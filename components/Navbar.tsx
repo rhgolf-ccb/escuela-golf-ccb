@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import { usePathname } from "next/navigation";
 
 const navItems = [
@@ -15,6 +16,13 @@ export default function Navbar() {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-16">
           <div className="flex items-center gap-4">
+            <Image
+              src="/Paco_transparente.png"
+              alt="Paco"
+              height={50}
+              width={50}
+              className="object-contain"
+            />
             <div className="flex flex-col leading-tight">
               <span className="text-ccb-gold font-bold text-lg tracking-wide">
                 CCB
