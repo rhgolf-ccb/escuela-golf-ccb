@@ -11,4 +11,5 @@ export type Student = {
   birth_date: string | null
   status: 'activo' | 'inactivo'
   grupo_activo: string | null
+  gender: string | null
 }

@@ -26,6 +26,23 @@ function calcularEdad(birthDate: string | null): string {
   return `${edad} años`;
 }
 
+function calcularGrupo(birthDate: string | null, gender: string | null, grupoActivo: string | null): GroupFilter | null {
+  if (grupoActivo === "Competencia") return "Competencia";
+  if (!birthDate) {
+    if (gender === "F") return "Damas";
+    return null;
+  }
+  const hoy = new Date();
+  const nac = new Date(birthDate);
+  let edad = hoy.getFullYear() - nac.getFullYear();
+  const m = hoy.getMonth() - nac.getMonth();
+  if (m < 0 || (m === 0 && hoy.getDate() < nac.getDate())) edad--;
+  if (edad <= 5) return "Birdies";
+  if (edad <= 8) return "Águilas";
+  if (edad <= 12) return "Albatros";
+  return "+14";
+}
+
 function formatFecha(dateStr: string | null): string {
   if (!dateStr) return "—";
   const d = new Date(dateStr + "T00:00:00");
@@ -55,7 +72,7 @@ export default function StudentsModule() {
       setError(null);
       const { data, error } = await supabase
         .from("students")
-        .select("id, full_name, birth_date, status, grupo_activo")
+        .select("id, full_name, birth_date, status, grupo_activo, gender")
         .order("full_name", { ascending: true });
 
       if (error) {
@@ -72,10 +89,13 @@ export default function StudentsModule() {
     return students.filter((s) => {
       const matchSearch = s.full_name.toLowerCase().includes(search.toLowerCase());
       const matchStatus = statusFilter === "todos" || s.status === statusFilter;
+      const grupoCalculado = calcularGrupo(s.birth_date, s.gender, s.grupo_activo);
       const matchGroup =
         groupFilter === "todos"
           ? true
-          : s.grupo_activo === groupFilter;
+          : groupFilter === "Competencia"
+          ? s.grupo_activo === "Competencia"
+          : grupoCalculado === groupFilter;
       return matchSearch && matchStatus && matchGroup;
     });
   }, [students, search, statusFilter, groupFilter]);
@@ -91,8 +111,11 @@ export default function StudentsModule() {
       Competencia: 0,
     };
     for (const s of students) {
-      if (s.grupo_activo && s.grupo_activo in counts) {
-        counts[s.grupo_activo as GroupFilter]++;
+      const g = calcularGrupo(s.birth_date, s.gender, s.grupo_activo);
+      if (g) counts[g]++;
+      if (s.grupo_activo === "Competencia") {
+        const gEdad = calcularGrupo(s.birth_date, s.gender, null);
+        if (gEdad && gEdad !== "Competencia") counts[gEdad]++;
       }
     }
     return counts;
@@ -109,7 +132,6 @@ export default function StudentsModule() {
 
   return (
     <div className="max-w-7xl mx-auto w-full px-4 sm:px-6 lg:px-8 py-8">
-      {/* Page header */}
       <div className="mb-6 flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold" style={{ color: "#1B4D2E" }}>
@@ -121,10 +143,7 @@ export default function StudentsModule() {
         </div>
         <div className="hidden sm:flex items-center gap-3 text-sm">
           <span className="flex items-center gap-1.5 text-gray-600">
-            <span
-              className="inline-block w-2 h-2 rounded-full"
-              style={{ backgroundColor: "#1B4D2E" }}
-            />
+            <span className="inline-block w-2 h-2 rounded-full" style={{ backgroundColor: "#1B4D2E" }} />
             {counts.activo} activos
           </span>
           <span className="text-gray-300">·</span>
@@ -135,22 +154,10 @@ export default function StudentsModule() {
         </div>
       </div>
 
-      {/* Search + status filter */}
-      <div
-        className="bg-white rounded-xl shadow-sm border border-gray-100 p-4 mb-3 flex flex-col sm:flex-row gap-3 items-stretch sm:items-center"
-        style={{ borderColor: "#e5e7eb" }}
-      >
-        {/* Search */}
+      <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4 mb-3 flex flex-col sm:flex-row gap-3 items-stretch sm:items-center">
         <div className="relative flex-1">
           <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none">
-            <svg
-              width="16"
-              height="16"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-              strokeWidth={2}
-            >
+            <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <circle cx="11" cy="11" r="8" />
               <path d="m21 21-4.35-4.35" />
             </svg>
@@ -161,11 +168,6 @@ export default function StudentsModule() {
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             className="w-full pl-9 pr-3 py-2 rounded-lg border border-gray-200 text-sm focus:outline-none transition"
-            style={
-              {
-                "--tw-ring-color": "#C9A84C",
-              } as React.CSSProperties
-            }
             onFocus={(e) => {
               e.target.style.borderColor = "#C9A84C";
               e.target.style.boxShadow = "0 0 0 2px #C9A84C33";
@@ -179,23 +181,14 @@ export default function StudentsModule() {
             <button
               onClick={() => setSearch("")}
               className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
-              aria-label="Limpiar búsqueda"
             >
-              <svg
-                width="14"
-                height="14"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-                strokeWidth={2}
-              >
+              <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                 <path d="M18 6 6 18M6 6l12 12" />
               </svg>
             </button>
           )}
         </div>
 
-        {/* Status tabs */}
         <div className="flex gap-1 bg-gray-100 rounded-lg p-1 self-start sm:self-auto shrink-0">
           {(["todos", "activo", "inactivo"] as StatusFilter[]).map((s) => (
             <button
@@ -208,17 +201,12 @@ export default function StudentsModule() {
                   : { color: "#4b5563" }
               }
             >
-              {s === "todos"
-                ? `Todos (${counts.todos})`
-                : s === "activo"
-                ? `Activos (${counts.activo})`
-                : `Inactivos (${counts.inactivo})`}
+              {s === "todos" ? `Todos (${counts.todos})` : s === "activo" ? `Activos (${counts.activo})` : `Inactivos (${counts.inactivo})`}
             </button>
           ))}
         </div>
       </div>
 
-      {/* Group filter tabs */}
       <div className="bg-white rounded-xl shadow-sm border border-gray-100 px-4 py-3 mb-4">
         <div className="flex gap-2 overflow-x-auto scrollbar-hide">
           {GROUPS.map(({ label, value, isSpecial }) => {
@@ -231,33 +219,14 @@ export default function StudentsModule() {
                 className="flex items-center gap-1.5 px-4 py-2 rounded-full text-sm font-medium whitespace-nowrap transition-all shrink-0"
                 style={
                   active
-                    ? {
-                        backgroundColor: isSpecial ? "#C9A84C" : "#1B4D2E",
-                        color: isSpecial ? "#1B4D2E" : "white",
-                        boxShadow: "0 1px 4px rgba(0,0,0,0.15)",
-                      }
+                    ? { backgroundColor: isSpecial ? "#C9A84C" : "#1B4D2E", color: isSpecial ? "#1B4D2E" : "white", boxShadow: "0 1px 4px rgba(0,0,0,0.15)" }
                     : isSpecial
-                    ? {
-                        color: "#92400e",
-                        backgroundColor: "#fef3c720",
-                        border: "1px solid #C9A84C55",
-                      }
-                    : {
-                        color: "#374151",
-                        backgroundColor: "transparent",
-                        border: "1px solid #e5e7eb",
-                      }
+                    ? { color: "#92400e", backgroundColor: "#fef3c720", border: "1px solid #C9A84C55" }
+                    : { color: "#374151", backgroundColor: "transparent", border: "1px solid #e5e7eb" }
                 }
               >
                 {isSpecial && (
-                  <svg
-                    width="13"
-                    height="13"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    stroke="currentColor"
-                    strokeWidth={2.5}
-                  >
+                  <svg width="13" height="13" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
                     <path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6" />
                     <path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18" />
                     <path d="M4 22h16" />
@@ -272,16 +241,8 @@ export default function StudentsModule() {
                     className="text-xs rounded-full px-1.5 py-0.5 font-semibold"
                     style={
                       active
-                        ? {
-                            backgroundColor: isSpecial
-                              ? "#1B4D2E22"
-                              : "#ffffff33",
-                            color: isSpecial ? "#1B4D2E" : "white",
-                          }
-                        : {
-                            backgroundColor: "#f3f4f6",
-                            color: "#6b7280",
-                          }
+                        ? { backgroundColor: isSpecial ? "#1B4D2E22" : "#ffffff33", color: isSpecial ? "#1B4D2E" : "white" }
+                        : { backgroundColor: "#f3f4f6", color: "#6b7280" }
                     }
                   >
                     {count}
@@ -293,44 +254,17 @@ export default function StudentsModule() {
         </div>
       </div>
 
-      {/* Table */}
       <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
         {loading ? (
           <div className="flex items-center justify-center py-20 text-gray-400">
-            <svg
-              className="animate-spin mr-3 h-5 w-5"
-              fill="none"
-              viewBox="0 0 24 24"
-            >
-              <circle
-                className="opacity-25"
-                cx="12"
-                cy="12"
-                r="10"
-                stroke="currentColor"
-                strokeWidth="4"
-              />
-              <path
-                className="opacity-75"
-                fill="currentColor"
-                d="M4 12a8 8 0 018-8v8H4z"
-              />
+            <svg className="animate-spin mr-3 h-5 w-5" fill="none" viewBox="0 0 24 24">
+              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
             </svg>
             Cargando alumnos...
           </div>
         ) : error ? (
           <div className="flex flex-col items-center justify-center py-20 gap-2" style={{ color: "#dc2626" }}>
-            <svg
-              width="24"
-              height="24"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-              strokeWidth={2}
-            >
-              <circle cx="12" cy="12" r="10" />
-              <path d="M12 8v4m0 4h.01" />
-            </svg>
             <p className="text-sm">Error al cargar los datos: {error}</p>
           </div>
         ) : (
@@ -339,110 +273,67 @@ export default function StudentsModule() {
               <table className="w-full text-sm">
                 <thead>
                   <tr style={{ backgroundColor: "#1B4D2E", color: "white" }}>
-                    <th className="text-left px-5 py-3.5 font-semibold tracking-wide text-xs uppercase opacity-90">
-                      Nombre
-                    </th>
-                    <th className="text-left px-5 py-3.5 font-semibold tracking-wide text-xs uppercase opacity-90">
-                      Fecha de nacimiento
-                    </th>
-                    <th className="text-left px-5 py-3.5 font-semibold tracking-wide text-xs uppercase opacity-90">
-                      Edad
-                    </th>
-                    <th className="text-left px-5 py-3.5 font-semibold tracking-wide text-xs uppercase opacity-90">
-                      Grupo
-                    </th>
-                    <th className="text-left px-5 py-3.5 font-semibold tracking-wide text-xs uppercase opacity-90">
-                      Estado
-                    </th>
+                    <th className="text-left px-5 py-3.5 font-semibold tracking-wide text-xs uppercase opacity-90">Nombre</th>
+                    <th className="text-left px-5 py-3.5 font-semibold tracking-wide text-xs uppercase opacity-90">Fecha de nacimiento</th>
+                    <th className="text-left px-5 py-3.5 font-semibold tracking-wide text-xs uppercase opacity-90">Edad</th>
+                    <th className="text-left px-5 py-3.5 font-semibold tracking-wide text-xs uppercase opacity-90">Grupo</th>
+                    <th className="text-left px-5 py-3.5 font-semibold tracking-wide text-xs uppercase opacity-90">Estado</th>
                   </tr>
                 </thead>
                 <tbody>
                   {filtered.length === 0 ? (
                     <tr>
-                      <td
-                        colSpan={5}
-                        className="text-center py-16 text-gray-400"
-                      >
-                        {search
-                          ? `No se encontraron alumnos con "${search}"`
-                          : "No hay alumnos en esta categoría"}
+                      <td colSpan={5} className="text-center py-16 text-gray-400">
+                        {search ? `No se encontraron alumnos con "${search}"` : "No hay alumnos en esta categoría"}
                       </td>
                     </tr>
                   ) : (
-                    filtered.map((student, idx) => (
-                      <tr
-                        key={student.id}
-                        className="border-t border-gray-50 transition-colors"
-                        style={{
-                          backgroundColor:
-                            idx % 2 === 0 ? "white" : "#f9fafb80",
-                        }}
-                        onMouseEnter={(e) => {
-                          (e.currentTarget as HTMLTableRowElement).style.backgroundColor =
-                            "#C9A84C0A";
-                        }}
-                        onMouseLeave={(e) => {
-                          (e.currentTarget as HTMLTableRowElement).style.backgroundColor =
-                            idx % 2 === 0 ? "white" : "#f9fafb80";
-                        }}
-                      >
-                        <td className="px-5 py-3.5 font-medium text-gray-800">
-                          <div className="flex items-center gap-2.5">
-                            <span
-                              className="inline-flex items-center justify-center w-8 h-8 rounded-full text-xs font-bold shrink-0"
-                              style={{
-                                backgroundColor: "#1B4D2E1A",
-                                color: "#1B4D2E",
-                              }}
-                            >
-                              {initiales(student.full_name)}
-                            </span>
-                            <span>{student.full_name}</span>
-                            {student.grupo_activo === "Competencia" && (
+                    filtered.map((student, idx) => {
+                      const grupoMostrar = calcularGrupo(student.birth_date, student.gender, student.grupo_activo);
+                      return (
+                        <tr
+                          key={student.id}
+                          className="border-t border-gray-50 transition-colors"
+                          style={{ backgroundColor: idx % 2 === 0 ? "white" : "#f9fafb80" }}
+                          onMouseEnter={(e) => { (e.currentTarget as HTMLTableRowElement).style.backgroundColor = "#C9A84C0A"; }}
+                          onMouseLeave={(e) => { (e.currentTarget as HTMLTableRowElement).style.backgroundColor = idx % 2 === 0 ? "white" : "#f9fafb80"; }}
+                        >
+                          <td className="px-5 py-3.5 font-medium text-gray-800">
+                            <div className="flex items-center gap-2.5">
                               <span
-                                className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold"
-                                style={{
-                                  backgroundColor: "#C9A84C22",
-                                  color: "#92400e",
-                                  border: "1px solid #C9A84C55",
-                                }}
+                                className="inline-flex items-center justify-center w-8 h-8 rounded-full text-xs font-bold shrink-0"
+                                style={{ backgroundColor: "#1B4D2E1A", color: "#1B4D2E" }}
                               >
-                                <svg
-                                  width="10"
-                                  height="10"
-                                  fill="none"
-                                  viewBox="0 0 24 24"
-                                  stroke="currentColor"
-                                  strokeWidth={2.5}
-                                >
-                                  <path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6" />
-                                  <path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18" />
-                                  <path d="M4 22h16" />
-                                  <path d="M18 2H6v7a6 6 0 0 0 12 0V2Z" />
-                                </svg>
-                                Competencia
+                                {initiales(student.full_name)}
                               </span>
-                            )}
-                          </div>
-                        </td>
-                        <td className="px-5 py-3.5 text-gray-600">
-                          {formatFecha(student.birth_date)}
-                        </td>
-                        <td className="px-5 py-3.5 text-gray-600">
-                          {calcularEdad(student.birth_date)}
-                        </td>
-                        <td className="px-5 py-3.5">
-                          {student.grupo_activo ? (
-                            <GroupBadge grupo={student.grupo_activo} />
-                          ) : (
-                            <span className="text-gray-300">—</span>
-                          )}
-                        </td>
-                        <td className="px-5 py-3.5">
-                          <StatusBadge status={student.status} />
-                        </td>
-                      </tr>
-                    ))
+                              <span>{student.full_name}</span>
+                              {student.grupo_activo === "Competencia" && (
+                                <span
+                                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold"
+                                  style={{ backgroundColor: "#C9A84C22", color: "#92400e", border: "1px solid #C9A84C55" }}
+                                >
+                                  <svg width="10" height="10" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                                    <path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6" />
+                                    <path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18" />
+                                    <path d="M4 22h16" />
+                                    <path d="M18 2H6v7a6 6 0 0 0 12 0V2Z" />
+                                  </svg>
+                                  Competencia
+                                </span>
+                              )}
+                            </div>
+                          </td>
+                          <td className="px-5 py-3.5 text-gray-600">{formatFecha(student.birth_date)}</td>
+                          <td className="px-5 py-3.5 text-gray-600">{calcularEdad(student.birth_date)}</td>
+                          <td className="px-5 py-3.5">
+                            {grupoMostrar ? <GroupBadge grupo={grupoMostrar} /> : <span className="text-gray-300">—</span>}
+                          </td>
+                          <td className="px-5 py-3.5">
+                            <StatusBadge status={student.status} />
+                          </td>
+                        </tr>
+                      );
+                    })
                   )}
                 </tbody>
               </table>
@@ -451,12 +342,7 @@ export default function StudentsModule() {
               <div className="px-5 py-3 border-t border-gray-100 text-xs text-gray-400">
                 Mostrando {filtered.length} de {students.length} alumnos
                 {groupFilter !== "todos" && (
-                  <span className="ml-1">
-                    · filtro:{" "}
-                    <span style={{ color: "#1B4D2E" }} className="font-medium">
-                      {groupFilter}
-                    </span>
-                  </span>
+                  <span className="ml-1">· filtro: <span style={{ color: "#1B4D2E" }} className="font-medium">{groupFilter}</span></span>
                 )}
               </div>
             )}
@@ -471,11 +357,7 @@ function GroupBadge({ grupo }: { grupo: string }) {
   return (
     <span
       className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium"
-      style={{
-        backgroundColor: "#1B4D2E15",
-        color: "#1B4D2E",
-        border: "1px solid #1B4D2E25",
-      }}
+      style={{ backgroundColor: "#1B4D2E15", color: "#1B4D2E", border: "1px solid #1B4D2E25" }}
     >
       {grupo}
     </span>
