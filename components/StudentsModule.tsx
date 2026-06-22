@@ -29,7 +29,7 @@ function calcularEdad(birthDate: string | null): string {
 function calcularGrupo(birthDate: string | null, gender: string | null, grupoActivo: string | null): GroupFilter | null {
   if (grupoActivo === "Competencia") return "Competencia";
   if (!birthDate) {
-    if (gender === "F") return "Damas";
+   if (gender === "F" || gender === "f" || gender?.toLowerCase() === "damas" || gender?.toLowerCase() === "femenino") return "Damas"; 
     return null;
   }
   const hoy = new Date();
