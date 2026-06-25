@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useMemo } from "react";
+import { useRouter } from "next/navigation";
 import { supabase, type Student } from "@/lib/supabase";
 
 type StatusFilter = "todos" | "activo" | "inactivo";
@@ -66,6 +67,8 @@ export default function StudentsModule() {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("todos");
   const [groupFilter, setGroupFilter] = useState<GroupFilter>("todos");
+  const router = useRouter();
+
 
   useEffect(() => {
     async function fetchStudents() {
@@ -295,7 +298,9 @@ export default function StudentsModule() {
                         <tr
                           key={student.id}
                           className="border-t border-gray-50 transition-colors"
-                          style={{ backgroundColor: idx % 2 === 0 ? "white" : "#f9fafb80" }}
+                          style={{ backgroundColor: idx % 2 === 0 ? "white" : "#f9fafb80", cursor: "pointer" }}
+onClick={() => router.push(`/alumnos/${student.id}`)}
+
                           onMouseEnter={(e) => { (e.currentTarget as HTMLTableRowElement).style.backgroundColor = "#C9A84C0A"; }}
                           onMouseLeave={(e) => { (e.currentTarget as HTMLTableRowElement).style.backgroundColor = idx % 2 === 0 ? "white" : "#f9fafb80"; }}
                         >
