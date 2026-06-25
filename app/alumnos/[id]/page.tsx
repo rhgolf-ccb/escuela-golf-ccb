@@ -1,5 +1,10 @@
 import StudentProfile from "@/components/StudentProfile";
 
-export default function StudentProfilePage({ params }: { params: { id: string } }) {
-  return <StudentProfile studentId={params.id} />;
+type Props = {
+  params: Promise<{ id: string }>;
+};
+
+export default async function StudentProfilePage({ params }: Props) {
+  const { id } = await params;
+  return <StudentProfile studentId={id} />;
 }

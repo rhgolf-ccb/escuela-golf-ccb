@@ -219,6 +219,11 @@ export default function StudentProfile({ studentId }: { studentId: string }) {
       </div>
     </div>
   );
+}function Field({ label, value }: { label: string; value: string | null | undefined }) {
+  return (
+    <div>
+      <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-1">{label}</p>
+      <p className="text-sm text-gray-800">{value || "—"}</p>
+    </div>
+  );
 }
-
-fun
