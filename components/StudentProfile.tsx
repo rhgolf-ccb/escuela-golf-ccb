@@ -7,7 +7,7 @@ import { supabase } from "@/lib/supabase";
 type Tab = "datos" | "tecnicos" | "fisicos" | "hitos";
 
 type Student = {
-  id: number;
+  id: string;
   full_name: string;
   birth_date: string | null;
   status: "activo" | "inactivo";
@@ -40,7 +40,8 @@ function initiales(name: string): string {
   return name.split(" ").slice(0, 2).map((n) => n[0]).join("").toUpperCase();
 }
 
-export default function StudentProfile({ studentId }: { studentId: number }) {
+export default function StudentProfile({ studentId }: { studentId: string }) {
+  const router = useRouter();
   const [student, setStudent] = useState<Student | null>(null);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<Tab>("datos");
@@ -87,7 +88,6 @@ export default function StudentProfile({ studentId }: { studentId: number }) {
 
   return (
     <div className="max-w-4xl mx-auto w-full px-4 sm:px-6 lg:px-8 py-8">
-      {/* Botón volver */}
       <button
         onClick={() => router.back()}
         className="flex items-center gap-2 text-sm text-gray-500 hover:text-gray-700 mb-6 transition-colors"
@@ -98,7 +98,6 @@ export default function StudentProfile({ studentId }: { studentId: number }) {
         Volver a alumnos
       </button>
 
-      {/* Header del perfil */}
       <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6 mb-4">
         <div className="flex items-center gap-4">
           <span
@@ -138,7 +137,6 @@ export default function StudentProfile({ studentId }: { studentId: number }) {
         </div>
       </div>
 
-      {/* Tabs */}
       <div className="bg-white rounded-xl shadow-sm border border-gray-100 px-4 py-3 mb-4">
         <div className="flex gap-1 overflow-x-auto">
           {TABS.map(({ key, label }) => (
@@ -158,7 +156,6 @@ export default function StudentProfile({ studentId }: { studentId: number }) {
         </div>
       </div>
 
-      {/* Contenido de cada tab */}
       <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
         {activeTab === "datos" && (
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
@@ -224,11 +221,4 @@ export default function StudentProfile({ studentId }: { studentId: number }) {
   );
 }
 
-function Field({ label, value }: { label: string; value: string | null | undefined }) {
-  return (
-    <div>
-      <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-1">{label}</p>
-      <p className="text-sm text-gray-800">{value || "—"}</p>
-    </div>
-  );
-}
+fun
