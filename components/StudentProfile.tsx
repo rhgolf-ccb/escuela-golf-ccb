@@ -40,8 +40,7 @@ function initiales(name: string): string {
   return name.split(" ").slice(0, 2).map((n) => n[0]).join("").toUpperCase();
 }
 
-export default function StudentProfile({ studentId }: { studentId: string }) {
-  const router = useRouter();
+export default function StudentProfile({ studentId }: { studentId: number }) {
   const [student, setStudent] = useState<Student | null>(null);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<Tab>("datos");
