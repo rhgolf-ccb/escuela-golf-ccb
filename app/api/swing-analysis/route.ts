@@ -130,7 +130,7 @@ GRUPOS CCB:
 INSTRUCCIONES ESPECÍFICAS PARA ESTE GRUPO:
 ${instruccionesGrupo[grupo] || instruccionesGrupo["Albatros"]}
 
-FORMATO DE RESPUESTA — responde SIEMPRE en este formato JSON exacto:
+FORMATO DE RESPUESTA — responde SIEMPRE en este formato JSON exacto, SIN backticks, SIN markdown, SIN texto adicional antes o después, SOLO el objeto JSON puro:
 {
   "resumen": "2-3 oraciones resumiendo el estado técnico general del alumno",
   "prioridades": [
