@@ -20,6 +20,17 @@ type Student = {
   enrollment_date: string | null;
 };
 
+type EditForm = {
+  full_name: string;
+  birth_date: string;
+  status: "activo" | "inactivo";
+  grupo_activo: string;
+  parent_name: string;
+  parent_phone: string;
+  parent_email: string;
+  observations: string;
+};
+
 function calcularEdad(birthDate: string | null): string {
   if (!birthDate) return "—";
   const hoy = new Date();
@@ -40,11 +51,28 @@ function initiales(name: string): string {
   return name.split(" ").slice(0, 2).map((n) => n[0]).join("").toUpperCase();
 }
 
+function studentToForm(s: Student): EditForm {
+  return {
+    full_name: s.full_name,
+    birth_date: s.birth_date ?? "",
+    status: s.status,
+    grupo_activo: s.grupo_activo ?? "",
+    parent_name: s.parent_name ?? "",
+    parent_phone: s.parent_phone ?? "",
+    parent_email: s.parent_email ?? "",
+    observations: s.observations ?? "",
+  };
+}
+
 export default function StudentProfile({ studentId }: { studentId: string }) {
   const router = useRouter();
   const [student, setStudent] = useState<Student | null>(null);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<Tab>("datos");
+  const [isEditing, setIsEditing] = useState(false);
+  const [form, setForm] = useState<EditForm | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   useEffect(() => {
     async function fetchStudent() {
@@ -58,6 +86,55 @@ export default function StudentProfile({ studentId }: { studentId: string }) {
     }
     fetchStudent();
   }, [studentId]);
+
+  function openEdit() {
+    if (!student) return;
+    setForm(studentToForm(student));
+    setSaveError(null);
+    setIsEditing(true);
+  }
+
+  function closeEdit() {
+    setIsEditing(false);
+    setForm(null);
+    setSaveError(null);
+  }
+
+  function setField<K extends keyof EditForm>(key: K, value: EditForm[K]) {
+    setForm((prev) => prev ? { ...prev, [key]: value } : prev);
+  }
+
+  async function handleSave() {
+    if (!form || !student) return;
+    setSaving(true);
+    setSaveError(null);
+
+    const payload = {
+      full_name: form.full_name.trim(),
+      birth_date: form.birth_date || null,
+      status: form.status,
+      grupo_activo: form.grupo_activo || null,
+      parent_name: form.parent_name.trim() || null,
+      parent_phone: form.parent_phone.trim() || null,
+      parent_email: form.parent_email.trim() || null,
+      observations: form.observations.trim() || null,
+    };
+
+    const { error } = await supabase
+      .from("students")
+      .update(payload)
+      .eq("id", student.id);
+
+    if (error) {
+      setSaveError(error.message);
+      setSaving(false);
+      return;
+    }
+
+    setStudent((prev) => prev ? { ...prev, ...payload } : prev);
+    setSaving(false);
+    closeEdit();
+  }
 
   if (loading) {
     return (
@@ -134,6 +211,19 @@ export default function StudentProfile({ studentId }: { studentId: string }) {
               )}
             </p>
           </div>
+          <button
+            onClick={openEdit}
+            className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors shrink-0"
+            style={{ backgroundColor: "#1B4D2E", color: "white" }}
+            onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.backgroundColor = "#163d24"; }}
+            onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.backgroundColor = "#1B4D2E"; }}
+          >
+            <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+              <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
+            </svg>
+            Editar
+          </button>
         </div>
       </div>
 
@@ -166,9 +256,9 @@ export default function StudentProfile({ studentId }: { studentId: string }) {
             <Field label="Estado" value={student.status} />
             <Field label="Fecha de ingreso" value={formatFecha(student.enrollment_date)} />
             <div className="sm:col-span-2 border-t border-gray-100 pt-4 mt-2">
-              <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-4">Contacto de padres</p>
+              <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-4">Contacto del acudiente</p>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-                <Field label="Nombre del padre/madre" value={student.parent_name} />
+                <Field label="Nombre del acudiente" value={student.parent_name} />
                 <Field label="Teléfono" value={student.parent_phone} />
                 <Field label="Email" value={student.parent_email} />
               </div>
@@ -217,13 +307,171 @@ export default function StudentProfile({ studentId }: { studentId: string }) {
           </div>
         )}
       </div>
+
+      {isEditing && form && (
+        <div
+          className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto py-8 px-4"
+          style={{ backgroundColor: "rgba(0,0,0,0.45)" }}
+          onClick={(e) => { if (e.target === e.currentTarget) closeEdit(); }}
+        >
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg my-auto">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+              <h2 className="text-base font-semibold text-gray-900">Editar perfil</h2>
+              <button
+                onClick={closeEdit}
+                className="text-gray-400 hover:text-gray-600 transition-colors"
+                disabled={saving}
+              >
+                <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path d="M18 6 6 18M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
+            <div className="px-6 py-5 space-y-4">
+              <FormField label="Nombre completo" required>
+                <input
+                  type="text"
+                  value={form.full_name}
+                  onChange={(e) => setField("full_name", e.target.value)}
+                  className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm focus:outline-none focus:border-[#1B4D2E] focus:ring-1 focus:ring-[#1B4D2E]"
+                />
+              </FormField>
+
+              <div className="grid grid-cols-2 gap-4">
+                <FormField label="Fecha de nacimiento">
+                  <input
+                    type="date"
+                    value={form.birth_date}
+                    onChange={(e) => setField("birth_date", e.target.value)}
+                    className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm focus:outline-none focus:border-[#1B4D2E] focus:ring-1 focus:ring-[#1B4D2E]"
+                  />
+                </FormField>
+
+                <FormField label="Estado">
+                  <select
+                    value={form.status}
+                    onChange={(e) => setField("status", e.target.value as "activo" | "inactivo")}
+                    className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm focus:outline-none focus:border-[#1B4D2E] focus:ring-1 focus:ring-[#1B4D2E] bg-white"
+                  >
+                    <option value="activo">Activo</option>
+                    <option value="inactivo">Inactivo</option>
+                  </select>
+                </FormField>
+              </div>
+
+              <FormField label="Grupo" hint="Selecciona solo para Damas o Competencia; los demás grupos se calculan por edad">
+                <select
+                  value={form.grupo_activo}
+                  onChange={(e) => setField("grupo_activo", e.target.value)}
+                  className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm focus:outline-none focus:border-[#1B4D2E] focus:ring-1 focus:ring-[#1B4D2E] bg-white"
+                >
+                  <option value="">Automático (según edad)</option>
+                  <option value="Damas">Damas</option>
+                  <option value="Competencia">Competencia</option>
+                </select>
+              </FormField>
+
+              <div className="border-t border-gray-100 pt-4">
+                <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">Acudiente</p>
+                <div className="space-y-4">
+                  <FormField label="Nombre (padre, madre o cuidador)">
+                    <input
+                      type="text"
+                      value={form.parent_name}
+                      onChange={(e) => setField("parent_name", e.target.value)}
+                      className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm focus:outline-none focus:border-[#1B4D2E] focus:ring-1 focus:ring-[#1B4D2E]"
+                    />
+                  </FormField>
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <FormField label="Teléfono">
+                      <input
+                        type="tel"
+                        value={form.parent_phone}
+                        onChange={(e) => setField("parent_phone", e.target.value)}
+                        className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm focus:outline-none focus:border-[#1B4D2E] focus:ring-1 focus:ring-[#1B4D2E]"
+                      />
+                    </FormField>
+
+                    <FormField label="Email">
+                      <input
+                        type="email"
+                        value={form.parent_email}
+                        onChange={(e) => setField("parent_email", e.target.value)}
+                        className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm focus:outline-none focus:border-[#1B4D2E] focus:ring-1 focus:ring-[#1B4D2E]"
+                      />
+                    </FormField>
+                  </div>
+                </div>
+              </div>
+
+              <FormField label="Observaciones">
+                <textarea
+                  value={form.observations}
+                  onChange={(e) => setField("observations", e.target.value)}
+                  rows={3}
+                  className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm focus:outline-none focus:border-[#1B4D2E] focus:ring-1 focus:ring-[#1B4D2E] resize-none"
+                />
+              </FormField>
+
+              {saveError && (
+                <p className="text-sm text-red-600 bg-red-50 border border-red-100 rounded-lg px-3 py-2">
+                  Error al guardar: {saveError}
+                </p>
+              )}
+            </div>
+
+            <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-gray-100">
+              <button
+                onClick={closeEdit}
+                disabled={saving}
+                className="px-4 py-2 rounded-lg text-sm font-medium text-gray-600 hover:text-gray-800 hover:bg-gray-100 transition-colors"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={handleSave}
+                disabled={saving || !form.full_name.trim()}
+                className="flex items-center gap-2 px-5 py-2 rounded-lg text-sm font-medium text-white transition-colors disabled:opacity-50"
+                style={{ backgroundColor: "#1B4D2E" }}
+                onMouseEnter={(e) => { if (!saving) (e.currentTarget as HTMLButtonElement).style.backgroundColor = "#163d24"; }}
+                onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.backgroundColor = "#1B4D2E"; }}
+              >
+                {saving && (
+                  <svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
+                  </svg>
+                )}
+                {saving ? "Guardando..." : "Guardar cambios"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
-}function Field({ label, value }: { label: string; value: string | null | undefined }) {
+}
+
+function Field({ label, value }: { label: string; value: string | null | undefined }) {
   return (
     <div>
       <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-1">{label}</p>
       <p className="text-sm text-gray-800">{value || "—"}</p>
+    </div>
+  );
+}
+
+function FormField({ label, children, required, hint }: { label: string; children: React.ReactNode; required?: boolean; hint?: string }) {
+  return (
+    <div>
+      <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
+        {label}
+        {required && <span className="text-red-400 ml-0.5">*</span>}
+      </label>
+      {children}
+      {hint && <p className="text-xs text-gray-400 mt-1">{hint}</p>}
     </div>
   );
 }
