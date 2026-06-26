@@ -196,14 +196,18 @@ Genera el análisis completo para guiar al profesor en las próximas clases.`;
     const rawText = data.content?.[0]?.text || "";
 console.log("RAW:", rawText.substring(0, 200));
     // Parsear JSON de la respuesta
-    let analysis;
+   let analysis;
 try {
   const cleaned = rawText.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
-  const jsonMatch = cleaned.match(/\{[\s\S]*\}/);
-  analysis = jsonMatch ? JSON.parse(jsonMatch[0]) : { resumen: rawText };
+  analysis = JSON.parse(cleaned);
 } catch {
-  analysis = { resumen: rawText };
-}
+  try {
+    const jsonMatch = rawText.match(/\{[\s\S]*\}/);
+    analysis = jsonMatch ? JSON.parse(jsonMatch[0]) : { resumen: rawText };
+  } catch {
+    analysis = { resumen: rawText };
+  }
+} 
 
     return Response.json({ analysis, raw: rawText });
   } catch (error) {
