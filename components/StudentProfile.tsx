@@ -82,6 +82,91 @@ type EvalForm = {
   general_comment: string;
 };
 
+// ── Physical tests ────────────────────────────────────────────────────────────
+
+const TPI_SCREEN_KEYS = [
+  "inclinacion_pelvica", "rotacion_pelvica", "rotacion_torso",
+  "sentadilla_profunda", "toe_touch", "equilibrio_una_pierna",
+  "estocada_linea", "puente_extension_pierna", "longitud_dorsal",
+  "rotacion_interna_cadera", "rotacion_externa_cadera",
+  "rotacion_cuadrante_inferior", "rotacion_cervical",
+  "movilidad_hombro", "bisagra_muneca", "rotacion_antebrazo",
+] as const;
+type TpiScreenKey = typeof TPI_SCREEN_KEYS[number];
+
+const TPI_SCREEN_LABELS: Record<TpiScreenKey, string> = {
+  inclinacion_pelvica: "Inclinación pélvica",
+  rotacion_pelvica: "Rotación pélvica",
+  rotacion_torso: "Rotación de torso",
+  sentadilla_profunda: "Sentadilla profunda",
+  toe_touch: "Toe touch",
+  equilibrio_una_pierna: "Equilibrio una pierna",
+  estocada_linea: "Estocada en línea",
+  puente_extension_pierna: "Puente con extensión de pierna",
+  longitud_dorsal: "Longitud dorsal",
+  rotacion_interna_cadera: "Rotación interna de cadera",
+  rotacion_externa_cadera: "Rotación externa de cadera",
+  rotacion_cuadrante_inferior: "Rotación cuadrante inferior",
+  rotacion_cervical: "Rotación cervical",
+  movilidad_hombro: "Movilidad hombro",
+  bisagra_muneca: "Bisagra de muñeca",
+  rotacion_antebrazo: "Rotación de antebrazo",
+};
+
+type TpiScreen = { pass: boolean; notes: string };
+
+type PhysicalTest = {
+  id: string;
+  student_id: string;
+  student_name: string | null;
+  analysis_date: string;
+  evaluator_name: string | null;
+  player_profile: string | null;
+  anthropometry: { height_cm: number | null; weight_kg: number | null; wingspan_cm: number | null } | null;
+  performance_tests: { swing_speed_mph: number | null; vertical_jump_cm: number | null; med_ball_throw_m: number | null } | null;
+  strength_power: { plank_seconds: number | null; grip_right_kg: number | null; grip_left_kg: number | null } | null;
+  tpi_screens: Record<string, TpiScreen> | null;
+  tpi_summary: { passes: number; fails: number } | null;
+  created_at: string;
+};
+
+type PhysicalTestForm = {
+  test_date: string;
+  evaluator: string;
+  player_profile: "junior_alto_rendimiento" | "dama_casual" | "hombre_casual";
+  height_cm: string;
+  weight_kg: string;
+  wingspan_cm: string;
+  swing_speed_mph: string;
+  vertical_jump_cm: string;
+  med_ball_throw_m: string;
+  plank_seconds: string;
+  grip_right_kg: string;
+  grip_left_kg: string;
+  tpi_screens: Record<TpiScreenKey, TpiScreen>;
+};
+
+function defaultTpiScreens(): Record<TpiScreenKey, TpiScreen> {
+  return Object.fromEntries(
+    TPI_SCREEN_KEYS.map((k) => [k, { pass: false, notes: "" }])
+  ) as Record<TpiScreenKey, TpiScreen>;
+}
+
+function tpiSummary(screens: Record<string, TpiScreen> | null) {
+  if (!screens) return { passes: 0, fails: 0 };
+  const vals = Object.values(screens);
+  const passes = vals.filter((v) => v.pass).length;
+  return { passes, fails: vals.length - passes };
+}
+
+const PLAYER_PROFILE_LABELS: Record<string, string> = {
+  junior_alto_rendimiento: "Junior alto rendimiento",
+  dama_casual: "Dama casual",
+  hombre_casual: "Hombre casual",
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+
 function defaultSkills(): Record<SkillKey, SkillLevel> {
   return Object.fromEntries(SKILL_KEYS.map((k) => [k, "bajo"])) as Record<SkillKey, SkillLevel>;
 }
@@ -153,7 +238,16 @@ export default function StudentProfile({ studentId }: { studentId: string }) {
   const [evalSaving, setEvalSaving] = useState(false);
   const [evalSaveError, setEvalSaveError] = useState<string | null>(null);
   const [expandedEval, setExpandedEval] = useState<string | null>(null);
-  const [deletingEvalId, setDeletingEvalId] = useState<string | null>(null);
+  const [editingEval, setEditingEval] = useState<SkillEvaluation | null>(null);
+
+  const [physicalTests, setPhysicalTests] = useState<PhysicalTest[]>([]);
+  const [physTestsLoading, setPhysTestsLoading] = useState(false);
+  const [showPhysForm, setShowPhysForm] = useState(false);
+  const [physForm, setPhysForm] = useState<PhysicalTestForm | null>(null);
+  const [physFormSaving, setPhysFormSaving] = useState(false);
+  const [physFormError, setPhysFormError] = useState<string | null>(null);
+  const [editingPhysTest, setEditingPhysTest] = useState<PhysicalTest | null>(null);
+  const [expandedPhysTest, setExpandedPhysTest] = useState<string | null>(null);
 
   useEffect(() => {
     async function fetchStudent() {
@@ -185,6 +279,21 @@ export default function StudentProfile({ studentId }: { studentId: string }) {
       setEvalsLoading(false);
     }
     fetchEvaluations();
+  }, [activeTab, studentId]);
+
+  useEffect(() => {
+    if (activeTab !== "fisicos") return;
+    async function fetchPhysicalTests() {
+      setPhysTestsLoading(true);
+      const { data, error } = await supabase
+        .from("physical_tests")
+        .select("*")
+        .eq("student_id", studentId)
+        .order("test_date", { ascending: false });
+      if (!error && data) setPhysicalTests(data);
+      setPhysTestsLoading(false);
+    }
+    fetchPhysicalTests();
   }, [activeTab, studentId]);
 
   function openEdit() {
@@ -251,6 +360,19 @@ export default function StudentProfile({ studentId }: { studentId: string }) {
     setShowEvalForm(false);
     setEvalForm(null);
     setEvalSaveError(null);
+    setEditingEval(null);
+  }
+
+  function openEditEvalForm(ev: SkillEvaluation) {
+    setEditingEval(ev);
+    setEvalForm({
+      evaluation_type: ev.evaluation_type as EvalForm["evaluation_type"],
+      evaluation_date: ev.evaluation_date,
+      skills: { ...defaultSkills(), ...(ev.skills as Record<SkillKey, SkillLevel>) },
+      general_comment: ev.general_comment ?? "",
+    });
+    setEvalSaveError(null);
+    setShowEvalForm(true);
   }
 
   function setEvalField<K extends keyof EvalForm>(key: K, value: EvalForm[K]) {
@@ -263,15 +385,19 @@ export default function StudentProfile({ studentId }: { studentId: string }) {
     );
   }
 
-  async function handleDeleteEval(evalId: string, evalDate: string) {
-    if (!window.confirm(`¿Eliminar la evaluación del ${formatFecha(evalDate)}? Esta acción no se puede deshacer.`)) return;
-    setDeletingEvalId(evalId);
-    const { error } = await supabase.from("skill_evaluations").delete().eq("id", evalId);
+  async function handleDeleteEvalFromForm() {
+    if (!editingEval) return;
+    if (!window.confirm(`¿Eliminar la evaluación del ${formatFecha(editingEval.evaluation_date)}? Esta acción no se puede deshacer.`)) return;
+    setEvalSaving(true);
+    const { error } = await supabase.from("skill_evaluations").delete().eq("id", editingEval.id);
     if (!error) {
-      setEvaluations((prev) => prev.filter((e) => e.id !== evalId));
-      if (expandedEval === evalId) setExpandedEval(null);
+      setEvaluations((prev) => prev.filter((e) => e.id !== editingEval.id));
+      if (expandedEval === editingEval.id) setExpandedEval(null);
+      closeEvalForm();
+    } else {
+      setEvalSaveError(error.message);
+      setEvalSaving(false);
     }
-    setDeletingEvalId(null);
   }
 
   async function handleSaveEval() {
@@ -280,6 +406,29 @@ export default function StudentProfile({ studentId }: { studentId: string }) {
     setEvalSaveError(null);
 
     const overall = calcularNivelGeneral(evalForm.skills);
+
+    if (editingEval) {
+      const patch = {
+        evaluation_date: evalForm.evaluation_date,
+        evaluation_type: evalForm.evaluation_type,
+        skills: evalForm.skills,
+        general_comment: evalForm.general_comment.trim() || null,
+        overall_level: overall,
+      };
+      const { error } = await supabase.from("skill_evaluations").update(patch).eq("id", editingEval.id);
+      if (error) {
+        setEvalSaveError(error.message);
+        setEvalSaving(false);
+        return;
+      }
+      setEvaluations((prev) =>
+        prev.map((e) => (e.id === editingEval.id ? { ...e, ...patch } : e))
+      );
+      setEvalSaving(false);
+      closeEvalForm();
+      return;
+    }
+
     const id = `eval_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
 
     const payload = {
@@ -305,6 +454,127 @@ export default function StudentProfile({ studentId }: { studentId: string }) {
     setEvaluations((prev) => [newEval, ...prev]);
     setEvalSaving(false);
     closeEvalForm();
+  }
+
+  function openPhysForm() {
+    setEditingPhysTest(null);
+    setPhysForm({
+      test_date: new Date().toISOString().split("T")[0],
+      evaluator: "",
+      player_profile: "junior_alto_rendimiento",
+      height_cm: "", weight_kg: "", wingspan_cm: "",
+      swing_speed_mph: "", vertical_jump_cm: "", med_ball_throw_m: "",
+      plank_seconds: "", grip_right_kg: "", grip_left_kg: "",
+      tpi_screens: defaultTpiScreens(),
+    });
+    setPhysFormError(null);
+    setShowPhysForm(true);
+  }
+
+  function openEditPhysForm(t: PhysicalTest) {
+    setEditingPhysTest(t);
+    setPhysForm({
+      test_date: t.analysis_date,
+      evaluator: t.evaluator_name ?? "",
+      player_profile: (t.player_profile as PhysicalTestForm["player_profile"]) ?? "junior_alto_rendimiento",
+      height_cm: t.anthropometry?.height_cm?.toString() ?? "",
+      weight_kg: t.anthropometry?.weight_kg?.toString() ?? "",
+      wingspan_cm: t.anthropometry?.wingspan_cm?.toString() ?? "",
+      swing_speed_mph: t.performance_tests?.swing_speed_mph?.toString() ?? "",
+      vertical_jump_cm: t.performance_tests?.vertical_jump_cm?.toString() ?? "",
+      med_ball_throw_m: t.performance_tests?.med_ball_throw_m?.toString() ?? "",
+      plank_seconds: t.strength_power?.plank_seconds?.toString() ?? "",
+      grip_right_kg: t.strength_power?.grip_right_kg?.toString() ?? "",
+      grip_left_kg: t.strength_power?.grip_left_kg?.toString() ?? "",
+      tpi_screens: { ...defaultTpiScreens(), ...(t.tpi_screens as Record<TpiScreenKey, TpiScreen>) },
+    });
+    setPhysFormError(null);
+    setShowPhysForm(true);
+  }
+
+  function closePhysForm() {
+    setShowPhysForm(false);
+    setPhysForm(null);
+    setPhysFormError(null);
+    setEditingPhysTest(null);
+  }
+
+  function setPhysField<K extends keyof PhysicalTestForm>(key: K, value: PhysicalTestForm[K]) {
+    setPhysForm((prev) => (prev ? { ...prev, [key]: value } : prev));
+  }
+
+  function setTpiScreen(key: TpiScreenKey, patch: Partial<TpiScreen>) {
+    setPhysForm((prev) =>
+      prev
+        ? { ...prev, tpi_screens: { ...prev.tpi_screens, [key]: { ...prev.tpi_screens[key], ...patch } } }
+        : prev
+    );
+  }
+
+  function parseNum(s: string): number | null {
+    const n = parseFloat(s);
+    return isNaN(n) ? null : n;
+  }
+
+  async function handleSavePhysTest() {
+    if (!physForm || !student) return;
+    setPhysFormSaving(true);
+    setPhysFormError(null);
+
+    const { passes, fails } = tpiSummary(physForm.tpi_screens);
+
+    const payload = {
+      student_id: student.id,
+      student_name: student.full_name,
+      analysis_date: physForm.test_date,
+      evaluator_name: physForm.evaluator.trim() || null,
+      player_profile: physForm.player_profile,
+      anthropometry: {
+        height_cm: parseNum(physForm.height_cm),
+        weight_kg: parseNum(physForm.weight_kg),
+        wingspan_cm: parseNum(physForm.wingspan_cm),
+      },
+      performance_tests: {
+        swing_speed_mph: parseNum(physForm.swing_speed_mph),
+        vertical_jump_cm: parseNum(physForm.vertical_jump_cm),
+        med_ball_throw_m: parseNum(physForm.med_ball_throw_m),
+      },
+      strength_power: {
+        plank_seconds: parseNum(physForm.plank_seconds),
+        grip_right_kg: parseNum(physForm.grip_right_kg),
+        grip_left_kg: parseNum(physForm.grip_left_kg),
+      },
+      tpi_screens: physForm.tpi_screens,
+      tpi_summary: { passes, fails },
+    };
+
+    if (editingPhysTest) {
+      const { error } = await supabase.from("physical_tests").update(payload).eq("id", editingPhysTest.id);
+      if (error) { setPhysFormError(error.message); setPhysFormSaving(false); return; }
+      setPhysicalTests((prev) => prev.map((t) => t.id === editingPhysTest.id ? { ...t, ...payload } : t));
+    } else {
+      const { data, error } = await supabase.from("physical_tests").insert(payload).select().single();
+      if (error) { setPhysFormError(error.message); setPhysFormSaving(false); return; }
+      setPhysicalTests((prev) => [data as PhysicalTest, ...prev]);
+    }
+
+    setPhysFormSaving(false);
+    closePhysForm();
+  }
+
+  async function handleDeletePhysTestFromForm() {
+    if (!editingPhysTest) return;
+    if (!window.confirm(`¿Eliminar el test del ${formatFecha(editingPhysTest.analysis_date)}? Esta acción no se puede deshacer.`)) return;
+    setPhysFormSaving(true);
+    const { error } = await supabase.from("physical_tests").delete().eq("id", editingPhysTest.id);
+    if (!error) {
+      setPhysicalTests((prev) => prev.filter((t) => t.id !== editingPhysTest.id));
+      if (expandedPhysTest === editingPhysTest.id) setExpandedPhysTest(null);
+      closePhysForm();
+    } else {
+      setPhysFormError(error.message);
+      setPhysFormSaving(false);
+    }
   }
 
   if (loading) {
@@ -528,22 +798,14 @@ export default function StudentProfile({ studentId }: { studentId: string }) {
                           </div>
                         </button>
                         <button
-                          onClick={() => handleDeleteEval(ev.id, ev.evaluation_date)}
-                          disabled={deletingEvalId === ev.id}
-                          title="Eliminar evaluación"
-                          className="mr-3 p-2 rounded-lg text-gray-400 hover:text-red-600 hover:bg-red-50 transition-colors disabled:opacity-40"
+                          onClick={() => openEditEvalForm(ev)}
+                          title="Editar evaluación"
+                          className="mr-3 p-2 rounded-lg text-gray-400 hover:text-[#1B4D2E] hover:bg-[#1B4D2E10] transition-colors"
                         >
-                          {deletingEvalId === ev.id ? (
-                            <svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
-                              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
-                            </svg>
-                          ) : (
-                            <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                              <path d="M3 6h18M8 6V4h8v2M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
-                              <path d="M10 11v6M14 11v6" />
-                            </svg>
-                          )}
+                          <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                            <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+                            <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
+                          </svg>
                         </button>
                       </div>
 
@@ -598,23 +860,158 @@ export default function StudentProfile({ studentId }: { studentId: string }) {
         )}
 
         {activeTab === "fisicos" && (
-          <div className="flex flex-col items-center justify-center py-16 text-gray-400">
-            <svg
-              width="40"
-              height="40"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-              strokeWidth={1.5}
-              className="mb-3"
-            >
-              <path d="M18 8h1a4 4 0 0 1 0 8h-1" />
-              <path d="M2 8h16v9a4 4 0 0 1-4 4H6a4 4 0 0 1-4-4V8z" />
-              <line x1="6" y1="1" x2="6" y2="4" />
-              <line x1="10" y1="1" x2="10" y2="4" />
-              <line x1="14" y1="1" x2="14" y2="4" />
-            </svg>
-            <p className="text-sm">Tests físicos — próximamente</p>
+          <div>
+            <div className="flex items-center justify-between mb-5">
+              <h2 className="text-base font-semibold text-gray-900">Tests físicos</h2>
+              <button
+                onClick={openPhysForm}
+                className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium text-white transition-colors"
+                style={{ backgroundColor: "#1B4D2E" }}
+                onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.backgroundColor = "#163d24"; }}
+                onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.backgroundColor = "#1B4D2E"; }}
+              >
+                <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                  <path d="M12 5v14M5 12h14" />
+                </svg>
+                Nuevo test
+              </button>
+            </div>
+
+            {physTestsLoading ? (
+              <div className="flex items-center justify-center py-16 text-gray-400">
+                <svg className="animate-spin mr-3 h-5 w-5" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
+                </svg>
+                Cargando tests...
+              </div>
+            ) : physicalTests.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-16 text-gray-400">
+                <svg width="40" height="40" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5} className="mb-3">
+                  <path d="M18 8h1a4 4 0 0 1 0 8h-1" />
+                  <path d="M2 8h16v9a4 4 0 0 1-4 4H6a4 4 0 0 1-4-4V8z" />
+                  <line x1="6" y1="1" x2="6" y2="4" />
+                  <line x1="10" y1="1" x2="10" y2="4" />
+                  <line x1="14" y1="1" x2="14" y2="4" />
+                </svg>
+                <p className="text-sm font-medium">Sin tests físicos aún</p>
+                <p className="text-xs mt-1">Crea el primer test físico de este alumno</p>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {physicalTests.map((t) => {
+                  const isOpen = expandedPhysTest === t.id;
+                  const { passes, fails } = tpiSummary(t.tpi_screens);
+                  return (
+                    <div key={t.id} className="border border-gray-100 rounded-xl overflow-hidden">
+                      <div className="flex items-center hover:bg-gray-50 transition-colors">
+                        <button
+                          onClick={() => setExpandedPhysTest(isOpen ? null : t.id)}
+                          className="flex-1 flex items-center justify-between px-5 py-4 text-left"
+                        >
+                          <div>
+                            <p className="text-sm font-semibold text-gray-900">{formatFecha(t.analysis_date)}</p>
+                            <p className="text-xs text-gray-500 mt-0.5">{t.evaluator_name || "Sin evaluador"}</p>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            {t.player_profile && (
+                              <span
+                                className="px-2.5 py-1 rounded-full text-xs font-medium"
+                                style={{ backgroundColor: "#C9A84C20", color: "#8B6914" }}
+                              >
+                                {PLAYER_PROFILE_LABELS[t.player_profile] ?? t.player_profile}
+                              </span>
+                            )}
+                            {t.tpi_screens && (
+                              <span className="flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold"
+                                style={{ backgroundColor: "#1B4D2E15", color: "#1B4D2E" }}>
+                                <span style={{ color: "#1B4D2E" }}>{passes}P</span>
+                                <span className="text-gray-400 mx-0.5">/</span>
+                                <span style={{ color: "#DC2626" }}>{fails}F</span>
+                              </span>
+                            )}
+                            <svg
+                              width="16" height="16" fill="none" viewBox="0 0 24 24"
+                              stroke="currentColor" strokeWidth={2}
+                              className={`text-gray-400 transition-transform ml-1 ${isOpen ? "rotate-180" : ""}`}
+                            >
+                              <path d="M19 9l-7 7-7-7" />
+                            </svg>
+                          </div>
+                        </button>
+                        <button
+                          onClick={() => openEditPhysForm(t)}
+                          title="Editar test"
+                          className="mr-3 p-2 rounded-lg text-gray-400 hover:text-[#1B4D2E] hover:bg-[#1B4D2E10] transition-colors"
+                        >
+                          <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                            <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+                            <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
+                          </svg>
+                        </button>
+                      </div>
+
+                      {isOpen && (
+                        <div className="px-5 pb-5 border-t border-gray-50">
+                          <div className="pt-4 space-y-5">
+                            <div>
+                              <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">Antropometría</p>
+                              <div className="grid grid-cols-3 gap-2">
+                                <PhysMetric label="Altura" value={t.anthropometry?.height_cm ?? null} unit="cm" />
+                                <PhysMetric label="Peso" value={t.anthropometry?.weight_kg ?? null} unit="kg" />
+                                <PhysMetric label="Envergadura" value={t.anthropometry?.wingspan_cm ?? null} unit="cm" />
+                              </div>
+                            </div>
+                            <div>
+                              <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">Rendimiento</p>
+                              <div className="grid grid-cols-3 gap-2">
+                                <PhysMetric label="Vel. swing" value={t.performance_tests?.swing_speed_mph ?? null} unit="mph" />
+                                <PhysMetric label="Salto vertical" value={t.performance_tests?.vertical_jump_cm ?? null} unit="cm" />
+                                <PhysMetric label="Med ball" value={t.performance_tests?.med_ball_throw_m ?? null} unit="m" />
+                              </div>
+                            </div>
+                            <div>
+                              <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">Fuerza</p>
+                              <div className="grid grid-cols-3 gap-2">
+                                <PhysMetric label="Plancha" value={t.strength_power?.plank_seconds ?? null} unit="seg" />
+                                <PhysMetric label="Agarre derecha" value={t.strength_power?.grip_right_kg ?? null} unit="kg" />
+                                <PhysMetric label="Agarre izquierda" value={t.strength_power?.grip_left_kg ?? null} unit="kg" />
+                              </div>
+                            </div>
+                            {t.tpi_screens && (
+                              <div>
+                                <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">TPI Screens</p>
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
+                                  {TPI_SCREEN_KEYS.map((key) => {
+                                    const sc = t.tpi_screens![key];
+                                    return (
+                                      <div key={key} className="flex items-center justify-between py-1.5 px-3 rounded-lg bg-gray-50">
+                                        <span className="text-sm text-gray-700">{TPI_SCREEN_LABELS[key]}</span>
+                                        <div className="flex items-center gap-1.5 shrink-0">
+                                          <span
+                                            className="px-2 py-0.5 rounded-full text-xs font-semibold"
+                                            style={sc?.pass
+                                              ? { backgroundColor: "#1B4D2E15", color: "#1B4D2E" }
+                                              : { backgroundColor: "#FEE2E2", color: "#991B1B" }}
+                                          >
+                                            {sc?.pass ? "Pass" : "Fail"}
+                                          </span>
+                                          {sc?.notes && <span className="text-xs text-gray-400 max-w-[80px] truncate" title={sc.notes}>{sc.notes}</span>}
+                                        </div>
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </div>
         )}
 
@@ -793,6 +1190,206 @@ export default function StudentProfile({ studentId }: { studentId: string }) {
         </div>
       )}
 
+      {/* Physical test modal */}
+      {showPhysForm && physForm && (
+        <div
+          className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto py-8 px-4"
+          style={{ backgroundColor: "rgba(0,0,0,0.45)" }}
+          onClick={(e) => { if (e.target === e.currentTarget) closePhysForm(); }}
+        >
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl my-auto">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+              <div>
+                <h2 className="text-base font-semibold text-gray-900">
+                  {editingPhysTest ? "Editar test físico" : "Nuevo test físico"}
+                </h2>
+                <p className="text-xs text-gray-400 mt-0.5">{student.full_name}</p>
+              </div>
+              <button onClick={closePhysForm} className="text-gray-400 hover:text-gray-600 transition-colors" disabled={physFormSaving}>
+                <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path d="M18 6 6 18M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
+            <div className="px-6 py-5 space-y-6 overflow-y-auto max-h-[72vh]">
+              {/* Básicos */}
+              <div className="grid grid-cols-2 gap-4">
+                <FormField label="Fecha" required>
+                  <input type="date" value={physForm.test_date}
+                    onChange={(e) => setPhysField("test_date", e.target.value)}
+                    className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm focus:outline-none focus:border-[#1B4D2E] focus:ring-1 focus:ring-[#1B4D2E]" />
+                </FormField>
+                <FormField label="Evaluador">
+                  <input type="text" value={physForm.evaluator} placeholder="Nombre del evaluador"
+                    onChange={(e) => setPhysField("evaluator", e.target.value)}
+                    className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm focus:outline-none focus:border-[#1B4D2E] focus:ring-1 focus:ring-[#1B4D2E]" />
+                </FormField>
+              </div>
+              <FormField label="Perfil del jugador">
+                <select value={physForm.player_profile}
+                  onChange={(e) => setPhysField("player_profile", e.target.value as PhysicalTestForm["player_profile"])}
+                  className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm focus:outline-none focus:border-[#1B4D2E] focus:ring-1 focus:ring-[#1B4D2E] bg-white">
+                  <option value="junior_alto_rendimiento">Junior alto rendimiento</option>
+                  <option value="dama_casual">Dama casual</option>
+                  <option value="hombre_casual">Hombre casual</option>
+                </select>
+              </FormField>
+
+              {/* Antropometría */}
+              <div>
+                <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">Antropometría</p>
+                <div className="grid grid-cols-3 gap-4">
+                  <FormField label="Altura (cm)">
+                    <input type="number" value={physForm.height_cm} placeholder="—"
+                      onChange={(e) => setPhysField("height_cm", e.target.value)}
+                      className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm focus:outline-none focus:border-[#1B4D2E] focus:ring-1 focus:ring-[#1B4D2E]" />
+                  </FormField>
+                  <FormField label="Peso (kg)">
+                    <input type="number" value={physForm.weight_kg} placeholder="—"
+                      onChange={(e) => setPhysField("weight_kg", e.target.value)}
+                      className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm focus:outline-none focus:border-[#1B4D2E] focus:ring-1 focus:ring-[#1B4D2E]" />
+                  </FormField>
+                  <FormField label="Envergadura (cm)">
+                    <input type="number" value={physForm.wingspan_cm} placeholder="—"
+                      onChange={(e) => setPhysField("wingspan_cm", e.target.value)}
+                      className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm focus:outline-none focus:border-[#1B4D2E] focus:ring-1 focus:ring-[#1B4D2E]" />
+                  </FormField>
+                </div>
+              </div>
+
+              {/* Rendimiento */}
+              <div>
+                <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">Tests de rendimiento</p>
+                <div className="grid grid-cols-3 gap-4">
+                  <FormField label="Vel. swing (mph)">
+                    <input type="number" value={physForm.swing_speed_mph} placeholder="—"
+                      onChange={(e) => setPhysField("swing_speed_mph", e.target.value)}
+                      className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm focus:outline-none focus:border-[#1B4D2E] focus:ring-1 focus:ring-[#1B4D2E]" />
+                  </FormField>
+                  <FormField label="Salto vertical (cm)">
+                    <input type="number" value={physForm.vertical_jump_cm} placeholder="—"
+                      onChange={(e) => setPhysField("vertical_jump_cm", e.target.value)}
+                      className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm focus:outline-none focus:border-[#1B4D2E] focus:ring-1 focus:ring-[#1B4D2E]" />
+                  </FormField>
+                  <FormField label="Med ball (m)">
+                    <input type="number" value={physForm.med_ball_throw_m} placeholder="—"
+                      onChange={(e) => setPhysField("med_ball_throw_m", e.target.value)}
+                      className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm focus:outline-none focus:border-[#1B4D2E] focus:ring-1 focus:ring-[#1B4D2E]" />
+                  </FormField>
+                </div>
+              </div>
+
+              {/* Fuerza */}
+              <div>
+                <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">Fuerza</p>
+                <div className="grid grid-cols-3 gap-4">
+                  <FormField label="Plancha (seg)">
+                    <input type="number" value={physForm.plank_seconds} placeholder="—"
+                      onChange={(e) => setPhysField("plank_seconds", e.target.value)}
+                      className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm focus:outline-none focus:border-[#1B4D2E] focus:ring-1 focus:ring-[#1B4D2E]" />
+                  </FormField>
+                  <FormField label="Agarre der. (kg)">
+                    <input type="number" value={physForm.grip_right_kg} placeholder="—"
+                      onChange={(e) => setPhysField("grip_right_kg", e.target.value)}
+                      className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm focus:outline-none focus:border-[#1B4D2E] focus:ring-1 focus:ring-[#1B4D2E]" />
+                  </FormField>
+                  <FormField label="Agarre izq. (kg)">
+                    <input type="number" value={physForm.grip_left_kg} placeholder="—"
+                      onChange={(e) => setPhysField("grip_left_kg", e.target.value)}
+                      className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm focus:outline-none focus:border-[#1B4D2E] focus:ring-1 focus:ring-[#1B4D2E]" />
+                  </FormField>
+                </div>
+              </div>
+
+              {/* TPI Screens */}
+              <div>
+                <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">TPI Screens</p>
+                <div className="space-y-2">
+                  {TPI_SCREEN_KEYS.map((key) => {
+                    const sc = physForm.tpi_screens[key];
+                    return (
+                      <div key={key} className="flex items-center gap-3">
+                        <span className="text-sm text-gray-700 w-52 shrink-0 leading-tight">{TPI_SCREEN_LABELS[key]}</span>
+                        <div className="flex gap-1 shrink-0">
+                          <button
+                            type="button"
+                            onClick={() => setTpiScreen(key, { pass: true })}
+                            className="px-3 py-1.5 rounded-lg text-xs font-medium border transition-all"
+                            style={sc.pass
+                              ? { backgroundColor: "#1B4D2E15", color: "#1B4D2E", borderColor: "#1B4D2E50" }
+                              : { backgroundColor: "white", color: "#9CA3AF", borderColor: "#E5E7EB" }}
+                          >Pass</button>
+                          <button
+                            type="button"
+                            onClick={() => setTpiScreen(key, { pass: false })}
+                            className="px-3 py-1.5 rounded-lg text-xs font-medium border transition-all"
+                            style={!sc.pass
+                              ? { backgroundColor: "#FEE2E2", color: "#991B1B", borderColor: "#FCA5A5" }
+                              : { backgroundColor: "white", color: "#9CA3AF", borderColor: "#E5E7EB" }}
+                          >Fail</button>
+                        </div>
+                        <input
+                          type="text"
+                          value={sc.notes}
+                          onChange={(e) => setTpiScreen(key, { notes: e.target.value })}
+                          placeholder="Notas..."
+                          className="flex-1 px-2.5 py-1.5 rounded-lg border border-gray-200 text-xs focus:outline-none focus:border-[#1B4D2E] focus:ring-1 focus:ring-[#1B4D2E]"
+                        />
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {physFormError && (
+                <p className="text-sm text-red-600 bg-red-50 border border-red-100 rounded-lg px-3 py-2">
+                  Error al guardar: {physFormError}
+                </p>
+              )}
+            </div>
+
+            <div className="flex items-center px-6 py-4 border-t border-gray-100 gap-3">
+              {editingPhysTest && (
+                <button
+                  onClick={handleDeletePhysTestFromForm}
+                  disabled={physFormSaving}
+                  className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium text-red-600 border border-red-200 hover:bg-red-50 transition-colors disabled:opacity-50"
+                >
+                  <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path d="M3 6h18M8 6V4h8v2M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
+                    <path d="M10 11v6M14 11v6" />
+                  </svg>
+                  Eliminar
+                </button>
+              )}
+              <div className="flex-1" />
+              <button
+                onClick={closePhysForm}
+                disabled={physFormSaving}
+                className="px-4 py-2 rounded-lg text-sm font-medium text-gray-600 hover:text-gray-800 hover:bg-gray-100 transition-colors"
+              >Cancelar</button>
+              <button
+                onClick={handleSavePhysTest}
+                disabled={physFormSaving || !physForm.test_date}
+                className="flex items-center gap-2 px-5 py-2 rounded-lg text-sm font-medium text-white transition-colors disabled:opacity-50"
+                style={{ backgroundColor: "#1B4D2E" }}
+                onMouseEnter={(e) => { if (!physFormSaving) (e.currentTarget as HTMLButtonElement).style.backgroundColor = "#163d24"; }}
+                onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.backgroundColor = "#1B4D2E"; }}
+              >
+                {physFormSaving && (
+                  <svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
+                  </svg>
+                )}
+                {physFormSaving ? "Guardando..." : editingPhysTest ? "Guardar cambios" : "Guardar test"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* New evaluation modal */}
       {showEvalForm && evalForm && (
         <div
@@ -805,7 +1402,9 @@ export default function StudentProfile({ studentId }: { studentId: string }) {
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-xl my-auto">
             <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
               <div>
-                <h2 className="text-base font-semibold text-gray-900">Nueva evaluación técnica</h2>
+                <h2 className="text-base font-semibold text-gray-900">
+                  {editingEval ? "Editar evaluación técnica" : "Nueva evaluación técnica"}
+                </h2>
                 <p className="text-xs text-gray-400 mt-0.5">{student.full_name}</p>
               </div>
               <button
@@ -893,7 +1492,21 @@ export default function StudentProfile({ studentId }: { studentId: string }) {
               )}
             </div>
 
-            <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-gray-100">
+            <div className="flex items-center px-6 py-4 border-t border-gray-100 gap-3">
+              {editingEval && (
+                <button
+                  onClick={handleDeleteEvalFromForm}
+                  disabled={evalSaving}
+                  className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium text-red-600 border border-red-200 hover:bg-red-50 transition-colors disabled:opacity-50"
+                >
+                  <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path d="M3 6h18M8 6V4h8v2M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
+                    <path d="M10 11v6M14 11v6" />
+                  </svg>
+                  Eliminar
+                </button>
+              )}
+              <div className="flex-1" />
               <button
                 onClick={closeEvalForm}
                 disabled={evalSaving}
@@ -919,7 +1532,7 @@ export default function StudentProfile({ studentId }: { studentId: string }) {
                     <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
                   </svg>
                 )}
-                {evalSaving ? "Guardando..." : "Guardar evaluación"}
+                {evalSaving ? "Guardando..." : editingEval ? "Guardar cambios" : "Guardar evaluación"}
               </button>
             </div>
           </div>
@@ -1041,6 +1654,19 @@ function SkillLevelInput({
           );
         })}
       </div>
+    </div>
+  );
+}
+
+function PhysMetric({ label, value, unit }: { label: string; value: number | null; unit: string }) {
+  return (
+    <div className="flex flex-col items-center justify-center py-3 px-2 rounded-lg bg-gray-50 text-center">
+      <p className="text-xs text-gray-400 mb-1">{label}</p>
+      {value != null ? (
+        <p className="text-sm font-semibold text-gray-900">{value} <span className="text-xs font-normal text-gray-500">{unit}</span></p>
+      ) : (
+        <p className="text-sm text-gray-400">—</p>
+      )}
     </div>
   );
 }
