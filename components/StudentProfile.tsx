@@ -284,6 +284,9 @@ export default function StudentProfile({ studentId }: { studentId: string }) {
   const [physFormError, setPhysFormError] = useState<string | null>(null);
   const [editingPhysTest, setEditingPhysTest] = useState<PhysicalTest | null>(null);
   const [expandedPhysTest, setExpandedPhysTest] = useState<string | null>(null);
+  const [aiLoading, setAiLoading] = useState<Record<string, boolean>>({});
+  const [aiRecommendations, setAiRecommendations] = useState<Record<string, string>>({});
+  const [aiExpanded, setAiExpanded] = useState<Record<string, boolean>>({});
 
   const [milestones, setMilestones] = useState<Milestone[]>([]);
   const [milestonesLoading, setMilestonesLoading] = useState(false);
@@ -769,6 +772,85 @@ export default function StudentProfile({ studentId }: { studentId: string }) {
     }
   }
 
+  async function generateAIRecommendations(t: PhysicalTest) {
+    if (!student) return;
+    setAiLoading((prev) => ({ ...prev, [t.id]: true }));
+
+    const edad = calcularEdad(student.birth_date);
+    const perfil = PLAYER_PROFILE_LABELS[t.player_profile ?? ""] ?? t.player_profile ?? "No especificado";
+
+    const tpiScreensText = TPI_SCREEN_KEYS.map((key) => {
+      const sc = t.tpi_screens?.[key];
+      const resultado = sc?.pass ? "PASS" : "FAIL";
+      const notas = sc?.notes ? ` (Notas: ${sc.notes})` : "";
+      return `- ${TPI_SCREEN_LABELS[key]}: ${resultado}${notas}`;
+    }).join("\n");
+
+    const failedScreens = TPI_SCREEN_KEYS.filter((key) => !t.tpi_screens?.[key]?.pass);
+
+    const userPrompt = `Alumno: ${student.full_name}
+Edad: ${edad}
+Perfil del jugador: ${perfil}
+Fecha del test: ${formatFecha(t.analysis_date)}
+Evaluador: ${t.evaluator_name ?? "No especificado"}
+
+ANTROPOMETRÍA:
+- Altura: ${t.anthropometry?.height_cm ?? "—"} cm
+- Peso: ${t.anthropometry?.weight_kg ?? "—"} kg
+- Envergadura: ${t.anthropometry?.wingspan_cm ?? "—"} cm
+
+TESTS DE RENDIMIENTO:
+- Velocidad de swing: ${t.performance_tests?.swing_speed_mph ?? "—"} mph
+- Salto vertical: ${t.performance_tests?.vertical_jump_cm ?? "—"} cm
+- Lanzamiento med ball: ${t.performance_tests?.med_ball_throw_m ?? "—"} m
+
+FUERZA:
+- Plancha isométrica: ${t.strength_power?.plank_seconds ?? "—"} segundos
+- Agarre mano derecha: ${t.strength_power?.grip_right_kg ?? "—"} kg
+- Agarre mano izquierda: ${t.strength_power?.grip_left_kg ?? "—"} kg
+
+TPI SCREENS (${t.tpi_summary?.passes ?? 0} PASS / ${t.tpi_summary?.fails ?? 0} FAIL):
+${tpiScreensText}
+
+Con base en estos resultados, por favor genera:
+
+1. **Análisis de screens TPI fallidos**: Para cada uno de los ${failedScreens.length} screens que fallaron (${failedScreens.map((k) => TPI_SCREEN_LABELS[k]).join(", ")}), explica qué limitación física representa y su impacto en el swing de golf.
+
+2. **Ejercicios correctivos prioritarios**: Lista los 5-8 ejercicios más importantes con descripción clara, series/repeticiones y cómo cada uno corrige las disfunciones encontradas.
+
+3. **Plan de trabajo físico 4-6 semanas**: Semana a semana, indica el enfoque principal, frecuencia semanal y métricas de progreso esperadas.
+
+4. **Comparación con benchmarks TPI**: Evalúa los resultados de rendimiento (velocidad de swing, salto vertical, med ball, plancha, agarre) vs. los valores esperados para el perfil "${perfil}" y grupo de edad.`;
+
+    try {
+      const res = await fetch("/api/ai-recommendations", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          model: "claude-sonnet-4-6",
+          max_tokens: 2048,
+          system: "Eres un experto en biomecánica del golf y desarrollo físico de golfistas con certificación TPI (Titleist Performance Institute). Analizas resultados de tests físicos y generas recomendaciones personalizadas considerando la edad, perfil del jugador y benchmarks TPI.",
+          messages: [{ role: "user", content: userPrompt }],
+        }),
+      });
+
+      const data = await res.json();
+      if (data.content?.[0]?.text) {
+        setAiRecommendations((prev) => ({ ...prev, [t.id]: data.content[0].text }));
+        setAiExpanded((prev) => ({ ...prev, [t.id]: true }));
+      } else {
+        const errMsg = data.error?.message ?? "Error desconocido al generar recomendaciones.";
+        setAiRecommendations((prev) => ({ ...prev, [t.id]: `Error: ${errMsg}` }));
+        setAiExpanded((prev) => ({ ...prev, [t.id]: true }));
+      }
+    } catch {
+      setAiRecommendations((prev) => ({ ...prev, [t.id]: "Error de conexión al generar recomendaciones. Intenta de nuevo." }));
+      setAiExpanded((prev) => ({ ...prev, [t.id]: true }));
+    } finally {
+      setAiLoading((prev) => ({ ...prev, [t.id]: false }));
+    }
+  }
+
   if (loading) {
     return (
       <div className="flex items-center justify-center py-32 text-gray-400">
@@ -1196,6 +1278,81 @@ export default function StudentProfile({ studentId }: { studentId: string }) {
                                 </div>
                               </div>
                             )}
+
+                            {/* AI Recommendations */}
+                            <div className="border-t border-gray-100 pt-4">
+                              <div className="flex items-center justify-between mb-3">
+                                <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide">
+                                  Recomendaciones IA
+                                </p>
+                                <button
+                                  onClick={() => generateAIRecommendations(t)}
+                                  disabled={aiLoading[t.id]}
+                                  className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors disabled:opacity-60"
+                                  style={{ backgroundColor: "#C9A84C", color: "white" }}
+                                  onMouseEnter={(e) => {
+                                    if (!aiLoading[t.id]) (e.currentTarget as HTMLButtonElement).style.backgroundColor = "#b8943c";
+                                  }}
+                                  onMouseLeave={(e) => {
+                                    (e.currentTarget as HTMLButtonElement).style.backgroundColor = "#C9A84C";
+                                  }}
+                                >
+                                  {aiLoading[t.id] ? (
+                                    <>
+                                      <svg className="animate-spin h-3.5 w-3.5" fill="none" viewBox="0 0 24 24">
+                                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
+                                      </svg>
+                                      Generando...
+                                    </>
+                                  ) : (
+                                    <>
+                                      <svg width="13" height="13" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                        <path d="M12 2a10 10 0 1 0 10 10" />
+                                        <path d="M12 6v6l4 2" />
+                                        <path d="M18 2v4M20 4h-4" />
+                                      </svg>
+                                      Generar recomendaciones IA
+                                    </>
+                                  )}
+                                </button>
+                              </div>
+
+                              {aiRecommendations[t.id] && (
+                                <div className="rounded-xl border overflow-hidden" style={{ borderColor: "#C9A84C40" }}>
+                                  <button
+                                    onClick={() => setAiExpanded((prev) => ({ ...prev, [t.id]: !prev[t.id] }))}
+                                    className="w-full flex items-center justify-between px-4 py-3 text-left text-xs font-semibold transition-colors"
+                                    style={{ backgroundColor: "#C9A84C15", color: "#8B6914" }}
+                                  >
+                                    <span className="flex items-center gap-2">
+                                      <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                        <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" fill="#C9A84C" stroke="#C9A84C" />
+                                      </svg>
+                                      Recomendaciones generadas por IA — TPI Expert
+                                    </span>
+                                    <svg
+                                      width="14" height="14" fill="none" viewBox="0 0 24 24"
+                                      stroke="currentColor" strokeWidth={2}
+                                      className={`transition-transform ${aiExpanded[t.id] ? "rotate-180" : ""}`}
+                                    >
+                                      <path d="M19 9l-7 7-7-7" />
+                                    </svg>
+                                  </button>
+                                  {aiExpanded[t.id] && (
+                                    <div className="px-4 py-4 bg-white">
+                                      <AiRecommendationsPanel text={aiRecommendations[t.id]} />
+                                    </div>
+                                  )}
+                                </div>
+                              )}
+
+                              {!aiRecommendations[t.id] && !aiLoading[t.id] && (
+                                <p className="text-xs text-gray-400 italic">
+                                  Haz clic en el botón para generar recomendaciones personalizadas basadas en los resultados de este test.
+                                </p>
+                              )}
+                            </div>
                           </div>
                         </div>
                       )}
@@ -2168,6 +2325,59 @@ function Field({ label, value }: { label: string; value: string | null | undefin
     <div>
       <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-1">{label}</p>
       <p className="text-sm text-gray-800">{value || "—"}</p>
+    </div>
+  );
+}
+
+function AiRecommendationsPanel({ text }: { text: string }) {
+  const sections = text.split(/\n(?=#{1,3} |\*{2}\d+\.|---)/);
+
+  const renderLine = (line: string, idx: number) => {
+    if (/^#{1,3} /.test(line)) {
+      const content = line.replace(/^#{1,3} /, "");
+      return (
+        <p key={idx} className="text-sm font-bold mt-4 mb-1.5" style={{ color: "#1B4D2E" }}>
+          {content}
+        </p>
+      );
+    }
+    if (/^\*\*(.+?)\*\*/.test(line)) {
+      return (
+        <p key={idx} className="text-sm font-semibold mt-3 mb-1" style={{ color: "#1B4D2E" }}>
+          {line.replace(/\*\*/g, "")}
+        </p>
+      );
+    }
+    if (/^[-•] /.test(line)) {
+      return (
+        <div key={idx} className="flex gap-2 text-sm text-gray-700 leading-relaxed">
+          <span className="mt-1.5 shrink-0 w-1.5 h-1.5 rounded-full" style={{ backgroundColor: "#C9A84C" }} />
+          <span>{line.replace(/^[-•] /, "").replace(/\*\*/g, "")}</span>
+        </div>
+      );
+    }
+    if (/^\d+\. /.test(line)) {
+      const num = line.match(/^(\d+)\. /)?.[1];
+      const rest = line.replace(/^\d+\. /, "").replace(/\*\*/g, "");
+      return (
+        <div key={idx} className="flex gap-2 text-sm text-gray-700 leading-relaxed mt-1">
+          <span className="shrink-0 font-semibold" style={{ color: "#C9A84C", minWidth: "1.25rem" }}>{num}.</span>
+          <span>{rest}</span>
+        </div>
+      );
+    }
+    if (line.trim() === "" || line === "---") return <div key={idx} className="h-2" />;
+    return (
+      <p key={idx} className="text-sm text-gray-700 leading-relaxed">
+        {line.replace(/\*\*/g, "")}
+      </p>
+    );
+  };
+
+  const lines = text.split("\n");
+  return (
+    <div className="space-y-0.5">
+      {lines.map((line, idx) => renderLine(line, idx))}
     </div>
   );
 }
