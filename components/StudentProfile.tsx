@@ -485,7 +485,9 @@ posPayload[`${key}_score`] = rawScore !== null ? Math.round(rawScore) : null;
                             <div className="border-t border-gray-100 bg-gradient-to-b from-purple-50 to-white px-5 py-5">
                               <div className="flex items-center justify-between mb-4">
                                 <div className="flex items-center gap-2"><span className="text-sm font-semibold text-purple-700">✦ Análisis IA</span><span className="text-xs text-gray-400">Guía para el profesor</span></div>
-                                <button onClick={() => handleAnalyzeAI(ev)} disabled={isAnalyzing} className="text-xs text-purple-600 hover:text-purple-800 underline">Regenerar</button>
+                                <button onClick={() => handleAnalyzeAI(ev)} disabled={analyzingId !== null} className="text-xs text-purple-600 hover:text-purple-800 underline disabled:opacity-40">
+  {analyzingId === ev.id ? "Analizando..." : "Regenerar"}
+</button>
                               </div>
                               <div className="bg-white rounded-xl border border-purple-100 p-4 mb-4"><p className="text-sm text-gray-700 leading-relaxed">{ai.resumen}</p></div>
                               <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">Lo que el profesor debe trabajar — en orden</p>
