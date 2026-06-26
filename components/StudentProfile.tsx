@@ -369,7 +369,7 @@ export default function StudentProfile({ studentId }: { studentId: string }) {
 
     const { error } = await supabase.from("swing_evaluations").insert(payload);
     if (error) { setSwingSaveError(error.message); setSwingSaving(false); return; }
-    const newEval: SwingEvaluation = { ...payload, ai_analysis: null, ai_generated_at: null, created_at: new Date().toISOString() };
+   const newEval = { ...payload, ai_analysis: null, ai_generated_at: null, created_at: new Date().toISOString() } as SwingEvaluation;
     setSwingEvals((prev) => [newEval, ...prev]);
     setSwingSaving(false);
     closeSwingForm();
