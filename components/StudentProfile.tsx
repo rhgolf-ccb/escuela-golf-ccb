@@ -604,10 +604,10 @@ posPayload[`${key}_score`] = rawScore !== null ? Math.round(rawScore) : null;
                               <span className="text-xs text-gray-700 flex-1 pr-3">{crit}</span>
                               <div className="flex gap-1.5">
                                 {(["cumple","progreso","no"] as CritValue[]).map((val) => {
-                                  const isActive = ps.criterios[i]===val;
-                                  const s = { cumple:{ac:"bg-emerald-50 border-emerald-300",ic:"✅"}, progreso:{ac:"bg-amber-50 border-amber-300",ic:"⚠️"}, no:{ac:"bg-red-50 border-red-300",ic:"❌"} }[val as "cumple"|"progreso"|"no"];
-                                 isActive ? s.ac + " shadow-sm" : "border-gray-300 bg-gray-100 hover:bg-gray-200"
-                                })}
+  const isActive = ps.criterios[i]===val;
+  const s = { cumple:{ac:"bg-emerald-50 border-emerald-300",ic:"✅"}, progreso:{ac:"bg-amber-50 border-amber-300",ic:"⚠️"}, no:{ac:"bg-red-50 border-red-300",ic:"❌"} }[val as "cumple"|"progreso"|"no"];
+  return <button key={val} onClick={() => setCrit(pid, i, val)} className={`w-8 h-7 rounded border flex items-center justify-center text-sm transition-all ${isActive ? s.ac + " shadow-sm" : "border-gray-300 bg-gray-100 hover:bg-gray-200"}`}>{s.ic}</button>;
+})}
                               </div>
                             </div>
                           ))}
