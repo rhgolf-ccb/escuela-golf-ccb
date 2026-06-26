@@ -293,7 +293,8 @@ export default function StudentProfile({ studentId }: { studentId: string }) {
     const posPayload: Record<string, unknown> = {};
     Object.entries(swingForm.positions).forEach(([pid, ps]) => {
       const key = pid.toLowerCase();
-      posPayload[`${key}_score`] = ps.na ? null : calcPosScore(ps.criterios);
+      const rawScore = ps.na ? null : calcPosScore(ps.criterios);
+posPayload[`${key}_score`] = rawScore !== null ? Math.round(rawScore) : null;
       posPayload[`${key}_criterios`] = ps.na ? null : ps.criterios;
       posPayload[`${key}_obs`] = ps.obs.trim() || null;
       posPayload[`${key}_na`] = ps.na;
@@ -605,7 +606,7 @@ export default function StudentProfile({ studentId }: { studentId: string }) {
                                 {(["cumple","progreso","no"] as CritValue[]).map((val) => {
                                   const isActive = ps.criterios[i]===val;
                                   const s = { cumple:{ac:"bg-emerald-50 border-emerald-300",ic:"✅"}, progreso:{ac:"bg-amber-50 border-amber-300",ic:"⚠️"}, no:{ac:"bg-red-50 border-red-300",ic:"❌"} }[val as "cumple"|"progreso"|"no"];
-                                  return <button key={val} onClick={() => setCrit(pid, i, val)} className={`w-8 h-7 rounded border flex items-center justify-center text-sm transition-all ${isActive?s.ac:"border-gray-200 bg-white opacity-40 hover:opacity-70"}`}>{s.ic}</button>;
+                                 isActive ? s.ac + " shadow-sm" : "border-gray-300 bg-gray-100 hover:bg-gray-200"
                                 })}
                               </div>
                             </div>
