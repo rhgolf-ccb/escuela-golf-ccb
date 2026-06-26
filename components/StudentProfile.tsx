@@ -146,6 +146,34 @@ type PhysicalTestForm = {
   tpi_screens: Record<TpiScreenKey, TpiScreen>;
 };
 
+// ── Milestones ────────────────────────────────────────────────────────────────
+
+type MilestoneCategory = "golf" | "fisico" | "actitud" | "campo" | "graduacion";
+
+type Milestone = {
+  id: string;
+  student_id: string;
+  milestone_date: string;
+  category: MilestoneCategory;
+  description: string;
+  registered_by: string | null;
+  photo_url: string | null;
+  visible_parents: boolean;
+  created_at: string;
+};
+
+type MilestoneForm = {
+  milestone_date: string;
+  category: MilestoneCategory;
+  description: string;
+  registered_by: string;
+  visible_parents: boolean;
+  photo_file: File | null;
+  photo_url: string | null;
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+
 function defaultTpiScreens(): Record<TpiScreenKey, TpiScreen> {
   return Object.fromEntries(
     TPI_SCREEN_KEYS.map((k) => [k, { pass: false, notes: "" }])
@@ -164,6 +192,14 @@ const PLAYER_PROFILE_LABELS: Record<string, string> = {
   dama_casual: "Dama casual",
   hombre_casual: "Hombre casual",
 };
+
+const MILESTONE_CATEGORIES: { key: MilestoneCategory; label: string; bg: string; color: string }[] = [
+  { key: "golf",       label: "Golf",       bg: "#1B4D2E15", color: "#1B4D2E" },
+  { key: "fisico",     label: "Físico",     bg: "#DBEAFE",   color: "#1E40AF" },
+  { key: "actitud",    label: "Actitud",    bg: "#FEF3C7",   color: "#92400E" },
+  { key: "campo",      label: "Campo",      bg: "#F3E8FF",   color: "#6B21A8" },
+  { key: "graduacion", label: "Graduación", bg: "#C9A84C20", color: "#8B6914" },
+];
 
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -249,6 +285,15 @@ export default function StudentProfile({ studentId }: { studentId: string }) {
   const [editingPhysTest, setEditingPhysTest] = useState<PhysicalTest | null>(null);
   const [expandedPhysTest, setExpandedPhysTest] = useState<string | null>(null);
 
+  const [milestones, setMilestones] = useState<Milestone[]>([]);
+  const [milestonesLoading, setMilestonesLoading] = useState(false);
+  const [showMilestoneForm, setShowMilestoneForm] = useState(false);
+  const [milestoneForm, setMilestoneForm] = useState<MilestoneForm | null>(null);
+  const [milestoneSaving, setMilestoneSaving] = useState(false);
+  const [milestoneSaveError, setMilestoneSaveError] = useState<string | null>(null);
+  const [editingMilestone, setEditingMilestone] = useState<Milestone | null>(null);
+  const [uploadingPhoto, setUploadingPhoto] = useState(false);
+
   useEffect(() => {
     async function fetchStudent() {
       const { data, error } = await supabase
@@ -294,6 +339,21 @@ export default function StudentProfile({ studentId }: { studentId: string }) {
       setPhysTestsLoading(false);
     }
     fetchPhysicalTests();
+  }, [activeTab, studentId]);
+
+  useEffect(() => {
+    if (activeTab !== "hitos") return;
+    async function fetchMilestones() {
+      setMilestonesLoading(true);
+      const { data, error } = await supabase
+        .from("progress_milestones")
+        .select("id, student_id, milestone_date, category, description, registered_by, photo_url, visible_parents, created_at")
+        .eq("student_id", studentId)
+        .order("milestone_date", { ascending: false });
+      if (!error && data) setMilestones(data as Milestone[]);
+      setMilestonesLoading(false);
+    }
+    fetchMilestones();
   }, [activeTab, studentId]);
 
   function openEdit() {
@@ -574,6 +634,138 @@ export default function StudentProfile({ studentId }: { studentId: string }) {
     } else {
       setPhysFormError(error.message);
       setPhysFormSaving(false);
+    }
+  }
+
+  function defaultMilestoneForm(): MilestoneForm {
+    return {
+      milestone_date: new Date().toISOString().split("T")[0],
+      category: "golf",
+      description: "",
+      registered_by: "",
+      visible_parents: true,
+      photo_file: null,
+      photo_url: null,
+    };
+  }
+
+  function openMilestoneForm() {
+    setEditingMilestone(null);
+    setMilestoneForm(defaultMilestoneForm());
+    setMilestoneSaveError(null);
+    setShowMilestoneForm(true);
+  }
+
+  function openEditMilestoneForm(m: Milestone) {
+    setEditingMilestone(m);
+    setMilestoneForm({
+      milestone_date: m.milestone_date,
+      category: m.category,
+      description: m.description,
+      registered_by: m.registered_by ?? "",
+      visible_parents: m.visible_parents,
+      photo_file: null,
+      photo_url: m.photo_url,
+    });
+    setMilestoneSaveError(null);
+    setShowMilestoneForm(true);
+  }
+
+  function closeMilestoneForm() {
+    setShowMilestoneForm(false);
+    setMilestoneForm(null);
+    setMilestoneSaveError(null);
+    setEditingMilestone(null);
+  }
+
+  function setMilestoneField<K extends keyof MilestoneForm>(key: K, value: MilestoneForm[K]) {
+    setMilestoneForm((prev) => (prev ? { ...prev, [key]: value } : prev));
+  }
+
+  async function handleSaveMilestone() {
+    if (!milestoneForm || !student) return;
+    setMilestoneSaving(true);
+    setMilestoneSaveError(null);
+
+    let photo_url = milestoneForm.photo_url;
+
+    if (milestoneForm.photo_file) {
+      setUploadingPhoto(true);
+      const ext = milestoneForm.photo_file.name.split(".").pop();
+      const path = `milestones/${studentId}/${Date.now()}.${ext}`;
+      const { data: uploadData, error: uploadError } = await supabase.storage
+        .from("student-photos")
+        .upload(path, milestoneForm.photo_file, { upsert: false });
+      setUploadingPhoto(false);
+      if (uploadError) {
+        setMilestoneSaveError(`Error al subir foto: ${uploadError.message}`);
+        setMilestoneSaving(false);
+        return;
+      }
+      const { data: urlData } = supabase.storage.from("student-photos").getPublicUrl(uploadData.path);
+      photo_url = urlData.publicUrl;
+    }
+
+    const payload = {
+      student_id: student.id,
+      milestone_date: milestoneForm.milestone_date,
+      category: milestoneForm.category,
+      description: milestoneForm.description.trim(),
+      registered_by: milestoneForm.registered_by.trim() || null,
+      photo_url,
+      visible_parents: milestoneForm.visible_parents,
+    };
+
+    if (editingMilestone) {
+      const { error } = await supabase
+        .from("progress_milestones")
+        .update(payload)
+        .eq("id", editingMilestone.id);
+      if (error) {
+        setMilestoneSaveError(error.message);
+        setMilestoneSaving(false);
+        return;
+      }
+      setMilestones((prev) =>
+        prev.map((m) => (m.id === editingMilestone.id ? { ...m, ...payload } : m))
+      );
+    } else {
+      const { data, error } = await supabase
+        .from("progress_milestones")
+        .insert(payload)
+        .select()
+        .single();
+      if (error) {
+        setMilestoneSaveError(error.message);
+        setMilestoneSaving(false);
+        return;
+      }
+      setMilestones((prev) => [data as Milestone, ...prev]);
+    }
+
+    setMilestoneSaving(false);
+    closeMilestoneForm();
+  }
+
+  async function handleDeleteMilestoneFromForm() {
+    if (!editingMilestone) return;
+    if (
+      !window.confirm(
+        `¿Eliminar el hito del ${formatFecha(editingMilestone.milestone_date)}? Esta acción no se puede deshacer.`
+      )
+    )
+      return;
+    setMilestoneSaving(true);
+    const { error } = await supabase
+      .from("progress_milestones")
+      .delete()
+      .eq("id", editingMilestone.id);
+    if (!error) {
+      setMilestones((prev) => prev.filter((m) => m.id !== editingMilestone.id));
+      closeMilestoneForm();
+    } else {
+      setMilestoneSaveError(error.message);
+      setMilestoneSaving(false);
     }
   }
 
@@ -1016,22 +1208,96 @@ export default function StudentProfile({ studentId }: { studentId: string }) {
         )}
 
         {activeTab === "hitos" && (
-          <div className="flex flex-col items-center justify-center py-16 text-gray-400">
-            <svg
-              width="40"
-              height="40"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-              strokeWidth={1.5}
-              className="mb-3"
-            >
-              <path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6" />
-              <path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18" />
-              <path d="M4 22h16" />
-              <path d="M18 2H6v7a6 6 0 0 0 12 0V2Z" />
-            </svg>
-            <p className="text-sm">Hitos personales — próximamente</p>
+          <div>
+            <div className="flex items-center justify-between mb-5">
+              <h2 className="text-base font-semibold text-gray-900">Hitos del alumno</h2>
+              <button
+                onClick={openMilestoneForm}
+                className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium text-white transition-colors"
+                style={{ backgroundColor: "#C9A84C" }}
+                onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.backgroundColor = "#b8943c"; }}
+                onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.backgroundColor = "#C9A84C"; }}
+              >
+                <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                  <path d="M12 5v14M5 12h14" />
+                </svg>
+                Nuevo hito
+              </button>
+            </div>
+
+            {milestonesLoading ? (
+              <div className="flex items-center justify-center py-16 text-gray-400">
+                <svg className="animate-spin mr-3 h-5 w-5" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
+                </svg>
+                Cargando hitos...
+              </div>
+            ) : milestones.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-16 text-gray-400">
+                <svg width="40" height="40" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5} className="mb-3">
+                  <path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6" />
+                  <path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18" />
+                  <path d="M4 22h16" />
+                  <path d="M18 2H6v7a6 6 0 0 0 12 0V2Z" />
+                </svg>
+                <p className="text-sm font-medium">Sin hitos registrados aún</p>
+                <p className="text-xs mt-1">Registra el primer logro de este alumno</p>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {milestones.map((m) => {
+                  const cat = MILESTONE_CATEGORIES.find((c) => c.key === m.category);
+                  return (
+                    <div key={m.id} className="flex items-start gap-4 border border-gray-100 rounded-xl px-5 py-4 hover:bg-gray-50 transition-colors">
+                      <div
+                        className="shrink-0 w-10 h-10 rounded-full flex items-center justify-center mt-0.5"
+                        style={{ backgroundColor: cat?.bg ?? "#F3F4F6" }}
+                      >
+                        <MilestoneCategoryIcon category={m.category} color={cat?.color ?? "#6B7280"} />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap mb-1">
+                          <span
+                            className="px-2.5 py-0.5 rounded-full text-xs font-semibold"
+                            style={{ backgroundColor: cat?.bg ?? "#F3F4F6", color: cat?.color ?? "#6B7280" }}
+                          >
+                            {cat?.label ?? m.category}
+                          </span>
+                          <span className="text-xs text-gray-400">{formatFecha(m.milestone_date)}</span>
+                          {!m.visible_parents && (
+                            <span className="px-2 py-0.5 rounded-full text-xs bg-gray-100 text-gray-500">Solo internos</span>
+                          )}
+                        </div>
+                        <p className="text-sm text-gray-800 leading-relaxed">{m.description}</p>
+                        {m.registered_by && (
+                          <p className="text-xs text-gray-400 mt-1">Registrado por {m.registered_by}</p>
+                        )}
+                      </div>
+                      {m.photo_url && (
+                        <a href={m.photo_url} target="_blank" rel="noopener noreferrer" className="shrink-0">
+                          <img
+                            src={m.photo_url}
+                            alt="Foto del hito"
+                            className="w-16 h-16 object-cover rounded-lg border border-gray-100 hover:opacity-90 transition-opacity"
+                          />
+                        </a>
+                      )}
+                      <button
+                        onClick={() => openEditMilestoneForm(m)}
+                        title="Editar hito"
+                        className="shrink-0 p-2 rounded-lg text-gray-400 hover:text-[#1B4D2E] hover:bg-[#1B4D2E10] transition-colors mt-0.5"
+                      >
+                        <svg width="15" height="15" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                          <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+                          <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
+                        </svg>
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </div>
         )}
       </div>
@@ -1390,6 +1656,196 @@ export default function StudentProfile({ studentId }: { studentId: string }) {
         </div>
       )}
 
+      {/* Milestone modal */}
+      {showMilestoneForm && milestoneForm && (
+        <div
+          className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto py-8 px-4"
+          style={{ backgroundColor: "rgba(0,0,0,0.45)" }}
+          onClick={(e) => { if (e.target === e.currentTarget) closeMilestoneForm(); }}
+        >
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg my-auto">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+              <div>
+                <h2 className="text-base font-semibold text-gray-900">
+                  {editingMilestone ? "Editar hito" : "Nuevo hito"}
+                </h2>
+                <p className="text-xs text-gray-400 mt-0.5">{student.full_name}</p>
+              </div>
+              <button onClick={closeMilestoneForm} disabled={milestoneSaving} className="text-gray-400 hover:text-gray-600 transition-colors">
+                <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path d="M18 6 6 18M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
+            <div className="px-6 py-5 space-y-4 overflow-y-auto max-h-[72vh]">
+              <div className="grid grid-cols-2 gap-4">
+                <FormField label="Fecha del hito" required>
+                  <input
+                    type="date"
+                    value={milestoneForm.milestone_date}
+                    onChange={(e) => setMilestoneField("milestone_date", e.target.value)}
+                    className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm focus:outline-none focus:border-[#1B4D2E] focus:ring-1 focus:ring-[#1B4D2E]"
+                  />
+                </FormField>
+                <FormField label="Categoría" required>
+                  <select
+                    value={milestoneForm.category}
+                    onChange={(e) => setMilestoneField("category", e.target.value as MilestoneCategory)}
+                    className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm focus:outline-none focus:border-[#1B4D2E] focus:ring-1 focus:ring-[#1B4D2E] bg-white"
+                  >
+                    {MILESTONE_CATEGORIES.map((c) => (
+                      <option key={c.key} value={c.key}>{c.label}</option>
+                    ))}
+                  </select>
+                </FormField>
+              </div>
+
+              <FormField label="Descripción del hito logrado" required>
+                <textarea
+                  value={milestoneForm.description}
+                  onChange={(e) => setMilestoneField("description", e.target.value)}
+                  rows={3}
+                  placeholder="Describe el logro alcanzado por el alumno..."
+                  className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm focus:outline-none focus:border-[#1B4D2E] focus:ring-1 focus:ring-[#1B4D2E] resize-none"
+                />
+              </FormField>
+
+              <FormField label="Registrado por">
+                <input
+                  type="text"
+                  value={milestoneForm.registered_by}
+                  onChange={(e) => setMilestoneField("registered_by", e.target.value)}
+                  placeholder="Nombre del profesor"
+                  className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm focus:outline-none focus:border-[#1B4D2E] focus:ring-1 focus:ring-[#1B4D2E]"
+                />
+              </FormField>
+
+              <FormField label="Foto del hito (opcional)">
+                <div className="space-y-2">
+                  {milestoneForm.photo_url && !milestoneForm.photo_file && (
+                    <div className="flex items-center gap-3">
+                      <img
+                        src={milestoneForm.photo_url}
+                        alt="Foto actual"
+                        className="w-20 h-20 object-cover rounded-lg border border-gray-100"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setMilestoneField("photo_url", null)}
+                        className="text-xs text-red-500 hover:text-red-700 transition-colors"
+                      >
+                        Eliminar foto
+                      </button>
+                    </div>
+                  )}
+                  {milestoneForm.photo_file && (
+                    <div className="flex items-center gap-3">
+                      <img
+                        src={URL.createObjectURL(milestoneForm.photo_file)}
+                        alt="Vista previa"
+                        className="w-20 h-20 object-cover rounded-lg border border-gray-100"
+                      />
+                      <div>
+                        <p className="text-xs text-gray-600 font-medium">{milestoneForm.photo_file.name}</p>
+                        <button
+                          type="button"
+                          onClick={() => setMilestoneField("photo_file", null)}
+                          className="text-xs text-red-500 hover:text-red-700 mt-0.5 transition-colors"
+                        >
+                          Quitar
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                  {!milestoneForm.photo_file && (
+                    <label className="flex items-center gap-2 px-3 py-2 rounded-lg border border-dashed border-gray-300 text-sm text-gray-500 cursor-pointer hover:border-[#1B4D2E] hover:text-[#1B4D2E] transition-colors">
+                      <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                        <polyline points="17 8 12 3 7 8" />
+                        <line x1="12" y1="3" x2="12" y2="15" />
+                      </svg>
+                      {milestoneForm.photo_url ? "Cambiar foto" : "Subir foto"}
+                      <input
+                        type="file"
+                        accept="image/*"
+                        className="hidden"
+                        onChange={(e) => {
+                          const file = e.target.files?.[0] ?? null;
+                          setMilestoneField("photo_file", file);
+                        }}
+                      />
+                    </label>
+                  )}
+                </div>
+              </FormField>
+
+              <div>
+                <label className="flex items-center gap-3 cursor-pointer group">
+                  <div
+                    onClick={() => setMilestoneField("visible_parents", !milestoneForm.visible_parents)}
+                    className="relative w-10 h-5 rounded-full transition-colors shrink-0"
+                    style={{ backgroundColor: milestoneForm.visible_parents ? "#1B4D2E" : "#D1D5DB" }}
+                  >
+                    <div
+                      className="absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform"
+                      style={{ transform: milestoneForm.visible_parents ? "translateX(20px)" : "translateX(0)" }}
+                    />
+                  </div>
+                  <span className="text-sm text-gray-700">Visible para padres</span>
+                </label>
+              </div>
+
+              {milestoneSaveError && (
+                <p className="text-sm text-red-600 bg-red-50 border border-red-100 rounded-lg px-3 py-2">
+                  {milestoneSaveError}
+                </p>
+              )}
+            </div>
+
+            <div className="flex items-center px-6 py-4 border-t border-gray-100 gap-3">
+              {editingMilestone && (
+                <button
+                  onClick={handleDeleteMilestoneFromForm}
+                  disabled={milestoneSaving}
+                  className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium text-red-600 border border-red-200 hover:bg-red-50 transition-colors disabled:opacity-50"
+                >
+                  <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path d="M3 6h18M8 6V4h8v2M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
+                    <path d="M10 11v6M14 11v6" />
+                  </svg>
+                  Eliminar
+                </button>
+              )}
+              <div className="flex-1" />
+              <button
+                onClick={closeMilestoneForm}
+                disabled={milestoneSaving}
+                className="px-4 py-2 rounded-lg text-sm font-medium text-gray-600 hover:text-gray-800 hover:bg-gray-100 transition-colors"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={handleSaveMilestone}
+                disabled={milestoneSaving || !milestoneForm.milestone_date || !milestoneForm.description.trim()}
+                className="flex items-center gap-2 px-5 py-2 rounded-lg text-sm font-medium text-white transition-colors disabled:opacity-50"
+                style={{ backgroundColor: "#1B4D2E" }}
+                onMouseEnter={(e) => { if (!milestoneSaving) (e.currentTarget as HTMLButtonElement).style.backgroundColor = "#163d24"; }}
+                onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.backgroundColor = "#1B4D2E"; }}
+              >
+                {(milestoneSaving || uploadingPhoto) && (
+                  <svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
+                  </svg>
+                )}
+                {uploadingPhoto ? "Subiendo foto..." : milestoneSaving ? "Guardando..." : editingMilestone ? "Guardar cambios" : "Guardar hito"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* New evaluation modal */}
       {showEvalForm && evalForm && (
         <div
@@ -1539,6 +1995,42 @@ export default function StudentProfile({ studentId }: { studentId: string }) {
         </div>
       )}
     </div>
+  );
+}
+
+function MilestoneCategoryIcon({ category, color }: { category: MilestoneCategory; color: string }) {
+  const props = { width: 18, height: 18, fill: "none", viewBox: "0 0 24 24", stroke: color, strokeWidth: 2 };
+  if (category === "golf") return (
+    <svg {...props}>
+      <circle cx="12" cy="18" r="2" />
+      <path d="M12 16V5l7 3-7 3" />
+    </svg>
+  );
+  if (category === "fisico") return (
+    <svg {...props}>
+      <path d="M18 8h1a4 4 0 0 1 0 8h-1" />
+      <path d="M2 8h16v9a4 4 0 0 1-4 4H6a4 4 0 0 1-4-4V8z" />
+      <line x1="6" y1="1" x2="6" y2="4" />
+      <line x1="10" y1="1" x2="10" y2="4" />
+      <line x1="14" y1="1" x2="14" y2="4" />
+    </svg>
+  );
+  if (category === "actitud") return (
+    <svg {...props}>
+      <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
+    </svg>
+  );
+  if (category === "campo") return (
+    <svg {...props}>
+      <path d="M17.8 19.2 16 11l3.5-3.5C21 6 21 4 21 4s-2 0-3.5 1.5L14 9l-8.2-1.8L4 8l6 3.5-4.6 4.6 1 1.5-1.5 2.5 2.5-1.5 1.5 1 4.6-4.6L18 20l1-1.2" />
+    </svg>
+  );
+  // graduacion
+  return (
+    <svg {...props}>
+      <path d="M22 10v6M2 10l10-5 10 5-10 5z" />
+      <path d="M6 12v5c3 3 9 3 12 0v-5" />
+    </svg>
   );
 }
 
