@@ -194,7 +194,7 @@ Genera el análisis completo para guiar al profesor en las próximas clases.`;
     }
 
     const rawText = data.content?.[0]?.text || "";
-
+console.log("RAW:", rawText.substring(0, 200));
     // Parsear JSON de la respuesta
     let analysis;
 try {
