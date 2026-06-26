@@ -153,6 +153,7 @@ export default function StudentProfile({ studentId }: { studentId: string }) {
   const [evalSaving, setEvalSaving] = useState(false);
   const [evalSaveError, setEvalSaveError] = useState<string | null>(null);
   const [expandedEval, setExpandedEval] = useState<string | null>(null);
+  const [deletingEvalId, setDeletingEvalId] = useState<string | null>(null);
 
   useEffect(() => {
     async function fetchStudent() {
@@ -260,6 +261,17 @@ export default function StudentProfile({ studentId }: { studentId: string }) {
     setEvalForm((prev) =>
       prev ? { ...prev, skills: { ...prev.skills, [skill]: level } } : prev
     );
+  }
+
+  async function handleDeleteEval(evalId: string, evalDate: string) {
+    if (!window.confirm(`¿Eliminar la evaluación del ${formatFecha(evalDate)}? Esta acción no se puede deshacer.`)) return;
+    setDeletingEvalId(evalId);
+    const { error } = await supabase.from("skill_evaluations").delete().eq("id", evalId);
+    if (!error) {
+      setEvaluations((prev) => prev.filter((e) => e.id !== evalId));
+      if (expandedEval === evalId) setExpandedEval(null);
+    }
+    setDeletingEvalId(null);
   }
 
   async function handleSaveEval() {
@@ -488,32 +500,52 @@ export default function StudentProfile({ studentId }: { studentId: string }) {
                   const nivel = ev.overall_level ?? calcularNivelGeneral(ev.skills);
                   return (
                     <div key={ev.id} className="border border-gray-100 rounded-xl overflow-hidden">
-                      <button
-                        onClick={() => setExpandedEval(isOpen ? null : ev.id)}
-                        className="w-full flex items-center justify-between px-5 py-4 hover:bg-gray-50 transition-colors text-left"
-                      >
-                        <div>
-                          <p className="text-sm font-semibold text-gray-900">
-                            {formatFecha(ev.evaluation_date)}
-                          </p>
-                          <p className="text-xs text-gray-500 mt-0.5 capitalize">{ev.evaluation_type}</p>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <EvalTypeBadge type={ev.evaluation_type} />
-                          <NivelBadge nivel={nivel} />
-                          <svg
-                            width="16"
-                            height="16"
-                            fill="none"
-                            viewBox="0 0 24 24"
-                            stroke="currentColor"
-                            strokeWidth={2}
-                            className={`text-gray-400 transition-transform ml-1 ${isOpen ? "rotate-180" : ""}`}
-                          >
-                            <path d="M19 9l-7 7-7-7" />
-                          </svg>
-                        </div>
-                      </button>
+                      <div className="flex items-center hover:bg-gray-50 transition-colors">
+                        <button
+                          onClick={() => setExpandedEval(isOpen ? null : ev.id)}
+                          className="flex-1 flex items-center justify-between px-5 py-4 text-left"
+                        >
+                          <div>
+                            <p className="text-sm font-semibold text-gray-900">
+                              {formatFecha(ev.evaluation_date)}
+                            </p>
+                            <p className="text-xs text-gray-500 mt-0.5 capitalize">{ev.evaluation_type}</p>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <EvalTypeBadge type={ev.evaluation_type} />
+                            <NivelBadge nivel={nivel} />
+                            <svg
+                              width="16"
+                              height="16"
+                              fill="none"
+                              viewBox="0 0 24 24"
+                              stroke="currentColor"
+                              strokeWidth={2}
+                              className={`text-gray-400 transition-transform ml-1 ${isOpen ? "rotate-180" : ""}`}
+                            >
+                              <path d="M19 9l-7 7-7-7" />
+                            </svg>
+                          </div>
+                        </button>
+                        <button
+                          onClick={() => handleDeleteEval(ev.id, ev.evaluation_date)}
+                          disabled={deletingEvalId === ev.id}
+                          title="Eliminar evaluación"
+                          className="mr-3 p-2 rounded-lg text-gray-400 hover:text-red-600 hover:bg-red-50 transition-colors disabled:opacity-40"
+                        >
+                          {deletingEvalId === ev.id ? (
+                            <svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
+                              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
+                            </svg>
+                          ) : (
+                            <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                              <path d="M3 6h18M8 6V4h8v2M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
+                              <path d="M10 11v6M14 11v6" />
+                            </svg>
+                          )}
+                        </button>
+                      </div>
 
                       {isOpen && (
                         <div className="px-5 pb-5 border-t border-gray-50">
