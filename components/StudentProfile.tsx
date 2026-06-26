@@ -5,6 +5,39 @@ import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 
 type Tab = "datos" | "tecnicos" | "fisicos" | "hitos";
+type SkillLevel = "bajo" | "en_progreso" | "cumple";
+
+const SKILL_KEYS = [
+  "putt_linea", "putt_distancia", "chipping", "pitching", "postura_grip",
+  "swing_hierros", "maderas_driver", "reglas_basicas", "etiqueta_campo",
+  "conteo_scoring", "concentracion", "manejo_frustracion", "trabajo_equipo",
+] as const;
+type SkillKey = typeof SKILL_KEYS[number];
+
+const SKILL_LABELS: Record<SkillKey, string> = {
+  putt_linea: "Putt línea",
+  putt_distancia: "Putt distancia",
+  chipping: "Chipping",
+  pitching: "Pitching",
+  postura_grip: "Postura y grip",
+  swing_hierros: "Swing hierros",
+  maderas_driver: "Maderas y driver",
+  reglas_basicas: "Reglas básicas",
+  etiqueta_campo: "Etiqueta en campo",
+  conteo_scoring: "Conteo y scoring",
+  concentracion: "Concentración",
+  manejo_frustracion: "Manejo de frustración",
+  trabajo_equipo: "Trabajo en equipo",
+};
+
+const GOLF_SKILLS: SkillKey[] = [
+  "putt_linea", "putt_distancia", "chipping", "pitching",
+  "postura_grip", "swing_hierros", "maderas_driver",
+];
+const CONDUCT_SKILLS: SkillKey[] = [
+  "reglas_basicas", "etiqueta_campo", "conteo_scoring",
+  "concentracion", "manejo_frustracion", "trabajo_equipo",
+];
 
 type Student = {
   id: string;
@@ -31,6 +64,39 @@ type EditForm = {
   observations: string;
 };
 
+type SkillEvaluation = {
+  id: string;
+  student_id: string;
+  evaluation_date: string;
+  evaluation_type: string;
+  skills: Record<string, SkillLevel> | null;
+  general_comment: string | null;
+  overall_level: string | null;
+  created_at: string;
+};
+
+type EvalForm = {
+  evaluation_type: "inicial" | "periódica" | "graduación";
+  evaluation_date: string;
+  skills: Record<SkillKey, SkillLevel>;
+  general_comment: string;
+};
+
+function defaultSkills(): Record<SkillKey, SkillLevel> {
+  return Object.fromEntries(SKILL_KEYS.map((k) => [k, "bajo"])) as Record<SkillKey, SkillLevel>;
+}
+
+function calcularNivelGeneral(skills: Record<string, SkillLevel> | null): string {
+  if (!skills) return "bajo";
+  const valores = Object.values(skills) as SkillLevel[];
+  if (!valores.length) return "bajo";
+  const scores: number[] = valores.map((v) => (v === "cumple" ? 2 : v === "en_progreso" ? 1 : 0));
+  const avg = scores.reduce((a, b) => a + b, 0) / scores.length;
+  if (avg >= 1.5) return "cumple";
+  if (avg >= 0.7) return "en_progreso";
+  return "bajo";
+}
+
 function calcularEdad(birthDate: string | null): string {
   if (!birthDate) return "—";
   const hoy = new Date();
@@ -48,7 +114,12 @@ function formatFecha(dateStr: string | null): string {
 }
 
 function initiales(name: string): string {
-  return name.split(" ").slice(0, 2).map((n) => n[0]).join("").toUpperCase();
+  return name
+    .split(" ")
+    .slice(0, 2)
+    .map((n) => n[0])
+    .join("")
+    .toUpperCase();
 }
 
 function studentToForm(s: Student): EditForm {
@@ -69,16 +140,27 @@ export default function StudentProfile({ studentId }: { studentId: string }) {
   const [student, setStudent] = useState<Student | null>(null);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<Tab>("datos");
+
   const [isEditing, setIsEditing] = useState(false);
   const [form, setForm] = useState<EditForm | null>(null);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
 
+  const [evaluations, setEvaluations] = useState<SkillEvaluation[]>([]);
+  const [evalsLoading, setEvalsLoading] = useState(false);
+  const [showEvalForm, setShowEvalForm] = useState(false);
+  const [evalForm, setEvalForm] = useState<EvalForm | null>(null);
+  const [evalSaving, setEvalSaving] = useState(false);
+  const [evalSaveError, setEvalSaveError] = useState<string | null>(null);
+  const [expandedEval, setExpandedEval] = useState<string | null>(null);
+
   useEffect(() => {
     async function fetchStudent() {
       const { data, error } = await supabase
         .from("students")
-        .select("id, full_name, birth_date, status, grupo_activo, gender, parent_name, parent_phone, parent_email, observations, enrollment_date")
+        .select(
+          "id, full_name, birth_date, status, grupo_activo, gender, parent_name, parent_phone, parent_email, observations, enrollment_date"
+        )
         .eq("id", studentId)
         .single();
       if (!error) setStudent(data);
@@ -86,6 +168,23 @@ export default function StudentProfile({ studentId }: { studentId: string }) {
     }
     fetchStudent();
   }, [studentId]);
+
+  useEffect(() => {
+    if (activeTab !== "tecnicos") return;
+    async function fetchEvaluations() {
+      setEvalsLoading(true);
+      const { data, error } = await supabase
+        .from("skill_evaluations")
+        .select(
+          "id, student_id, evaluation_date, evaluation_type, skills, general_comment, overall_level, created_at"
+        )
+        .eq("student_id", studentId)
+        .order("evaluation_date", { ascending: false });
+      if (!error && data) setEvaluations(data);
+      setEvalsLoading(false);
+    }
+    fetchEvaluations();
+  }, [activeTab, studentId]);
 
   function openEdit() {
     if (!student) return;
@@ -101,7 +200,7 @@ export default function StudentProfile({ studentId }: { studentId: string }) {
   }
 
   function setField<K extends keyof EditForm>(key: K, value: EditForm[K]) {
-    setForm((prev) => prev ? { ...prev, [key]: value } : prev);
+    setForm((prev) => (prev ? { ...prev, [key]: value } : prev));
   }
 
   async function handleSave() {
@@ -131,9 +230,69 @@ export default function StudentProfile({ studentId }: { studentId: string }) {
       return;
     }
 
-    setStudent((prev) => prev ? { ...prev, ...payload } : prev);
+    setStudent((prev) => (prev ? { ...prev, ...payload } : prev));
     setSaving(false);
     closeEdit();
+  }
+
+  function openEvalForm() {
+    setEvalForm({
+      evaluation_type: "inicial",
+      evaluation_date: new Date().toISOString().split("T")[0],
+      skills: defaultSkills(),
+      general_comment: "",
+    });
+    setEvalSaveError(null);
+    setShowEvalForm(true);
+  }
+
+  function closeEvalForm() {
+    setShowEvalForm(false);
+    setEvalForm(null);
+    setEvalSaveError(null);
+  }
+
+  function setEvalField<K extends keyof EvalForm>(key: K, value: EvalForm[K]) {
+    setEvalForm((prev) => (prev ? { ...prev, [key]: value } : prev));
+  }
+
+  function setSkillLevel(skill: SkillKey, level: SkillLevel) {
+    setEvalForm((prev) =>
+      prev ? { ...prev, skills: { ...prev.skills, [skill]: level } } : prev
+    );
+  }
+
+  async function handleSaveEval() {
+    if (!evalForm || !student) return;
+    setEvalSaving(true);
+    setEvalSaveError(null);
+
+    const overall = calcularNivelGeneral(evalForm.skills);
+    const id = `eval_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+
+    const payload = {
+      id,
+      student_id: student.id,
+      student_name: student.full_name,
+      evaluation_date: evalForm.evaluation_date,
+      evaluation_type: evalForm.evaluation_type,
+      skills: evalForm.skills,
+      general_comment: evalForm.general_comment.trim() || null,
+      overall_level: overall,
+    };
+
+    const { error } = await supabase.from("skill_evaluations").insert(payload);
+
+    if (error) {
+      setEvalSaveError(error.message);
+      setEvalSaving(false);
+      return;
+    }
+
+    const newEval: SkillEvaluation = { ...payload, created_at: new Date().toISOString() };
+    setEvaluations((prev) => [newEval, ...prev]);
+    setEvalSaving(false);
+    closeEvalForm();
   }
 
   if (loading) {
@@ -215,8 +374,12 @@ export default function StudentProfile({ studentId }: { studentId: string }) {
             onClick={openEdit}
             className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors shrink-0"
             style={{ backgroundColor: "#1B4D2E", color: "white" }}
-            onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.backgroundColor = "#163d24"; }}
-            onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.backgroundColor = "#1B4D2E"; }}
+            onMouseEnter={(e) => {
+              (e.currentTarget as HTMLButtonElement).style.backgroundColor = "#163d24";
+            }}
+            onMouseLeave={(e) => {
+              (e.currentTarget as HTMLButtonElement).style.backgroundColor = "#1B4D2E";
+            }}
           >
             <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
@@ -234,11 +397,7 @@ export default function StudentProfile({ studentId }: { studentId: string }) {
               key={key}
               onClick={() => setActiveTab(key)}
               className="px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap transition-all"
-              style={
-                activeTab === key
-                  ? { backgroundColor: "#1B4D2E", color: "white" }
-                  : { color: "#374151" }
-              }
+              style={activeTab === key ? { backgroundColor: "#1B4D2E", color: "white" } : { color: "#374151" }}
             >
               {label}
             </button>
@@ -256,7 +415,9 @@ export default function StudentProfile({ studentId }: { studentId: string }) {
             <Field label="Estado" value={student.status} />
             <Field label="Fecha de ingreso" value={formatFecha(student.enrollment_date)} />
             <div className="sm:col-span-2 border-t border-gray-100 pt-4 mt-2">
-              <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-4">Contacto del acudiente</p>
+              <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-4">
+                Contacto del acudiente
+              </p>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
                 <Field label="Nombre del acudiente" value={student.parent_name} />
                 <Field label="Teléfono" value={student.parent_phone} />
@@ -273,18 +434,148 @@ export default function StudentProfile({ studentId }: { studentId: string }) {
         )}
 
         {activeTab === "tecnicos" && (
-          <div className="flex flex-col items-center justify-center py-16 text-gray-400">
-            <svg width="40" height="40" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5} className="mb-3">
-              <path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2" />
-              <rect x="9" y="3" width="6" height="4" rx="1" />
-            </svg>
-            <p className="text-sm">Tests técnicos — próximamente</p>
+          <div>
+            <div className="flex items-center justify-between mb-5">
+              <h2 className="text-base font-semibold text-gray-900">Evaluaciones técnicas</h2>
+              <button
+                onClick={openEvalForm}
+                className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium text-white transition-colors"
+                style={{ backgroundColor: "#1B4D2E" }}
+                onMouseEnter={(e) => {
+                  (e.currentTarget as HTMLButtonElement).style.backgroundColor = "#163d24";
+                }}
+                onMouseLeave={(e) => {
+                  (e.currentTarget as HTMLButtonElement).style.backgroundColor = "#1B4D2E";
+                }}
+              >
+                <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                  <path d="M12 5v14M5 12h14" />
+                </svg>
+                Nueva evaluación
+              </button>
+            </div>
+
+            {evalsLoading ? (
+              <div className="flex items-center justify-center py-16 text-gray-400">
+                <svg className="animate-spin mr-3 h-5 w-5" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
+                </svg>
+                Cargando evaluaciones...
+              </div>
+            ) : evaluations.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-16 text-gray-400">
+                <svg
+                  width="40"
+                  height="40"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                  strokeWidth={1.5}
+                  className="mb-3"
+                >
+                  <path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2" />
+                  <rect x="9" y="3" width="6" height="4" rx="1" />
+                  <path d="M9 12h6M9 16h4" />
+                </svg>
+                <p className="text-sm font-medium">Sin evaluaciones aún</p>
+                <p className="text-xs mt-1">Crea la primera evaluación técnica de este alumno</p>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {evaluations.map((ev) => {
+                  const isOpen = expandedEval === ev.id;
+                  const nivel = ev.overall_level ?? calcularNivelGeneral(ev.skills);
+                  return (
+                    <div key={ev.id} className="border border-gray-100 rounded-xl overflow-hidden">
+                      <button
+                        onClick={() => setExpandedEval(isOpen ? null : ev.id)}
+                        className="w-full flex items-center justify-between px-5 py-4 hover:bg-gray-50 transition-colors text-left"
+                      >
+                        <div>
+                          <p className="text-sm font-semibold text-gray-900">
+                            {formatFecha(ev.evaluation_date)}
+                          </p>
+                          <p className="text-xs text-gray-500 mt-0.5 capitalize">{ev.evaluation_type}</p>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <EvalTypeBadge type={ev.evaluation_type} />
+                          <NivelBadge nivel={nivel} />
+                          <svg
+                            width="16"
+                            height="16"
+                            fill="none"
+                            viewBox="0 0 24 24"
+                            stroke="currentColor"
+                            strokeWidth={2}
+                            className={`text-gray-400 transition-transform ml-1 ${isOpen ? "rotate-180" : ""}`}
+                          >
+                            <path d="M19 9l-7 7-7-7" />
+                          </svg>
+                        </div>
+                      </button>
+
+                      {isOpen && (
+                        <div className="px-5 pb-5 border-t border-gray-50">
+                          <div className="pt-4 space-y-5">
+                            <div>
+                              <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">
+                                Habilidades técnicas de golf
+                              </p>
+                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
+                                {GOLF_SKILLS.map((skill) => (
+                                  <SkillRow
+                                    key={skill}
+                                    label={SKILL_LABELS[skill]}
+                                    level={(ev.skills?.[skill] as SkillLevel) ?? null}
+                                  />
+                                ))}
+                              </div>
+                            </div>
+                            <div>
+                              <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">
+                                Actitud y conocimiento
+                              </p>
+                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
+                                {CONDUCT_SKILLS.map((skill) => (
+                                  <SkillRow
+                                    key={skill}
+                                    label={SKILL_LABELS[skill]}
+                                    level={(ev.skills?.[skill] as SkillLevel) ?? null}
+                                  />
+                                ))}
+                              </div>
+                            </div>
+                            {ev.general_comment && (
+                              <div className="border-t border-gray-50 pt-4">
+                                <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">
+                                  Comentario del evaluador
+                                </p>
+                                <p className="text-sm text-gray-700 leading-relaxed">{ev.general_comment}</p>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </div>
         )}
 
         {activeTab === "fisicos" && (
           <div className="flex flex-col items-center justify-center py-16 text-gray-400">
-            <svg width="40" height="40" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5} className="mb-3">
+            <svg
+              width="40"
+              height="40"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+              strokeWidth={1.5}
+              className="mb-3"
+            >
               <path d="M18 8h1a4 4 0 0 1 0 8h-1" />
               <path d="M2 8h16v9a4 4 0 0 1-4 4H6a4 4 0 0 1-4-4V8z" />
               <line x1="6" y1="1" x2="6" y2="4" />
@@ -297,7 +588,15 @@ export default function StudentProfile({ studentId }: { studentId: string }) {
 
         {activeTab === "hitos" && (
           <div className="flex flex-col items-center justify-center py-16 text-gray-400">
-            <svg width="40" height="40" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5} className="mb-3">
+            <svg
+              width="40"
+              height="40"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+              strokeWidth={1.5}
+              className="mb-3"
+            >
               <path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6" />
               <path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18" />
               <path d="M4 22h16" />
@@ -308,11 +607,14 @@ export default function StudentProfile({ studentId }: { studentId: string }) {
         )}
       </div>
 
+      {/* Edit student modal */}
       {isEditing && form && (
         <div
           className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto py-8 px-4"
           style={{ backgroundColor: "rgba(0,0,0,0.45)" }}
-          onClick={(e) => { if (e.target === e.currentTarget) closeEdit(); }}
+          onClick={(e) => {
+            if (e.target === e.currentTarget) closeEdit();
+          }}
         >
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg my-auto">
             <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
@@ -360,15 +662,19 @@ export default function StudentProfile({ studentId }: { studentId: string }) {
                 </FormField>
               </div>
 
-              <FormField label="Grupo" hint="Selecciona solo para Damas o Competencia; los demás grupos se calculan por edad">
+              <FormField label="Grupo">
                 <select
                   value={form.grupo_activo}
                   onChange={(e) => setField("grupo_activo", e.target.value)}
                   className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm focus:outline-none focus:border-[#1B4D2E] focus:ring-1 focus:ring-[#1B4D2E] bg-white"
                 >
-                  <option value="">Automático (según edad)</option>
-                  <option value="Damas">Damas</option>
+                  <option value="">Sin grupo asignado</option>
+                  <option value="Birdies">Birdies</option>
+                  <option value="Águilas">Águilas</option>
+                  <option value="Albatros">Albatros</option>
+                  <option value="+14">+14</option>
                   <option value="Competencia">Competencia</option>
+                  <option value="Damas">Damas</option>
                 </select>
               </FormField>
 
@@ -435,8 +741,12 @@ export default function StudentProfile({ studentId }: { studentId: string }) {
                 disabled={saving || !form.full_name.trim()}
                 className="flex items-center gap-2 px-5 py-2 rounded-lg text-sm font-medium text-white transition-colors disabled:opacity-50"
                 style={{ backgroundColor: "#1B4D2E" }}
-                onMouseEnter={(e) => { if (!saving) (e.currentTarget as HTMLButtonElement).style.backgroundColor = "#163d24"; }}
-                onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.backgroundColor = "#1B4D2E"; }}
+                onMouseEnter={(e) => {
+                  if (!saving) (e.currentTarget as HTMLButtonElement).style.backgroundColor = "#163d24";
+                }}
+                onMouseLeave={(e) => {
+                  (e.currentTarget as HTMLButtonElement).style.backgroundColor = "#1B4D2E";
+                }}
               >
                 {saving && (
                   <svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
@@ -450,6 +760,255 @@ export default function StudentProfile({ studentId }: { studentId: string }) {
           </div>
         </div>
       )}
+
+      {/* New evaluation modal */}
+      {showEvalForm && evalForm && (
+        <div
+          className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto py-8 px-4"
+          style={{ backgroundColor: "rgba(0,0,0,0.45)" }}
+          onClick={(e) => {
+            if (e.target === e.currentTarget) closeEvalForm();
+          }}
+        >
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-xl my-auto">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+              <div>
+                <h2 className="text-base font-semibold text-gray-900">Nueva evaluación técnica</h2>
+                <p className="text-xs text-gray-400 mt-0.5">{student.full_name}</p>
+              </div>
+              <button
+                onClick={closeEvalForm}
+                className="text-gray-400 hover:text-gray-600 transition-colors"
+                disabled={evalSaving}
+              >
+                <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path d="M18 6 6 18M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
+            <div className="px-6 py-5 space-y-6 overflow-y-auto max-h-[72vh]">
+              <div className="grid grid-cols-2 gap-4">
+                <FormField label="Tipo de evaluación" required>
+                  <select
+                    value={evalForm.evaluation_type}
+                    onChange={(e) =>
+                      setEvalField("evaluation_type", e.target.value as EvalForm["evaluation_type"])
+                    }
+                    className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm focus:outline-none focus:border-[#1B4D2E] focus:ring-1 focus:ring-[#1B4D2E] bg-white"
+                  >
+                    <option value="inicial">Inicial</option>
+                    <option value="periódica">Periódica</option>
+                    <option value="graduación">Graduación</option>
+                  </select>
+                </FormField>
+                <FormField label="Fecha" required>
+                  <input
+                    type="date"
+                    value={evalForm.evaluation_date}
+                    onChange={(e) => setEvalField("evaluation_date", e.target.value)}
+                    className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm focus:outline-none focus:border-[#1B4D2E] focus:ring-1 focus:ring-[#1B4D2E]"
+                  />
+                </FormField>
+              </div>
+
+              <div>
+                <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">
+                  Habilidades técnicas de golf
+                </p>
+                <div className="space-y-2">
+                  {GOLF_SKILLS.map((skill) => (
+                    <SkillLevelInput
+                      key={skill}
+                      label={SKILL_LABELS[skill]}
+                      value={evalForm.skills[skill]}
+                      onChange={(level) => setSkillLevel(skill, level)}
+                    />
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">
+                  Actitud y conocimiento
+                </p>
+                <div className="space-y-2">
+                  {CONDUCT_SKILLS.map((skill) => (
+                    <SkillLevelInput
+                      key={skill}
+                      label={SKILL_LABELS[skill]}
+                      value={evalForm.skills[skill]}
+                      onChange={(level) => setSkillLevel(skill, level)}
+                    />
+                  ))}
+                </div>
+              </div>
+
+              <FormField label="Comentario general del evaluador">
+                <textarea
+                  value={evalForm.general_comment}
+                  onChange={(e) => setEvalField("general_comment", e.target.value)}
+                  rows={3}
+                  placeholder="Observaciones sobre el alumno, avances, áreas de mejora..."
+                  className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm focus:outline-none focus:border-[#1B4D2E] focus:ring-1 focus:ring-[#1B4D2E] resize-none"
+                />
+              </FormField>
+
+              {evalSaveError && (
+                <p className="text-sm text-red-600 bg-red-50 border border-red-100 rounded-lg px-3 py-2">
+                  Error al guardar: {evalSaveError}
+                </p>
+              )}
+            </div>
+
+            <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-gray-100">
+              <button
+                onClick={closeEvalForm}
+                disabled={evalSaving}
+                className="px-4 py-2 rounded-lg text-sm font-medium text-gray-600 hover:text-gray-800 hover:bg-gray-100 transition-colors"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={handleSaveEval}
+                disabled={evalSaving || !evalForm.evaluation_date}
+                className="flex items-center gap-2 px-5 py-2 rounded-lg text-sm font-medium text-white transition-colors disabled:opacity-50"
+                style={{ backgroundColor: "#1B4D2E" }}
+                onMouseEnter={(e) => {
+                  if (!evalSaving) (e.currentTarget as HTMLButtonElement).style.backgroundColor = "#163d24";
+                }}
+                onMouseLeave={(e) => {
+                  (e.currentTarget as HTMLButtonElement).style.backgroundColor = "#1B4D2E";
+                }}
+              >
+                {evalSaving && (
+                  <svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
+                  </svg>
+                )}
+                {evalSaving ? "Guardando..." : "Guardar evaluación"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function NivelBadge({ nivel }: { nivel: string }) {
+  const map: Record<string, { bg: string; color: string; label: string }> = {
+    cumple: { bg: "#1B4D2E15", color: "#1B4D2E", label: "Cumple" },
+    en_progreso: { bg: "#FEF3C7", color: "#92400E", label: "En progreso" },
+    bajo: { bg: "#FEE2E2", color: "#991B1B", label: "Bajo" },
+  };
+  const s = map[nivel] ?? { bg: "#F3F4F6", color: "#6B7280", label: nivel };
+  return (
+    <span
+      className="px-2.5 py-1 rounded-full text-xs font-semibold"
+      style={{ backgroundColor: s.bg, color: s.color, border: `1px solid ${s.color}30` }}
+    >
+      {s.label}
+    </span>
+  );
+}
+
+function EvalTypeBadge({ type }: { type: string }) {
+  const map: Record<string, { bg: string; color: string }> = {
+    inicial: { bg: "#C9A84C20", color: "#8B6914" },
+    periódica: { bg: "#EFF6FF", color: "#1D4ED8" },
+    graduación: { bg: "#F5F3FF", color: "#6D28D9" },
+  };
+  const s = map[type] ?? { bg: "#F3F4F6", color: "#6B7280" };
+  return (
+    <span
+      className="px-2.5 py-1 rounded-full text-xs font-medium capitalize"
+      style={{ backgroundColor: s.bg, color: s.color }}
+    >
+      {type.charAt(0).toUpperCase() + type.slice(1)}
+    </span>
+  );
+}
+
+function SkillRow({ label, level }: { label: string; level: SkillLevel | null }) {
+  const cfg: Record<SkillLevel, { dot: string; text: string; label: string }> = {
+    cumple: { dot: "#1B4D2E", text: "#1B4D2E", label: "Cumple" },
+    en_progreso: { dot: "#D97706", text: "#D97706", label: "En progreso" },
+    bajo: { dot: "#DC2626", text: "#DC2626", label: "Bajo" },
+  };
+  const c = level ? cfg[level] : null;
+  return (
+    <div className="flex items-center justify-between py-1.5 px-3 rounded-lg bg-gray-50">
+      <span className="text-sm text-gray-700">{label}</span>
+      {c ? (
+        <div className="flex items-center gap-1.5">
+          <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: c.dot }} />
+          <span className="text-xs font-medium" style={{ color: c.text }}>
+            {c.label}
+          </span>
+        </div>
+      ) : (
+        <span className="text-xs text-gray-400">—</span>
+      )}
+    </div>
+  );
+}
+
+function SkillLevelInput({
+  label,
+  value,
+  onChange,
+}: {
+  label: string;
+  value: SkillLevel;
+  onChange: (level: SkillLevel) => void;
+}) {
+  const levels: {
+    key: SkillLevel;
+    label: string;
+    active: { bg: string; color: string; border: string };
+  }[] = [
+    {
+      key: "bajo",
+      label: "Bajo",
+      active: { bg: "#FEE2E2", color: "#991B1B", border: "#FCA5A5" },
+    },
+    {
+      key: "en_progreso",
+      label: "En progreso",
+      active: { bg: "#FEF3C7", color: "#92400E", border: "#FCD34D" },
+    },
+    {
+      key: "cumple",
+      label: "Cumple",
+      active: { bg: "#1B4D2E15", color: "#1B4D2E", border: "#1B4D2E50" },
+    },
+  ];
+
+  return (
+    <div className="flex items-center gap-3">
+      <span className="text-sm text-gray-700 w-40 shrink-0 leading-tight">{label}</span>
+      <div className="flex gap-1 flex-1">
+        {levels.map(({ key, label: lbl, active }) => {
+          const isActive = value === key;
+          return (
+            <button
+              key={key}
+              type="button"
+              onClick={() => onChange(key)}
+              className="flex-1 px-2 py-1.5 rounded-lg text-xs font-medium border transition-all"
+              style={
+                isActive
+                  ? { backgroundColor: active.bg, color: active.color, borderColor: active.border }
+                  : { backgroundColor: "white", color: "#9CA3AF", borderColor: "#E5E7EB" }
+              }
+            >
+              {lbl}
+            </button>
+          );
+        })}
+      </div>
     </div>
   );
 }
@@ -463,7 +1022,17 @@ function Field({ label, value }: { label: string; value: string | null | undefin
   );
 }
 
-function FormField({ label, children, required, hint }: { label: string; children: React.ReactNode; required?: boolean; hint?: string }) {
+function FormField({
+  label,
+  children,
+  required,
+  hint,
+}: {
+  label: string;
+  children: React.ReactNode;
+  required?: boolean;
+  hint?: string;
+}) {
   return (
     <div>
       <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
