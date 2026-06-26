@@ -198,7 +198,7 @@ Genera el análisis completo para guiar al profesor en las próximas clases.`;
     // Parsear JSON de la respuesta
     let analysis;
     try {
-      const jsonMatch = rawText.match(/\{[\s\S]*\}/);
+      const jsonMatch = rawText.replace(/^```json\n?/, '').replace(/\n?```$/, '').match(/\{[\s\S]*\}/);
       analysis = jsonMatch ? JSON.parse(jsonMatch[0]) : { resumen: rawText };
     } catch {
       analysis = { resumen: rawText };
