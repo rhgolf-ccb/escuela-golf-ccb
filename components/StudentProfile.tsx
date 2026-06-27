@@ -234,7 +234,7 @@ export default function StudentProfile({ studentId }: { studentId: string }) {
           if (ev.ai_analysis) {
             try {
               const parsed = typeof ev.ai_analysis === 'string' ? JSON.parse(ev.ai_analysis) : ev.ai_analysis;
-              if (parsed && typeof parsed === 'object' && !parsed.resumen?.startsWith('{')) {
+              if (parsed && typeof parsed === 'object' && !parsed.resumen?.trim()startsWith('{')) {
                 aiMap[ev.id] = parsed;
               } else if (parsed?.resumen) {
                 try { aiMap[ev.id] = JSON.parse(parsed.resumen); } catch { aiMap[ev.id] = parsed; }
