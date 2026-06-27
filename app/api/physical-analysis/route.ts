@@ -1,5 +1,30 @@
 import type { NextRequest } from "next/server";
 
+function calcularGrupoEfectivo(student: { birth_date?: string | null; grupo_activo?: string | null }): string {
+  if (student.grupo_activo === "Competencia") return "Competencia";
+  if (student.grupo_activo === "Damas") {
+    if (student.birth_date) {
+      const hoy = new Date();
+      const nac = new Date(student.birth_date);
+      let edad = hoy.getFullYear() - nac.getFullYear();
+      const m = hoy.getMonth() - nac.getMonth();
+      if (m < 0 || (m === 0 && hoy.getDate() < nac.getDate())) edad--;
+      if (edad >= 50) return "Damas Senior";
+    }
+    return "Damas";
+  }
+  if (!student.birth_date) return "Albatros";
+  const hoy = new Date();
+  const nac = new Date(student.birth_date);
+  let edad = hoy.getFullYear() - nac.getFullYear();
+  const m = hoy.getMonth() - nac.getMonth();
+  if (m < 0 || (m === 0 && hoy.getDate() < nac.getDate())) edad--;
+  if (edad <= 5) return "Birdies";
+  if (edad <= 8) return "Águilas";
+  if (edad <= 12) return "Albatros";
+  return "Grupo +14";
+}
+
 export async function POST(request: NextRequest) {
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) {
@@ -9,7 +34,7 @@ export async function POST(request: NextRequest) {
   const body = await request.json();
   const { student, evaluation } = body;
 
-  const grupo = student.grupo_activo || "Albatros";
+  const grupo = calcularGrupoEfectivo(student);
 
   const testsData: Record<string, { result: string | null; obs: string | null; na: boolean }> =
     evaluation.tests_data || {};

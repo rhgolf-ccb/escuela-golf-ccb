@@ -296,6 +296,7 @@ type SwingEvaluation = {
   p9_criterios: CritValue[]|null; p9_obs: string|null; p9_na: boolean;
   p10_criterios: CritValue[]|null; p10_obs: string|null; p10_na: boolean;
   ai_analysis: string|null; ai_generated_at: string|null;
+  integrated_analysis: string|null; integrated_at: string|null;
   professor_comment: string|null; created_at: string;
 };
 
@@ -342,6 +343,23 @@ type PhysicalAiAnalysis = {
   patron_general: string | null;
   fortalezas_fisicas: string[];
   plan_trabajo: { semanas: string; objetivo: string; ejercicios: string[]; }[];
+  nota_edad: string;
+};
+
+type IntegratedAiAnalysis = {
+  resumen_integrado: string;
+  prioridades_cruzadas: {
+    orden: number;
+    titulo: string;
+    limitacion_fisica: string;
+    error_tecnico: string;
+    descripcion: string;
+    ejercicio_fisico: string;
+    drill_tecnico: string;
+    progresion: string;
+  }[];
+  plan_clase: { fase: string; minutos: string; actividad: string; tipo: string; }[];
+  indicadores_progreso: string[];
   nota_edad: string;
 };
 
@@ -481,6 +499,8 @@ export default function StudentProfile({ studentId }: { studentId: string }) {
   const [expandedPhysical, setExpandedPhysical] = useState<string|null>(null);
   const [analyzingPhysicalId, setAnalyzingPhysicalId] = useState<string|null>(null);
   const [physicalAiResults, setPhysicalAiResults] = useState<Record<string, PhysicalAiAnalysis>>({});
+  const [integratedResults, setIntegratedResults] = useState<Record<string, IntegratedAiAnalysis>>({});
+  const [analyzingIntegratedId, setAnalyzingIntegratedId] = useState<string|null>(null);
 
   useEffect(() => {
     async function fetchStudent() {
@@ -525,6 +545,16 @@ export default function StudentProfile({ studentId }: { studentId: string }) {
           } catch {}
         });
         setAiResults(aiMap);
+        const integratedMap: Record<string, IntegratedAiAnalysis> = {};
+        data.forEach((ev) => {
+          if (!ev.integrated_analysis) return;
+          try {
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const p: any = typeof ev.integrated_analysis === "string" ? JSON.parse(ev.integrated_analysis) : ev.integrated_analysis;
+            if (p && typeof p === "object" && typeof p.resumen_integrado === "string") integratedMap[ev.id] = p as IntegratedAiAnalysis;
+          } catch {}
+        });
+        setIntegratedResults(integratedMap);
       }
       setSwingLoading(false);
     }
@@ -694,6 +724,29 @@ posPayload[`${key}_score`] = rawScore !== null ? Math.round(rawScore) : null;
     setAnalyzingPhysicalId(null);
   }
 
+  async function handleAnalyzeIntegrated(ev: SwingEvaluation) {
+    if (!student) return;
+    setAnalyzingIntegratedId(ev.id);
+    try {
+      let physEvals = physicalEvals;
+      if (physEvals.length === 0) {
+        const { data: physData } = await supabase.from("physical_evaluations").select("*")
+          .eq("student_id", studentId).order("evaluation_date", { ascending: false }).limit(1);
+        if (!physData || physData.length === 0) { setAnalyzingIntegratedId(null); return; }
+        physEvals = physData;
+        setPhysicalEvals(physData);
+      }
+      const latestPhysical = physEvals[0];
+      const res = await fetch("/api/integrated-analysis", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ student: { ...student, edad: calcularEdadNum(student.birth_date) }, swingEvaluation: ev, physicalEvaluation: latestPhysical }) });
+      const data = await res.json();
+      if (data.analysis) {
+        setIntegratedResults((prev) => ({ ...prev, [ev.id]: data.analysis }));
+        await supabase.from("swing_evaluations").update({ integrated_analysis: JSON.stringify(data.analysis), integrated_at: new Date().toISOString() }).eq("id", ev.id);
+      }
+    } catch (err) { console.error("Error análisis integrado:", err); }
+    setAnalyzingIntegratedId(null);
+  }
+
   if (loading) return <div className="flex items-center justify-center py-32 text-gray-400"><svg className="animate-spin mr-3 h-5 w-5" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"/></svg>Cargando perfil...</div>;
   if (!student) return <div className="flex flex-col items-center justify-center py-32 text-gray-400"><p>Alumno no encontrado.</p></div>;
 
@@ -784,7 +837,9 @@ posPayload[`${key}_score`] = rawScore !== null ? Math.round(rawScore) : null;
                 {swingEvals.map((ev) => {
                   const isOpen = expandedEval === ev.id;
                   const ai = aiResults[ev.id];
+                  const integrated = integratedResults[ev.id];
                   const isAnalyzing = analyzingId === ev.id;
+                  const isAnalyzingIntegrated = analyzingIntegratedId === ev.id;
                   const posActivas = POSICIONES_GRUPO[ev.grupo] || POSICIONES_GRUPO["Albatros"];
                   return (
                     <div key={ev.id} className="border border-gray-100 rounded-xl overflow-hidden">
@@ -797,6 +852,7 @@ posPayload[`${key}_score`] = rawScore !== null ? Math.round(rawScore) : null;
                           <EvalTypeBadge type={ev.evaluation_type}/>
                           {ev.score_promedio !== null && <span className="px-2.5 py-1 rounded-full text-xs font-semibold" style={{ backgroundColor:scoreColor(ev.score_promedio).bg, color:scoreColor(ev.score_promedio).text }}>{ev.score_promedio.toFixed(1)}/10</span>}
                           {ai && <span className="px-2 py-1 rounded-full text-xs font-medium bg-purple-50 text-purple-700">IA ✓</span>}
+                          {integrated && <span className="px-2 py-1 rounded-full text-xs font-medium bg-teal-50 text-teal-700">Integrado ✓</span>}
                           <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} className={`text-gray-400 transition-transform ml-1 ${isOpen?"rotate-180":""}`}><path d="M19 9l-7 7-7-7"/></svg>
                         </div>
                       </button>
@@ -933,6 +989,111 @@ posPayload[`${key}_score`] = rawScore !== null ? Math.round(rawScore) : null;
                                 <div>
                                   <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">Nota pedagógica</p>
                                   <p className="text-xs text-gray-600 leading-relaxed">{ai.nota_edad}</p>
+                                </div>
+                              )}
+                            </div>
+                          )}
+
+                          {/* Análisis integrado técnico + físico */}
+                          {!integrated && (
+                            <div className="border-t border-gray-50 px-5 pt-4 pb-5">
+                              <button onClick={() => handleAnalyzeIntegrated(ev)} disabled={analyzingIntegratedId !== null} className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl text-sm font-medium border-2 border-dashed transition-all" style={{ borderColor:isAnalyzingIntegrated?"#5EEAD4":"#0D9488", color:isAnalyzingIntegrated?"#0D9488":"#0F766E", backgroundColor:isAnalyzingIntegrated?"#F0FDFA":"transparent" }}>
+                                {isAnalyzingIntegrated ? <><svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"/></svg>Generando análisis integrado...</> : <>
+                                  <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
+                                  Análisis integrado técnico + físico TPI
+                                </>}
+                              </button>
+                            </div>
+                          )}
+
+                          {integrated && (
+                            <div className="border-t border-teal-50 px-5 py-6" style={{ backgroundColor:"#F0FDFA" }}>
+                              <div className="flex items-center justify-between mb-6">
+                                <div>
+                                  <p className="text-sm font-semibold text-teal-900">Análisis integrado — técnico + físico TPI</p>
+                                  <p className="text-xs text-teal-600 mt-0.5">Cruza limitaciones físicas con errores de swing</p>
+                                </div>
+                                <button onClick={() => handleAnalyzeIntegrated(ev)} disabled={analyzingIntegratedId !== null} className="text-xs text-teal-600 hover:text-teal-800 underline disabled:opacity-40">
+                                  {isAnalyzingIntegrated ? "Analizando..." : "Regenerar"}
+                                </button>
+                              </div>
+
+                              <div className="mb-5 pb-5 border-b border-teal-100">
+                                <p className="text-xs font-semibold text-teal-700 uppercase tracking-wide mb-2">Resumen integrado</p>
+                                <p className="text-sm text-teal-900 leading-relaxed">{integrated.resumen_integrado}</p>
+                              </div>
+
+                              {integrated.prioridades_cruzadas?.length > 0 && (
+                                <div className="mb-5 pb-5 border-b border-teal-100">
+                                  <p className="text-xs font-semibold text-teal-700 uppercase tracking-wide mb-4">Prioridades cruzadas</p>
+                                  <div className="space-y-6">
+                                    {integrated.prioridades_cruzadas.map((pr) => (
+                                      <div key={pr.orden} className="flex gap-4">
+                                        <span className="text-sm font-bold text-teal-300 w-5 shrink-0 pt-0.5">{pr.orden}.</span>
+                                        <div className="flex-1 min-w-0">
+                                          <p className="text-sm font-semibold text-teal-900 mb-2">{pr.titulo}</p>
+                                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mb-3">
+                                            <div className="bg-white rounded-lg px-3 py-2.5 border border-teal-100">
+                                              <p className="text-xs font-semibold text-teal-600 mb-1">Limitación física</p>
+                                              <p className="text-xs text-gray-700">{pr.limitacion_fisica}</p>
+                                            </div>
+                                            <div className="bg-white rounded-lg px-3 py-2.5 border border-teal-100">
+                                              <p className="text-xs font-semibold text-teal-600 mb-1">Error técnico</p>
+                                              <p className="text-xs text-gray-700">{pr.error_tecnico}</p>
+                                            </div>
+                                          </div>
+                                          <p className="text-sm text-gray-700 leading-relaxed mb-3">{pr.descripcion}</p>
+                                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mb-2">
+                                            <div className="bg-white rounded-lg px-3 py-2.5 border border-teal-100">
+                                              <p className="text-xs font-semibold text-teal-600 mb-1">Ejercicio físico</p>
+                                              <p className="text-xs text-gray-700">{pr.ejercicio_fisico}</p>
+                                            </div>
+                                            <div className="bg-white rounded-lg px-3 py-2.5 border border-teal-100">
+                                              <p className="text-xs font-semibold text-teal-600 mb-1">Drill técnico</p>
+                                              <p className="text-xs text-gray-700">{pr.drill_tecnico}</p>
+                                            </div>
+                                          </div>
+                                          <p className="text-xs text-teal-700 bg-teal-50 rounded px-2.5 py-1.5">{pr.progresion}</p>
+                                        </div>
+                                      </div>
+                                    ))}
+                                  </div>
+                                </div>
+                              )}
+
+                              {integrated.plan_clase?.length > 0 && (
+                                <div className="mb-5 pb-5 border-b border-teal-100">
+                                  <p className="text-xs font-semibold text-teal-700 uppercase tracking-wide mb-3">Plan de clase integrado (60 min)</p>
+                                  <div className="space-y-2">
+                                    {integrated.plan_clase.map((step, i) => (
+                                      <div key={i} className="flex items-start gap-3">
+                                        <span className="text-xs text-teal-500 font-mono min-w-[44px] pt-0.5">{step.minutos}&apos;</span>
+                                        <span className="text-sm text-gray-700 flex-1">{step.actividad}</span>
+                                        <span className="text-xs text-teal-500 capitalize whitespace-nowrap">{step.tipo}</span>
+                                      </div>
+                                    ))}
+                                  </div>
+                                </div>
+                              )}
+
+                              {integrated.indicadores_progreso?.length > 0 && (
+                                <div className="mb-5 pb-5 border-b border-teal-100">
+                                  <p className="text-xs font-semibold text-teal-700 uppercase tracking-wide mb-2">Indicadores de progreso</p>
+                                  <ul className="space-y-1">
+                                    {integrated.indicadores_progreso.map((ind, i) => (
+                                      <li key={i} className="flex items-start gap-2 text-sm text-gray-700">
+                                        <span className="text-teal-400 shrink-0 mt-0.5">—</span>
+                                        <span>{ind}</span>
+                                      </li>
+                                    ))}
+                                  </ul>
+                                </div>
+                              )}
+
+                              {integrated.nota_edad && (
+                                <div>
+                                  <p className="text-xs font-semibold text-teal-700 uppercase tracking-wide mb-2">Nota pedagógica</p>
+                                  <p className="text-xs text-teal-800 leading-relaxed">{integrated.nota_edad}</p>
                                 </div>
                               )}
                             </div>
