@@ -243,6 +243,19 @@ function calcularGrupoEfectivo(student: { birth_date: string | null; grupo_activ
   return "Grupo +14";
 }
 
+function calcularGrupoFisico(student: { birth_date: string | null; grupo_activo: string | null; gender: string | null }): string {
+  const base = calcularGrupoEfectivo(student);
+  if (base === "Damas" && student.birth_date) {
+    const hoy = new Date();
+    const nac = new Date(student.birth_date);
+    let edad = hoy.getFullYear() - nac.getFullYear();
+    const m = hoy.getMonth() - nac.getMonth();
+    if (m < 0 || (m === 0 && hoy.getDate() < nac.getDate())) edad--;
+    if (edad >= 50) return "Damas Senior";
+  }
+  return base;
+}
+
 type Student = {
   id: string; full_name: string; birth_date: string | null;
   status: "activo" | "inactivo"; grupo_activo: string | null; gender: string | null;
@@ -626,7 +639,7 @@ posPayload[`${key}_score`] = rawScore !== null ? Math.round(rawScore) : null;
   }
 
   function openPhysicalForm() {
-    const g = calcularGrupoEfectivo(student!);
+    const g = calcularGrupoFisico(student!);
     setPhysicalForm(defaultPhysicalForm(g));
     setPhysicalSaveError(null); setShowPhysicalForm(true);
   }
@@ -652,7 +665,7 @@ posPayload[`${key}_score`] = rawScore !== null ? Math.round(rawScore) : null;
   async function handleSavePhysical() {
     if (!physicalForm || !student) return;
     setPhysicalSaving(true); setPhysicalSaveError(null);
-    const g = calcularGrupoEfectivo(student);
+    const g = calcularGrupoFisico(student);
     const promedio = calcPhysPromedio(physicalForm.tests);
     const id = `phys_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
     const testsData: Record<string, { result: PhysicalResult; obs: string | null; na: boolean }> = {};
@@ -685,6 +698,7 @@ posPayload[`${key}_score`] = rawScore !== null ? Math.round(rawScore) : null;
   if (!student) return <div className="flex flex-col items-center justify-center py-32 text-gray-400"><p>Alumno no encontrado.</p></div>;
 
   const grupo = calcularGrupoEfectivo(student);
+  const grupoFisico = calcularGrupoFisico(student);
   const posicionesActivas = POSICIONES_GRUPO[grupo] || POSICIONES_GRUPO["Albatros"];
   const TABS: { key: Tab; label: string }[] = [{ key:"datos", label:"Datos personales" }, { key:"tecnicos", label:"Tests técnicos" }, { key:"fisicos", label:"Tests físicos" }, { key:"hitos", label:"Hitos" }];
 
@@ -938,7 +952,7 @@ posPayload[`${key}_score`] = rawScore !== null ? Math.round(rawScore) : null;
             <div className="flex items-center justify-between mb-5">
               <div>
                 <h2 className="text-base font-semibold text-gray-900">Evaluación física TPI</h2>
-                <p className="text-xs text-gray-400 mt-0.5">{grupo} · {getPhysicalCategorias(grupo).reduce((acc, c) => acc + c.tests.length, 0)} tests</p>
+                <p className="text-xs text-gray-400 mt-0.5">{grupoFisico} · {getPhysicalCategorias(grupoFisico).reduce((acc, c) => acc + c.tests.length, 0)} tests</p>
               </div>
               <button onClick={openPhysicalForm} className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium text-white" style={{ backgroundColor:"#1B4D2E" }}>
                 <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path d="M12 5v14M5 12h14"/></svg>
@@ -1259,7 +1273,7 @@ posPayload[`${key}_score`] = rawScore !== null ? Math.round(rawScore) : null;
         <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto py-8 px-4" style={{ backgroundColor:"rgba(0,0,0,0.45)" }} onClick={(e) => { if (e.target===e.currentTarget) closePhysicalForm(); }}>
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl my-auto">
             <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
-              <div><h2 className="text-base font-semibold text-gray-900">Nueva evaluación física TPI</h2><p className="text-xs text-gray-400 mt-0.5">{student.full_name} · {grupo}</p></div>
+              <div><h2 className="text-base font-semibold text-gray-900">Nueva evaluación física TPI</h2><p className="text-xs text-gray-400 mt-0.5">{student.full_name} · {grupoFisico}</p></div>
               <button onClick={closePhysicalForm} className="text-gray-400 hover:text-gray-600" disabled={physicalSaving}><svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path d="M18 6 6 18M6 6l12 12"/></svg></button>
             </div>
             <div className="px-6 py-5 space-y-4 overflow-y-auto max-h-[72vh]">
@@ -1274,7 +1288,7 @@ posPayload[`${key}_score`] = rawScore !== null ? Math.round(rawScore) : null;
                 </FormField>
               </div>
 
-              {getPhysicalCategorias(grupo).map((cat) => {
+              {getPhysicalCategorias(grupoFisico).map((cat) => {
                 const tipoBadge = cat.tipo === "desarrollo_motor" ? { bg:"#FEF3C7", color:"#92400E" } : cat.tipo === "potencia" ? { bg:"#FEE2E2", color:"#991B1B" } : { bg:"#EFF6FF", color:"#1D4ED8" };
                 return (
                   <div key={cat.label}>
