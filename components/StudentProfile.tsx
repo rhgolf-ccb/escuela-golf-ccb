@@ -231,17 +231,26 @@ export default function StudentProfile({ studentId }: { studentId: string }) {
         setSwingEvals(data);
         const aiMap: Record<string, AiAnalysis> = {};
         data.forEach((ev) => {
-          if (ev.ai_analysis) {
-            try {
-              let parsed = typeof ev.ai_analysis === 'string' ? JSON.parse(ev.ai_analysis) : ev.ai_analysis;
-              if (parsed?.resumen && typeof parsed.resumen === 'string' && parsed.resumen.trim().startsWith('{')) {
-                try { parsed = JSON.parse(parsed.resumen); } catch {}
+          if (!ev.ai_analysis) return;
+          try {
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            let p: any = typeof ev.ai_analysis === 'string' ? JSON.parse(ev.ai_analysis) : ev.ai_analysis;
+            // Unwrap up to 3 levels of nested JSON in resumen (handles double-encoding from older saves)
+            for (let i = 0; i < 3; i++) {
+              if (typeof p?.resumen !== 'string' || !p.resumen.trim().startsWith('{')) break;
+              try {
+                const inner = JSON.parse(p.resumen);
+                if (inner?.resumen !== undefined) { p = inner; } else break;
+              } catch {
+                const match = String(p.resumen).match(/\{[\s\S]*\}/);
+                if (match) { try { const inner = JSON.parse(match[0]); if (inner?.resumen !== undefined) { p = inner; } } catch {} }
+                break;
               }
-              if (parsed && typeof parsed === 'object' && parsed.resumen) {
-                aiMap[ev.id] = parsed;
-              }
-            } catch {}
-          }
+            }
+            if (p && typeof p === 'object' && typeof p.resumen === 'string' && !p.resumen.trim().startsWith('{')) {
+              aiMap[ev.id] = p as AiAnalysis;
+            }
+          } catch {}
         });
         setAiResults(aiMap);
       }
@@ -494,36 +503,85 @@ posPayload[`${key}_score`] = rawScore !== null ? Math.round(rawScore) : null;
                           </div>
 
                           {ai && (
-                            <div className="border-t border-gray-100 bg-gradient-to-b from-purple-50 to-white px-5 py-5">
-                              <div className="flex items-center justify-between mb-4">
-                                <div className="flex items-center gap-2"><span className="text-sm font-semibold text-purple-700">✦ Análisis IA</span><span className="text-xs text-gray-400">Guía para el profesor</span></div>
-                                <button onClick={() => handleAnalyzeAI(ev)} disabled={analyzingId !== null} className="text-xs text-purple-600 hover:text-purple-800 underline disabled:opacity-40">
-  {analyzingId === ev.id ? "Analizando..." : "Regenerar"}
-</button>
+                            <div className="border-t border-gray-100 px-5 py-6">
+                              <div className="flex items-center justify-between mb-6">
+                                <div>
+                                  <p className="text-sm font-semibold text-gray-900">Análisis IA — Guía del profesor</p>
+                                  {ev.ai_generated_at && <p className="text-xs text-gray-400 mt-0.5">Generado {formatFecha(ev.ai_generated_at.split("T")[0])}</p>}
+                                </div>
+                                <button onClick={() => handleAnalyzeAI(ev)} disabled={analyzingId !== null} className="text-xs text-gray-500 hover:text-gray-700 underline disabled:opacity-40">
+                                  {analyzingId === ev.id ? "Analizando..." : "Regenerar"}
+                                </button>
                               </div>
-                              <div className="bg-white rounded-xl border border-purple-100 p-4 mb-4"><p className="text-sm text-gray-700 leading-relaxed">{ai.resumen}</p></div>
-                              <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">Lo que el profesor debe trabajar — en orden</p>
-                              <div className="space-y-3 mb-4">
-                                {ai.prioridades?.map((p) => {
-                                  const bc = ["#EF4444","#F59E0B","#22C55E"]; const bg = ["#FEF2F2","#FFFBEB","#F0FDF4"]; const nc = ["#991B1B","#92400E","#1B4D2E"];
-                                  const idx = Math.min(p.orden-1, 2);
-                                  return (
-                                    <div key={p.orden} className="bg-white rounded-xl border p-4" style={{ borderColor:bc[idx]+"40" }}>
-                                      <div className="flex items-start gap-3 mb-2">
-                                        <span className="w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold shrink-0 mt-0.5" style={{ backgroundColor:bg[idx], color:nc[idx] }}>{p.orden}</span>
-                                        <div className="flex-1"><p className="text-sm font-semibold text-gray-900">{p.titulo}</p><p className="text-xs text-gray-500">{p.posicion}</p></div>
+
+                              <div className="mb-5 pb-5 border-b border-gray-100">
+                                <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">Resumen técnico</p>
+                                <p className="text-sm text-gray-700 leading-relaxed">{ai.resumen}</p>
+                              </div>
+
+                              {ai.prioridades?.length > 0 && (
+                                <div className="mb-5 pb-5 border-b border-gray-100">
+                                  <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-4">Prioridades de trabajo</p>
+                                  <div className="space-y-5">
+                                    {ai.prioridades.map((pr) => (
+                                      <div key={pr.orden} className="flex gap-4">
+                                        <span className="text-sm font-bold text-gray-300 w-5 shrink-0 pt-0.5">{pr.orden}.</span>
+                                        <div className="flex-1 min-w-0">
+                                          <p className="text-sm font-semibold text-gray-900">{pr.titulo}</p>
+                                          <p className="text-xs text-gray-400 mb-2">{pr.posicion}</p>
+                                          <p className="text-sm text-gray-700 leading-relaxed mb-3">{pr.descripcion}</p>
+                                          <div className="bg-gray-50 rounded-lg px-3 py-2.5 mb-2">
+                                            <p className="text-xs font-semibold text-gray-500 mb-1">Para el profesor</p>
+                                            <p className="text-xs text-gray-700 leading-relaxed">{pr.instruccion_profesor}</p>
+                                          </div>
+                                          {pr.conexion_fisica && <p className="text-xs text-gray-500 mb-2"><span className="font-semibold">Conexión TPI:</span> {pr.conexion_fisica}</p>}
+                                          {pr.drills?.length > 0 && (
+                                            <div className="flex flex-wrap gap-1.5">
+                                              {pr.drills.map((d, i) => <span key={i} className="text-xs px-2.5 py-1 rounded border border-gray-200 text-gray-600 bg-white">{d}</span>)}
+                                            </div>
+                                          )}
+                                        </div>
                                       </div>
-                                      <p className="text-sm text-gray-700 leading-relaxed mb-2 ml-9">{p.descripcion}</p>
-                                      <div className="ml-9 bg-blue-50 rounded-lg p-3 mb-2"><p className="text-xs font-semibold text-blue-700 mb-1">Instrucción para el profesor</p><p className="text-xs text-blue-800 leading-relaxed">{p.instruccion_profesor}</p></div>
-                                      {p.conexion_fisica && <div className="ml-9 bg-green-50 rounded-lg p-2.5 mb-2"><p className="text-xs text-green-800"><span className="font-semibold">Conexión física TPI:</span> {p.conexion_fisica}</p></div>}
-                                      {p.drills?.length > 0 && <div className="ml-9 flex flex-wrap gap-1.5">{p.drills.map((d, i) => <span key={i} className="text-xs px-2.5 py-1 rounded-full bg-purple-50 text-purple-700 border border-purple-100">{d}</span>)}</div>}
-                                    </div>
-                                  );
-                                })}
-                              </div>
-                              {ai.fortalezas?.length > 0 && <div className="bg-emerald-50 rounded-xl border border-emerald-100 p-4 mb-4"><p className="text-xs font-semibold text-emerald-700 mb-2">⭐ Fortalezas — mantener y reforzar</p><ul className="space-y-1">{ai.fortalezas.map((f,i) => <li key={i} className="text-sm text-emerald-800">· {f}</li>)}</ul></div>}
-                              {ai.plan_clase?.length > 0 && <div className="bg-white rounded-xl border border-gray-100 p-4 mb-3"><p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">Plan sugerido para próxima clase</p><div className="space-y-2">{ai.plan_clase.map((step,i) => { const tc: Record<string,string> = { fisico:"bg-green-50 text-green-700", tecnico:"bg-blue-50 text-blue-700", juego_corto:"bg-purple-50 text-purple-700", mental:"bg-amber-50 text-amber-700" }; return <div key={i} className="flex items-start gap-3"><span className="text-xs text-gray-400 min-w-[48px] mt-0.5">{step.minutos}'</span><p className="text-sm text-gray-700 flex-1">{step.actividad}</p><span className={`text-xs px-2 py-0.5 rounded-full whitespace-nowrap ${tc[step.tipo]||"bg-gray-50 text-gray-600"}`}>{step.tipo}</span></div>; })}</div></div>}
-                              {ai.nota_edad && <div className="bg-amber-50 rounded-xl border border-amber-100 p-3"><p className="text-xs text-amber-800"><span className="font-semibold">Nota pedagógica:</span> {ai.nota_edad}</p></div>}
+                                    ))}
+                                  </div>
+                                </div>
+                              )}
+
+                              {ai.fortalezas?.length > 0 && (
+                                <div className="mb-5 pb-5 border-b border-gray-100">
+                                  <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">Fortalezas — mantener</p>
+                                  <ul className="space-y-1">
+                                    {ai.fortalezas.map((f, i) => (
+                                      <li key={i} className="flex items-start gap-2 text-sm text-gray-700">
+                                        <span className="text-gray-300 shrink-0 mt-0.5">—</span>
+                                        <span>{f}</span>
+                                      </li>
+                                    ))}
+                                  </ul>
+                                </div>
+                              )}
+
+                              {ai.plan_clase?.length > 0 && (
+                                <div className="mb-5 pb-5 border-b border-gray-100">
+                                  <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">Plan próxima clase</p>
+                                  <div className="space-y-2">
+                                    {ai.plan_clase.map((step, i) => (
+                                      <div key={i} className="flex items-start gap-3">
+                                        <span className="text-xs text-gray-400 font-mono min-w-[44px] pt-0.5">{step.minutos}&apos;</span>
+                                        <span className="text-sm text-gray-700 flex-1">{step.actividad}</span>
+                                        <span className="text-xs text-gray-400 capitalize whitespace-nowrap">{step.tipo.replace("_"," ")}</span>
+                                      </div>
+                                    ))}
+                                  </div>
+                                </div>
+                              )}
+
+                              {ai.nota_edad && (
+                                <div>
+                                  <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">Nota pedagógica</p>
+                                  <p className="text-xs text-gray-600 leading-relaxed">{ai.nota_edad}</p>
+                                </div>
+                              )}
                             </div>
                           )}
                         </div>

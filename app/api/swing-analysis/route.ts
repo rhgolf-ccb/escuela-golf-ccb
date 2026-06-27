@@ -80,30 +80,32 @@ export async function POST(request: NextRequest) {
 INSTRUCCIONES PARA ESTE GRUPO (${grupo}):
 ${instruccionesGrupo[grupo] || instruccionesGrupo["Albatros"]}
 
+ESTILO DE REDACCIÓN: Tono técnico y formal de coaching deportivo. Oraciones cortas y directas. Sin frases motivacionales genéricas ("gran potencial", "sigue así"). Usa nomenclatura técnica de golf (on-plane, lag, shaft lean, etc.) cuando el grupo lo permite.
+
 CRÍTICO: Responde ÚNICAMENTE con un objeto JSON válido. Sin texto antes, sin texto después, sin markdown, sin backticks, sin explicaciones. Solo el JSON puro empezando con { y terminando con }.
 
 El JSON debe tener exactamente esta estructura:
 {
-  "resumen": "string con 2-3 oraciones sobre el estado técnico general",
+  "resumen": "párrafo técnico de 2-3 oraciones sobre el estado actual del swing, tono formal y objetivo, sin frases genéricas",
   "prioridades": [
     {
       "orden": 1,
-      "posicion": "string",
-      "titulo": "string corto",
-      "descripcion": "string explicando el problema observable en clase",
-      "instruccion_profesor": "string con qué hacer exactamente en clase",
-      "conexion_fisica": "string o null",
-      "drills": ["string", "string"]
+      "posicion": "código de posición(es) afectadas, ej: P2 / P3",
+      "titulo": "máx 6 palabras, nombre técnico del defecto",
+      "descripcion": "observación técnica objetiva del problema, máx 2 oraciones cortas",
+      "instruccion_profesor": "indicación directa y accionable para el profesor en clase, máx 3 oraciones",
+      "conexion_fisica": "restricción física TPI relacionada o null si no hay test disponible",
+      "drills": ["nombre del drill específico con descripción breve", "segundo drill"]
     }
   ],
-  "fortalezas": ["string", "string"],
+  "fortalezas": ["observación técnica positiva concreta", "segunda fortaleza"],
   "plan_clase": [
-    { "minutos": "0-10", "actividad": "string", "tipo": "fisico" }
+    { "minutos": "0-10", "actividad": "descripción específica de la actividad", "tipo": "fisico" }
   ],
-  "nota_edad": "string con consideración pedagógica por edad y grupo"
+  "nota_edad": "consideración pedagógica concisa por edad y nivel del grupo, máx 2 oraciones"
 }
 
-Máximo 3 prioridades. Solo incluye posiciones que fueron evaluadas (no N/A).`;
+Máximo 3 prioridades. Solo incluye posiciones evaluadas (no N/A). Los tipos de plan_clase son: fisico, tecnico, juego_corto, mental.`;
 
   const userMessage = `ALUMNO: ${student.full_name}
 GRUPO: ${grupo}
