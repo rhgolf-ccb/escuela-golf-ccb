@@ -233,11 +233,12 @@ export default function StudentProfile({ studentId }: { studentId: string }) {
         data.forEach((ev) => {
           if (ev.ai_analysis) {
             try {
-              const parsed = typeof ev.ai_analysis === 'string' ? JSON.parse(ev.ai_analysis) : ev.ai_analysis;
-              if (parsed && typeof parsed === 'object' && !parsed.resumen?.trim()startsWith('{')) {
+              let parsed = typeof ev.ai_analysis === 'string' ? JSON.parse(ev.ai_analysis) : ev.ai_analysis;
+              if (parsed?.resumen && typeof parsed.resumen === 'string' && parsed.resumen.trim().startsWith('{')) {
+                try { parsed = JSON.parse(parsed.resumen); } catch {}
+              }
+              if (parsed && typeof parsed === 'object' && parsed.resumen) {
                 aiMap[ev.id] = parsed;
-              } else if (parsed?.resumen) {
-                try { aiMap[ev.id] = JSON.parse(parsed.resumen); } catch { aiMap[ev.id] = parsed; }
               }
             } catch {}
           }
