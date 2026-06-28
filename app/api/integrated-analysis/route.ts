@@ -102,7 +102,7 @@ ${instruccionesGrupo[grupo] || instruccionesGrupo["Albatros"]}
 
 PRINCIPIO FUNDAMENTAL: Cada prioridad cruzada debe tener una causa física clara que explique un error técnico específico. No asumas conexiones — usa solo los datos proporcionados.
 
-CRÍTICO: Responde ÚNICAMENTE con JSON válido. Sin texto extra, sin markdown, sin backticks.
+CRÍTICO: Responde SIEMPRE en español. No muestres tu razonamiento interno. Responde ÚNICAMENTE con el objeto JSON puro sin backticks, sin texto antes ni después. Solo el JSON empezando con { y terminando con }.
 
 {
   "resumen_integrado": "2-3 oraciones que expliquen cómo el perfil físico de este alumno explica los patrones técnicos observados en el swing. Menciona la conexión más importante.",
