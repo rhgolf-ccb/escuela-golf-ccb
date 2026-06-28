@@ -576,7 +576,7 @@ export default function StudentProfile({ studentId }: { studentId: string }) {
                 break;
               }
             }
-            if (p && typeof p === "object" && p.resumen_integrado !== undefined) integratedMap[ev.id] = p as IntegratedAiAnalysis;
+            if (p && typeof p === "object" && typeof p.resumen_integrado === "string" && !p.resumen_integrado.trim().startsWith("{")) integratedMap[ev.id] = p as IntegratedAiAnalysis;
           } catch {}
         });
         setIntegratedResults(integratedMap);
@@ -612,7 +612,7 @@ export default function StudentProfile({ studentId }: { studentId: string }) {
                 break;
               }
             }
-            if (p && typeof p === "object" && p.resumen !== undefined) aiMap[ev.id] = p as PhysicalAiAnalysis;
+            if (p && typeof p === "object" && typeof p.resumen === "string" && !p.resumen.trim().startsWith("{")) aiMap[ev.id] = p as PhysicalAiAnalysis;
           } catch {}
         });
         setPhysicalAiResults(aiMap);
@@ -754,7 +754,7 @@ posPayload[`${key}_score`] = rawScore !== null ? Math.round(rawScore) : null;
     try {
       const res = await fetch("/api/physical-analysis", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ student: { ...student, edad: calcularEdadNum(student.birth_date) }, evaluation: ev }) });
       const data = await res.json();
-      if (data.analysis) {
+      if (data.analysis && typeof data.analysis.resumen === "string") {
         setPhysicalAiResults((prev) => ({ ...prev, [ev.id]: data.analysis }));
         await supabase.from("physical_evaluations").update({ ai_analysis: JSON.stringify(data.analysis), ai_generated_at: new Date().toISOString() }).eq("id", ev.id);
       }
@@ -777,7 +777,7 @@ posPayload[`${key}_score`] = rawScore !== null ? Math.round(rawScore) : null;
       const latestPhysical = physEvals[0];
       const res = await fetch("/api/integrated-analysis", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ student: { ...student, edad: calcularEdadNum(student.birth_date) }, swingEvaluation: ev, physicalEvaluation: latestPhysical }) });
       const data = await res.json();
-      if (data.analysis) {
+      if (data.analysis && typeof data.analysis.resumen_integrado === "string") {
         setIntegratedResults((prev) => ({ ...prev, [ev.id]: data.analysis }));
         await supabase.from("swing_evaluations").update({ integrated_analysis: JSON.stringify(data.analysis), integrated_at: new Date().toISOString() }).eq("id", ev.id);
       }
