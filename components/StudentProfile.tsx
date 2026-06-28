@@ -340,10 +340,11 @@ type PhysicalEvaluation = {
 type PhysicalAiAnalysis = {
   resumen: string;
   limitaciones: { test: string; titulo: string; nivel: string; descripcion: string; conexion_swing: string; ejercicios: string[]; }[];
-  patron_general: string | null;
-  fortalezas_fisicas: string[];
-  plan_trabajo: { semanas: string; objetivo: string; ejercicios: string[]; }[];
-  nota_edad: string;
+  patron_general?: string | null;
+  fortalezas_fisicas?: string[];
+  recomendaciones_generales?: string[];
+  plan_trabajo?: { semanas: string; objetivo: string; ejercicios: string[]; }[];
+  nota_edad?: string;
 };
 
 type IntegratedAiAnalysis = {
@@ -599,8 +600,19 @@ export default function StudentProfile({ studentId }: { studentId: string }) {
           if (!ev.ai_analysis) return;
           try {
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            const p: any = typeof ev.ai_analysis === "string" ? JSON.parse(ev.ai_analysis) : ev.ai_analysis;
-            if (p && typeof p === "object" && typeof p.resumen === "string") aiMap[ev.id] = p as PhysicalAiAnalysis;
+            let p: any = typeof ev.ai_analysis === "string" ? JSON.parse(ev.ai_analysis) : ev.ai_analysis;
+            for (let i = 0; i < 3; i++) {
+              if (typeof p?.resumen !== "string" || !p.resumen.trim().startsWith("{")) break;
+              try {
+                const inner = JSON.parse(p.resumen);
+                if (inner?.resumen !== undefined) { p = inner; } else break;
+              } catch {
+                const match = String(p.resumen).match(/\{[\s\S]*\}/);
+                if (match) { try { const inner = JSON.parse(match[0]); if (inner?.resumen !== undefined) { p = inner; } } catch {} }
+                break;
+              }
+            }
+            if (p && typeof p === "object" && p.resumen !== undefined) aiMap[ev.id] = p as PhysicalAiAnalysis;
           } catch {}
         });
         setPhysicalAiResults(aiMap);
@@ -950,42 +962,47 @@ posPayload[`${key}_score`] = rawScore !== null ? Math.round(rawScore) : null;
                               </div>
 
                               <div className="mb-5 pb-5 border-b border-gray-100">
-                                <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">Resumen técnico</p>
-                                <p className="text-sm text-gray-700 leading-relaxed">{ai.resumen}</p>
+                                <span className="text-xs font-semibold uppercase tracking-wide px-2 py-0.5 rounded text-white mb-3 inline-block" style={{ backgroundColor:"#1B4D2E" }}>Resumen técnico</span>
+                                <p className="text-sm text-gray-700 leading-relaxed mt-2">{ai.resumen}</p>
                               </div>
 
                               {ai.prioridades?.length > 0 && (
                                 <div className="mb-5 pb-5 border-b border-gray-100">
-                                  <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-4">Prioridades de trabajo</p>
-                                  <div className="space-y-5">
-                                    {ai.prioridades.map((pr) => (
-                                      <div key={pr.orden} className="flex gap-4">
-                                        <span className="text-sm font-bold text-gray-300 w-5 shrink-0 pt-0.5">{pr.orden}.</span>
-                                        <div className="flex-1 min-w-0">
-                                          <p className="text-sm font-semibold text-gray-900">{pr.titulo}</p>
-                                          <p className="text-xs text-gray-400 mb-2">{pr.posicion}</p>
-                                          <p className="text-sm text-gray-700 leading-relaxed mb-3">{pr.descripcion}</p>
-                                          <div className="bg-gray-50 rounded-lg px-3 py-2.5 mb-2">
-                                            <p className="text-xs font-semibold text-gray-500 mb-1">Para el profesor</p>
-                                            <p className="text-xs text-gray-700 leading-relaxed">{pr.instruccion_profesor}</p>
-                                          </div>
-                                          {pr.conexion_fisica && <p className="text-xs text-gray-500 mb-2"><span className="font-semibold">Conexión TPI:</span> {pr.conexion_fisica}</p>}
-                                          {pr.drills?.length > 0 && (
-                                            <div className="flex flex-wrap gap-1.5">
-                                              {pr.drills.map((d, i) => <span key={i} className="text-xs px-2.5 py-1 rounded border border-gray-200 text-gray-600 bg-white">{d}</span>)}
+                                  <span className="text-xs font-semibold uppercase tracking-wide px-2 py-0.5 rounded text-white mb-4 inline-block" style={{ backgroundColor:"#1B4D2E" }}>Prioridades de trabajo</span>
+                                  <div className="space-y-3 mt-3">
+                                    {ai.prioridades.map((pr) => {
+                                      const bc = pr.orden === 1 ? "#EF4444" : pr.orden === 2 ? "#F97316" : "#22C55E";
+                                      return (
+                                        <div key={pr.orden} className="rounded-lg bg-gray-50 overflow-hidden" style={{ borderLeft:`3px solid ${bc}` }}>
+                                          <div className="px-4 py-3">
+                                            <div className="flex items-start gap-2 mb-1">
+                                              <span className="text-xs font-bold shrink-0 mt-0.5" style={{ color:bc }}>{pr.orden}.</span>
+                                              <p className="text-sm font-semibold text-gray-900">{pr.titulo}</p>
                                             </div>
-                                          )}
+                                            {pr.posicion && <p className="text-xs text-gray-400 mb-2 ml-4">{pr.posicion}</p>}
+                                            <p className="text-sm text-gray-700 leading-relaxed mb-3 ml-4">{pr.descripcion}</p>
+                                            <div className="ml-4 bg-white rounded-md px-3 py-2 mb-2 border border-gray-100">
+                                              <p className="text-xs font-semibold text-gray-500 mb-1">Para el profesor</p>
+                                              <p className="text-xs text-gray-700 leading-relaxed">{pr.instruccion_profesor}</p>
+                                            </div>
+                                            {pr.conexion_fisica && <p className="text-xs text-gray-500 ml-4 mb-2"><span className="font-semibold">Conexión TPI:</span> {pr.conexion_fisica}</p>}
+                                            {pr.drills?.length > 0 && (
+                                              <div className="flex flex-wrap gap-1.5 ml-4">
+                                                {pr.drills.map((d, i) => <span key={i} className="text-xs px-2.5 py-1 rounded border border-gray-200 text-gray-600 bg-white">{d}</span>)}
+                                              </div>
+                                            )}
+                                          </div>
                                         </div>
-                                      </div>
-                                    ))}
+                                      );
+                                    })}
                                   </div>
                                 </div>
                               )}
 
                               {ai.fortalezas?.length > 0 && (
                                 <div className="mb-5 pb-5 border-b border-gray-100">
-                                  <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">Fortalezas — mantener</p>
-                                  <ul className="space-y-1">
+                                  <span className="text-xs font-semibold uppercase tracking-wide px-2 py-0.5 rounded text-white mb-3 inline-block" style={{ backgroundColor:"#1B4D2E" }}>Fortalezas — mantener</span>
+                                  <ul className="space-y-1 mt-2">
                                     {ai.fortalezas.map((f, i) => (
                                       <li key={i} className="flex items-start gap-2 text-sm text-gray-700">
                                         <span className="text-gray-300 shrink-0 mt-0.5">—</span>
@@ -998,23 +1015,26 @@ posPayload[`${key}_score`] = rawScore !== null ? Math.round(rawScore) : null;
 
                               {ai.plan_clase?.length > 0 && (
                                 <div className="mb-5 pb-5 border-b border-gray-100">
-                                  <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">Plan próxima clase</p>
-                                  <div className="space-y-2">
-                                    {ai.plan_clase.map((step, i) => (
-                                      <div key={i} className="flex items-start gap-3">
-                                        <span className="text-xs text-gray-400 font-mono min-w-[44px] pt-0.5">{step.minutos}&apos;</span>
-                                        <span className="text-sm text-gray-700 flex-1">{step.actividad}</span>
-                                        <span className="text-xs text-gray-400 capitalize whitespace-nowrap">{step.tipo.replace("_"," ")}</span>
-                                      </div>
-                                    ))}
+                                  <span className="text-xs font-semibold uppercase tracking-wide px-2 py-0.5 rounded text-white mb-3 inline-block" style={{ backgroundColor:"#1B4D2E" }}>Plan próxima clase</span>
+                                  <div className="space-y-2 mt-3">
+                                    {ai.plan_clase.map((step, i) => {
+                                      const badge = step.tipo === "tecnico" ? { bg:"#DBEAFE", color:"#1D4ED8" } : step.tipo === "fisico" ? { bg:"#DCFCE7", color:"#15803D" } : { bg:"#F3E8FF", color:"#7C3AED" };
+                                      return (
+                                        <div key={i} className="flex items-start gap-3">
+                                          <span className="text-xs text-gray-400 font-mono min-w-[44px] pt-0.5">{step.minutos}&apos;</span>
+                                          <span className="text-sm text-gray-700 flex-1">{step.actividad}</span>
+                                          <span className="text-xs font-medium px-2 py-0.5 rounded-full whitespace-nowrap" style={{ backgroundColor:badge.bg, color:badge.color }}>{step.tipo.replace("_"," ")}</span>
+                                        </div>
+                                      );
+                                    })}
                                   </div>
                                 </div>
                               )}
 
                               {ai.nota_edad && (
                                 <div>
-                                  <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">Nota pedagógica</p>
-                                  <p className="text-xs text-gray-600 leading-relaxed">{ai.nota_edad}</p>
+                                  <span className="text-xs font-semibold uppercase tracking-wide px-2 py-0.5 rounded text-white mb-2 inline-block" style={{ backgroundColor:"#1B4D2E" }}>Nota pedagógica</span>
+                                  <p className="text-xs text-gray-600 leading-relaxed mt-2">{ai.nota_edad}</p>
                                 </div>
                               )}
                             </div>
@@ -1045,50 +1065,57 @@ posPayload[`${key}_score`] = rawScore !== null ? Math.round(rawScore) : null;
                               </div>
 
                               <div className="mb-5 pb-5 border-b border-gray-100">
-                                <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">Resumen integrado</p>
-                                <p className="text-sm text-gray-700 leading-relaxed">{integrated.resumen_integrado}</p>
+                                <span className="text-xs font-semibold uppercase tracking-wide px-2 py-0.5 rounded text-white mb-3 inline-block" style={{ backgroundColor:"#1B4D2E" }}>Resumen integrado</span>
+                                <p className="text-sm text-gray-700 leading-relaxed mt-2">{integrated.resumen_integrado}</p>
                               </div>
 
                               {integrated.prioridades_cruzadas?.length > 0 && (
                                 <div className="mb-5 pb-5 border-b border-gray-100">
-                                  <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-4">Prioridades cruzadas</p>
-                                  <div className="space-y-5">
-                                    {integrated.prioridades_cruzadas.map((pr) => (
-                                      <div key={pr.orden} className="flex gap-4">
-                                        <span className="text-sm font-bold text-gray-300 w-5 shrink-0 pt-0.5">{pr.orden}.</span>
-                                        <div className="flex-1 min-w-0">
-                                          <p className="text-sm font-semibold text-gray-900">{pr.titulo}</p>
-                                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-2 mb-3">
-                                            <div className="bg-gray-50 rounded-lg px-3 py-2.5">
-                                              <p className="text-xs font-semibold text-gray-500 mb-1">Limitación física</p>
-                                              <p className="text-xs text-gray-700">{pr.limitacion_fisica}</p>
+                                  <span className="text-xs font-semibold uppercase tracking-wide px-2 py-0.5 rounded text-white mb-4 inline-block" style={{ backgroundColor:"#1B4D2E" }}>Prioridades cruzadas</span>
+                                  <div className="space-y-3 mt-3">
+                                    {integrated.prioridades_cruzadas.map((pr) => {
+                                      const bc = pr.orden === 1 ? "#EF4444" : pr.orden === 2 ? "#F97316" : "#22C55E";
+                                      return (
+                                        <div key={pr.orden} className="rounded-lg bg-gray-50 overflow-hidden" style={{ borderLeft:`3px solid ${bc}` }}>
+                                          <div className="px-4 py-3">
+                                            <div className="flex items-start gap-2 mb-2">
+                                              <span className="text-xs font-bold shrink-0 mt-0.5" style={{ color:bc }}>{pr.orden}.</span>
+                                              <p className="text-sm font-semibold text-gray-900">{pr.titulo}</p>
                                             </div>
-                                            <div className="bg-gray-50 rounded-lg px-3 py-2.5">
-                                              <p className="text-xs font-semibold text-gray-500 mb-1">Error técnico</p>
-                                              <p className="text-xs text-gray-700">{pr.error_tecnico}</p>
+                                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mb-3">
+                                              <div className="bg-white rounded-md px-3 py-2 border border-gray-100">
+                                                <p className="text-xs font-semibold text-gray-500 mb-1">Limitación física</p>
+                                                <p className="text-xs text-gray-700">{pr.limitacion_fisica}</p>
+                                              </div>
+                                              <div className="bg-white rounded-md px-3 py-2 border border-gray-100">
+                                                <p className="text-xs font-semibold text-gray-500 mb-1">Error técnico</p>
+                                                <p className="text-xs text-gray-700">{pr.error_tecnico}</p>
+                                              </div>
                                             </div>
+                                            <p className="text-sm text-gray-700 leading-relaxed mb-3">{pr.descripcion}</p>
+                                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mb-2">
+                                              <div className="bg-white rounded-md px-3 py-2 border border-gray-100">
+                                                <p className="text-xs font-semibold text-gray-500 mb-1">Ejercicio físico</p>
+                                                <p className="text-xs text-gray-700 leading-relaxed">{pr.ejercicio_fisico}</p>
+                                              </div>
+                                              <div className="bg-white rounded-md px-3 py-2 border border-gray-100">
+                                                <p className="text-xs font-semibold text-gray-500 mb-1">Drill técnico</p>
+                                                <p className="text-xs text-gray-700 leading-relaxed">{pr.drill_tecnico}</p>
+                                              </div>
+                                            </div>
+                                            <p className="text-xs text-gray-500"><span className="font-semibold">Progresión:</span> {pr.progresion}</p>
                                           </div>
-                                          <p className="text-sm text-gray-700 leading-relaxed mb-3">{pr.descripcion}</p>
-                                          <div className="bg-gray-50 rounded-lg px-3 py-2.5 mb-2">
-                                            <p className="text-xs font-semibold text-gray-500 mb-1">Ejercicio físico</p>
-                                            <p className="text-xs text-gray-700 leading-relaxed">{pr.ejercicio_fisico}</p>
-                                          </div>
-                                          <div className="bg-gray-50 rounded-lg px-3 py-2.5 mb-2">
-                                            <p className="text-xs font-semibold text-gray-500 mb-1">Drill técnico</p>
-                                            <p className="text-xs text-gray-700 leading-relaxed">{pr.drill_tecnico}</p>
-                                          </div>
-                                          <p className="text-xs text-gray-500"><span className="font-semibold">Progresión:</span> {pr.progresion}</p>
                                         </div>
-                                      </div>
-                                    ))}
+                                      );
+                                    })}
                                   </div>
                                 </div>
                               )}
 
                               {(integrated.fortalezas_combinadas?.length ?? 0) > 0 && (
                                 <div className="mb-5 pb-5 border-b border-gray-100">
-                                  <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">Fortalezas — mantener</p>
-                                  <ul className="space-y-1">
+                                  <span className="text-xs font-semibold uppercase tracking-wide px-2 py-0.5 rounded text-white mb-3 inline-block" style={{ backgroundColor:"#1B4D2E" }}>Fortalezas combinadas</span>
+                                  <ul className="space-y-1 mt-2">
                                     {integrated.fortalezas_combinadas!.map((f, i) => (
                                       <li key={i} className="flex items-start gap-2 text-sm text-gray-700">
                                         <span className="text-gray-300 shrink-0 mt-0.5">—</span>
@@ -1101,23 +1128,26 @@ posPayload[`${key}_score`] = rawScore !== null ? Math.round(rawScore) : null;
 
                               {((integrated.plan_clase_unificado?.length ?? 0) > 0 || (integrated.plan_clase?.length ?? 0) > 0) && (
                                 <div className="mb-5 pb-5 border-b border-gray-100">
-                                  <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">Plan de clase (60 min)</p>
-                                  <div className="space-y-2">
-                                    {(integrated.plan_clase_unificado ?? integrated.plan_clase ?? []).map((step, i) => (
-                                      <div key={i} className="flex items-start gap-3">
-                                        <span className="text-xs text-gray-400 font-mono min-w-[44px] pt-0.5">{step.minutos}&apos;</span>
-                                        <span className="text-sm text-gray-700 flex-1">{step.actividad}</span>
-                                        <span className="text-xs text-gray-400 capitalize whitespace-nowrap">{step.tipo.replace("_"," ")}</span>
-                                      </div>
-                                    ))}
+                                  <span className="text-xs font-semibold uppercase tracking-wide px-2 py-0.5 rounded text-white mb-3 inline-block" style={{ backgroundColor:"#1B4D2E" }}>Plan de clase (60 min)</span>
+                                  <div className="space-y-2 mt-3">
+                                    {(integrated.plan_clase_unificado ?? integrated.plan_clase ?? []).map((step, i) => {
+                                      const badge = step.tipo === "tecnico" ? { bg:"#DBEAFE", color:"#1D4ED8" } : step.tipo === "fisico" ? { bg:"#DCFCE7", color:"#15803D" } : { bg:"#F3E8FF", color:"#7C3AED" };
+                                      return (
+                                        <div key={i} className="flex items-start gap-3">
+                                          <span className="text-xs text-gray-400 font-mono min-w-[44px] pt-0.5">{step.minutos}&apos;</span>
+                                          <span className="text-sm text-gray-700 flex-1">{step.actividad}</span>
+                                          <span className="text-xs font-medium px-2 py-0.5 rounded-full whitespace-nowrap" style={{ backgroundColor:badge.bg, color:badge.color }}>{step.tipo.replace("_"," ")}</span>
+                                        </div>
+                                      );
+                                    })}
                                   </div>
                                 </div>
                               )}
 
                               {(integrated.indicadores_progreso?.length ?? 0) > 0 && (
                                 <div className="mb-5 pb-5 border-b border-gray-100">
-                                  <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">Indicadores de progreso</p>
-                                  <ul className="space-y-1">
+                                  <span className="text-xs font-semibold uppercase tracking-wide px-2 py-0.5 rounded text-white mb-3 inline-block" style={{ backgroundColor:"#1B4D2E" }}>Indicadores de progreso</span>
+                                  <ul className="space-y-1 mt-2">
                                     {integrated.indicadores_progreso!.map((ind, i) => (
                                       <li key={i} className="flex items-start gap-2 text-sm text-gray-700">
                                         <span className="text-gray-300 shrink-0 mt-0.5">—</span>
@@ -1130,8 +1160,8 @@ posPayload[`${key}_score`] = rawScore !== null ? Math.round(rawScore) : null;
 
                               {(integrated.nota_profesor || integrated.nota_edad) && (
                                 <div>
-                                  <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">Nota pedagógica</p>
-                                  <p className="text-xs text-gray-600 leading-relaxed">{integrated.nota_profesor ?? integrated.nota_edad}</p>
+                                  <span className="text-xs font-semibold uppercase tracking-wide px-2 py-0.5 rounded text-white mb-2 inline-block" style={{ backgroundColor:"#1B4D2E" }}>Nota pedagógica</span>
+                                  <p className="text-xs text-gray-600 leading-relaxed mt-2">{integrated.nota_profesor ?? integrated.nota_edad}</p>
                                 </div>
                               )}
                             </div>
@@ -1259,59 +1289,77 @@ posPayload[`${key}_score`] = rawScore !== null ? Math.round(rawScore) : null;
                               </div>
 
                               <div className="mb-5 pb-5 border-b border-gray-100">
-                                <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">Estado físico general</p>
-                                <p className="text-sm text-gray-700 leading-relaxed">{ai.resumen}</p>
+                                <span className="text-xs font-semibold uppercase tracking-wide px-2 py-0.5 rounded text-white mb-3 inline-block" style={{ backgroundColor:"#1B4D2E" }}>Estado físico general</span>
+                                <p className="text-sm text-gray-700 leading-relaxed mt-2">{ai.resumen}</p>
                               </div>
 
                               {ai.patron_general && (
-                                <div className="mb-5 pb-5 border-b border-gray-100 bg-amber-50 rounded-lg p-3">
-                                  <p className="text-xs font-semibold text-amber-700 uppercase tracking-wide mb-1">Patrón identificado</p>
-                                  <p className="text-sm text-amber-900 leading-relaxed">{ai.patron_general}</p>
+                                <div className="mb-5 pb-5 border-b border-gray-100">
+                                  <div className="bg-amber-50 rounded-lg p-3">
+                                    <p className="text-xs font-semibold text-amber-700 uppercase tracking-wide mb-1">Patrón identificado</p>
+                                    <p className="text-sm text-amber-900 leading-relaxed">{ai.patron_general}</p>
+                                  </div>
                                 </div>
                               )}
 
                               {ai.limitaciones?.length > 0 && (
                                 <div className="mb-5 pb-5 border-b border-gray-100">
-                                  <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-4">Limitaciones — prioridades de trabajo</p>
-                                  <div className="space-y-5">
-                                    {ai.limitaciones.map((lim, i) => (
-                                      <div key={i} className="flex gap-4">
-                                        <span className="text-xs font-mono font-bold px-1.5 py-0.5 rounded shrink-0 mt-0.5" style={{ backgroundColor:lim.nivel==="bajo"?"#FEE2E2":"#FEF3C7", color:lim.nivel==="bajo"?"#991B1B":"#92400E" }}>{lim.test}</span>
-                                        <div className="flex-1 min-w-0">
-                                          <p className="text-sm font-semibold text-gray-900">{lim.titulo}</p>
-                                          <p className="text-xs text-gray-400 mb-2">Afecta: {lim.conexion_swing}</p>
-                                          <p className="text-sm text-gray-700 leading-relaxed mb-3">{lim.descripcion}</p>
-                                          {lim.ejercicios?.length > 0 && (
-                                            <div className="flex flex-wrap gap-1.5">
-                                              {lim.ejercicios.map((e, j) => <span key={j} className="text-xs px-2.5 py-1 rounded border border-gray-200 text-gray-600 bg-white">{e}</span>)}
+                                  <span className="text-xs font-semibold uppercase tracking-wide px-2 py-0.5 rounded text-white mb-4 inline-block" style={{ backgroundColor:"#1B4D2E" }}>Limitaciones — prioridades</span>
+                                  <div className="space-y-3 mt-3">
+                                    {ai.limitaciones.map((lim, i) => {
+                                      const bc = lim.nivel === "bajo" ? "#EF4444" : "#F97316";
+                                      return (
+                                        <div key={i} className="rounded-lg bg-gray-50 overflow-hidden" style={{ borderLeft:`3px solid ${bc}` }}>
+                                          <div className="px-4 py-3">
+                                            <div className="flex items-start gap-2 mb-1">
+                                              <span className="text-xs font-mono font-bold px-1.5 py-0.5 rounded shrink-0" style={{ backgroundColor:lim.nivel==="bajo"?"#FEE2E2":"#FEF3C7", color:lim.nivel==="bajo"?"#991B1B":"#92400E" }}>{lim.test}</span>
+                                              <p className="text-sm font-semibold text-gray-900">{lim.titulo}</p>
                                             </div>
-                                          )}
+                                            {lim.conexion_swing && <p className="text-xs text-gray-400 mb-2 ml-1">Afecta: {lim.conexion_swing}</p>}
+                                            <p className="text-sm text-gray-700 leading-relaxed mb-3">{lim.descripcion}</p>
+                                            {lim.ejercicios?.length > 0 && (
+                                              <div className="flex flex-wrap gap-1.5">
+                                                {lim.ejercicios.map((e, j) => <span key={j} className="text-xs px-2.5 py-1 rounded border border-gray-200 text-gray-600 bg-white">{e}</span>)}
+                                              </div>
+                                            )}
+                                          </div>
                                         </div>
-                                      </div>
-                                    ))}
+                                      );
+                                    })}
                                   </div>
                                 </div>
                               )}
 
-                              {ai.fortalezas_fisicas?.length > 0 && (
+                              {((ai.recomendaciones_generales?.length ?? 0) > 0 || (ai.fortalezas_fisicas?.length ?? 0) > 0) && (
                                 <div className="mb-5 pb-5 border-b border-gray-100">
-                                  <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">Fortalezas físicas</p>
-                                  <ul className="space-y-1">
-                                    {ai.fortalezas_fisicas.map((f, i) => <li key={i} className="flex items-start gap-2 text-sm text-gray-700"><span className="text-gray-300 shrink-0 mt-0.5">—</span><span>{f}</span></li>)}
+                                  <span className="text-xs font-semibold uppercase tracking-wide px-2 py-0.5 rounded text-white mb-3 inline-block" style={{ backgroundColor:"#1B4D2E" }}>Recomendaciones generales</span>
+                                  <ul className="space-y-1 mt-2">
+                                    {(ai.recomendaciones_generales ?? ai.fortalezas_fisicas ?? []).map((f, i) => (
+                                      <li key={i} className="flex items-start gap-2 text-sm text-gray-700">
+                                        <span className="text-gray-300 shrink-0 mt-0.5">—</span>
+                                        <span>{f}</span>
+                                      </li>
+                                    ))}
                                   </ul>
                                 </div>
                               )}
 
-                              {ai.plan_trabajo?.length > 0 && (
+                              {(ai.plan_trabajo?.length ?? 0) > 0 && (
                                 <div className="mb-5 pb-5 border-b border-gray-100">
-                                  <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">Plan de trabajo</p>
-                                  <div className="space-y-4">
-                                    {ai.plan_trabajo.map((step, i) => (
-                                      <div key={i} className="bg-gray-50 rounded-lg p-3">
-                                        <p className="text-xs font-semibold text-gray-500 mb-1">Semanas {step.semanas} — {step.objetivo}</p>
-                                        <ul className="space-y-1 mt-2">
-                                          {step.ejercicios?.map((e, j) => <li key={j} className="text-xs text-gray-700 flex items-start gap-1.5"><span className="text-gray-300 shrink-0 mt-0.5">·</span>{e}</li>)}
-                                        </ul>
+                                  <span className="text-xs font-semibold uppercase tracking-wide px-2 py-0.5 rounded text-white mb-3 inline-block" style={{ backgroundColor:"#1B4D2E" }}>Plan de trabajo</span>
+                                  <div className="space-y-3 mt-3">
+                                    {ai.plan_trabajo!.map((step, i) => (
+                                      <div key={i} className="rounded-lg bg-gray-50 overflow-hidden" style={{ borderLeft:"3px solid #1B4D2E" }}>
+                                        <div className="px-4 py-3">
+                                          <p className="text-xs font-semibold text-gray-700 mb-2">Semanas {step.semanas} — {step.objetivo}</p>
+                                          <ul className="space-y-1">
+                                            {step.ejercicios?.map((e, j) => (
+                                              <li key={j} className="text-xs text-gray-700 flex items-start gap-1.5">
+                                                <span className="text-gray-300 shrink-0 mt-0.5">·</span>{e}
+                                              </li>
+                                            ))}
+                                          </ul>
+                                        </div>
                                       </div>
                                     ))}
                                   </div>
@@ -1320,8 +1368,8 @@ posPayload[`${key}_score`] = rawScore !== null ? Math.round(rawScore) : null;
 
                               {ai.nota_edad && (
                                 <div>
-                                  <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">Nota pedagógica</p>
-                                  <p className="text-xs text-gray-600 leading-relaxed">{ai.nota_edad}</p>
+                                  <span className="text-xs font-semibold uppercase tracking-wide px-2 py-0.5 rounded text-white mb-2 inline-block" style={{ backgroundColor:"#1B4D2E" }}>Nota pedagógica</span>
+                                  <p className="text-xs text-gray-600 leading-relaxed mt-2">{ai.nota_edad}</p>
                                 </div>
                               )}
                             </div>
