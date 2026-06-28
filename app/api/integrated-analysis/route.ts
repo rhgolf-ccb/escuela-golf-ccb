@@ -165,32 +165,47 @@ export async function POST(request: NextRequest) {
   const body = await request.json();
   const { student, swingEvaluation, physicalEvaluation, trackman_data } = body;
 
+  const hasSwing = swingEvaluation != null;
+  const hasPhysical = physicalEvaluation != null;
+  const hasTrackman = trackman_data != null;
+
+  if (!hasSwing && !hasPhysical && !hasTrackman) {
+    return Response.json({ error: "No hay datos suficientes para generar el análisis" }, { status: 400 });
+  }
+
   const grupo = calcularGrupoEfectivo(student);
+  const fuentes = [hasSwing && "técnico", hasPhysical && "físico TPI", hasTrackman && "Trackman"].filter(Boolean).join(" + ");
 
   // Build swing summary — only evaluated positions
   const swingLines: string[] = [];
-  for (let i = 1; i <= 10; i++) {
-    const p = `P${i}`;
-    const naKey = `p${i}_na`;
-    const scoreKey = `p${i}_score`;
-    const criteriosKey = `p${i}_criterios`;
-    const obsKey = `p${i}_obs`;
-    if (swingEvaluation[naKey]) continue;
-    const score = swingEvaluation[scoreKey];
-    if (score === null || score === undefined) continue;
-    const nivel = score >= 8 ? "excelente" : score >= 6 ? "cumple" : score >= 4 ? "en progreso" : "bajo — prioridad";
-    const criterios: (string | null)[] = swingEvaluation[criteriosKey] || [];
-    const critStr = criterios.length
-      ? ` | Criterios: ${criterios.map((c, idx) => `${idx + 1}:${c}`).join(", ")}`
-      : "";
-    const obs = swingEvaluation[obsKey] ? ` | Obs: ${swingEvaluation[obsKey]}` : "";
-    swingLines.push(`  ${p} — ${POSICIONES_NOMBRES[p]}: ${score}/10 (${nivel})${critStr}${obs}`);
+  const swingWeakPositions: string[] = [];
+  if (hasSwing) {
+    for (let i = 1; i <= 10; i++) {
+      const p = `P${i}`;
+      const naKey = `p${i}_na`;
+      const scoreKey = `p${i}_score`;
+      const criteriosKey = `p${i}_criterios`;
+      const obsKey = `p${i}_obs`;
+      if (swingEvaluation[naKey]) continue;
+      const score = swingEvaluation[scoreKey];
+      if (score === null || score === undefined) continue;
+      const nivel = score >= 8 ? "excelente" : score >= 6 ? "cumple" : score >= 4 ? "en progreso" : "bajo — prioridad";
+      const criterios: (string | null)[] = swingEvaluation[criteriosKey] || [];
+      const critStr = criterios.length
+        ? ` | Criterios: ${criterios.map((c, idx) => `${idx + 1}:${c}`).join(", ")}`
+        : "";
+      const obs = swingEvaluation[obsKey] ? ` | Obs: ${swingEvaluation[obsKey]}` : "";
+      swingLines.push(`  ${p} — ${POSICIONES_NOMBRES[p]}: ${score}/10 (${nivel})${critStr}${obs}`);
+      if (score < 6) swingWeakPositions.push(`P${p} — ${POSICIONES_NOMBRES[p]} (${score}/10)`);
+    }
   }
 
   // Build physical summary — only non-NA tests, with full test names for AI context
   const testsData: Record<string, { result: string | null; obs: string | null; na: boolean }> =
-    physicalEvaluation.tests_data || {};
-  const testInfoMap = TPI_TESTS_INFO[physicalEvaluation.grupo] || TPI_TESTS_INFO["Albatros"] || {};
+    hasPhysical ? (physicalEvaluation.tests_data || {}) : {};
+  const testInfoMap = hasPhysical
+    ? (TPI_TESTS_INFO[physicalEvaluation.grupo] || TPI_TESTS_INFO["Albatros"] || {})
+    : {};
 
   function testLabel(tid: string): string {
     const info = testInfoMap[tid];
@@ -210,14 +225,6 @@ export async function POST(request: NextRequest) {
     .filter(([, t]) => !t.na && (t.result === "bajo" || t.result === "progreso"))
     .map(([tid, t]) => `${testLabel(tid)} (${t.result})`);
 
-  const swingWeakPositions = [];
-  for (let i = 1; i <= 10; i++) {
-    const score = swingEvaluation[`p${i}_score`];
-    if (!swingEvaluation[`p${i}_na`] && score !== null && score !== undefined && score < 6) {
-      swingWeakPositions.push(`P${i} — ${POSICIONES_NOMBRES[`P${i}`]} (${score}/10)`);
-    }
-  }
-
   const instruccionesGrupo: Record<string, string> = {
     Birdies: "Niño 4-5 años. Lenguaje de juego. Máximo 2 prioridades simples. Sin términos técnicos. Los ejercicios deben ser juegos divertidos.",
     "Águilas": "Niño 6-8 años. Lenguaje simple con referencias visuales. Máximo 3 prioridades. Ejercicios cortos y atractivos.",
@@ -228,39 +235,43 @@ export async function POST(request: NextRequest) {
     "Damas Senior": "Jugadora 50-70 años. PRIORIDAD: prevención de lesiones. Ejercicios de bajo impacto. Progresión conservadora. Énfasis en movilidad funcional.",
   };
 
-  const systemPrompt = `Eres un coach de golf certificado TPI con especialidad en la conexión entre limitaciones físicas y defectos técnicos del swing. Tienes acceso tanto a la evaluación técnica de swing como al screening físico TPI de este alumno. Tu análisis debe revelar EXACTAMENTE cómo las limitaciones físicas CAUSAN los errores técnicos observados.
+  const systemPrompt = `Eres un coach de golf certificado TPI con especialidad en la conexión entre limitaciones físicas y defectos técnicos del swing. Analizas los datos disponibles de este alumno y generas un análisis integrado para el profesor.
 
 INSTRUCCIONES PARA ESTE GRUPO (${grupo}):
 ${instruccionesGrupo[grupo] || instruccionesGrupo["Albatros"]}
 
-PRINCIPIO FUNDAMENTAL: Cada prioridad cruzada debe tener una causa física clara que explique un error técnico específico. No asumas conexiones — usa solo los datos proporcionados.
+FUENTES DISPONIBLES EN ESTE ANÁLISIS: ${fuentes}
+- Si solo tienes datos técnicos: analiza las posiciones débiles del swing y genera recomendaciones técnicas.
+- Si solo tienes datos físicos: analiza las limitaciones TPI y su impacto potencial en el swing.
+- Si solo tienes Trackman: interpreta las métricas y su relación con posibles patrones de swing.
+- Si tienes combinaciones, conecta los datos entre sí con precisión biomecánica.
+En el campo "resumen_integrado" SIEMPRE indica qué fuentes utilizaste (ej: "Análisis basado en técnico + Trackman:...").
 
-CRÍTICO: Responde SIEMPRE en español. No muestres tu razonamiento interno. No expliques tu razonamiento. Responde ÚNICAMENTE con el objeto JSON puro sin backticks, sin texto antes ni después. Solo el JSON empezando con { y terminando con }. Si no tienes suficientes datos, genera el mejor análisis posible con lo disponible.
+PRINCIPIO FUNDAMENTAL: Solo incluye conexiones donde haya datos reales. No inventes métricas ni hallazgos que no estén en los datos.
+
+CRÍTICO: Responde SIEMPRE en español. Responde ÚNICAMENTE con el objeto JSON puro sin backticks, sin texto antes ni después. Solo el JSON empezando con { y terminando con }.
 
 {
-  "resumen_integrado": "2-3 oraciones que expliquen cómo el perfil físico de este alumno explica los patrones técnicos observados en el swing. Menciona la conexión más importante.",
+  "resumen_integrado": "Comienza con 'Análisis basado en [fuentes]:'. Luego 2-3 oraciones explicando los hallazgos principales y la conexión más importante entre los datos disponibles.",
   "prioridades_cruzadas": [
     {
       "orden": 1,
       "titulo": "nombre del problema combinado (máx 6 palabras)",
-      "limitacion_fisica": "código test + descripción breve del hallazgo (ej: S5 — Torso Rotation bajo, 22°)",
-      "error_tecnico": "posición + descripción del error (ej: P4 — Rotación de hombros insuficiente, 6/10)",
-      "descripcion": "explicación biomecánica precisa de cómo la limitación física causa o contribuye al error técnico. Máx 3 oraciones.",
+      "limitacion_fisica": "código test + hallazgo si hay datos físicos, o 'Sin datos físicos' si no hay screening",
+      "error_tecnico": "posición + descripción si hay datos técnicos, o 'Sin evaluación técnica' si no hay swing",
+      "descripcion": "explicación biomecánica o técnica precisa según los datos disponibles. Máx 3 oraciones.",
       "ejercicio_fisico": "ejercicio correctivo específico con instrucción de ejecución y sets/reps",
-      "drill_tecnico": "drill de swing específico que trabaja el patrón una vez mejorada la movilidad",
-      "progresion": "cómo secuenciar el trabajo físico y técnico en el tiempo (ej: primero movilidad, luego drill)"
+      "drill_tecnico": "drill de swing específico que trabaja el patrón",
+      "progresion": "cómo secuenciar el trabajo físico y técnico en el tiempo"
     }
   ],
-  "plan_sesion": "descripción del plan de trabajo para la próxima sesión en 2-3 oraciones directas. Menciona el ejercicio físico principal, el drill técnico y el foco integrado.",
-  "nota_trackman": "si el alumno tiene datos de velocidad de swing u otras métricas TrackMan mencionadas en las observaciones, interpreta la métrica más relevante en relación con las limitaciones físicas identificadas. Si no hay datos TrackMan, usa null."
+  "plan_sesion": "plan de trabajo para la próxima sesión en 2-3 oraciones directas basado en las fuentes disponibles.",
+  "nota_trackman": "si hay datos Trackman, interpreta la métrica más relevante en relación con las limitaciones o patrones identificados. Si no hay datos Trackman, usa null."
 }
 
-Máximo 3 prioridades cruzadas. Solo incluye conexiones donde AMBOS lados (físico y técnico) muestren datos reales de la evaluación.`;
+Máximo 3 prioridades. Adapta el contenido a las fuentes disponibles — no dejes campos vacíos innecesariamente.`;
 
-  const userMessage = `ALUMNO: ${student.full_name}
-GRUPO: ${grupo}
-EDAD: ${student.edad || "no especificada"} años
-
+  const swingSection = hasSwing ? `
 ════════════════════════════════════════
 EVALUACIÓN TÉCNICA DE SWING
 Fecha: ${swingEvaluation.evaluation_date} | Tipo: ${swingEvaluation.evaluation_type}
@@ -270,21 +281,21 @@ POSICIONES EVALUADAS:
 ${swingLines.join("\n") || "  (sin posiciones evaluadas)"}
 
 POSICIONES CON PRIORIDAD (score < 6):
-${swingWeakPositions.join(", ") || "  ninguna"}
-${swingEvaluation.professor_comment ? `\nObservaciones del profesor: ${swingEvaluation.professor_comment}` : ""}
+${swingWeakPositions.join(", ") || "  ninguna"}${swingEvaluation.professor_comment ? `\nObservaciones del profesor: ${swingEvaluation.professor_comment}` : ""}` : "";
 
+  const physicalSection = hasPhysical ? `
 ════════════════════════════════════════
 SCREENING FÍSICO TPI
 Fecha: ${physicalEvaluation.evaluation_date} | Grupo: ${physicalEvaluation.grupo}
-Promedio: ${physicalEvaluation.score_promedio !== null && physicalEvaluation.score_promedio !== undefined ? `${physicalEvaluation.score_promedio}/10` : "—"}
+Promedio: ${physicalEvaluation.score_promedio != null ? `${physicalEvaluation.score_promedio}/10` : "—"}
 
 TODOS LOS TESTS:
 ${physLines.join("\n") || "  (sin tests evaluados)"}
 
 LIMITACIONES IDENTIFICADAS (bajo o progreso):
-${physLimitations.join(", ") || "  ninguna"}
-${physicalEvaluation.professor_comment ? `\nObservaciones: ${physicalEvaluation.professor_comment}` : ""}${trackman_data ? `
+${physLimitations.join(", ") || "  ninguna"}${physicalEvaluation.professor_comment ? `\nObservaciones: ${physicalEvaluation.professor_comment}` : ""}` : "";
 
+  const trackmanSection = hasTrackman ? `
 ════════════════════════════════════════
 DATOS TRACKMAN DE LA ÚLTIMA SESIÓN:
 ${trackman_data.club_usado ? `- Club: ${trackman_data.club_usado}` : ""}
@@ -300,7 +311,13 @@ ${trackman_data.spin_rate_rpm != null ? `- Spin Rate: ${trackman_data.spin_rate_
 ${trackman_data.carry_yards != null ? `- Carry: ${trackman_data.carry_yards} yds` : ""}
 ${trackman_data.total_yards != null ? `- Total: ${trackman_data.total_yards} yds` : ""}
 ${trackman_data.notas_adicionales ? `- Notas: ${trackman_data.notas_adicionales}` : ""}
-Usa estos datos para correlacionar con los errores técnicos identificados (ej. si hay over-the-plane en P5 y el path es out-to-in, confirma la conexión).` : ""}`;
+Correlaciona estas métricas con los errores técnicos identificados (ej. si hay over-the-plane en P5 y el path es out-to-in, confirma la conexión causal).` : "";
+
+  const userMessage = `ALUMNO: ${student.full_name}
+GRUPO: ${grupo}
+EDAD: ${student.edad || "no especificada"} años
+FUENTES: ${fuentes}
+${swingSection}${physicalSection}${trackmanSection}`;
 
   try {
     const response = await fetch("https://api.anthropic.com/v1/messages", {

@@ -610,12 +610,28 @@ export default function StudentProfile({ studentId }: { studentId: string }) {
   const [trackmanLatest, setTrackmanLatest] = useState<TrackmanSession | null>(null);
   const [showTrackmanHistory, setShowTrackmanHistory] = useState(false);
   const [trackmanError, setTrackmanError] = useState<string | null>(null);
+  // Análisis integrado del perfil (independiente de evaluación específica)
+  const [hasSwingEvals, setHasSwingEvals] = useState(false);
+  const [hasTrackmanData, setHasTrackmanData] = useState(false);
+  const [profileIntegratedResult, setProfileIntegratedResult] = useState<IntegratedAiAnalysis | null>(null);
+  const [analyzingProfileIntegrated, setAnalyzingProfileIntegrated] = useState(false);
+  const [profileIntegratedError, setProfileIntegratedError] = useState<string | null>(null);
 
   useEffect(() => {
     supabase.from("physical_evaluations")
       .select("id", { count: "exact", head: true })
       .eq("student_id", studentId)
       .then(({ count }) => { if ((count ?? 0) > 0) setHasPhysicalEvals(true); });
+    supabase.from("swing_evaluations")
+      .select("id", { count: "exact", head: true })
+      .eq("student_id", studentId)
+      .then(({ count }) => { if ((count ?? 0) > 0) setHasSwingEvals(true); });
+    const thirtyDaysAgo = new Date(Date.now() - 30 * 86400000).toISOString().split("T")[0];
+    supabase.from("trackman_sessions")
+      .select("id", { count: "exact", head: true })
+      .eq("alumno_id", studentId)
+      .gte("fecha", thirtyDaysAgo)
+      .then(({ count }) => { if ((count ?? 0) > 0) setHasTrackmanData(true); });
   }, [studentId]);
 
   useEffect(() => {
@@ -1040,6 +1056,55 @@ posPayload[`${key}_score`] = rawScore !== null ? Math.round(rawScore) : null;
     }
     await supabase.from("hitos").delete().eq("id", id);
     setHitos((prev) => prev.filter((h) => h.id !== id));
+  }
+
+  async function handleProfileIntegratedAnalysis() {
+    if (!student) return;
+    setAnalyzingProfileIntegrated(true);
+    setProfileIntegratedError(null);
+    try {
+      const [{ data: swingData }, { data: physData }] = await Promise.all([
+        supabase.from("swing_evaluations").select("*").eq("student_id", studentId).order("evaluation_date", { ascending: false }).limit(1),
+        supabase.from("physical_evaluations").select("*").eq("student_id", studentId).order("evaluation_date", { ascending: false }).limit(1),
+      ]);
+      const thirtyDaysAgo = new Date(Date.now() - 30 * 86400000).toISOString().split("T")[0];
+      const { data: tmData } = await supabase.from("trackman_sessions").select("*").eq("alumno_id", studentId).gte("fecha", thirtyDaysAgo).order("fecha", { ascending: false }).limit(1);
+      const latestSwing = swingData?.[0] ?? null;
+      const latestPhysical = physData?.[0] ?? null;
+      const latestTrackman = tmData?.[0] ?? null;
+      const res = await fetch("/api/integrated-analysis", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          student: { ...student, edad: calcularEdadNum(student.birth_date) },
+          swingEvaluation: latestSwing,
+          physicalEvaluation: latestPhysical,
+          trackman_data: latestTrackman?.datos ?? null,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok || data.error) {
+        setProfileIntegratedError(data.error ?? "Error al generar análisis");
+      } else if (data.analysis) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        let ia: any = data.analysis;
+        for (let i = 0; i < 3; i++) {
+          if (typeof ia?.resumen_integrado !== "string" || !ia.resumen_integrado.trim().startsWith("{")) break;
+          try {
+            const inner = JSON.parse(ia.resumen_integrado);
+            if (inner?.resumen_integrado !== undefined) { ia = inner; }
+            else if (inner?.prioridades_cruzadas !== undefined) { ia = { resumen_integrado: ia.resumen_integrado, ...inner }; break; }
+            else { break; }
+          } catch { break; }
+        }
+        if (ia && typeof ia.resumen_integrado === "string") {
+          setProfileIntegratedResult(ia as IntegratedAiAnalysis);
+        }
+      }
+    } catch (err) {
+      setProfileIntegratedError(err instanceof Error ? err.message : "Error de conexión");
+    }
+    setAnalyzingProfileIntegrated(false);
   }
 
   if (loading) return <div className="flex items-center justify-center py-32 text-gray-400"><svg className="animate-spin mr-3 h-5 w-5" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"/></svg>Cargando perfil...</div>;
@@ -1747,6 +1812,130 @@ posPayload[`${key}_score`] = rawScore !== null ? Math.round(rawScore) : null;
           </div>
         )}
       </div>
+
+      {/* Card análisis integrado del perfil — visible cuando hay al menos un tipo de datos */}
+      {(hasSwingEvals || hasPhysicalEvals || hasTrackmanData) && (
+        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6 mt-4">
+          <div className="flex items-center justify-between mb-4">
+            <div>
+              <h2 className="text-base font-semibold text-gray-900">Análisis integrado del perfil</h2>
+              <p className="text-xs text-gray-400 mt-0.5">
+                Combina:{" "}
+                {[hasSwingEvals && "técnico", hasPhysicalEvals && "físico TPI", hasTrackmanData && "Trackman (30 días)"].filter(Boolean).join(" · ")}
+              </p>
+            </div>
+            {profileIntegratedResult && (
+              <button onClick={handleProfileIntegratedAnalysis} disabled={analyzingProfileIntegrated} className="text-xs text-gray-500 hover:text-gray-700 underline disabled:opacity-40">
+                {analyzingProfileIntegrated ? "Generando..." : "Regenerar"}
+              </button>
+            )}
+          </div>
+
+          {!profileIntegratedResult && (
+            <button onClick={handleProfileIntegratedAnalysis} disabled={analyzingProfileIntegrated} className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl text-sm font-medium border-2 border-dashed transition-all" style={{ borderColor: analyzingProfileIntegrated ? "#5EEAD4" : "#0D9488", color: analyzingProfileIntegrated ? "#0D9488" : "#0F766E", backgroundColor: analyzingProfileIntegrated ? "#F0FDFA" : "transparent" }}>
+              {analyzingProfileIntegrated ? (
+                <><svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"/></svg>Generando análisis integrado...</>
+              ) : (
+                <><svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>Generar análisis integrado</>
+              )}
+            </button>
+          )}
+
+          {profileIntegratedError && (
+            <p className="text-xs text-red-500 bg-red-50 px-3 py-2 rounded-lg mt-2">{profileIntegratedError}</p>
+          )}
+
+          {profileIntegratedResult && (() => {
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            let cur: any = profileIntegratedResult;
+            for (let i = 0; i < 3; i++) {
+              const r = cur.resumen_integrado;
+              if (typeof r !== "string" || !r.trim().startsWith("{")) break;
+              try {
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                const inner: any = JSON.parse(r);
+                if (!inner || typeof inner !== "object") break;
+                if (typeof inner.resumen_integrado === "string") { cur = inner; continue; }
+                if (inner.prioridades_cruzadas !== undefined) { cur = { ...cur, ...inner }; break; }
+                cur = inner;
+              } catch { break; }
+            }
+            const di = cur as IntegratedAiAnalysis;
+            return (
+              <div className="mt-4 space-y-5">
+                <div className="pb-5 border-b border-gray-100">
+                  <span className="text-xs font-semibold uppercase tracking-wide px-2 py-0.5 rounded text-white mb-3 inline-block" style={{ backgroundColor:"#1B4D2E" }}>Resumen integrado</span>
+                  <p className="text-sm text-gray-700 leading-relaxed mt-2">{di.resumen_integrado}</p>
+                </div>
+
+                {di.prioridades_cruzadas?.length > 0 && (
+                  <div className="pb-5 border-b border-gray-100">
+                    <span className="text-xs font-semibold uppercase tracking-wide px-2 py-0.5 rounded text-white mb-4 inline-block" style={{ backgroundColor:"#1B4D2E" }}>Prioridades cruzadas</span>
+                    <div className="space-y-3 mt-3">
+                      {di.prioridades_cruzadas.map((pr) => {
+                        const bc = pr.orden === 1 ? "#EF4444" : pr.orden === 2 ? "#F97316" : "#22C55E";
+                        return (
+                          <div key={pr.orden} className="rounded-lg bg-gray-50 overflow-hidden" style={{ borderLeft:`3px solid ${bc}` }}>
+                            <div className="px-4 py-3">
+                              <div className="flex items-start gap-2 mb-2">
+                                <span className="text-xs font-bold shrink-0 mt-0.5" style={{ color:bc }}>{pr.orden}.</span>
+                                <p className="text-sm font-semibold text-gray-900">{pr.titulo}</p>
+                              </div>
+                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mb-3">
+                                <div className="bg-white rounded-md px-3 py-2 border border-gray-100">
+                                  <p className="text-xs font-semibold text-gray-500 mb-1">Limitación física</p>
+                                  <p className="text-xs text-gray-700">{pr.limitacion_fisica}</p>
+                                </div>
+                                <div className="bg-white rounded-md px-3 py-2 border border-gray-100">
+                                  <p className="text-xs font-semibold text-gray-500 mb-1">Error técnico</p>
+                                  <p className="text-xs text-gray-700">{pr.error_tecnico}</p>
+                                </div>
+                              </div>
+                              <p className="text-sm text-gray-700 leading-relaxed mb-3">{pr.descripcion}</p>
+                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mb-2">
+                                <div className="bg-white rounded-md px-3 py-2 border border-gray-100">
+                                  <p className="text-xs font-semibold text-gray-500 mb-1">Ejercicio físico</p>
+                                  <p className="text-xs text-gray-700 leading-relaxed">{pr.ejercicio_fisico}</p>
+                                </div>
+                                <div className="bg-white rounded-md px-3 py-2 border border-gray-100">
+                                  <p className="text-xs font-semibold text-gray-500 mb-1">Drill técnico</p>
+                                  <p className="text-xs text-gray-700 leading-relaxed">{pr.drill_tecnico}</p>
+                                </div>
+                              </div>
+                              <p className="text-xs text-gray-500"><span className="font-semibold">Progresión:</span> {pr.progresion}</p>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
+                {di.plan_sesion && (
+                  <div className="pb-5 border-b border-gray-100">
+                    <span className="text-xs font-semibold uppercase tracking-wide px-2 py-0.5 rounded text-white mb-3 inline-block" style={{ backgroundColor:"#1B4D2E" }}>Plan de sesión</span>
+                    <p className="text-sm text-gray-700 leading-relaxed mt-2">{di.plan_sesion}</p>
+                  </div>
+                )}
+
+                {di.nota_trackman && (
+                  <div className="pb-5 border-b border-gray-100">
+                    <span className="text-xs font-semibold uppercase tracking-wide px-2 py-0.5 rounded text-white mb-2 inline-block" style={{ backgroundColor:"#1B4D2E" }}>Nota TrackMan</span>
+                    <p className="text-xs text-gray-600 leading-relaxed mt-2">{di.nota_trackman}</p>
+                  </div>
+                )}
+
+                {(di.nota_profesor || di.nota_edad) && (
+                  <div>
+                    <span className="text-xs font-semibold uppercase tracking-wide px-2 py-0.5 rounded text-white mb-2 inline-block" style={{ backgroundColor:"#1B4D2E" }}>Nota pedagógica</span>
+                    <p className="text-xs text-gray-600 leading-relaxed mt-2">{di.nota_profesor ?? di.nota_edad}</p>
+                  </div>
+                )}
+              </div>
+            );
+          })()}
+        </div>
+      )}
 
       {showHitoForm && hitoForm && (
         <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto py-8 px-4" style={{ backgroundColor:"rgba(0,0,0,0.45)" }} onClick={(e) => { if (e.target===e.currentTarget) closeHitoForm(); }}>
