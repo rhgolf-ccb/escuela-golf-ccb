@@ -785,19 +785,40 @@ posPayload[`${key}_score`] = rawScore !== null ? Math.round(rawScore) : null;
       const latestPhysical = physEvals[0];
       const res = await fetch("/api/integrated-analysis", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ student: { ...student, edad: calcularEdadNum(student.birth_date) }, swingEvaluation: ev, physicalEvaluation: latestPhysical }) });
       const data = await res.json();
-      if (data.analysis) {
+      console.log("[integrated] API response status:", res.status, "data:", data);
+      if (!res.ok || data.error) {
+        console.error("[integrated] API error:", data.error ?? res.status);
+      } else if (data.analysis) {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         let ia: any = data.analysis;
+        console.log("[integrated] raw analysis:", ia);
+        // Triple-fallback: desenvuelve si resumen_integrado es un JSON anidado
         for (let i = 0; i < 3; i++) {
           if (typeof ia?.resumen_integrado !== "string" || !ia.resumen_integrado.trim().startsWith("{")) break;
-          try { const inner = JSON.parse(ia.resumen_integrado); if (inner?.resumen_integrado !== undefined) { ia = inner; } else break; } catch { break; }
+          try {
+            const inner = JSON.parse(ia.resumen_integrado);
+            if (inner?.resumen_integrado !== undefined) {
+              ia = inner; // inner tiene la clave correcta → subir un nivel
+            } else if (inner?.prioridades_cruzadas !== undefined) {
+              // inner ES el análisis pero sin clave resumen_integrado → fusionar
+              ia = { resumen_integrado: ia.resumen_integrado, ...inner };
+              break;
+            } else { break; }
+          } catch { break; }
         }
-        if (ia && typeof ia.resumen_integrado === "string" && !ia.resumen_integrado.trim().startsWith("{")) {
+        console.log("[integrated] after unwrap:", ia);
+        // Aceptar si resumen_integrado existe como string (aunque empiece con "{" como último recurso)
+        if (ia && typeof ia.resumen_integrado === "string") {
           setIntegratedResults((prev) => ({ ...prev, [ev.id]: ia as IntegratedAiAnalysis }));
           await supabase.from("swing_evaluations").update({ integrated_analysis: JSON.stringify(ia), integrated_at: new Date().toISOString() }).eq("id", ev.id);
+          console.log("[integrated] saved ok");
+        } else {
+          console.warn("[integrated] acceptance failed, resumen_integrado:", ia?.resumen_integrado);
         }
+      } else {
+        console.warn("[integrated] no analysis in response:", data);
       }
-    } catch (err) { console.error("Error análisis integrado:", err); }
+    } catch (err) { console.error("[integrated] exception:", err); }
     setAnalyzingIntegratedId(null);
   }
 
@@ -1082,7 +1103,13 @@ posPayload[`${key}_score`] = rawScore !== null ? Math.round(rawScore) : null;
 
                               <div className="mb-5 pb-5 border-b border-gray-100">
                                 <span className="text-xs font-semibold uppercase tracking-wide px-2 py-0.5 rounded text-white mb-3 inline-block" style={{ backgroundColor:"#1B4D2E" }}>Resumen integrado</span>
-                                <p className="text-sm text-gray-700 leading-relaxed mt-2">{integrated.resumen_integrado}</p>
+                                <p className="text-sm text-gray-700 leading-relaxed mt-2">
+                                  {(() => {
+                                    const r = integrated.resumen_integrado;
+                                    if (!r?.trim().startsWith("{")) return r;
+                                    try { const p = JSON.parse(r); return p.resumen_integrado ?? "Regenera el análisis para ver el resumen."; } catch { return r; }
+                                  })()}
+                                </p>
                               </div>
 
                               {integrated.prioridades_cruzadas?.length > 0 && (
