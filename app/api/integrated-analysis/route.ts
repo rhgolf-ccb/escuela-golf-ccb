@@ -331,6 +331,23 @@ ${physicalEvaluation.professor_comment ? `\nObservaciones: ${physicalEvaluation.
       }
     }
 
+    // Unwrap if the model double-encoded the full JSON inside resumen_integrado
+    if (analysis && typeof analysis === "object") {
+      for (let i = 0; i < 3; i++) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const r = (analysis as any).resumen_integrado;
+        if (typeof r !== "string" || !r.trim().startsWith("{")) break;
+        try {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const inner = JSON.parse(r) as any;
+          if (!inner || typeof inner !== "object") break;
+          if (typeof inner.resumen_integrado === "string") { analysis = inner; continue; }
+          if (inner.prioridades_cruzadas !== undefined) { analysis = { ...analysis, ...inner }; break; }
+          analysis = inner;
+        } catch { break; }
+      }
+    }
+
     return Response.json({ analysis });
   } catch (error) {
     console.error("Error integrated-analysis:", error);

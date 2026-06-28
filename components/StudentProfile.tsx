@@ -913,6 +913,22 @@ posPayload[`${key}_score`] = rawScore !== null ? Math.round(rawScore) : null;
                   const isOpen = expandedEval === ev.id;
                   const ai = aiResults[ev.id];
                   const integrated = integratedResults[ev.id];
+                  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                  const displayIntegrated: IntegratedAiAnalysis | null = integrated ? (() => {
+                    let cur: any = integrated;
+                    for (let i = 0; i < 3; i++) {
+                      const r = cur.resumen_integrado;
+                      if (typeof r !== "string" || !r.trim().startsWith("{")) break;
+                      try {
+                        const inner: any = JSON.parse(r);
+                        if (!inner || typeof inner !== "object") break;
+                        if (typeof inner.resumen_integrado === "string") { cur = inner; continue; }
+                        if (inner.prioridades_cruzadas !== undefined) { cur = { ...cur, ...inner }; break; }
+                        cur = inner;
+                      } catch { break; }
+                    }
+                    return cur as IntegratedAiAnalysis;
+                  })() : null;
                   const isAnalyzing = analyzingId === ev.id;
                   const isAnalyzingIntegrated = analyzingIntegratedId === ev.id;
                   const posActivas = POSICIONES_GRUPO[ev.grupo] || POSICIONES_GRUPO["Albatros"];
@@ -1103,20 +1119,14 @@ posPayload[`${key}_score`] = rawScore !== null ? Math.round(rawScore) : null;
 
                               <div className="mb-5 pb-5 border-b border-gray-100">
                                 <span className="text-xs font-semibold uppercase tracking-wide px-2 py-0.5 rounded text-white mb-3 inline-block" style={{ backgroundColor:"#1B4D2E" }}>Resumen integrado</span>
-                                <p className="text-sm text-gray-700 leading-relaxed mt-2">
-                                  {(() => {
-                                    const r = integrated.resumen_integrado;
-                                    if (!r?.trim().startsWith("{")) return r;
-                                    try { const p = JSON.parse(r); return p.resumen_integrado ?? "Regenera el análisis para ver el resumen."; } catch { return r; }
-                                  })()}
-                                </p>
+                                <p className="text-sm text-gray-700 leading-relaxed mt-2">{displayIntegrated!.resumen_integrado}</p>
                               </div>
 
-                              {integrated.prioridades_cruzadas?.length > 0 && (
+                              {displayIntegrated!.prioridades_cruzadas?.length > 0 && (
                                 <div className="mb-5 pb-5 border-b border-gray-100">
                                   <span className="text-xs font-semibold uppercase tracking-wide px-2 py-0.5 rounded text-white mb-4 inline-block" style={{ backgroundColor:"#1B4D2E" }}>Prioridades cruzadas</span>
                                   <div className="space-y-3 mt-3">
-                                    {integrated.prioridades_cruzadas.map((pr) => {
+                                    {displayIntegrated!.prioridades_cruzadas.map((pr) => {
                                       const bc = pr.orden === 1 ? "#EF4444" : pr.orden === 2 ? "#F97316" : "#22C55E";
                                       return (
                                         <div key={pr.orden} className="rounded-lg bg-gray-50 overflow-hidden" style={{ borderLeft:`3px solid ${bc}` }}>
@@ -1155,11 +1165,11 @@ posPayload[`${key}_score`] = rawScore !== null ? Math.round(rawScore) : null;
                                 </div>
                               )}
 
-                              {(integrated.fortalezas_combinadas?.length ?? 0) > 0 && (
+                              {(displayIntegrated!.fortalezas_combinadas?.length ?? 0) > 0 && (
                                 <div className="mb-5 pb-5 border-b border-gray-100">
                                   <span className="text-xs font-semibold uppercase tracking-wide px-2 py-0.5 rounded text-white mb-3 inline-block" style={{ backgroundColor:"#1B4D2E" }}>Fortalezas combinadas</span>
                                   <ul className="space-y-1 mt-2">
-                                    {integrated.fortalezas_combinadas!.map((f, i) => (
+                                    {displayIntegrated!.fortalezas_combinadas!.map((f, i) => (
                                       <li key={i} className="flex items-start gap-2 text-sm text-gray-700">
                                         <span className="text-gray-300 shrink-0 mt-0.5">—</span>
                                         <span>{f}</span>
@@ -1169,11 +1179,11 @@ posPayload[`${key}_score`] = rawScore !== null ? Math.round(rawScore) : null;
                                 </div>
                               )}
 
-                              {((integrated.plan_clase_unificado?.length ?? 0) > 0 || (integrated.plan_clase?.length ?? 0) > 0) && (
+                              {((displayIntegrated!.plan_clase_unificado?.length ?? 0) > 0 || (displayIntegrated!.plan_clase?.length ?? 0) > 0) && (
                                 <div className="mb-5 pb-5 border-b border-gray-100">
                                   <span className="text-xs font-semibold uppercase tracking-wide px-2 py-0.5 rounded text-white mb-3 inline-block" style={{ backgroundColor:"#1B4D2E" }}>Plan de clase (60 min)</span>
                                   <div className="space-y-2 mt-3">
-                                    {(integrated.plan_clase_unificado ?? integrated.plan_clase ?? []).map((step, i) => {
+                                    {(displayIntegrated!.plan_clase_unificado ?? displayIntegrated!.plan_clase ?? []).map((step, i) => {
                                       const badge = step.tipo === "tecnico" ? { bg:"#DBEAFE", color:"#1D4ED8" } : step.tipo === "fisico" ? { bg:"#DCFCE7", color:"#15803D" } : { bg:"#F3E8FF", color:"#7C3AED" };
                                       return (
                                         <div key={i} className="flex items-start gap-3">
@@ -1187,11 +1197,11 @@ posPayload[`${key}_score`] = rawScore !== null ? Math.round(rawScore) : null;
                                 </div>
                               )}
 
-                              {(integrated.indicadores_progreso?.length ?? 0) > 0 && (
+                              {(displayIntegrated!.indicadores_progreso?.length ?? 0) > 0 && (
                                 <div className="mb-5 pb-5 border-b border-gray-100">
                                   <span className="text-xs font-semibold uppercase tracking-wide px-2 py-0.5 rounded text-white mb-3 inline-block" style={{ backgroundColor:"#1B4D2E" }}>Indicadores de progreso</span>
                                   <ul className="space-y-1 mt-2">
-                                    {integrated.indicadores_progreso!.map((ind, i) => (
+                                    {displayIntegrated!.indicadores_progreso!.map((ind, i) => (
                                       <li key={i} className="flex items-start gap-2 text-sm text-gray-700">
                                         <span className="text-gray-300 shrink-0 mt-0.5">—</span>
                                         <span>{ind}</span>
@@ -1201,10 +1211,10 @@ posPayload[`${key}_score`] = rawScore !== null ? Math.round(rawScore) : null;
                                 </div>
                               )}
 
-                              {(integrated.nota_profesor || integrated.nota_edad) && (
+                              {(displayIntegrated!.nota_profesor || displayIntegrated!.nota_edad) && (
                                 <div>
                                   <span className="text-xs font-semibold uppercase tracking-wide px-2 py-0.5 rounded text-white mb-2 inline-block" style={{ backgroundColor:"#1B4D2E" }}>Nota pedagógica</span>
-                                  <p className="text-xs text-gray-600 leading-relaxed mt-2">{integrated.nota_profesor ?? integrated.nota_edad}</p>
+                                  <p className="text-xs text-gray-600 leading-relaxed mt-2">{displayIntegrated!.nota_profesor ?? displayIntegrated!.nota_edad}</p>
                                 </div>
                               )}
                             </div>
