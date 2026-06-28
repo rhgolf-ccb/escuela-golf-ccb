@@ -251,16 +251,11 @@ CRÍTICO: Responde SIEMPRE en español. No muestres tu razonamiento interno. No 
       "progresion": "cómo secuenciar el trabajo físico y técnico en el tiempo (ej: primero movilidad, luego drill)"
     }
   ],
-  "fortalezas_combinadas": [
-    "fortaleza concreta que combina lo físico y lo técnico (ej: Buena movilidad de cadera que permite rotación correcta en P4)"
-  ],
-  "plan_clase_unificado": [
-    { "fase": "nombre de la fase", "minutos": "10", "actividad": "descripción específica de la actividad integrada", "tipo": "fisico|tecnico|integrado" }
-  ],
-  "nota_profesor": "observación pedagógica clave para el profesor, específica para la edad y grupo. Máx 2 oraciones."
+  "plan_sesion": "descripción del plan de trabajo para la próxima sesión en 2-3 oraciones directas. Menciona el ejercicio físico principal, el drill técnico y el foco integrado.",
+  "nota_trackman": "si el alumno tiene datos de velocidad de swing u otras métricas TrackMan mencionadas en las observaciones, interpreta la métrica más relevante en relación con las limitaciones físicas identificadas. Si no hay datos TrackMan, usa null."
 }
 
-Máximo 3 prioridades cruzadas. Solo incluye conexiones donde AMBOS lados (físico y técnico) muestren datos reales de la evaluación. El plan de clase debe ser una sesión de 60 minutos estructurada.`;
+Máximo 3 prioridades cruzadas. Solo incluye conexiones donde AMBOS lados (físico y técnico) muestren datos reales de la evaluación.`;
 
   const userMessage = `ALUMNO: ${student.full_name}
 GRUPO: ${grupo}

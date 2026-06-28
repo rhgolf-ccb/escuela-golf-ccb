@@ -359,13 +359,15 @@ type IntegratedAiAnalysis = {
     drill_tecnico: string;
     progresion: string;
   }[];
+  plan_sesion?: string | null;
+  nota_trackman?: string | null;
+  // campos legacy para compatibilidad con análisis guardados anteriores
   fortalezas_combinadas?: string[];
   plan_clase_unificado?: { fase: string; minutos: string; actividad: string; tipo: string; }[];
-  nota_profesor?: string;
-  // backward compat con análisis guardados antes del cambio de schema
   plan_clase?: { fase: string; minutos: string; actividad: string; tipo: string; }[];
   indicadores_progreso?: string[];
-  nota_edad?: string;
+  nota_profesor?: string | null;
+  nota_edad?: string | null;
 };
 
 function physResultToScore(result: PhysicalResult): number | null {
@@ -1165,49 +1167,17 @@ posPayload[`${key}_score`] = rawScore !== null ? Math.round(rawScore) : null;
                                 </div>
                               )}
 
-                              {(displayIntegrated!.fortalezas_combinadas?.length ?? 0) > 0 && (
+                              {displayIntegrated!.plan_sesion && (
                                 <div className="mb-5 pb-5 border-b border-gray-100">
-                                  <span className="text-xs font-semibold uppercase tracking-wide px-2 py-0.5 rounded text-white mb-3 inline-block" style={{ backgroundColor:"#1B4D2E" }}>Fortalezas combinadas</span>
-                                  <ul className="space-y-1 mt-2">
-                                    {displayIntegrated!.fortalezas_combinadas!.map((f, i) => (
-                                      <li key={i} className="flex items-start gap-2 text-sm text-gray-700">
-                                        <span className="text-gray-300 shrink-0 mt-0.5">—</span>
-                                        <span>{f}</span>
-                                      </li>
-                                    ))}
-                                  </ul>
+                                  <span className="text-xs font-semibold uppercase tracking-wide px-2 py-0.5 rounded text-white mb-3 inline-block" style={{ backgroundColor:"#1B4D2E" }}>Plan de sesión</span>
+                                  <p className="text-sm text-gray-700 leading-relaxed mt-2">{displayIntegrated!.plan_sesion}</p>
                                 </div>
                               )}
 
-                              {((displayIntegrated!.plan_clase_unificado?.length ?? 0) > 0 || (displayIntegrated!.plan_clase?.length ?? 0) > 0) && (
+                              {displayIntegrated!.nota_trackman && (
                                 <div className="mb-5 pb-5 border-b border-gray-100">
-                                  <span className="text-xs font-semibold uppercase tracking-wide px-2 py-0.5 rounded text-white mb-3 inline-block" style={{ backgroundColor:"#1B4D2E" }}>Plan de clase (60 min)</span>
-                                  <div className="space-y-2 mt-3">
-                                    {(displayIntegrated!.plan_clase_unificado ?? displayIntegrated!.plan_clase ?? []).map((step, i) => {
-                                      const badge = step.tipo === "tecnico" ? { bg:"#DBEAFE", color:"#1D4ED8" } : step.tipo === "fisico" ? { bg:"#DCFCE7", color:"#15803D" } : { bg:"#F3E8FF", color:"#7C3AED" };
-                                      return (
-                                        <div key={i} className="flex items-start gap-3">
-                                          <span className="text-xs text-gray-400 font-mono min-w-[44px] pt-0.5">{step.minutos}&apos;</span>
-                                          <span className="text-sm text-gray-700 flex-1">{step.actividad}</span>
-                                          <span className="text-xs font-medium px-2 py-0.5 rounded-full whitespace-nowrap" style={{ backgroundColor:badge.bg, color:badge.color }}>{step.tipo.replace("_"," ")}</span>
-                                        </div>
-                                      );
-                                    })}
-                                  </div>
-                                </div>
-                              )}
-
-                              {(displayIntegrated!.indicadores_progreso?.length ?? 0) > 0 && (
-                                <div className="mb-5 pb-5 border-b border-gray-100">
-                                  <span className="text-xs font-semibold uppercase tracking-wide px-2 py-0.5 rounded text-white mb-3 inline-block" style={{ backgroundColor:"#1B4D2E" }}>Indicadores de progreso</span>
-                                  <ul className="space-y-1 mt-2">
-                                    {displayIntegrated!.indicadores_progreso!.map((ind, i) => (
-                                      <li key={i} className="flex items-start gap-2 text-sm text-gray-700">
-                                        <span className="text-gray-300 shrink-0 mt-0.5">—</span>
-                                        <span>{ind}</span>
-                                      </li>
-                                    ))}
-                                  </ul>
+                                  <span className="text-xs font-semibold uppercase tracking-wide px-2 py-0.5 rounded text-white mb-2 inline-block" style={{ backgroundColor:"#1B4D2E" }}>Nota TrackMan</span>
+                                  <p className="text-xs text-gray-600 leading-relaxed mt-2">{displayIntegrated!.nota_trackman}</p>
                                 </div>
                               )}
 
