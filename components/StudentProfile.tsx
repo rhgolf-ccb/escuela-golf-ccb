@@ -754,9 +754,17 @@ posPayload[`${key}_score`] = rawScore !== null ? Math.round(rawScore) : null;
     try {
       const res = await fetch("/api/physical-analysis", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ student: { ...student, edad: calcularEdadNum(student.birth_date) }, evaluation: ev }) });
       const data = await res.json();
-      if (data.analysis && typeof data.analysis.resumen === "string") {
-        setPhysicalAiResults((prev) => ({ ...prev, [ev.id]: data.analysis }));
-        await supabase.from("physical_evaluations").update({ ai_analysis: JSON.stringify(data.analysis), ai_generated_at: new Date().toISOString() }).eq("id", ev.id);
+      if (data.analysis) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        let pa: any = data.analysis;
+        for (let i = 0; i < 3; i++) {
+          if (typeof pa?.resumen !== "string" || !pa.resumen.trim().startsWith("{")) break;
+          try { const inner = JSON.parse(pa.resumen); if (inner?.resumen !== undefined) { pa = inner; } else break; } catch { break; }
+        }
+        if (pa && typeof pa.resumen === "string" && !pa.resumen.trim().startsWith("{")) {
+          setPhysicalAiResults((prev) => ({ ...prev, [ev.id]: pa as PhysicalAiAnalysis }));
+          await supabase.from("physical_evaluations").update({ ai_analysis: JSON.stringify(pa), ai_generated_at: new Date().toISOString() }).eq("id", ev.id);
+        }
       }
     } catch (err) { console.error("Error IA física:", err); }
     setAnalyzingPhysicalId(null);
@@ -777,9 +785,17 @@ posPayload[`${key}_score`] = rawScore !== null ? Math.round(rawScore) : null;
       const latestPhysical = physEvals[0];
       const res = await fetch("/api/integrated-analysis", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ student: { ...student, edad: calcularEdadNum(student.birth_date) }, swingEvaluation: ev, physicalEvaluation: latestPhysical }) });
       const data = await res.json();
-      if (data.analysis && typeof data.analysis.resumen_integrado === "string") {
-        setIntegratedResults((prev) => ({ ...prev, [ev.id]: data.analysis }));
-        await supabase.from("swing_evaluations").update({ integrated_analysis: JSON.stringify(data.analysis), integrated_at: new Date().toISOString() }).eq("id", ev.id);
+      if (data.analysis) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        let ia: any = data.analysis;
+        for (let i = 0; i < 3; i++) {
+          if (typeof ia?.resumen_integrado !== "string" || !ia.resumen_integrado.trim().startsWith("{")) break;
+          try { const inner = JSON.parse(ia.resumen_integrado); if (inner?.resumen_integrado !== undefined) { ia = inner; } else break; } catch { break; }
+        }
+        if (ia && typeof ia.resumen_integrado === "string" && !ia.resumen_integrado.trim().startsWith("{")) {
+          setIntegratedResults((prev) => ({ ...prev, [ev.id]: ia as IntegratedAiAnalysis }));
+          await supabase.from("swing_evaluations").update({ integrated_analysis: JSON.stringify(ia), integrated_at: new Date().toISOString() }).eq("id", ev.id);
+        }
       }
     } catch (err) { console.error("Error análisis integrado:", err); }
     setAnalyzingIntegratedId(null);
