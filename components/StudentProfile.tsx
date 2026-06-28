@@ -370,6 +370,23 @@ type IntegratedAiAnalysis = {
   nota_edad?: string | null;
 };
 
+type Hito = {
+  id: string;
+  alumno_id: string;
+  titulo: string;
+  descripcion: string | null;
+  fecha: string;
+  foto_url: string | null;
+  created_at: string;
+};
+
+type HitoForm = {
+  titulo: string;
+  descripcion: string;
+  fecha: string;
+  foto: File | null;
+};
+
 function physResultToScore(result: PhysicalResult): number | null {
   if (result === "cumple") return 10;
   if (result === "progreso") return 6;
@@ -509,6 +526,12 @@ export default function StudentProfile({ studentId }: { studentId: string }) {
   const [integratedResults, setIntegratedResults] = useState<Record<string, IntegratedAiAnalysis>>({});
   const [analyzingIntegratedId, setAnalyzingIntegratedId] = useState<string|null>(null);
   const [hasPhysicalEvals, setHasPhysicalEvals] = useState(false);
+  const [hitos, setHitos] = useState<Hito[]>([]);
+  const [hitosLoading, setHitosLoading] = useState(false);
+  const [showHitoForm, setShowHitoForm] = useState(false);
+  const [hitoForm, setHitoForm] = useState<HitoForm | null>(null);
+  const [savingHito, setSavingHito] = useState(false);
+  const [hitoSaveError, setHitoSaveError] = useState<string | null>(null);
 
   useEffect(() => {
     supabase.from("physical_evaluations")
@@ -516,6 +539,13 @@ export default function StudentProfile({ studentId }: { studentId: string }) {
       .eq("student_id", studentId)
       .then(({ count }) => { if ((count ?? 0) > 0) setHasPhysicalEvals(true); });
   }, [studentId]);
+
+  useEffect(() => {
+    if (activeTab !== "hitos") return;
+    setHitosLoading(true);
+    supabase.from("hitos").select("*").eq("alumno_id", studentId).order("fecha", { ascending: false })
+      .then(({ data }) => { setHitos(data ?? []); setHitosLoading(false); });
+  }, [activeTab, studentId]);
 
   useEffect(() => {
     async function fetchStudent() {
@@ -822,6 +852,51 @@ posPayload[`${key}_score`] = rawScore !== null ? Math.round(rawScore) : null;
       }
     } catch (err) { console.error("[integrated] exception:", err); }
     setAnalyzingIntegratedId(null);
+  }
+
+  function openHitoForm() {
+    setHitoForm({ titulo: "", descripcion: "", fecha: new Date().toISOString().split("T")[0], foto: null });
+    setHitoSaveError(null);
+    setShowHitoForm(true);
+  }
+
+  function closeHitoForm() {
+    setShowHitoForm(false);
+    setHitoForm(null);
+    setHitoSaveError(null);
+  }
+
+  async function handleSaveHito() {
+    if (!hitoForm || !hitoForm.titulo.trim()) return;
+    setSavingHito(true);
+    setHitoSaveError(null);
+    try {
+      let foto_url: string | null = null;
+      if (hitoForm.foto) {
+        const path = `${studentId}/${Date.now()}_${hitoForm.foto.name}`;
+        const { error: uploadError } = await supabase.storage.from("student-milestones").upload(path, hitoForm.foto, { contentType: hitoForm.foto.type, upsert: true });
+        if (uploadError) throw uploadError;
+        foto_url = supabase.storage.from("student-milestones").getPublicUrl(path).data.publicUrl;
+      }
+      const { data, error } = await supabase.from("hitos").insert({ alumno_id: studentId, titulo: hitoForm.titulo.trim(), descripcion: hitoForm.descripcion.trim() || null, fecha: hitoForm.fecha, foto_url }).select().single();
+      if (error) throw error;
+      setHitos((prev) => [data, ...prev].sort((a, b) => b.fecha.localeCompare(a.fecha)));
+      closeHitoForm();
+    } catch (err: unknown) {
+      setHitoSaveError(err instanceof Error ? err.message : "Error al guardar el hito");
+    }
+    setSavingHito(false);
+  }
+
+  async function handleDeleteHito(id: string) {
+    if (!confirm("¿Eliminar este hito? Esta acción no se puede deshacer.")) return;
+    const hito = hitos.find((h) => h.id === id);
+    if (hito?.foto_url) {
+      const parts = hito.foto_url.split("/student-milestones/");
+      if (parts[1]) await supabase.storage.from("student-milestones").remove([parts[1]]);
+    }
+    await supabase.from("hitos").delete().eq("id", id);
+    setHitos((prev) => prev.filter((h) => h.id !== id));
   }
 
   if (loading) return <div className="flex items-center justify-center py-32 text-gray-400"><svg className="animate-spin mr-3 h-5 w-5" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"/></svg>Cargando perfil...</div>;
@@ -1406,8 +1481,90 @@ posPayload[`${key}_score`] = rawScore !== null ? Math.round(rawScore) : null;
             )}
           </div>
         )}
-        {activeTab === "hitos" && <div className="flex flex-col items-center justify-center py-16 text-gray-400"><svg width="40" height="40" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5} className="mb-3"><path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"/><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"/><path d="M4 22h16"/><path d="M18 2H6v7a6 6 0 0 0 12 0V2Z"/></svg><p className="text-sm">Hitos personales — próximamente</p></div>}
+        {activeTab === "hitos" && (
+          <div>
+            <div className="flex items-center justify-between mb-5">
+              <h2 className="text-base font-semibold text-gray-900">Hitos del alumno</h2>
+              <button onClick={openHitoForm} className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium transition-colors" style={{ backgroundColor:"#1B4D2E", color:"white" }}>
+                <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path d="M12 5v14M5 12h14"/></svg>
+                Registrar hito
+              </button>
+            </div>
+
+            {hitosLoading ? (
+              <div className="flex items-center justify-center py-16 text-gray-400">
+                <svg className="animate-spin mr-3 h-5 w-5" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"/></svg>
+                Cargando...
+              </div>
+            ) : hitos.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-16 text-gray-400">
+                <svg width="40" height="40" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5} className="mb-3"><path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"/><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"/><path d="M4 22h16"/><path d="M18 2H6v7a6 6 0 0 0 12 0V2Z"/></svg>
+                <p className="text-sm font-medium">Sin hitos aún</p>
+                <p className="text-xs mt-1">Registra el primer logro de este alumno</p>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {hitos.map((h) => (
+                  <div key={h.id} className="flex items-start gap-4 p-4 rounded-xl border border-gray-100 bg-white hover:border-gray-200 transition-colors">
+                    {h.foto_url ? (
+                      <img src={h.foto_url} alt={h.titulo} className="w-20 h-20 rounded-lg object-cover shrink-0 border border-gray-100" />
+                    ) : (
+                      <div className="w-20 h-20 rounded-lg shrink-0 flex items-center justify-center" style={{ backgroundColor:"#F0FDF4" }}>
+                        <svg width="28" height="28" fill="none" viewBox="0 0 24 24" stroke="#1B4D2E" strokeWidth={1.5}><path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"/><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"/><path d="M4 22h16"/><path d="M18 2H6v7a6 6 0 0 0 12 0V2Z"/></svg>
+                      </div>
+                    )}
+                    <div className="flex-1 min-w-0">
+                      <p className="font-semibold text-gray-900 text-sm">{h.titulo}</p>
+                      <p className="text-xs text-gray-400 mt-0.5">{formatFecha(h.fecha)}</p>
+                      {h.descripcion && <p className="text-sm text-gray-600 mt-1.5 leading-relaxed">{h.descripcion}</p>}
+                    </div>
+                    <button onClick={() => handleDeleteHito(h.id)} className="shrink-0 p-1.5 rounded-lg text-gray-300 hover:text-red-400 hover:bg-red-50 transition-colors">
+                      <svg width="15" height="15" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}><path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6"/></svg>
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
       </div>
+
+      {showHitoForm && hitoForm && (
+        <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto py-8 px-4" style={{ backgroundColor:"rgba(0,0,0,0.45)" }} onClick={(e) => { if (e.target===e.currentTarget) closeHitoForm(); }}>
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md my-auto">
+            <div className="flex items-center justify-between px-6 py-5 border-b border-gray-100">
+              <h2 className="text-base font-semibold text-gray-900">Registrar hito</h2>
+              <button onClick={closeHitoForm} className="text-gray-400 hover:text-gray-600"><svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path d="M18 6 6 18M6 6l12 12"/></svg></button>
+            </div>
+            <div className="px-6 py-5 space-y-4">
+              <div>
+                <label className="block text-xs font-semibold text-gray-700 mb-1.5">Título <span className="text-red-400">*</span></label>
+                <input type="text" value={hitoForm.titulo} onChange={(e) => setHitoForm((f) => f ? { ...f, titulo: e.target.value } : f)} placeholder="ej: Primer eagle, Handicap −5, Primer torneo..." className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-600 focus:border-transparent" />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-gray-700 mb-1.5">Descripción <span className="text-gray-400 font-normal">(opcional)</span></label>
+                <textarea value={hitoForm.descripcion} onChange={(e) => setHitoForm((f) => f ? { ...f, descripcion: e.target.value } : f)} placeholder="Detalles del logro..." rows={3} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-600 resize-none" />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-gray-700 mb-1.5">Fecha del logro</label>
+                <input type="date" value={hitoForm.fecha} onChange={(e) => setHitoForm((f) => f ? { ...f, fecha: e.target.value } : f)} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-600" />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-gray-700 mb-1.5">Foto del logro <span className="text-gray-400 font-normal">(opcional)</span></label>
+                <input type="file" accept="image/jpeg,image/png,image/webp" onChange={(e) => { const file = e.target.files?.[0] ?? null; setHitoForm((f) => f ? { ...f, foto: file } : f); }} className="w-full text-sm text-gray-500 file:mr-3 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-medium file:bg-green-50 file:text-green-700 hover:file:bg-green-100" />
+                {hitoForm.foto && <p className="text-xs text-gray-400 mt-1.5">{hitoForm.foto.name} ({(hitoForm.foto.size / 1024).toFixed(0)} KB)</p>}
+              </div>
+              {hitoSaveError && <p className="text-xs text-red-500 bg-red-50 px-3 py-2 rounded-lg">{hitoSaveError}</p>}
+            </div>
+            <div className="px-6 pb-6 flex gap-3">
+              <button onClick={closeHitoForm} className="flex-1 px-4 py-2.5 rounded-xl border border-gray-200 text-sm font-medium text-gray-600 hover:bg-gray-50">Cancelar</button>
+              <button onClick={handleSaveHito} disabled={savingHito || !hitoForm.titulo.trim()} className="flex-1 px-4 py-2.5 rounded-xl text-sm font-medium text-white disabled:opacity-50 transition-opacity" style={{ backgroundColor:"#1B4D2E" }}>
+                {savingHito ? "Guardando..." : "Guardar hito"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {isEditing && form && (
         <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto py-8 px-4" style={{ backgroundColor:"rgba(0,0,0,0.45)" }} onClick={(e) => { if (e.target===e.currentTarget) closeEdit(); }}>
