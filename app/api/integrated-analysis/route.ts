@@ -163,7 +163,7 @@ export async function POST(request: NextRequest) {
   }
 
   const body = await request.json();
-  const { student, swingEvaluation, physicalEvaluation } = body;
+  const { student, swingEvaluation, physicalEvaluation, trackman_data } = body;
 
   const grupo = calcularGrupoEfectivo(student);
 
@@ -283,7 +283,24 @@ ${physLines.join("\n") || "  (sin tests evaluados)"}
 
 LIMITACIONES IDENTIFICADAS (bajo o progreso):
 ${physLimitations.join(", ") || "  ninguna"}
-${physicalEvaluation.professor_comment ? `\nObservaciones: ${physicalEvaluation.professor_comment}` : ""}`;
+${physicalEvaluation.professor_comment ? `\nObservaciones: ${physicalEvaluation.professor_comment}` : ""}${trackman_data ? `
+
+════════════════════════════════════════
+DATOS TRACKMAN DE LA ÚLTIMA SESIÓN:
+${trackman_data.club_usado ? `- Club: ${trackman_data.club_usado}` : ""}
+${trackman_data.club_speed_mph != null ? `- Club Speed: ${trackman_data.club_speed_mph} mph` : ""}
+${trackman_data.ball_speed_mph != null ? `- Ball Speed: ${trackman_data.ball_speed_mph} mph` : ""}
+${trackman_data.smash_factor != null ? `- Smash Factor: ${trackman_data.smash_factor}` : ""}
+${trackman_data.attack_angle_deg != null ? `- Attack Angle: ${trackman_data.attack_angle_deg}°` : ""}
+${trackman_data.club_path_deg != null ? `- Club Path: ${trackman_data.club_path_deg}°` : ""}
+${trackman_data.face_angle_deg != null ? `- Face Angle: ${trackman_data.face_angle_deg}°` : ""}
+${trackman_data.face_to_path_deg != null ? `- Face to Path: ${trackman_data.face_to_path_deg}°` : ""}
+${trackman_data.launch_angle_deg != null ? `- Launch Angle: ${trackman_data.launch_angle_deg}°` : ""}
+${trackman_data.spin_rate_rpm != null ? `- Spin Rate: ${trackman_data.spin_rate_rpm} rpm` : ""}
+${trackman_data.carry_yards != null ? `- Carry: ${trackman_data.carry_yards} yds` : ""}
+${trackman_data.total_yards != null ? `- Total: ${trackman_data.total_yards} yds` : ""}
+${trackman_data.notas_adicionales ? `- Notas: ${trackman_data.notas_adicionales}` : ""}
+Usa estos datos para correlacionar con los errores técnicos identificados (ej. si hay over-the-plane en P5 y el path es out-to-in, confirma la conexión).` : ""}`;
 
   try {
     const response = await fetch("https://api.anthropic.com/v1/messages", {

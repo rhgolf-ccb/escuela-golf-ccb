@@ -387,6 +387,30 @@ type HitoForm = {
   foto: File | null;
 };
 
+type TrackmanData = {
+  club_speed_mph: number | null;
+  ball_speed_mph: number | null;
+  smash_factor: number | null;
+  launch_angle_deg: number | null;
+  spin_rate_rpm: number | null;
+  carry_yards: number | null;
+  total_yards: number | null;
+  attack_angle_deg: number | null;
+  club_path_deg: number | null;
+  face_angle_deg: number | null;
+  face_to_path_deg: number | null;
+  club_usado: string | null;
+  notas_adicionales: string | null;
+};
+
+type TrackmanSession = {
+  id: string;
+  alumno_id: string;
+  fecha: string;
+  datos: TrackmanData;
+  created_at: string;
+};
+
 function physResultToScore(result: PhysicalResult): number | null {
   if (result === "cumple") return 10;
   if (result === "progreso") return 6;
@@ -482,6 +506,53 @@ function formatFecha(dateStr: string|null): string {
   return d.toLocaleDateString("es-CO", { day: "2-digit", month: "long", year: "numeric" });
 }
 
+const TRACKMAN_LABELS: { key: keyof TrackmanData; label: string; unit: string }[] = [
+  { key: "club_usado", label: "Club", unit: "" },
+  { key: "club_speed_mph", label: "Club Speed", unit: " mph" },
+  { key: "ball_speed_mph", label: "Ball Speed", unit: " mph" },
+  { key: "smash_factor", label: "Smash Factor", unit: "" },
+  { key: "launch_angle_deg", label: "Launch Angle", unit: "°" },
+  { key: "spin_rate_rpm", label: "Spin Rate", unit: " rpm" },
+  { key: "carry_yards", label: "Carry", unit: " yds" },
+  { key: "total_yards", label: "Total", unit: " yds" },
+  { key: "attack_angle_deg", label: "Attack Angle", unit: "°" },
+  { key: "club_path_deg", label: "Club Path", unit: "°" },
+  { key: "face_angle_deg", label: "Face Angle", unit: "°" },
+  { key: "face_to_path_deg", label: "Face to Path", unit: "°" },
+  { key: "notas_adicionales", label: "Notas", unit: "" },
+];
+
+function TrackmanDataTable({ data, compact = false }: { data: TrackmanData; compact?: boolean }) {
+  const rows = TRACKMAN_LABELS.filter((f) => data[f.key] != null);
+  if (!rows.length) return <p className="text-xs text-gray-400">Sin datos extraídos</p>;
+  if (compact) {
+    return (
+      <div className="flex flex-wrap gap-x-4 gap-y-1">
+        {rows.map((f) => (
+          <span key={f.key} className="text-xs text-gray-600">
+            <span className="text-gray-400">{f.label}: </span>
+            {String(data[f.key])}{f.unit}
+          </span>
+        ))}
+      </div>
+    );
+  }
+  return (
+    <div className="rounded-xl border border-gray-100 overflow-hidden">
+      <table className="w-full text-sm">
+        <tbody>
+          {rows.map((f, i) => (
+            <tr key={f.key} className={i % 2 === 0 ? "bg-white" : "bg-gray-50"}>
+              <td className="px-4 py-2.5 text-xs font-medium text-gray-500 w-40">{f.label}</td>
+              <td className="px-4 py-2.5 font-semibold text-gray-900">{String(data[f.key])}{f.unit}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
 function initiales(name: string): string {
   return name.split(" ").slice(0,2).map((n) => n[0]).join("").toUpperCase();
 }
@@ -532,6 +603,13 @@ export default function StudentProfile({ studentId }: { studentId: string }) {
   const [hitoForm, setHitoForm] = useState<HitoForm | null>(null);
   const [savingHito, setSavingHito] = useState(false);
   const [hitoSaveError, setHitoSaveError] = useState<string | null>(null);
+  const [trackmanSessions, setTrackmanSessions] = useState<TrackmanSession[]>([]);
+  const [trackmanFile, setTrackmanFile] = useState<File | null>(null);
+  const [trackmanPreview, setTrackmanPreview] = useState<string | null>(null);
+  const [analyzingTrackman, setAnalyzingTrackman] = useState(false);
+  const [trackmanLatest, setTrackmanLatest] = useState<TrackmanSession | null>(null);
+  const [showTrackmanHistory, setShowTrackmanHistory] = useState(false);
+  const [trackmanError, setTrackmanError] = useState<string | null>(null);
 
   useEffect(() => {
     supabase.from("physical_evaluations")
@@ -545,6 +623,13 @@ export default function StudentProfile({ studentId }: { studentId: string }) {
     setHitosLoading(true);
     supabase.from("hitos").select("*").eq("alumno_id", studentId).order("fecha", { ascending: false })
       .then(({ data }) => { setHitos(data ?? []); setHitosLoading(false); });
+  }, [activeTab, studentId]);
+
+  useEffect(() => {
+    if (activeTab !== "tecnicos") return;
+    supabase.from("trackman_sessions").select("*").eq("alumno_id", studentId)
+      .order("fecha", { ascending: false }).limit(5)
+      .then(({ data }) => { setTrackmanSessions(data ?? []); if (data?.[0]) setTrackmanLatest(data[0]); });
   }, [activeTab, studentId]);
 
   useEffect(() => {
@@ -815,7 +900,14 @@ posPayload[`${key}_score`] = rawScore !== null ? Math.round(rawScore) : null;
         setPhysicalEvals(physData);
       }
       const latestPhysical = physEvals[0];
-      const res = await fetch("/api/integrated-analysis", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ student: { ...student, edad: calcularEdadNum(student.birth_date) }, swingEvaluation: ev, physicalEvaluation: latestPhysical }) });
+      // Include recent trackman data (last 14 days) if available
+      let recentTrackman: TrackmanData | null = null;
+      const latestTm = trackmanSessions[0] ?? trackmanLatest;
+      if (latestTm) {
+        const daysDiff = (Date.now() - new Date(latestTm.fecha).getTime()) / 86400000;
+        if (daysDiff <= 14) recentTrackman = latestTm.datos;
+      }
+      const res = await fetch("/api/integrated-analysis", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ student: { ...student, edad: calcularEdadNum(student.birth_date) }, swingEvaluation: ev, physicalEvaluation: latestPhysical, trackman_data: recentTrackman }) });
       const data = await res.json();
       console.log("[integrated] API response status:", res.status, "data:", data);
       if (!res.ok || data.error) {
@@ -852,6 +944,57 @@ posPayload[`${key}_score`] = rawScore !== null ? Math.round(rawScore) : null;
       }
     } catch (err) { console.error("[integrated] exception:", err); }
     setAnalyzingIntegratedId(null);
+  }
+
+  function trackmanFileToBase64(file: File): Promise<{ data: string; mediaType: string }> {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.readAsDataURL(file);
+      reader.onload = () => {
+        const result = reader.result as string;
+        const [header, data] = result.split(",");
+        const mediaType = header.split(":")[1]?.split(";")[0] ?? "image/jpeg";
+        resolve({ data, mediaType });
+      };
+      reader.onerror = reject;
+    });
+  }
+
+  function handleTrackmanFileChange(file: File | null) {
+    setTrackmanFile(file);
+    setTrackmanError(null);
+    if (file) {
+      const url = URL.createObjectURL(file);
+      setTrackmanPreview(url);
+    } else {
+      setTrackmanPreview(null);
+    }
+  }
+
+  async function handleTrackmanAnalyze() {
+    if (!trackmanFile || !studentId) return;
+    setAnalyzingTrackman(true);
+    setTrackmanError(null);
+    try {
+      const { data: b64, mediaType } = await trackmanFileToBase64(trackmanFile);
+      const res = await fetch("/api/trackman-analysis", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ imagen_base64: b64, media_type: mediaType, alumno_id: studentId }),
+      });
+      const result = await res.json();
+      if (!res.ok || result.error) { setTrackmanError(result.error ?? "Error al analizar"); }
+      else {
+        const newSession: TrackmanSession = result.session ?? { id: crypto.randomUUID(), alumno_id: studentId, fecha: new Date().toISOString().split("T")[0], datos: result.datos, created_at: new Date().toISOString() };
+        setTrackmanLatest(newSession);
+        setTrackmanSessions((prev) => [newSession, ...prev].slice(0, 5));
+        setTrackmanFile(null);
+        setTrackmanPreview(null);
+      }
+    } catch (err: unknown) {
+      setTrackmanError(err instanceof Error ? err.message : "Error de conexión");
+    }
+    setAnalyzingTrackman(false);
   }
 
   function openHitoForm() {
@@ -1271,6 +1414,82 @@ posPayload[`${key}_score`] = rawScore !== null ? Math.round(rawScore) : null;
                 })}
               </div>
             )}
+          {/* Sección Trackman — solo para grupo Competencia */}
+          {grupo === "Competencia" && (
+            <div className="mt-6 pt-6 border-t border-gray-100">
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center gap-2">
+                  <h3 className="text-sm font-semibold text-gray-900">Datos Trackman</h3>
+                  {trackmanLatest && (
+                    <span className="text-xs px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 font-medium">
+                      Última sesión: {formatFecha(trackmanLatest.fecha)}
+                    </span>
+                  )}
+                </div>
+                <div className="flex items-center gap-2">
+                  {trackmanSessions.length > 0 && (
+                    <button onClick={() => setShowTrackmanHistory((v) => !v)} className="text-xs text-gray-500 hover:text-gray-700 underline">
+                      {showTrackmanHistory ? "Ocultar historial" : `Ver historial (${trackmanSessions.length})`}
+                    </button>
+                  )}
+                  <label className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium cursor-pointer transition-colors" style={{ backgroundColor:"#EFF6FF", color:"#1D4ED8" }}>
+                    <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path d="M12 5v14M5 12h14"/></svg>
+                    Subir pantallazo Trackman
+                    <input type="file" accept="image/jpeg,image/png,image/webp" className="hidden" onChange={(e) => handleTrackmanFileChange(e.target.files?.[0] ?? null)} />
+                  </label>
+                </div>
+              </div>
+
+              {trackmanError && (
+                <p className="text-xs text-red-500 bg-red-50 px-3 py-2 rounded-lg mb-3">{trackmanError}</p>
+              )}
+
+              {trackmanPreview && trackmanFile && !analyzingTrackman && (
+                <div className="mb-4 p-4 rounded-xl border border-blue-100 bg-blue-50 flex items-start gap-4">
+                  <img src={trackmanPreview} alt="preview" className="w-32 h-24 object-cover rounded-lg border border-blue-200 shrink-0" />
+                  <div className="flex-1">
+                    <p className="text-sm font-medium text-gray-900">{trackmanFile.name}</p>
+                    <p className="text-xs text-gray-500 mt-0.5">{(trackmanFile.size / 1024).toFixed(0)} KB</p>
+                    <div className="flex gap-2 mt-3">
+                      <button onClick={handleTrackmanAnalyze} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-white" style={{ backgroundColor:"#1D4ED8" }}>
+                        <svg width="12" height="12" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
+                        Analizar con IA
+                      </button>
+                      <button onClick={() => { setTrackmanFile(null); setTrackmanPreview(null); }} className="px-3 py-1.5 rounded-lg text-xs font-medium border border-gray-200 text-gray-600 hover:bg-gray-50">Cancelar</button>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {analyzingTrackman && (
+                <div className="flex items-center gap-2 py-4 text-blue-600 text-sm">
+                  <svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"/></svg>
+                  Extrayendo datos del pantallazo...
+                </div>
+              )}
+
+              {trackmanLatest && !trackmanPreview && (
+                <TrackmanDataTable data={trackmanLatest.datos} />
+              )}
+
+              {showTrackmanHistory && trackmanSessions.length > 0 && (
+                <div className="mt-4 space-y-3">
+                  <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Últimas sesiones</p>
+                  {trackmanSessions.map((s) => (
+                    <div key={s.id} className="rounded-xl border border-gray-100 overflow-hidden">
+                      <div className="px-4 py-2.5 bg-gray-50 flex items-center justify-between">
+                        <span className="text-xs font-medium text-gray-700">{formatFecha(s.fecha)}</span>
+                        {s.datos.club_usado && <span className="text-xs text-gray-500">{s.datos.club_usado}</span>}
+                      </div>
+                      <div className="px-4 py-3">
+                        <TrackmanDataTable data={s.datos} compact />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
           </div>
         )}
 
