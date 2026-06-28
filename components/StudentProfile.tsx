@@ -501,6 +501,14 @@ export default function StudentProfile({ studentId }: { studentId: string }) {
   const [physicalAiResults, setPhysicalAiResults] = useState<Record<string, PhysicalAiAnalysis>>({});
   const [integratedResults, setIntegratedResults] = useState<Record<string, IntegratedAiAnalysis>>({});
   const [analyzingIntegratedId, setAnalyzingIntegratedId] = useState<string|null>(null);
+  const [hasPhysicalEvals, setHasPhysicalEvals] = useState(false);
+
+  useEffect(() => {
+    supabase.from("physical_evaluations")
+      .select("id", { count: "exact", head: true })
+      .eq("student_id", studentId)
+      .then(({ count }) => { if ((count ?? 0) > 0) setHasPhysicalEvals(true); });
+  }, [studentId]);
 
   useEffect(() => {
     async function fetchStudent() {
@@ -569,6 +577,7 @@ export default function StudentProfile({ studentId }: { studentId: string }) {
         .eq("student_id", studentId).order("evaluation_date", { ascending: false });
       if (!error && data) {
         setPhysicalEvals(data);
+        if (data.length > 0) setHasPhysicalEvals(true);
         const aiMap: Record<string, PhysicalAiAnalysis> = {};
         data.forEach((ev) => {
           if (!ev.ai_analysis) return;
@@ -707,6 +716,7 @@ posPayload[`${key}_score`] = rawScore !== null ? Math.round(rawScore) : null;
     if (error) { setPhysicalSaveError(error.message); setPhysicalSaving(false); return; }
     const newEval = { ...payload, ai_analysis: null, ai_generated_at: null, created_at: new Date().toISOString() } as PhysicalEvaluation;
     setPhysicalEvals((prev) => [newEval, ...prev]);
+    setHasPhysicalEvals(true);
     setPhysicalSaving(false); closePhysicalForm(); setExpandedPhysical(id);
   }
 
@@ -995,7 +1005,7 @@ posPayload[`${key}_score`] = rawScore !== null ? Math.round(rawScore) : null;
                           )}
 
                           {/* Análisis integrado técnico + físico */}
-                          {!integrated && (
+                          {!integrated && hasPhysicalEvals && (
                             <div className="border-t border-gray-50 px-5 pt-4 pb-5">
                               <button onClick={() => handleAnalyzeIntegrated(ev)} disabled={analyzingIntegratedId !== null} className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl text-sm font-medium border-2 border-dashed transition-all" style={{ borderColor:isAnalyzingIntegrated?"#5EEAD4":"#0D9488", color:isAnalyzingIntegrated?"#0D9488":"#0F766E", backgroundColor:isAnalyzingIntegrated?"#F0FDFA":"transparent" }}>
                                 {isAnalyzingIntegrated ? <><svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"/></svg>Generando análisis integrado...</> : <>
