@@ -31,6 +31,131 @@ const POSICIONES_NOMBRES: Record<string, string> = {
   P7: "Impacto", P8: "Follow through — palo paralelo", P9: "Follow through — brazo der.", P10: "Finish completo",
 };
 
+const TPI_TESTS_INFO: Record<string, Record<string, { nombre: string; swing?: string }>> = {
+  Birdies: {
+    DM1: { nombre: "Lanzar una pelota (coordinación rotacional)", swing: "P4–P7" },
+    DM2: { nombre: "Atrapar una pelota (coordinación óculo-manual)" },
+    DM3: { nombre: "Saltar en un pie (equilibrio unipodal)", swing: "P5, P10" },
+    DM4: { nombre: "Skipping (coordinación dinámica)" },
+    DM5: { nombre: "Equilibrio en movimiento (control postural dinámico)", swing: "P10" },
+    MB1: { nombre: "Overhead Deep Squat (movilidad general, postura global)", swing: "P1, P10" },
+    MB2: { nombre: "Single Leg Balance 3 seg (equilibrio estático unipodal)", swing: "P5, P10" },
+    MB3: { nombre: "Torso Rotation (rotación de tronco sobre caderas)", swing: "P4, P7" },
+  },
+  "Águilas": {
+    DM1: { nombre: "Lanzar con rotación (coordinación rotacional + transferencia de peso)", swing: "P4–P7" },
+    DM2: { nombre: "Atrapar en movimiento (coordinación dinámica)" },
+    DM3: { nombre: "Saltar y caer en equilibrio (potencia + estabilidad de aterrizaje)", swing: "P10" },
+    S1: { nombre: "Overhead Deep Squat (movilidad global, postura, dorsiflexión)", swing: "P1, P10" },
+    S2: { nombre: "Toe Touch (flexibilidad isquiotibiales y cadena posterior)", swing: "P1" },
+    S3: { nombre: "Single Leg Balance 7 seg (equilibrio estático unipodal)", swing: "P5, P10" },
+    S4: { nombre: "Torso Rotation (rotación de tronco sobre caderas)", swing: "P4, P7" },
+    S5: { nombre: "Pelvic Tilt (control lumbo-pélvico, lordosis funcional)", swing: "P1, P4" },
+    S6: { nombre: "Ankle Mobility (movilidad de tobillo, dorsiflexión)", swing: "P1, P10" },
+    S7: { nombre: "Hip Sway Test (estabilidad lateral de cadera en carga)", swing: "P4, P7" },
+    S8: { nombre: "Hip Rotation Awareness (conciencia de rotación interna/externa de cadera)", swing: "P5, P7" },
+    PO1: { nombre: "Salto Vertical (potencia explosiva de piernas)" },
+    PO2: { nombre: "Lanzamiento Rotacional 0.5 kg (potencia rotacional)", swing: "P4–P7" },
+    PO3: { nombre: "Fuerza de Agarre (fuerza de manos y antebrazos)", swing: "P1" },
+  },
+  Albatros: {
+    S1: { nombre: "Overhead Deep Squat (movilidad global, postura, dorsiflexión)", swing: "P1, P10" },
+    S2: { nombre: "Toe Touch (flexibilidad isquiotibiales y cadena posterior)", swing: "P1" },
+    S3: { nombre: "90/90 Stretch (flexibilidad isquiotibiales en posición sentada)", swing: "P4, P5" },
+    S4: { nombre: "Pelvic Tilt (control lumbo-pélvico, lordosis funcional)", swing: "P1, P4" },
+    S5: { nombre: "Torso Rotation (rotación de tronco sobre caderas fijas)", swing: "P4, P7" },
+    S6: { nombre: "Cervical Rotation (rotación cervical, seguimiento visual del objetivo)", swing: "P7" },
+    S7: { nombre: "Shoulder Horizontal Abduction (movilidad posterior de hombro, plano horizontal)", swing: "P3, P8, P9" },
+    S8: { nombre: "Wrist Flexion/Extension (movilidad de muñeca, control del face)", swing: "P2, P3, P6" },
+    S9: { nombre: "Ankle Mobility (movilidad de tobillo, dorsiflexión)", swing: "P1, P10" },
+    S10: { nombre: "Single Leg Balance 10 seg (equilibrio estático unipodal)", swing: "P5, P10" },
+    S11: { nombre: "Hip Internal Rotation (rotación interna de cadera, X-Factor)", swing: "P4, P7" },
+    S12: { nombre: "Hip External Rotation (rotación externa de cadera)", swing: "P5, P7" },
+    S13: { nombre: "Lower Quarter Rotation (rotación global del tren inferior)", swing: "P5, P7" },
+    S14: { nombre: "Seated Trunk Rotation (rotación de tronco disociada de caderas)", swing: "P4, P5" },
+    S15: { nombre: "Lat Length (longitud del dorsal ancho, restricción en follow through)", swing: "P3, P8, P9" },
+    S16: { nombre: "Bridge with Leg Extension (fuerza glúteo, estabilidad lumbo-pélvica)", swing: "P5, P6" },
+    PB1: { nombre: "Salto Vertical (potencia explosiva de piernas)" },
+    PB2: { nombre: "Lanzamiento Rotacional 1 kg (potencia rotacional)", swing: "P4–P7" },
+    PB3: { nombre: "Sit Up and Throw 1 kg (potencia de core)" },
+    PB4: { nombre: "Fuerza de Agarre (fuerza de manos y antebrazos)", swing: "P1" },
+  },
+  "Grupo +14": {
+    S1: { nombre: "Overhead Deep Squat (movilidad global, postura, dorsiflexión)", swing: "P1, P10" },
+    S2: { nombre: "Toe Touch (flexibilidad isquiotibiales y cadena posterior)", swing: "P1" },
+    S3: { nombre: "90/90 Stretch (flexibilidad isquiotibiales en posición sentada)", swing: "P4, P5" },
+    S4: { nombre: "Pelvic Tilt (control lumbo-pélvico, lordosis funcional)", swing: "P1, P4" },
+    S5: { nombre: "Torso Rotation (rotación de tronco sobre caderas fijas)", swing: "P4, P7" },
+    S6: { nombre: "Cervical Rotation (rotación cervical, seguimiento visual del objetivo)", swing: "P7" },
+    S7: { nombre: "Shoulder Horizontal Abduction (movilidad posterior de hombro, plano horizontal)", swing: "P3, P8, P9" },
+    S8: { nombre: "Wrist Flexion/Extension (movilidad de muñeca, control del face)", swing: "P2, P3, P6" },
+    S9: { nombre: "Ankle Mobility (movilidad de tobillo, dorsiflexión)", swing: "P1, P10" },
+    S10: { nombre: "Single Leg Balance 10 seg (equilibrio estático unipodal)", swing: "P5, P10" },
+    S11: { nombre: "Hip Internal Rotation (rotación interna de cadera, X-Factor)", swing: "P4, P7" },
+    S12: { nombre: "Hip External Rotation (rotación externa de cadera)", swing: "P5, P7" },
+    S13: { nombre: "Lower Quarter Rotation (rotación global del tren inferior)", swing: "P5, P7" },
+    S14: { nombre: "Seated Trunk Rotation (rotación de tronco disociada de caderas)", swing: "P4, P5" },
+    S15: { nombre: "Lat Length (longitud del dorsal ancho, restricción en follow through)", swing: "P3, P8, P9" },
+    S16: { nombre: "Bridge with Leg Extension (fuerza glúteo, estabilidad lumbo-pélvica)", swing: "P5, P6" },
+    PB1: { nombre: "Salto Vertical (potencia explosiva de piernas)" },
+    PB2: { nombre: "Lanzamiento Rotacional 1 kg (potencia rotacional)", swing: "P4–P7" },
+    PB3: { nombre: "Sit Up and Throw 1 kg (potencia de core)" },
+    PB4: { nombre: "Fuerza de Agarre (fuerza de manos y antebrazos)", swing: "P1" },
+  },
+  Competencia: {
+    S1: { nombre: "Overhead Deep Squat (movilidad global, postura, dorsiflexión)", swing: "P1, P10" },
+    S2: { nombre: "Toe Touch (flexibilidad isquiotibiales y cadena posterior)", swing: "P1" },
+    S3: { nombre: "90/90 Stretch (flexibilidad isquiotibiales en posición sentada)", swing: "P4, P5" },
+    S4: { nombre: "Pelvic Tilt (control lumbo-pélvico, lordosis funcional)", swing: "P1, P4" },
+    S5: { nombre: "Torso Rotation (rotación de tronco sobre caderas fijas)", swing: "P4, P7" },
+    S6: { nombre: "Cervical Rotation (rotación cervical, seguimiento visual del objetivo)", swing: "P7" },
+    S7: { nombre: "Shoulder Horizontal Abduction (movilidad posterior de hombro, plano horizontal)", swing: "P3, P8, P9" },
+    S8: { nombre: "Wrist Flexion/Extension (movilidad de muñeca, control del face)", swing: "P2, P3, P6" },
+    S9: { nombre: "Ankle Mobility (movilidad de tobillo, dorsiflexión)", swing: "P1, P10" },
+    S10: { nombre: "Single Leg Balance 10 seg (equilibrio estático unipodal)", swing: "P5, P10" },
+    S11: { nombre: "Hip Internal Rotation (rotación interna de cadera, X-Factor)", swing: "P4, P7" },
+    S12: { nombre: "Hip External Rotation (rotación externa de cadera)", swing: "P5, P7" },
+    S13: { nombre: "Lower Quarter Rotation (rotación global del tren inferior)", swing: "P5, P7" },
+    S14: { nombre: "Seated Trunk Rotation (rotación de tronco disociada de caderas)", swing: "P4, P5" },
+    S15: { nombre: "Lat Length (longitud del dorsal ancho, restricción en follow through)", swing: "P3, P8, P9" },
+    S16: { nombre: "Bridge with Leg Extension (fuerza glúteo, estabilidad lumbo-pélvica)", swing: "P5, P6" },
+    P1: { nombre: "Salto Vertical (potencia explosiva de piernas)" },
+    P2: { nombre: "Sit Up and Throw 2 kg (potencia de core)" },
+    P3: { nombre: "Lanzamiento Rotacional 2 kg (potencia rotacional)", swing: "P4–P7" },
+    P4: { nombre: "Fuerza de Agarre (fuerza de manos y antebrazos)", swing: "P1" },
+    P5: { nombre: "Velocidad de Swing con Driver (potencia total del swing)", swing: "P4–P10" },
+  },
+  Damas: {
+    D1: { nombre: "Overhead Deep Squat (movilidad global, notar valgo de rodilla)", swing: "P1, P10" },
+    D2: { nombre: "Toe Touch (flexibilidad cadena posterior)", swing: "P1" },
+    D3: { nombre: "90/90 Stretch (flexibilidad isquiotibiales en posición sentada)", swing: "P4, P5" },
+    D4: { nombre: "Torso Rotation (rotación de tronco sobre caderas fijas)", swing: "P4, P7" },
+    D5: { nombre: "Shoulder Horizontal Abduction (movilidad hombro, documentar hiperlaxitud)", swing: "P3, P8, P9" },
+    D6: { nombre: "Ankle Mobility (movilidad de tobillo, dorsiflexión)", swing: "P1, P10" },
+    D7: { nombre: "Single Leg Balance 12 seg (equilibrio estático unipodal)", swing: "P5, P10" },
+    D8: { nombre: "Hip Sway Test (estabilidad lateral de cadera en carga)", swing: "P4, P7" },
+    D9: { nombre: "Bridge with Leg Extension (fuerza glúteo, estabilidad lumbo-pélvica)", swing: "P5, P6" },
+    D10: { nombre: "Pelvic Tilt (control lumbo-pélvico, lordosis funcional)", swing: "P1, P4" },
+    DP1: { nombre: "Salto Vertical (potencia explosiva de piernas)" },
+    DP2: { nombre: "Sit Up and Throw 1.5 kg (potencia de core)" },
+    DP3: { nombre: "Lanzamiento Rotacional 1.5 kg (potencia rotacional)", swing: "P4–P7" },
+    DP4: { nombre: "Fuerza de Agarre (fuerza de manos y antebrazos)", swing: "P1" },
+    DP5: { nombre: "Velocidad de Swing (potencia total del swing)", swing: "P4–P10" },
+  },
+  "Damas Senior": {
+    DS1: { nombre: "Overhead Deep Squat modificado (movilidad con apoyo, sin dolor)", swing: "P1, P10" },
+    DS2: { nombre: "Toe Touch (flexibilidad cadena posterior)", swing: "P1" },
+    DS3: { nombre: "Torso Rotation (rotación de tronco sobre caderas)", swing: "P4, P7" },
+    DS4: { nombre: "90/90 Stretch (flexibilidad isquiotibiales sentada)", swing: "P4, P5" },
+    DS5: { nombre: "Pelvic Tilt (control lumbo-pélvico, lordosis funcional)", swing: "P1, P4" },
+    DS6: { nombre: "Single Leg Balance (equilibrio unipodal, prevención de caídas)", swing: "P5, P10" },
+    DS7: { nombre: "Hip Sway Test (estabilidad lateral de cadera en carga)", swing: "P4, P7" },
+    DS8: { nombre: "Bridge with Leg Extension modificado (fuerza glúteo, estabilidad lumbo-pélvica)", swing: "P5, P6" },
+    DS9: { nombre: "Fuerza de Agarre (fuerza de manos y antebrazos)", swing: "P1" },
+    DS10: { nombre: "Salto Vertical en Puntillas (potencia de piernas y equilibrio)" },
+  },
+};
+
 export async function POST(request: NextRequest) {
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) {
@@ -62,20 +187,28 @@ export async function POST(request: NextRequest) {
     swingLines.push(`  ${p} — ${POSICIONES_NOMBRES[p]}: ${score}/10 (${nivel})${critStr}${obs}`);
   }
 
-  // Build physical summary — only non-NA tests
+  // Build physical summary — only non-NA tests, with full test names for AI context
   const testsData: Record<string, { result: string | null; obs: string | null; na: boolean }> =
     physicalEvaluation.tests_data || {};
+  const testInfoMap = TPI_TESTS_INFO[physicalEvaluation.grupo] || TPI_TESTS_INFO["Albatros"] || {};
+
+  function testLabel(tid: string): string {
+    const info = testInfoMap[tid];
+    if (!info) return tid;
+    return info.swing ? `${tid} — ${info.nombre} [swing: ${info.swing}]` : `${tid} — ${info.nombre}`;
+  }
+
   const physLines = Object.entries(testsData)
     .filter(([, t]) => !t.na && t.result)
     .map(([tid, t]) => {
       const nivel = t.result === "cumple" ? "✅ cumple" : t.result === "progreso" ? "⚠️ en progreso" : "❌ bajo";
       const obs = t.obs ? ` — obs: ${t.obs}` : "";
-      return `  ${tid}: ${nivel}${obs}`;
+      return `  ${testLabel(tid)}: ${nivel}${obs}`;
     });
 
   const physLimitations = Object.entries(testsData)
     .filter(([, t]) => !t.na && (t.result === "bajo" || t.result === "progreso"))
-    .map(([tid, t]) => `${tid} (${t.result})`);
+    .map(([tid, t]) => `${testLabel(tid)} (${t.result})`);
 
   const swingWeakPositions = [];
   for (let i = 1; i <= 10; i++) {
@@ -102,7 +235,7 @@ ${instruccionesGrupo[grupo] || instruccionesGrupo["Albatros"]}
 
 PRINCIPIO FUNDAMENTAL: Cada prioridad cruzada debe tener una causa física clara que explique un error técnico específico. No asumas conexiones — usa solo los datos proporcionados.
 
-CRÍTICO: Responde SIEMPRE en español. No muestres tu razonamiento interno. Responde ÚNICAMENTE con el objeto JSON puro sin backticks, sin texto antes ni después. Solo el JSON empezando con { y terminando con }.
+CRÍTICO: Responde SIEMPRE en español. No muestres tu razonamiento interno. No expliques tu razonamiento. Responde ÚNICAMENTE con el objeto JSON puro sin backticks, sin texto antes ni después. Solo el JSON empezando con { y terminando con }. Si no tienes suficientes datos, genera el mejor análisis posible con lo disponible.
 
 {
   "resumen_integrado": "2-3 oraciones que expliquen cómo el perfil físico de este alumno explica los patrones técnicos observados en el swing. Menciona la conexión más importante.",
