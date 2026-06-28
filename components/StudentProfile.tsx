@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
+import ParentReportModal from "./ParentReportModal";
 
 type Tab = "datos" | "tecnicos" | "fisicos" | "hitos";
 type CritValue = "cumple" | "progreso" | "no" | null;
@@ -260,7 +261,7 @@ type Student = {
   id: string; full_name: string; birth_date: string | null;
   status: "activo" | "inactivo"; grupo_activo: string | null; gender: string | null;
   parent_name: string | null; parent_phone: string | null; parent_email: string | null;
-  observations: string | null; enrollment_date: string | null;
+  observations: string | null; enrollment_date: string | null; foto_url: string | null;
 };
 
 type EditForm = {
@@ -616,6 +617,7 @@ export default function StudentProfile({ studentId }: { studentId: string }) {
   const [profileIntegratedResult, setProfileIntegratedResult] = useState<IntegratedAiAnalysis | null>(null);
   const [analyzingProfileIntegrated, setAnalyzingProfileIntegrated] = useState(false);
   const [profileIntegratedError, setProfileIntegratedError] = useState<string | null>(null);
+  const [showParentReport, setShowParentReport] = useState(false);
 
   useEffect(() => {
     supabase.from("physical_evaluations")
@@ -651,7 +653,7 @@ export default function StudentProfile({ studentId }: { studentId: string }) {
   useEffect(() => {
     async function fetchStudent() {
       const { data, error } = await supabase.from("students")
-        .select("id,full_name,birth_date,status,grupo_activo,gender,parent_name,parent_phone,parent_email,observations,enrollment_date")
+        .select("id,full_name,birth_date,status,grupo_activo,gender,parent_name,parent_phone,parent_email,observations,enrollment_date,foto_url")
         .eq("id", studentId).single();
       if (!error) setStudent(data);
       setLoading(false);
@@ -1949,6 +1951,31 @@ posPayload[`${key}_score`] = rawScore !== null ? Math.round(rawScore) : null;
             </div>
           )}
         </div>
+      )}
+
+      {/* Botón Informe para padres */}
+      {(hasSwingEvals || hasPhysicalEvals || hasTrackmanData) && student && (
+        <div className="mt-3 flex justify-end">
+          <button
+            onClick={() => setShowParentReport(true)}
+            className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold text-white shadow-sm transition-all hover:brightness-110"
+            style={{ background: "#1B4D2E" }}
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+            Informe para padres
+          </button>
+        </div>
+      )}
+
+      {showParentReport && student && (
+        <ParentReportModal
+          studentId={String(student.id)}
+          studentName={student.full_name}
+          hasSwingEvals={hasSwingEvals}
+          hasPhysicalEvals={hasPhysicalEvals}
+          hasTrackmanData={hasTrackmanData}
+          onClose={() => setShowParentReport(false)}
+        />
       )}
 
       {showHitoForm && hitoForm && (
