@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import ParentReportModal from "./ParentReportModal";
@@ -618,6 +618,13 @@ export default function StudentProfile({ studentId }: { studentId: string }) {
   const [analyzingProfileIntegrated, setAnalyzingProfileIntegrated] = useState(false);
   const [profileIntegratedError, setProfileIntegratedError] = useState<string | null>(null);
   const [showParentReport, setShowParentReport] = useState(false);
+  // Foto de perfil
+  const [photoFile, setPhotoFile] = useState<File | null>(null);
+  const [photoPreview, setPhotoPreview] = useState<string | null>(null);
+  const [uploadingPhoto, setUploadingPhoto] = useState(false);
+  const [photoError, setPhotoError] = useState<string | null>(null);
+  const [photoToast, setPhotoToast] = useState<string | null>(null);
+  const photoInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     supabase.from("physical_evaluations")
@@ -1060,6 +1067,71 @@ posPayload[`${key}_score`] = rawScore !== null ? Math.round(rawScore) : null;
     setHitos((prev) => prev.filter((h) => h.id !== id));
   }
 
+  function handlePhotoSelect(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 5 * 1024 * 1024) {
+      setPhotoError("La imagen no puede superar 5 MB.");
+      return;
+    }
+    setPhotoError(null);
+    setPhotoFile(file);
+    const reader = new FileReader();
+    reader.onload = (ev) => setPhotoPreview(ev.target?.result as string);
+    reader.readAsDataURL(file);
+  }
+
+  function handlePhotoCancelPreview() {
+    setPhotoFile(null);
+    setPhotoPreview(null);
+    setPhotoError(null);
+    if (photoInputRef.current) photoInputRef.current.value = "";
+  }
+
+  async function handlePhotoUpload() {
+    if (!photoFile || !student) return;
+    setUploadingPhoto(true);
+    setPhotoError(null);
+    try {
+      const ext = photoFile.name.split(".").pop()?.toLowerCase() ?? "jpg";
+      const path = `${student.id}/profile_${Date.now()}.${ext}`;
+      const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+      const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
+      const uploadRes = await fetch(
+        `${supabaseUrl}/storage/v1/object/student-photos/${path}`,
+        {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${anonKey}`,
+            "Content-Type": photoFile.type,
+            "x-upsert": "true",
+          },
+          body: photoFile,
+        }
+      );
+      if (!uploadRes.ok) {
+        const err = await uploadRes.json().catch(() => ({}));
+        throw new Error(err.message || `Error al subir (${uploadRes.status})`);
+      }
+      const publicUrl = `${supabaseUrl}/storage/v1/object/public/student-photos/${path}`;
+      const { error: dbError } = await supabase
+        .from("students")
+        .update({ foto_url: publicUrl })
+        .eq("id", student.id);
+      if (dbError) throw new Error(dbError.message);
+      setStudent((s) => s ? { ...s, foto_url: publicUrl } : s);
+      setPhotoFile(null);
+      setPhotoPreview(null);
+      if (photoInputRef.current) photoInputRef.current.value = "";
+      setPhotoToast("Foto actualizada correctamente");
+      setTimeout(() => setPhotoToast(null), 3000);
+    } catch (err) {
+      setPhotoError(err instanceof Error ? err.message : "Error al subir la foto");
+    } finally {
+      setUploadingPhoto(false);
+    }
+  }
+
   async function handleProfileIntegratedAnalysis() {
     if (!student) return;
     setAnalyzingProfileIntegrated(true);
@@ -1150,6 +1222,12 @@ posPayload[`${key}_score`] = rawScore !== null ? Math.round(rawScore) : null;
 
   return (
     <div className="max-w-4xl mx-auto w-full px-4 sm:px-6 lg:px-8 py-8">
+      {photoToast && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-2 bg-gray-900 text-white text-sm font-medium px-5 py-3 rounded-xl shadow-lg pointer-events-none">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#4ade80" strokeWidth={2.5}><path d="M20 6L9 17l-5-5"/></svg>
+          {photoToast}
+        </div>
+      )}
       <button onClick={() => router.back()} className="flex items-center gap-2 text-sm text-gray-500 hover:text-gray-700 mb-6 transition-colors">
         <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path d="M19 12H5M12 5l-7 7 7 7"/></svg>
         Volver a alumnos
@@ -1183,6 +1261,64 @@ posPayload[`${key}_score`] = rawScore !== null ? Math.round(rawScore) : null;
 
         {activeTab === "datos" && (
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+            {/* Foto de perfil */}
+            <div className="sm:col-span-2 flex flex-col items-center gap-3 pb-5 border-b border-gray-100">
+              {/* Avatar */}
+              <div className="relative w-24 h-24 rounded-full overflow-hidden bg-gray-100 ring-2 ring-gray-200 flex items-center justify-center shrink-0">
+                {(photoPreview ?? student.foto_url) ? (
+                  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                  <img src={(photoPreview ?? student.foto_url) as string} alt={student.full_name} className="w-full h-full object-cover" />
+                ) : (
+                  <span className="text-2xl font-bold text-gray-400 select-none">
+                    {student.full_name.split(" ").map((n) => n[0]).slice(0, 2).join("").toUpperCase()}
+                  </span>
+                )}
+              </div>
+
+              {/* Confirmar / Cancelar preview */}
+              {photoFile ? (
+                <div className="flex flex-col items-center gap-2">
+                  <p className="text-xs text-gray-500">{photoFile.name}</p>
+                  {photoError && <p className="text-xs text-red-500">{photoError}</p>}
+                  <div className="flex gap-2">
+                    <button
+                      onClick={handlePhotoUpload}
+                      disabled={uploadingPhoto}
+                      className="px-4 py-1.5 rounded-lg text-xs font-semibold text-white disabled:opacity-50"
+                      style={{ background: "#1B4D2E" }}
+                    >
+                      {uploadingPhoto ? "Subiendo..." : "Confirmar"}
+                    </button>
+                    <button
+                      onClick={handlePhotoCancelPreview}
+                      disabled={uploadingPhoto}
+                      className="px-4 py-1.5 rounded-lg text-xs font-medium text-gray-600 border border-gray-200 hover:bg-gray-50 disabled:opacity-50"
+                    >
+                      Cancelar
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="flex flex-col items-center gap-1.5">
+                  <button
+                    onClick={() => photoInputRef.current?.click()}
+                    className="px-4 py-1.5 rounded-lg text-xs font-medium text-gray-700 border border-gray-200 hover:bg-gray-50 transition-colors"
+                  >
+                    {student.foto_url ? "Cambiar foto" : "Subir foto"}
+                  </button>
+                  {photoError && <p className="text-xs text-red-500">{photoError}</p>}
+                </div>
+              )}
+
+              <input
+                ref={photoInputRef}
+                type="file"
+                accept="image/jpeg,image/png,image/webp"
+                className="hidden"
+                onChange={handlePhotoSelect}
+              />
+            </div>
+
             <Field label="Nombre completo" value={student.full_name}/>
             <Field label="Fecha de nacimiento" value={formatFecha(student.birth_date)}/>
             <Field label="Edad" value={calcularEdad(student.birth_date)}/>
