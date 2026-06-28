@@ -1033,57 +1033,51 @@ posPayload[`${key}_score`] = rawScore !== null ? Math.round(rawScore) : null;
                           )}
 
                           {integrated && (
-                            <div className="border-t border-teal-50 px-5 py-6" style={{ backgroundColor:"#F0FDFA" }}>
+                            <div className="border-t border-gray-100 px-5 py-6">
                               <div className="flex items-center justify-between mb-6">
                                 <div>
-                                  <p className="text-sm font-semibold text-teal-900">Análisis integrado — técnico + físico TPI</p>
-                                  <p className="text-xs text-teal-600 mt-0.5">Cruza limitaciones físicas con errores de swing</p>
+                                  <p className="text-sm font-semibold text-gray-900">Análisis integrado — técnico + físico TPI</p>
+                                  {ev.integrated_at && <p className="text-xs text-gray-400 mt-0.5">Generado {formatFecha(ev.integrated_at.split("T")[0])}</p>}
                                 </div>
-                                <button onClick={() => handleAnalyzeIntegrated(ev)} disabled={analyzingIntegratedId !== null} className="text-xs text-teal-600 hover:text-teal-800 underline disabled:opacity-40">
+                                <button onClick={() => handleAnalyzeIntegrated(ev)} disabled={analyzingIntegratedId !== null} className="text-xs text-gray-500 hover:text-gray-700 underline disabled:opacity-40">
                                   {isAnalyzingIntegrated ? "Analizando..." : "Regenerar"}
                                 </button>
                               </div>
 
-                              {/* Resumen */}
-                              <div className="mb-5 pb-5 border-b border-teal-100">
-                                <p className="text-xs font-semibold text-teal-700 uppercase tracking-wide mb-2">Resumen integrado</p>
-                                <p className="text-sm text-teal-900 leading-relaxed">{integrated.resumen_integrado}</p>
+                              <div className="mb-5 pb-5 border-b border-gray-100">
+                                <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">Resumen integrado</p>
+                                <p className="text-sm text-gray-700 leading-relaxed">{integrated.resumen_integrado}</p>
                               </div>
 
-                              {/* Prioridades cruzadas */}
                               {integrated.prioridades_cruzadas?.length > 0 && (
-                                <div className="mb-5 pb-5 border-b border-teal-100">
-                                  <p className="text-xs font-semibold text-teal-700 uppercase tracking-wide mb-4">Prioridades cruzadas</p>
-                                  <div className="space-y-6">
+                                <div className="mb-5 pb-5 border-b border-gray-100">
+                                  <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-4">Prioridades cruzadas</p>
+                                  <div className="space-y-5">
                                     {integrated.prioridades_cruzadas.map((pr) => (
                                       <div key={pr.orden} className="flex gap-4">
-                                        <span className="flex-shrink-0 w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold text-white mt-0.5" style={{ backgroundColor:"#0D9488" }}>{pr.orden}</span>
+                                        <span className="text-sm font-bold text-gray-300 w-5 shrink-0 pt-0.5">{pr.orden}.</span>
                                         <div className="flex-1 min-w-0">
-                                          <p className="text-sm font-semibold text-teal-900 mb-2">{pr.titulo}</p>
-                                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mb-3">
-                                            <div className="bg-white rounded-lg px-3 py-2.5 border border-teal-100">
-                                              <p className="text-xs font-semibold text-orange-600 mb-1">Limitación física</p>
+                                          <p className="text-sm font-semibold text-gray-900">{pr.titulo}</p>
+                                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-2 mb-3">
+                                            <div className="bg-gray-50 rounded-lg px-3 py-2.5">
+                                              <p className="text-xs font-semibold text-gray-500 mb-1">Limitación física</p>
                                               <p className="text-xs text-gray-700">{pr.limitacion_fisica}</p>
                                             </div>
-                                            <div className="bg-white rounded-lg px-3 py-2.5 border border-teal-100">
-                                              <p className="text-xs font-semibold text-purple-600 mb-1">Error técnico</p>
+                                            <div className="bg-gray-50 rounded-lg px-3 py-2.5">
+                                              <p className="text-xs font-semibold text-gray-500 mb-1">Error técnico</p>
                                               <p className="text-xs text-gray-700">{pr.error_tecnico}</p>
                                             </div>
                                           </div>
                                           <p className="text-sm text-gray-700 leading-relaxed mb-3">{pr.descripcion}</p>
-                                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mb-2">
-                                            <div className="bg-orange-50 rounded-lg px-3 py-2.5 border border-orange-100">
-                                              <p className="text-xs font-semibold text-orange-700 mb-1">Ejercicio físico</p>
-                                              <p className="text-xs text-gray-700">{pr.ejercicio_fisico}</p>
-                                            </div>
-                                            <div className="bg-purple-50 rounded-lg px-3 py-2.5 border border-purple-100">
-                                              <p className="text-xs font-semibold text-purple-700 mb-1">Drill técnico</p>
-                                              <p className="text-xs text-gray-700">{pr.drill_tecnico}</p>
-                                            </div>
+                                          <div className="bg-gray-50 rounded-lg px-3 py-2.5 mb-2">
+                                            <p className="text-xs font-semibold text-gray-500 mb-1">Ejercicio físico</p>
+                                            <p className="text-xs text-gray-700 leading-relaxed">{pr.ejercicio_fisico}</p>
                                           </div>
-                                          <p className="text-xs text-teal-800 bg-teal-50 border border-teal-100 rounded-lg px-2.5 py-1.5">
-                                            <span className="font-semibold">Progresión: </span>{pr.progresion}
-                                          </p>
+                                          <div className="bg-gray-50 rounded-lg px-3 py-2.5 mb-2">
+                                            <p className="text-xs font-semibold text-gray-500 mb-1">Drill técnico</p>
+                                            <p className="text-xs text-gray-700 leading-relaxed">{pr.drill_tecnico}</p>
+                                          </div>
+                                          <p className="text-xs text-gray-500"><span className="font-semibold">Progresión:</span> {pr.progresion}</p>
                                         </div>
                                       </div>
                                     ))}
@@ -1091,14 +1085,13 @@ posPayload[`${key}_score`] = rawScore !== null ? Math.round(rawScore) : null;
                                 </div>
                               )}
 
-                              {/* Fortalezas combinadas */}
                               {(integrated.fortalezas_combinadas?.length ?? 0) > 0 && (
-                                <div className="mb-5 pb-5 border-b border-teal-100">
-                                  <p className="text-xs font-semibold text-teal-700 uppercase tracking-wide mb-2">Fortalezas combinadas</p>
+                                <div className="mb-5 pb-5 border-b border-gray-100">
+                                  <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">Fortalezas — mantener</p>
                                   <ul className="space-y-1">
                                     {integrated.fortalezas_combinadas!.map((f, i) => (
                                       <li key={i} className="flex items-start gap-2 text-sm text-gray-700">
-                                        <span className="text-teal-400 shrink-0 mt-0.5">—</span>
+                                        <span className="text-gray-300 shrink-0 mt-0.5">—</span>
                                         <span>{f}</span>
                                       </li>
                                     ))}
@@ -1106,41 +1099,28 @@ posPayload[`${key}_score`] = rawScore !== null ? Math.round(rawScore) : null;
                                 </div>
                               )}
 
-                              {/* Plan de clase unificado (nuevo schema) o plan_clase (schema antiguo) */}
-                              {((integrated.plan_clase_unificado?.length ?? 0) > 0 || (integrated.plan_clase?.length ?? 0) > 0) && (() => {
-                                const pasos = integrated.plan_clase_unificado ?? integrated.plan_clase ?? [];
-                                const tipoBadge = (tipo: string) => {
-                                  if (tipo === "fisico") return "bg-orange-100 text-orange-700";
-                                  if (tipo === "tecnico") return "bg-purple-100 text-purple-700";
-                                  return "bg-teal-100 text-teal-700";
-                                };
-                                return (
-                                  <div className="mb-5 pb-5 border-b border-teal-100">
-                                    <p className="text-xs font-semibold text-teal-700 uppercase tracking-wide mb-3">Plan de clase integrado (60 min)</p>
-                                    <div className="space-y-2">
-                                      {pasos.map((step, i) => (
-                                        <div key={i} className="flex items-start gap-3 bg-white rounded-lg px-3 py-2.5 border border-teal-50">
-                                          <span className="text-xs text-teal-500 font-mono min-w-[36px] pt-0.5 shrink-0">{step.minutos}&apos;</span>
-                                          <div className="flex-1 min-w-0">
-                                            {step.fase && <p className="text-xs font-semibold text-gray-500 mb-0.5">{step.fase}</p>}
-                                            <p className="text-sm text-gray-700">{step.actividad}</p>
-                                          </div>
-                                          <span className={`text-xs px-2 py-0.5 rounded-full font-medium whitespace-nowrap shrink-0 ${tipoBadge(step.tipo)}`}>{step.tipo}</span>
-                                        </div>
-                                      ))}
-                                    </div>
+                              {((integrated.plan_clase_unificado?.length ?? 0) > 0 || (integrated.plan_clase?.length ?? 0) > 0) && (
+                                <div className="mb-5 pb-5 border-b border-gray-100">
+                                  <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">Plan de clase (60 min)</p>
+                                  <div className="space-y-2">
+                                    {(integrated.plan_clase_unificado ?? integrated.plan_clase ?? []).map((step, i) => (
+                                      <div key={i} className="flex items-start gap-3">
+                                        <span className="text-xs text-gray-400 font-mono min-w-[44px] pt-0.5">{step.minutos}&apos;</span>
+                                        <span className="text-sm text-gray-700 flex-1">{step.actividad}</span>
+                                        <span className="text-xs text-gray-400 capitalize whitespace-nowrap">{step.tipo.replace("_"," ")}</span>
+                                      </div>
+                                    ))}
                                   </div>
-                                );
-                              })()}
+                                </div>
+                              )}
 
-                              {/* Indicadores de progreso (schema antiguo) */}
                               {(integrated.indicadores_progreso?.length ?? 0) > 0 && (
-                                <div className="mb-5 pb-5 border-b border-teal-100">
-                                  <p className="text-xs font-semibold text-teal-700 uppercase tracking-wide mb-2">Indicadores de progreso</p>
+                                <div className="mb-5 pb-5 border-b border-gray-100">
+                                  <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">Indicadores de progreso</p>
                                   <ul className="space-y-1">
                                     {integrated.indicadores_progreso!.map((ind, i) => (
                                       <li key={i} className="flex items-start gap-2 text-sm text-gray-700">
-                                        <span className="text-teal-400 shrink-0 mt-0.5">—</span>
+                                        <span className="text-gray-300 shrink-0 mt-0.5">—</span>
                                         <span>{ind}</span>
                                       </li>
                                     ))}
@@ -1148,11 +1128,10 @@ posPayload[`${key}_score`] = rawScore !== null ? Math.round(rawScore) : null;
                                 </div>
                               )}
 
-                              {/* Nota para el profesor */}
                               {(integrated.nota_profesor || integrated.nota_edad) && (
                                 <div>
-                                  <p className="text-xs font-semibold text-teal-700 uppercase tracking-wide mb-2">Nota para el profesor</p>
-                                  <p className="text-xs text-teal-800 leading-relaxed">{integrated.nota_profesor ?? integrated.nota_edad}</p>
+                                  <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">Nota pedagógica</p>
+                                  <p className="text-xs text-gray-600 leading-relaxed">{integrated.nota_profesor ?? integrated.nota_edad}</p>
                                 </div>
                               )}
                             </div>
