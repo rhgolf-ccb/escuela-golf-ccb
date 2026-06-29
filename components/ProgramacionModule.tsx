@@ -398,7 +398,10 @@ export default function ProgramacionModule() {
         body: JSON.stringify({ tipo_plan: activeTab, tema_semanal: tema, foco_mes: focoMes, semana_inicio: toISODate(semana), contexto_grupo: contextoGrupo }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Error de IA");
+      if (!res.ok) {
+        console.error("[IA] Error del endpoint:", data.error, "| Raw:", data.raw);
+        throw new Error(data.error || "Error de IA");
+      }
       const sesionesConFecha = (data.sesiones as PreviewSesion[]).map((s) => ({
         ...s, fecha: getFechaForDia(semana, s.dia_semana),
         hora_inicio: s.hora_inicio ?? "", hora_fin: s.hora_fin ?? "",

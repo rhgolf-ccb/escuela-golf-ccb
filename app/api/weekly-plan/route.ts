@@ -206,11 +206,20 @@ Devuelve este JSON exacto:
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function parseAI(raw: string): any {
-  const clean = raw.trim();
-  try { return JSON.parse(clean); } catch { /* */ }
-  try { return JSON.parse(clean.replace(/^```json\s*/, "").replace(/^```\s*/, "").replace(/\s*```$/, "").trim()); } catch { /* */ }
-  const m = clean.match(/\{[\s\S]*\}/);
+  // 1. Try as-is
+  try { return JSON.parse(raw.trim()); } catch { /* */ }
+
+  // 2. Strip all markdown code fences (```json ... ``` or ``` ... ```)
+  const stripped = raw
+    .replace(/```json\s*/gi, "")
+    .replace(/```\s*/g, "")
+    .trim();
+  try { return JSON.parse(stripped); } catch { /* */ }
+
+  // 3. Extract first { ... } block (handles leading/trailing text)
+  const m = stripped.match(/\{[\s\S]*\}/);
   if (m) { try { return JSON.parse(m[0]); } catch { /* */ } }
+
   return null;
 }
 
@@ -238,7 +247,21 @@ export async function POST(req: NextRequest) {
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) return Response.json({ error: "API key no configurada" }, { status: 500 });
 
-  const body = await req.json();
+  let body: Record<string, unknown>;
+  try {
+    body = await req.json();
+  } catch {
+    return Response.json({ error: "Body JSON inválido" }, { status: 400 });
+  }
+
+  console.log("[weekly-plan] Request recibido:", JSON.stringify({
+    tipo_plan: body.tipo_plan,
+    tema_semanal: body.tema_semanal,
+    semana_inicio: body.semana_inicio,
+    foco_mes: body.foco_mes,
+    tiene_contexto: !!body.contexto_grupo,
+  }));
+
   const { tipo_plan, tema_semanal, semana_inicio, foco_mes, contexto_grupo = {} } = body as {
     tipo_plan: string;
     tema_semanal: string;
@@ -254,27 +277,52 @@ export async function POST(req: NextRequest) {
   const contexto = { ...contexto_grupo, semana_inicio, foco_mes: foco_mes ?? null };
   const { system, user } = buildPrompt(tipo_plan, tema_semanal, contexto);
 
-  const anthropicRes = await fetch("https://api.anthropic.com/v1/messages", {
-    method: "POST",
-    headers: { "Content-Type": "application/json", "x-api-key": apiKey, "anthropic-version": "2023-06-01" },
-    body: JSON.stringify({
-      model: "claude-sonnet-4-6",
-      max_tokens: 6000,
-      system,
-      messages: [{ role: "user", content: user }],
-    }),
-  });
-
-  const apiData = await anthropicRes.json();
-  if (!anthropicRes.ok) {
-    return Response.json({ error: apiData.error?.message || "Error de API" }, { status: anthropicRes.status });
+  let anthropicRes: Response;
+  let apiData: Record<string, unknown>;
+  try {
+    anthropicRes = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "x-api-key": apiKey, "anthropic-version": "2023-06-01" },
+      body: JSON.stringify({
+        model: "claude-sonnet-4-6",
+        max_tokens: 8000,
+        system,
+        messages: [{ role: "user", content: user }],
+      }),
+    });
+    apiData = await anthropicRes.json() as Record<string, unknown>;
+  } catch (err) {
+    console.error("[weekly-plan] Error llamando Anthropic:", err);
+    return Response.json({ error: "Error conectando con Anthropic" }, { status: 502 });
   }
 
-  const rawText = apiData.content?.[0]?.text ?? "";
-  const parsed = parseAI(rawText);
+  if (!anthropicRes.ok) {
+    const errMsg = (apiData as { error?: { message?: string } }).error?.message || "Error de API";
+    console.error("[weekly-plan] Anthropic error:", anthropicRes.status, errMsg);
+    return Response.json({ error: errMsg }, { status: anthropicRes.status });
+  }
+
+  const rawText: string = (apiData as { content?: { text?: string }[] }).content?.[0]?.text ?? "";
+  console.log("[weekly-plan] Raw Claude response (primeros 300 chars):", rawText.slice(0, 300));
+  console.log("[weekly-plan] Longitud raw:", rawText.length, "chars");
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let parsed: any;
+  try {
+    parsed = parseAI(rawText);
+  } catch (err) {
+    console.error("[weekly-plan] Error en parseAI:", err);
+    parsed = null;
+  }
+
+  console.log("[weekly-plan] JSON parseado — tiene sesiones:", !!parsed?.sesiones, "| count:", parsed?.sesiones?.length ?? 0);
 
   if (!parsed?.sesiones) {
-    return Response.json({ error: "Respuesta IA inválida", raw: rawText.slice(0, 500) }, { status: 500 });
+    console.error("[weekly-plan] Respuesta inválida. Raw completo:", rawText);
+    return Response.json(
+      { error: "Respuesta IA inválida — revisa los logs de Vercel", raw: rawText.slice(0, 1000) },
+      { status: 500 }
+    );
   }
 
   return Response.json({
