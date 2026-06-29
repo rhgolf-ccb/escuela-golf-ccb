@@ -280,6 +280,12 @@ export default function ProgramacionModule() {
   // Preview — selected option index per sesion (for Competencia Martes)
   const [selectedOpcionIdx, setSelectedOpcionIdx] = useState<Record<number, number>>({});
 
+  // Biblioteca de drills — panel dentro del wizard paso 3
+  const [bibliotecaPanel, setBibliotecaPanel] = useState<{
+    sesionIdx: number; loading: boolean;
+    drills: { id: string; titulo: string; descripcion: string; posicion_swing: string[] | null; nivel_recomendado: string[] | null; lugar: string; duracion_minutos: number | null; repeticiones: string | null; error_que_corrige: string | null; sensacion_buscada: string | null; metrica_exito: string | null }[];
+  } | null>(null);
+
   // Competencia wizard paso 1
   const [compModo, setCompModo]           = useState<"construccion" | "preparacion" | "">("");
   const [compTorneo, setCompTorneo]       = useState<string>("sin_torneo");
@@ -462,6 +468,38 @@ export default function ProgramacionModule() {
       if (res.ok && data.sugerencias) setSuggestedTemas(data.sugerencias);
     } catch { /* silencioso */ }
     finally { setSuggestingTemas(false); }
+  }
+
+  async function handleAbrirBiblioteca(sesionIdx: number, tipoSesion: string) {
+    if (bibliotecaPanel?.sesionIdx === sesionIdx) { setBibliotecaPanel(null); return; }
+    setBibliotecaPanel({ sesionIdx, loading: true, drills: [] });
+    const catMap: Record<string, string> = {
+      tiro_largo: "tecnico", juego_corto: "juego_corto", putt: "putting",
+      campo: "campo", test_tecnico: "tecnico", competencia: "campo",
+    };
+    const cat = catMap[tipoSesion] ?? "tecnico";
+    const { data } = await supabase.from("drills").select(
+      "id,titulo,descripcion,posicion_swing,nivel_recomendado,lugar,duracion_minutos,repeticiones,error_que_corrige,sensacion_buscada,metrica_exito"
+    ).eq("categoria", cat).eq("aprobado", true).order("rating", { ascending: false }).limit(20);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    setBibliotecaPanel({ sesionIdx, loading: false, drills: (data ?? []) as any });
+  }
+
+  function handleUsarDrillBiblioteca(sesionIdx: number, drill: NonNullable<typeof bibliotecaPanel>["drills"][0]) {
+    updatePreviewSesion(sesionIdx, {
+      drills: [...(aiPreview?.sesiones[sesionIdx]?.drills ?? []), {
+        titulo: drill.titulo,
+        descripcion: drill.descripcion,
+        posicion_objetivo: drill.posicion_swing?.join(", ") ?? null,
+        error_comun: drill.error_que_corrige ?? null,
+        sensacion: drill.sensacion_buscada ?? null,
+        repeticiones: drill.repeticiones ?? null,
+        metrica_exito: drill.metrica_exito ?? null,
+        variante_presion: null, conexion_tecnica: null,
+        dificultad_birdies: null, dificultad_aguilas: null,
+        dificultad_albatros: null, dificultad_mas14: null,
+      }],
+    });
   }
 
   function handleSelectOpcion(si: number, optIdx: number) {
@@ -1764,7 +1802,19 @@ export default function ProgramacionModule() {
                           {/* Drills */}
                           {s.drills && s.drills.length > 0 && (
                             <div className="space-y-2">
-                              <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wide">Drills</p>
+                              <div className="flex items-center justify-between">
+                                <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wide">Drills</p>
+                                <button
+                                  onClick={() => handleAbrirBiblioteca(i, s.tipo_sesion)}
+                                  className="flex items-center gap-1 text-[10px] font-semibold px-2 py-1 rounded-lg border transition-all"
+                                  style={bibliotecaPanel?.sesionIdx === i
+                                    ? { borderColor: "#1B4D2E", background: "#1B4D2E", color: "#fff" }
+                                    : { borderColor: "#e5e7eb", background: "#f9fafb", color: "#374151" }}
+                                >
+                                  <svg width="10" height="10" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path d="M4 19.5A2.5 2.5 0 016.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15A2.5 2.5 0 016.5 2z"/></svg>
+                                  {bibliotecaPanel?.sesionIdx === i ? "Cerrar" : "Ver biblioteca"}
+                                </button>
+                              </div>
                               {s.drills.map((drill, j) => {
                                 const dk = `${i}-${j}`;
                                 const isOpen = expandedDrillKeys.has(dk);
@@ -1868,6 +1918,39 @@ export default function ProgramacionModule() {
                               })}
                             </div>
                           )}
+                          {/* Panel biblioteca de drills */}
+                          {bibliotecaPanel?.sesionIdx === i && (
+                            <div className="border border-green-200 bg-green-50 rounded-xl p-3 space-y-2">
+                              <p className="text-[11px] font-bold text-green-800 uppercase tracking-wide">📚 Biblioteca — drills aprobados</p>
+                              {bibliotecaPanel.loading ? (
+                                <p className="text-xs text-gray-400 py-2 text-center">Cargando...</p>
+                              ) : bibliotecaPanel.drills.length === 0 ? (
+                                <p className="text-xs text-gray-500 py-2 text-center italic">No hay drills aprobados para este tipo de sesión</p>
+                              ) : (
+                                <div className="space-y-1.5 max-h-48 overflow-y-auto">
+                                  {bibliotecaPanel.drills.map(bd => (
+                                    <div key={bd.id} className="flex items-start gap-2 bg-white rounded-lg p-2.5 border border-green-100">
+                                      <div className="flex-1 min-w-0">
+                                        <p className="text-[11px] font-bold text-gray-800 leading-snug">{bd.titulo}</p>
+                                        <p className="text-[10px] text-gray-500 leading-snug truncate">{bd.descripcion}</p>
+                                        <div className="flex gap-1 mt-1">
+                                          {bd.posicion_swing?.map(p => (
+                                            <span key={p} className="text-[9px] font-bold px-1.5 py-0.5 rounded-full" style={{background:"#e8f5e9",color:"#2d5a27"}}>{p}</span>
+                                          ))}
+                                          {bd.duracion_minutos && <span className="text-[9px] text-gray-400">⏱ {bd.duracion_minutos}min</span>}
+                                        </div>
+                                      </div>
+                                      <button
+                                        onClick={() => handleUsarDrillBiblioteca(i, bd)}
+                                        className="shrink-0 text-[10px] font-bold px-2 py-1.5 rounded-lg bg-green-700 text-white hover:bg-green-800 transition-colors whitespace-nowrap"
+                                      >↩ Usar</button>
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          )}
+
                           {/* Estaciones damas */}
                           {s.estaciones_damas && s.estaciones_damas.length > 0 && (
                             <div className="space-y-1.5">
