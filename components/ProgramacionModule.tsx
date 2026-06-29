@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
+import WeeklyPlanPDFTemplate from "./WeeklyPlanPDFTemplate";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 type TipoPlan   = "juvenil" | "competencia" | "damas";
@@ -668,14 +669,19 @@ export default function ProgramacionModule() {
     setGeneratingPdfPadres(true);
     try {
       const [{ default: jsPDF }, { default: html2canvas }] = await Promise.all([import("jspdf"), import("html2canvas")]);
-      const canvas = await html2canvas(el, { scale: 2, backgroundColor: "#fff", useCORS: true });
-      const pdf = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
-      const pdfW = pdf.internal.pageSize.getWidth();
-      const pdfH = (canvas.height * pdfW) / canvas.width;
-      const pageH = pdf.internal.pageSize.getHeight();
-      let y = 0;
-      while (y < pdfH) { if (y > 0) pdf.addPage(); pdf.addImage(canvas.toDataURL("image/jpeg", 0.92), "JPEG", 0, -y, pdfW, pdfH); y += pageH; }
-      pdf.save(`Plan_Padres_${TIPO_PLAN_LABEL[activeTab]}_${toISODate(semana)}.pdf`);
+      const canvas = await html2canvas(el, { scale: 2, backgroundColor: "#fff", useCORS: true, logging: false });
+      // A4 landscape: 297mm × 210mm
+      const pdf = new jsPDF({ orientation: "landscape", unit: "mm", format: "a4" });
+      const pdfW = pdf.internal.pageSize.getWidth();   // 297
+      const pdfH = pdf.internal.pageSize.getHeight();  // 210
+      const ratio = canvas.width / canvas.height;
+      let imgW = pdfW;
+      let imgH = pdfW / ratio;
+      if (imgH > pdfH) { imgH = pdfH; imgW = pdfH * ratio; }
+      const offsetX = (pdfW - imgW) / 2;
+      const offsetY = (pdfH - imgH) / 2;
+      pdf.addImage(canvas.toDataURL("image/jpeg", 0.95), "JPEG", offsetX, offsetY, imgW, imgH);
+      pdf.save(`Programacion_${TIPO_PLAN_LABEL[activeTab]}_${toISODate(semana)}.pdf`);
     } finally { setGeneratingPdfPadres(false); }
   }
 
@@ -1968,58 +1974,15 @@ export default function ProgramacionModule() {
         </div>
       )}
 
-      {/* ── Hidden PDF padres ─────────────────────────────────────────────── */}
-      <div ref={padresPdfRef} style={{ position: "absolute", left: "-9999px", top: 0, width: "720px", background: "#fff", fontFamily: "Arial, sans-serif" }}>
+      {/* ── Hidden PDF padres — template landscape A4 ────────────────────── */}
+      <div ref={padresPdfRef} style={{ position: "absolute", left: "-9999px", top: 0 }}>
         {plan && (
-          <>
-            <div style={{ background: accentColor, color: "#fff", padding: "20px 28px" }}>
-              <p style={{ margin: 0, fontSize: 10, fontWeight: 700, opacity: 0.75, letterSpacing: "0.1em", textTransform: "uppercase" }}>Escuela de Golf CCB</p>
-              <h1 style={{ margin: "4px 0 2px", fontSize: 20, fontWeight: 800 }}>Programación Semanal</h1>
-              <p style={{ margin: 0, fontSize: 12, opacity: 0.85 }}>Grupo {TIPO_PLAN_LABEL[activeTab]} · {formatWeekRange(semana)}</p>
-            </div>
-            <div style={{ background: "#f0fdf4", borderBottom: "2px solid #bbf7d0", padding: "14px 28px" }}>
-              <p style={{ margin: "0 0 4px", fontSize: 10, fontWeight: 700, color: "#6b7280", textTransform: "uppercase" }}>Tema de la semana</p>
-              <h2 style={{ margin: "0 0 4px", fontSize: 15, fontWeight: 800, color: "#111827" }}>{plan.tema_semanal}</h2>
-              {plan.descripcion_tema && <p style={{ margin: 0, fontSize: 12, color: "#374151", lineHeight: 1.5 }}>{plan.descripcion_tema}</p>}
-            </div>
-            {sesiones.map((sesion, idx) => (
-              <div key={sesion.id} style={{ padding: "14px 28px", borderBottom: "1px solid #f3f4f6", background: idx % 2 === 0 ? "#fff" : "#fafafa" }}>
-                <div style={{ display: "flex", alignItems: "baseline", gap: 8, marginBottom: 6, flexWrap: "wrap" }}>
-                  <span style={{ fontWeight: 800, fontSize: 14, color: "#111827" }}>{DIA_LABEL[sesion.dia_semana]}</span>
-                  <span style={{ fontSize: 11, color: "#9ca3af" }}>{formatDiaFecha(sesion.fecha)}</span>
-                  <span style={{ fontSize: 11, color: "#6b7280" }}>· {LUGAR_LABEL[sesion.lugar]}</span>
-                  {sesion.hora_inicio && <span style={{ fontSize: 11, color: "#6b7280" }}>· {formatHora(sesion.hora_inicio)}–{formatHora(sesion.hora_fin)}</span>}
-                </div>
-                {sesion.objetivo && <p style={{ margin: "0 0 8px", fontSize: 12, color: "#374151", lineHeight: 1.5 }}>{sesion.objetivo}</p>}
-                {sesion.drills?.length > 0 && (
-                  <ul style={{ margin: "4px 0 0", paddingLeft: 16, fontSize: 11, color: "#4b5563" }}>
-                    {sesion.drills.map((d, j) => (
-                      <li key={j} style={{ marginBottom: 3 }}><strong>{d.titulo}</strong>{d.descripcion && <span style={{ color: "#6b7280" }}> — {d.descripcion}</span>}{activeTab === "competencia" && d.metrica_exito && <span style={{ color: "#1d4ed8", fontSize: 10 }}> · Meta: {d.metrica_exito}</span>}</li>
-                    ))}
-                  </ul>
-                )}
-                {(sesion.estaciones_damas?.length ?? 0) > 0 && (
-                  <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
-                    {(sesion.estaciones_damas ?? []).map((est, j) => (
-                      <div key={j} style={{ flex: 1, background: "#fdf4ff", border: "1px solid #e9d5ff", borderRadius: 6, padding: "8px 10px" }}>
-                        <p style={{ margin: "0 0 2px", fontSize: 10, fontWeight: 700, color: "#6b21a8" }}>{est.nombre} · {est.duracion_min} min</p>
-                        <p style={{ margin: 0, fontSize: 11, color: "#374151" }}>{est.descripcion}</p>
-                      </div>
-                    ))}
-                  </div>
-                )}
-                {sesion.juego_competitivo && (
-                  <div style={{ marginTop: 8, padding: "6px 10px", background: "#fff7ed", borderRadius: 6, border: "1px solid #fed7aa" }}>
-                    <span style={{ fontSize: 10, fontWeight: 700, color: "#92400e" }}>Actividad final: </span>
-                    <span style={{ fontSize: 11, color: "#78350f" }}>{sesion.juego_competitivo}</span>
-                  </div>
-                )}
-              </div>
-            ))}
-            <div style={{ background: accentColor, color: "rgba(255,255,255,0.75)", padding: "12px 28px", fontSize: 10, textAlign: "center" }}>
-              Escuela de Golf CCB · Para consultas, contacte a su instructor
-            </div>
-          </>
+          <WeeklyPlanPDFTemplate
+            plan={plan}
+            sesiones={sesiones}
+            tipoPlan={activeTab}
+            semana={semana}
+          />
         )}
       </div>
     </div>
