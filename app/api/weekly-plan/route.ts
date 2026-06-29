@@ -98,17 +98,8 @@ Devuelve este JSON exacto:
   }
 
   if (tipoPlan === "competencia") {
-    const drillCompSchema = `{
-          "titulo": "nombre del drill",
-          "descripcion": "descripción y ejecución detallada",
-          "metrica_exito": "X de Y intentos / distancia / porcentaje",
-          "variante_presion": "mismo drill con consecuencia o apuesta",
-          "conexion_tecnica": "qué error técnico trabaja este drill",
-          "dificultad_birdies": null,
-          "dificultad_aguilas": null,
-          "dificultad_albatros": null,
-          "dificultad_mas14": null
-        }`;
+    // Schema compacto de drill para no repetirlo 8+ veces en el prompt
+    const drillRef = `{"titulo":"string","descripcion":"string","metrica_exito":"string","variante_presion":"string","conexion_tecnica":"string","dificultad_birdies":null,"dificultad_aguilas":null,"dificultad_albatros":null,"dificultad_mas14":null}`;
 
     const diasSchema = dias.map((d) => {
       const h = (HORARIOS[tipoPlan]?.[d] ?? [{ hi: "16:00", hf: "17:30" }])[0];
@@ -120,43 +111,15 @@ Devuelve este JSON exacto:
       "hora_fin": "${h.hf}",
       "tipo_sesion": "tiro_largo",
       "lugar": "driving_range",
-      "objetivo": "foco concreto de la sesión de tiro largo con métrica",
+      "objetivo": "foco concreto de la sesión con métrica",
       "opciones_actividad": [
-        {
-          "id": 1,
-          "titulo": "Toma de tests / Evaluación",
-          "descripcion_corta": "Test técnico P1-P10, test físico TPI o medición Trackman. Día de evaluación y toma de datos.",
-          "justificacion": "frase corta explicando por qué esta opción aplica ahora (ej: inicio de período, sin datos recientes)",
-          "es_recomendada": false,
-          "drills": [${drillCompSchema}, ${drillCompSchema}]
-        },
-        {
-          "id": 2,
-          "titulo": "Corrección técnica con drill",
-          "descripcion_corta": "Basado en análisis disponible, trabajar el error técnico más crítico identificado.",
-          "justificacion": "frase corta explicando por qué esta opción aplica (ej: error de grip detectado, análisis reciente)",
-          "es_recomendada": false,
-          "drills": [${drillCompSchema}, ${drillCompSchema}]
-        },
-        {
-          "id": 3,
-          "titulo": "Sesión de potencia y velocidad",
-          "descripcion_corta": "Trabajo de velocidad de swing, SuperSpeed o ejercicios de potencia con medición.",
-          "justificacion": "frase corta (ej: club speed por debajo del promedio, período de carga)",
-          "es_recomendada": false,
-          "drills": [${drillCompSchema}, ${drillCompSchema}]
-        },
-        {
-          "id": 4,
-          "titulo": "Filmación y análisis",
-          "descripcion_corta": "Grabar swing desde frente y lado, analizar posiciones clave P1-P10 en tiempo real.",
-          "justificacion": "frase corta (ej: sin filmación reciente, trabajo de consciencia propioceptiva)",
-          "es_recomendada": false,
-          "drills": [${drillCompSchema}, ${drillCompSchema}]
-        }
+        {"id":1,"titulo":"Toma de tests / Evaluación","descripcion_corta":"Test técnico P1-P10, test físico TPI o medición Trackman.","justificacion":"<1 frase>","es_recomendada":false,"drills":[${drillRef},${drillRef}]},
+        {"id":2,"titulo":"Corrección técnica con drill","descripcion_corta":"Trabajar el error técnico más crítico identificado.","justificacion":"<1 frase>","es_recomendada":false,"drills":[${drillRef},${drillRef}]},
+        {"id":3,"titulo":"Sesión de potencia y velocidad","descripcion_corta":"Velocidad de swing, SuperSpeed o potencia con medición.","justificacion":"<1 frase>","es_recomendada":false,"drills":[${drillRef},${drillRef}]},
+        {"id":4,"titulo":"Filmación y análisis","descripcion_corta":"Grabar swing frente y lado, analizar posiciones P1-P10.","justificacion":"<1 frase>","es_recomendada":false,"drills":[${drillRef},${drillRef}]}
       ],
       "drills": [],
-      "juego_competitivo": "actividad competitiva corta al final si aplica",
+      "juego_competitivo": "string o null",
       "estaciones_damas": null,
       "notas": null
     }`;
@@ -169,10 +132,8 @@ Devuelve este JSON exacto:
       "tipo_sesion": "<tiro_largo|juego_corto|putt|campo|test_tecnico|test_fisico|competencia>",
       "lugar": "<driving_range|putting_green|campo_infantil|campo_pacos_fabios|campo_completo>",
       "objetivo": "foco concreto con métrica de sesión",
-      "drills": [
-        ${drillCompSchema}
-      ],
-      "juego_competitivo": "simulación de torneo o competencia real (especialmente sábado)",
+      "drills": [${drillRef},${drillRef}],
+      "juego_competitivo": "string o null",
       "estaciones_damas": null,
       "notas": null
     }`;
@@ -354,6 +315,12 @@ export async function POST(req: NextRequest) {
   const contexto = { ...contexto_grupo, semana_inicio, foco_mes: foco_mes ?? null };
   const { system, user } = buildPrompt(tipo_plan, tema_semanal, contexto);
 
+  // Competencia genera mucho más contenido (4 opciones × 2 drills × 4 días)
+  const maxTokens = tipo_plan === "competencia" ? 16000 : 8000;
+
+  console.log("[weekly-plan] API key existe:", !!apiKey);
+  console.log("[weekly-plan] max_tokens:", maxTokens, "| prompt user length:", user.length, "chars");
+
   let anthropicRes: Response;
   let apiData: Record<string, unknown>;
   try {
@@ -362,7 +329,7 @@ export async function POST(req: NextRequest) {
       headers: { "Content-Type": "application/json", "x-api-key": apiKey, "anthropic-version": "2023-06-01" },
       body: JSON.stringify({
         model: "claude-sonnet-4-6",
-        max_tokens: 8000,
+        max_tokens: maxTokens,
         system,
         messages: [{ role: "user", content: user }],
       }),
@@ -370,7 +337,7 @@ export async function POST(req: NextRequest) {
     apiData = await anthropicRes.json() as Record<string, unknown>;
   } catch (err) {
     console.error("[weekly-plan] Error llamando Anthropic:", err);
-    return Response.json({ error: "Error conectando con Anthropic" }, { status: 502 });
+    return Response.json({ error: "Error conectando con Anthropic", detail: String(err) }, { status: 502 });
   }
 
   if (!anthropicRes.ok) {
@@ -379,9 +346,19 @@ export async function POST(req: NextRequest) {
     return Response.json({ error: errMsg }, { status: anthropicRes.status });
   }
 
+  const stopReason: string = (apiData as { stop_reason?: string }).stop_reason ?? "unknown";
   const rawText: string = (apiData as { content?: { text?: string }[] }).content?.[0]?.text ?? "";
-  console.log("[weekly-plan] Raw Claude response (primeros 300 chars):", rawText.slice(0, 300));
-  console.log("[weekly-plan] Longitud raw:", rawText.length, "chars");
+  const usage = (apiData as { usage?: { input_tokens?: number; output_tokens?: number } }).usage;
+
+  console.log("[weekly-plan] stop_reason:", stopReason);
+  console.log("[weekly-plan] tokens — input:", usage?.input_tokens, "| output:", usage?.output_tokens);
+  console.log("[weekly-plan] rawText primeros 500 chars:", rawText.slice(0, 500));
+  console.log("[weekly-plan] rawText longitud total:", rawText.length, "chars");
+
+  if (stopReason === "max_tokens") {
+    console.error("[weekly-plan] TRUNCADO POR max_tokens — aumentar límite. Output tokens usados:", usage?.output_tokens);
+    console.error("[weekly-plan] Raw truncado:", rawText.slice(-200));
+  }
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let parsed: any;
@@ -397,7 +374,14 @@ export async function POST(req: NextRequest) {
   if (!parsed?.sesiones) {
     console.error("[weekly-plan] Respuesta inválida. Raw completo:", rawText);
     return Response.json(
-      { error: "Respuesta IA inválida — revisa los logs de Vercel", raw: rawText.slice(0, 1000) },
+      {
+        error: stopReason === "max_tokens"
+          ? `Respuesta truncada por límite de tokens (${usage?.output_tokens} usados / ${maxTokens} máx)`
+          : "Respuesta IA inválida — no se encontró campo 'sesiones' en el JSON",
+        stop_reason: stopReason,
+        output_tokens: usage?.output_tokens,
+        raw: rawText.slice(0, 2000),
+      },
       { status: 500 }
     );
   }

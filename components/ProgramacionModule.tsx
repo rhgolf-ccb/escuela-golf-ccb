@@ -468,8 +468,11 @@ export default function ProgramacionModule() {
       });
       const data = await res.json();
       if (!res.ok) {
-        console.error("[IA] Error del endpoint:", data.error, "| Raw:", data.raw);
-        throw new Error(data.error || "Error de IA");
+        console.error("[IA] Error del endpoint:", data.error, "| stop_reason:", data.stop_reason, "| output_tokens:", data.output_tokens, "| Raw:", data.raw);
+        const detail = data.stop_reason === "max_tokens"
+          ? `Truncado por tokens (${data.output_tokens} generados). Intenta un tema más corto.`
+          : (data.error || "Error de IA");
+        throw new Error(detail);
       }
       const initialOpcionIdx: Record<number, number> = {};
       const sesionesConFecha = (data.sesiones as PreviewSesion[]).map((s, si) => {
