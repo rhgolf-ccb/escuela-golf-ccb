@@ -1448,7 +1448,7 @@ posPayload[`${key}_score`] = rawScore !== null ? Math.round(rawScore) : null;
   const grupo = calcularGrupoEfectivo(student);
   const grupoFisico = calcularGrupoFisico(student);
   const posicionesActivas = POSICIONES_GRUPO[grupo] || POSICIONES_GRUPO["Albatros"];
-  const TABS: { key: Tab; label: string }[] = [{ key:"datos", label:"Datos personales" }, { key:"tecnicos", label:"Tests técnicos" }, { key:"fisicos", label:"Tests físicos" }, { key:"hitos", label:"Hitos" }, { key:"notas", label:"Notas" }];
+  const TABS: { key: Tab; label: string }[] = [{ key:"datos", label:"Datos personales" }, { key:"tecnicos", label:"Tests técnicos" }, { key:"fisicos", label:"Tests físicos" }, { key:"notas", label:"Notas del profesor" }, { key:"hitos", label:"Hitos" }];
 
   // Unwrap double-encoded integrated result for the profile card
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
