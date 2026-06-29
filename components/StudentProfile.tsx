@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import ParentReportModal from "./ParentReportModal";
 
-type Tab = "datos" | "tecnicos" | "fisicos" | "hitos";
+type Tab = "datos" | "tecnicos" | "fisicos" | "hitos" | "notas";
 type CritValue = "cumple" | "progreso" | "no" | null;
 
 const CRITERIOS_POR_POSICION: Record<string, string[]> = {
@@ -388,6 +388,32 @@ type HitoForm = {
   foto: File | null;
 };
 
+type TipoImagen = "trackman" | "swing" | "campo" | "otro";
+
+type NotaProfesor = {
+  id: string;
+  alumno_id: string;
+  contenido: string;
+  imagen_url: string | null;
+  tipo_imagen: TipoImagen | null;
+  profesor_id: string | null;
+  profesor_nombre: string | null;
+  fecha: string;
+  created_at: string;
+};
+
+type NotaForm = {
+  contenido: string;
+  fecha: string;
+  imagen: File | null;
+  imagenPreview: string | null;
+  tipo_imagen: TipoImagen | null;
+};
+
+const TIPO_IMAGEN_LABELS: Record<TipoImagen, string> = {
+  trackman: "Trackman", swing: "Swing", campo: "Campo", otro: "Otro",
+};
+
 type TrackmanData = {
   club_speed_mph: number | null;
   ball_speed_mph: number | null;
@@ -625,6 +651,15 @@ export default function StudentProfile({ studentId }: { studentId: string }) {
   const [photoError, setPhotoError] = useState<string | null>(null);
   const [photoToast, setPhotoToast] = useState<string | null>(null);
   const photoInputRef = useRef<HTMLInputElement>(null);
+  const [notas, setNotas] = useState<NotaProfesor[]>([]);
+  const [notasLoading, setNotasLoading] = useState(false);
+  const [showNotaForm, setShowNotaForm] = useState(false);
+  const [notaForm, setNotaForm] = useState<NotaForm | null>(null);
+  const [savingNota, setSavingNota] = useState(false);
+  const [notaSaveError, setNotaSaveError] = useState<string | null>(null);
+  const [editingNotaId, setEditingNotaId] = useState<string | null>(null);
+  const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
+  const [downloadingPDF, setDownloadingPDF] = useState(false);
 
   useEffect(() => {
     supabase.from("physical_evaluations")
@@ -648,6 +683,13 @@ export default function StudentProfile({ studentId }: { studentId: string }) {
     setHitosLoading(true);
     supabase.from("hitos").select("*").eq("alumno_id", studentId).order("fecha", { ascending: false })
       .then(({ data }) => { setHitos(data ?? []); setHitosLoading(false); });
+  }, [activeTab, studentId]);
+
+  useEffect(() => {
+    if (activeTab !== "notas") return;
+    setNotasLoading(true);
+    supabase.from("notas_profesor").select("*").eq("alumno_id", studentId).order("fecha", { ascending: false })
+      .then(({ data }) => { setNotas((data as NotaProfesor[]) ?? []); setNotasLoading(false); });
   }, [activeTab, studentId]);
 
   useEffect(() => {
@@ -1067,6 +1109,215 @@ posPayload[`${key}_score`] = rawScore !== null ? Math.round(rawScore) : null;
     setHitos((prev) => prev.filter((h) => h.id !== id));
   }
 
+  // ── Notas del profesor ───────────────────────────────────────────────────────
+  function openNotaForm(nota?: NotaProfesor) {
+    if (nota) {
+      setEditingNotaId(nota.id);
+      setNotaForm({ contenido: nota.contenido, fecha: nota.fecha, imagen: null, imagenPreview: null, tipo_imagen: nota.tipo_imagen });
+    } else {
+      setEditingNotaId(null);
+      setNotaForm({ contenido: "", fecha: new Date().toISOString().split("T")[0], imagen: null, imagenPreview: null, tipo_imagen: null });
+    }
+    setNotaSaveError(null);
+    setShowNotaForm(true);
+  }
+
+  function closeNotaForm() {
+    setShowNotaForm(false);
+    setNotaForm(null);
+    setEditingNotaId(null);
+    setNotaSaveError(null);
+  }
+
+  async function handleSaveNota() {
+    if (!notaForm || !notaForm.contenido.trim()) return;
+    setSavingNota(true);
+    setNotaSaveError(null);
+    try {
+      let imagen_url: string | null = editingNotaId
+        ? (notas.find((n) => n.id === editingNotaId)?.imagen_url ?? null)
+        : null;
+      if (notaForm.imagen) {
+        const path = `${studentId}/${Date.now()}_${notaForm.imagen.name}`;
+        const { error: uploadError } = await supabase.storage
+          .from("notas-profesor")
+          .upload(path, notaForm.imagen, { contentType: notaForm.imagen.type, upsert: true });
+        if (uploadError) throw uploadError;
+        imagen_url = supabase.storage.from("notas-profesor").getPublicUrl(path).data.publicUrl;
+      }
+      const payload = {
+        alumno_id: studentId,
+        contenido: notaForm.contenido.trim(),
+        fecha: notaForm.fecha,
+        imagen_url,
+        tipo_imagen: notaForm.tipo_imagen,
+        profesor_nombre: "Robert Instructor",
+      };
+      if (editingNotaId) {
+        const { data, error } = await supabase.from("notas_profesor").update(payload).eq("id", editingNotaId).select().single();
+        if (error) throw error;
+        setNotas((prev) => prev.map((n) => n.id === editingNotaId ? (data as NotaProfesor) : n));
+      } else {
+        const { data, error } = await supabase.from("notas_profesor").insert(payload).select().single();
+        if (error) throw error;
+        setNotas((prev) => [data as NotaProfesor, ...prev]);
+      }
+      closeNotaForm();
+    } catch (err) {
+      setNotaSaveError(err instanceof Error ? err.message : "Error al guardar la nota");
+    }
+    setSavingNota(false);
+  }
+
+  async function handleDeleteNota(id: string) {
+    if (!confirm("¿Eliminar esta nota? Esta acción no se puede deshacer.")) return;
+    const nota = notas.find((n) => n.id === id);
+    if (nota?.imagen_url) {
+      const parts = nota.imagen_url.split("/notas-profesor/");
+      if (parts[1]) await supabase.storage.from("notas-profesor").remove([parts[1]]);
+    }
+    await supabase.from("notas_profesor").delete().eq("id", id);
+    setNotas((prev) => prev.filter((n) => n.id !== id));
+  }
+
+  function formatFechaLarga(dateStr: string): string {
+    const [y, m, d] = dateStr.split("-").map(Number);
+    const meses = ["enero","febrero","marzo","abril","mayo","junio","julio","agosto","septiembre","octubre","noviembre","diciembre"];
+    return `${d} de ${meses[m - 1]} de ${y}`;
+  }
+
+  async function fetchImgBase64(url: string): Promise<string | null> {
+    try {
+      const res = await fetch(url);
+      const blob = await res.blob();
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onloadend = () => resolve(reader.result as string);
+        reader.onerror = reject;
+        reader.readAsDataURL(blob);
+      });
+    } catch { return null; }
+  }
+
+  async function handleDownloadPDF() {
+    if (!student) return;
+    setDownloadingPDF(true);
+    try {
+      const { default: jsPDF } = await import("jspdf");
+      const W = 210; const M = 18; const CW = W - 2 * M;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const doc = new (jsPDF as any)({ orientation: "portrait", unit: "mm", format: "a4" });
+      const LH = 4.8;
+      let y = 0;
+
+      // ── Header verde ─────────────────────────────────
+      doc.setFillColor(27, 77, 46);
+      doc.rect(0, 0, W, 27, "F");
+      doc.setTextColor(255, 255, 255);
+      doc.setFontSize(8);
+      doc.setFont("helvetica", "normal");
+      doc.text("ESCUELA DE GOLF — COUNTRY CLUB DE BOGOTÁ", M, 10);
+      doc.setFontSize(15);
+      doc.setFont("helvetica", "bold");
+      doc.text("Registro de Notas del Profesor", M, 21);
+      y = 35;
+
+      // ── Datos del alumno ──────────────────────────────
+      doc.setTextColor(20, 20, 20);
+      doc.setFontSize(13);
+      doc.setFont("helvetica", "bold");
+      doc.text(student.full_name, M, y);
+      y += 5.5;
+      doc.setFontSize(8.5);
+      doc.setFont("helvetica", "normal");
+      doc.setTextColor(120, 120, 120);
+      const meta = [student.grupo_activo, calcularEdad(student.birth_date), `Generado ${formatFecha(new Date().toISOString().split("T")[0])}`].filter(Boolean).join(" · ");
+      doc.text(meta, M, y);
+      y += 3.5;
+      doc.setDrawColor(27, 77, 46);
+      doc.setLineWidth(0.5);
+      doc.line(M, y, W - M, y);
+      y += 7;
+
+      // ── Notas (orden cronológico — más antigua primero) ───
+      const notasOrdenadas = [...notas].reverse();
+      const pageH = 297;
+      const footerH = 13;
+
+      for (let i = 0; i < notasOrdenadas.length; i++) {
+        const nota = notasOrdenadas[i];
+
+        if (y > pageH - footerH - 30) { doc.addPage(); y = M; }
+
+        // Fecha
+        doc.setFontSize(10);
+        doc.setFont("helvetica", "bold");
+        doc.setTextColor(27, 77, 46);
+        doc.text(formatFechaLarga(nota.fecha), M, y);
+
+        // Badge tipo
+        if (nota.tipo_imagen) {
+          doc.setFontSize(7.5);
+          doc.setTextColor(100, 30, 130);
+          doc.text(`[${TIPO_IMAGEN_LABELS[nota.tipo_imagen]}]`, W - M, y, { align: "right" });
+        }
+        y += 4.5;
+
+        // Profesor
+        doc.setFontSize(8);
+        doc.setFont("helvetica", "normal");
+        doc.setTextColor(140, 140, 140);
+        doc.text(`Profesor: ${nota.profesor_nombre ?? "—"}`, M, y);
+        y += 5.5;
+
+        // Contenido
+        doc.setFontSize(9.5);
+        doc.setFont("helvetica", "normal");
+        doc.setTextColor(35, 35, 35);
+        const lines = doc.splitTextToSize(nota.contenido, CW) as string[];
+        const textH = lines.length * LH;
+        if (y + textH > pageH - footerH - 5) { doc.addPage(); y = M; }
+        doc.text(lines, M, y);
+        y += textH + 3;
+
+        // Imagen (solo si es imagen, no PDF)
+        if (nota.imagen_url && !nota.imagen_url.toLowerCase().includes(".pdf")) {
+          const imgBase64 = await fetchImgBase64(nota.imagen_url);
+          if (imgBase64) {
+            const imgW = 80; const imgH = 60;
+            if (y + imgH > pageH - footerH - 5) { doc.addPage(); y = M; }
+            try { doc.addImage(imgBase64, "JPEG", M, y, imgW, imgH); y += imgH + 5; } catch { /* skip */ }
+          }
+        }
+
+        // Separador
+        if (i < notasOrdenadas.length - 1) {
+          if (y > pageH - footerH - 10) { doc.addPage(); y = M; }
+          doc.setDrawColor(210, 210, 210);
+          doc.setLineWidth(0.25);
+          doc.line(M, y, W - M, y);
+          y += 8;
+        }
+      }
+
+      // ── Footer en todas las páginas ───────────────────
+      const totalPages = doc.getNumberOfPages();
+      for (let p = 1; p <= totalPages; p++) {
+        doc.setPage(p);
+        doc.setFontSize(7.5);
+        doc.setFont("helvetica", "normal");
+        doc.setTextColor(160, 160, 160);
+        doc.text("Escuela de Golf — Country Club de Bogotá", M, 291);
+        doc.text(`Página ${p} de ${totalPages}`, W - M, 291, { align: "right" });
+      }
+
+      const nombre = student.full_name.replace(/\s+/g, "_");
+      const fecha = new Date().toISOString().split("T")[0];
+      doc.save(`Notas_${nombre}_${fecha}.pdf`);
+    } catch (err) { console.error("Error al generar PDF:", err); }
+    setDownloadingPDF(false);
+  }
+
   function handlePhotoSelect(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -1197,7 +1448,7 @@ posPayload[`${key}_score`] = rawScore !== null ? Math.round(rawScore) : null;
   const grupo = calcularGrupoEfectivo(student);
   const grupoFisico = calcularGrupoFisico(student);
   const posicionesActivas = POSICIONES_GRUPO[grupo] || POSICIONES_GRUPO["Albatros"];
-  const TABS: { key: Tab; label: string }[] = [{ key:"datos", label:"Datos personales" }, { key:"tecnicos", label:"Tests técnicos" }, { key:"fisicos", label:"Tests físicos" }, { key:"hitos", label:"Hitos" }];
+  const TABS: { key: Tab; label: string }[] = [{ key:"datos", label:"Datos personales" }, { key:"tecnicos", label:"Tests técnicos" }, { key:"fisicos", label:"Tests físicos" }, { key:"hitos", label:"Hitos" }, { key:"notas", label:"Notas" }];
 
   // Unwrap double-encoded integrated result for the profile card
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -1980,6 +2231,100 @@ posPayload[`${key}_score`] = rawScore !== null ? Math.round(rawScore) : null;
             )}
           </div>
         )}
+
+        {activeTab === "notas" && (
+          <div>
+            <div className="flex items-center justify-between mb-5 gap-2 flex-wrap">
+              <h2 className="text-base font-semibold text-gray-900">Notas del profesor</h2>
+              <div className="flex gap-2">
+                <button
+                  onClick={handleDownloadPDF}
+                  disabled={downloadingPDF || notas.length === 0}
+                  className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium border border-gray-200 text-gray-600 hover:bg-gray-50 disabled:opacity-40 transition-colors"
+                >
+                  {downloadingPDF
+                    ? <><svg className="animate-spin h-3.5 w-3.5" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"/></svg>Generando...</>
+                    : <><svg width="13" height="13" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>Descargar PDF</>}
+                </button>
+                <button
+                  onClick={() => openNotaForm()}
+                  className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium transition-colors"
+                  style={{ backgroundColor: "#1B4D2E", color: "white" }}
+                >
+                  <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path d="M12 5v14M5 12h14"/></svg>
+                  Nueva nota
+                </button>
+              </div>
+            </div>
+
+            {notasLoading ? (
+              <div className="flex items-center justify-center py-16 text-gray-400">
+                <svg className="animate-spin mr-3 h-5 w-5" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"/></svg>
+                Cargando notas...
+              </div>
+            ) : notas.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-16 text-gray-400">
+                <svg width="40" height="40" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5} className="mb-3"><path d="M11 5H6a2 2 0 0 0-2 2v11a2 2 0 0 0 2 2h11a2 2 0 0 0 2-2v-5"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                <p className="text-sm font-medium">Sin notas aún</p>
+                <p className="text-xs mt-1">Registra la primera observación de clase</p>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {notas.map((nota) => (
+                  <div key={nota.id} className="rounded-xl border border-gray-100 bg-white p-4 hover:border-gray-200 transition-colors">
+                    {/* Header de la card */}
+                    <div className="flex items-start justify-between gap-2 mb-3">
+                      <div>
+                        <span className="text-sm font-bold" style={{ color: "#1B4D2E" }}>
+                          📅 {formatFecha(nota.fecha)}
+                        </span>
+                        {nota.profesor_nombre && (
+                          <span className="text-xs text-gray-400 ml-2">👤 {nota.profesor_nombre}</span>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        {nota.tipo_imagen && (
+                          <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full" style={{ background: "#f3e5f5", color: "#6a1b9a" }}>
+                            🏷️ {TIPO_IMAGEN_LABELS[nota.tipo_imagen]}
+                          </span>
+                        )}
+                        <button onClick={() => openNotaForm(nota)} className="p-1.5 rounded-lg text-gray-300 hover:text-blue-500 hover:bg-blue-50 transition-colors" title="Editar">
+                          <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                        </button>
+                        <button onClick={() => handleDeleteNota(nota.id)} className="p-1.5 rounded-lg text-gray-300 hover:text-red-400 hover:bg-red-50 transition-colors" title="Eliminar">
+                          <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}><path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6"/></svg>
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Contenido */}
+                    <p className="text-sm text-gray-700 leading-relaxed whitespace-pre-wrap">{nota.contenido}</p>
+
+                    {/* Imagen */}
+                    {nota.imagen_url && (
+                      <div className="mt-3">
+                        {nota.imagen_url.toLowerCase().endsWith(".pdf") ? (
+                          <a href={nota.imagen_url} target="_blank" rel="noopener noreferrer"
+                            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium border border-gray-200 text-gray-600 hover:bg-gray-50">
+                            <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                            Ver PDF Trackman
+                          </a>
+                        ) : (
+                          <img
+                            src={nota.imagen_url}
+                            alt="Imagen adjunta"
+                            className="w-48 h-36 object-cover rounded-lg border border-gray-100 cursor-pointer hover:opacity-90 transition-opacity"
+                            onClick={() => setLightboxUrl(nota.imagen_url)}
+                          />
+                        )}
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Card análisis integrado del perfil — visible cuando hay al menos un tipo de datos */}
@@ -2112,6 +2457,125 @@ posPayload[`${key}_score`] = rawScore !== null ? Math.round(rawScore) : null;
           hasTrackmanData={hasTrackmanData}
           onClose={() => setShowParentReport(false)}
         />
+      )}
+
+      {/* ── Lightbox imagen nota ─────────────────────── */}
+      {lightboxUrl && (
+        <div
+          className="fixed inset-0 z-[60] flex items-center justify-center p-4"
+          style={{ backgroundColor: "rgba(0,0,0,0.85)" }}
+          onClick={() => setLightboxUrl(null)}
+        >
+          <div className="relative max-w-4xl max-h-[90vh]" onClick={(e) => e.stopPropagation()}>
+            <img src={lightboxUrl} alt="Imagen adjunta" className="max-w-full max-h-[85vh] rounded-xl object-contain shadow-2xl" />
+            <button
+              onClick={() => setLightboxUrl(null)}
+              className="absolute -top-3 -right-3 w-8 h-8 rounded-full bg-white text-gray-700 flex items-center justify-center shadow-lg hover:bg-gray-100 transition-colors text-sm font-bold"
+            >✕</button>
+          </div>
+        </div>
+      )}
+
+      {/* ── Modal nueva / editar nota ─────────────────── */}
+      {showNotaForm && notaForm && (
+        <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto py-8 px-4" style={{ backgroundColor: "rgba(0,0,0,0.45)" }} onClick={(e) => { if (e.target === e.currentTarget) closeNotaForm(); }}>
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg my-auto">
+            <div className="flex items-center justify-between px-6 py-5 border-b border-gray-100">
+              <h2 className="text-base font-semibold text-gray-900">{editingNotaId ? "Editar nota" : "Nueva nota del profesor"}</h2>
+              <button onClick={closeNotaForm} className="text-gray-400 hover:text-gray-600">
+                <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path d="M18 6 6 18M6 6l12 12"/></svg>
+              </button>
+            </div>
+
+            <div className="px-6 py-5 space-y-4">
+              {/* Nota */}
+              <div>
+                <label className="block text-xs font-semibold text-gray-700 mb-1.5">Nota <span className="text-red-400">*</span></label>
+                <textarea
+                  value={notaForm.contenido}
+                  onChange={(e) => setNotaForm((f) => f ? { ...f, contenido: e.target.value } : f)}
+                  rows={5}
+                  placeholder="Observaciones de la clase, aspectos técnicos notados, comportamiento, progreso..."
+                  className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-green-600 resize-none"
+                />
+              </div>
+
+              {/* Fecha */}
+              <div>
+                <label className="block text-xs font-semibold text-gray-700 mb-1.5">Fecha</label>
+                <input
+                  type="date"
+                  value={notaForm.fecha}
+                  onChange={(e) => setNotaForm((f) => f ? { ...f, fecha: e.target.value } : f)}
+                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-600"
+                />
+              </div>
+
+              {/* Imagen */}
+              <div>
+                <label className="block text-xs font-semibold text-gray-700 mb-1.5">
+                  Imagen o PDF <span className="text-gray-400 font-normal">(opcional — JPG, PNG, WEBP, PDF · máx 10 MB)</span>
+                </label>
+                <input
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp,application/pdf"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0] ?? null;
+                    if (!file) return;
+                    if (file.size > 10 * 1024 * 1024) { setNotaSaveError("El archivo no puede superar 10 MB."); return; }
+                    setNotaSaveError(null);
+                    const preview = file.type.startsWith("image/") ? URL.createObjectURL(file) : null;
+                    setNotaForm((f) => f ? { ...f, imagen: file, imagenPreview: preview } : f);
+                  }}
+                  className="w-full text-sm text-gray-500 file:mr-3 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-medium file:bg-green-50 file:text-green-700 hover:file:bg-green-100"
+                />
+                {notaForm.imagenPreview && (
+                  <img src={notaForm.imagenPreview} alt="Preview" className="mt-2 h-28 w-auto rounded-lg border border-gray-100 object-cover" />
+                )}
+                {notaForm.imagen && !notaForm.imagenPreview && (
+                  <div className="mt-2 flex items-center gap-2 text-xs text-gray-500">
+                    <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                    {notaForm.imagen.name}
+                  </div>
+                )}
+              </div>
+
+              {/* Tipo de imagen */}
+              {notaForm.imagen && (
+                <div>
+                  <label className="block text-xs font-semibold text-gray-700 mb-1.5">Tipo de archivo</label>
+                  <select
+                    value={notaForm.tipo_imagen ?? ""}
+                    onChange={(e) => setNotaForm((f) => f ? { ...f, tipo_imagen: (e.target.value || null) as TipoImagen | null } : f)}
+                    className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-green-600"
+                  >
+                    <option value="">— Seleccionar tipo —</option>
+                    <option value="trackman">Trackman</option>
+                    <option value="swing">Swing</option>
+                    <option value="campo">Campo</option>
+                    <option value="otro">Otro</option>
+                  </select>
+                </div>
+              )}
+
+              {notaSaveError && <p className="text-xs text-red-500 bg-red-50 px-3 py-2 rounded-lg">{notaSaveError}</p>}
+            </div>
+
+            <div className="px-6 pb-6 flex gap-3">
+              <button onClick={closeNotaForm} className="flex-1 px-4 py-2.5 rounded-xl border border-gray-200 text-sm font-medium text-gray-600 hover:bg-gray-50">
+                Cancelar
+              </button>
+              <button
+                onClick={handleSaveNota}
+                disabled={savingNota || !notaForm.contenido.trim()}
+                className="flex-1 px-4 py-2.5 rounded-xl text-sm font-medium text-white disabled:opacity-50 transition-opacity"
+                style={{ backgroundColor: "#1B4D2E" }}
+              >
+                {savingNota ? "Guardando..." : editingNotaId ? "Guardar cambios" : "Guardar nota"}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       {showHitoForm && hitoForm && (
