@@ -98,8 +98,70 @@ Devuelve este JSON exacto:
   }
 
   if (tipoPlan === "competencia") {
+    const drillCompSchema = `{
+          "titulo": "nombre del drill",
+          "descripcion": "descripción y ejecución detallada",
+          "metrica_exito": "X de Y intentos / distancia / porcentaje",
+          "variante_presion": "mismo drill con consecuencia o apuesta",
+          "conexion_tecnica": "qué error técnico trabaja este drill",
+          "dificultad_birdies": null,
+          "dificultad_aguilas": null,
+          "dificultad_albatros": null,
+          "dificultad_mas14": null
+        }`;
+
     const diasSchema = dias.map((d) => {
       const h = (HORARIOS[tipoPlan]?.[d] ?? [{ hi: "16:00", hf: "17:30" }])[0];
+
+      if (d === "martes") {
+        return `{
+      "dia_semana": "martes",
+      "hora_inicio": "${h.hi}",
+      "hora_fin": "${h.hf}",
+      "tipo_sesion": "tiro_largo",
+      "lugar": "driving_range",
+      "objetivo": "foco concreto de la sesión de tiro largo con métrica",
+      "opciones_actividad": [
+        {
+          "id": 1,
+          "titulo": "Toma de tests / Evaluación",
+          "descripcion_corta": "Test técnico P1-P10, test físico TPI o medición Trackman. Día de evaluación y toma de datos.",
+          "justificacion": "frase corta explicando por qué esta opción aplica ahora (ej: inicio de período, sin datos recientes)",
+          "es_recomendada": false,
+          "drills": [${drillCompSchema}, ${drillCompSchema}]
+        },
+        {
+          "id": 2,
+          "titulo": "Corrección técnica con drill",
+          "descripcion_corta": "Basado en análisis disponible, trabajar el error técnico más crítico identificado.",
+          "justificacion": "frase corta explicando por qué esta opción aplica (ej: error de grip detectado, análisis reciente)",
+          "es_recomendada": false,
+          "drills": [${drillCompSchema}, ${drillCompSchema}]
+        },
+        {
+          "id": 3,
+          "titulo": "Sesión de potencia y velocidad",
+          "descripcion_corta": "Trabajo de velocidad de swing, SuperSpeed o ejercicios de potencia con medición.",
+          "justificacion": "frase corta (ej: club speed por debajo del promedio, período de carga)",
+          "es_recomendada": false,
+          "drills": [${drillCompSchema}, ${drillCompSchema}]
+        },
+        {
+          "id": 4,
+          "titulo": "Filmación y análisis",
+          "descripcion_corta": "Grabar swing desde frente y lado, analizar posiciones clave P1-P10 en tiempo real.",
+          "justificacion": "frase corta (ej: sin filmación reciente, trabajo de consciencia propioceptiva)",
+          "es_recomendada": false,
+          "drills": [${drillCompSchema}, ${drillCompSchema}]
+        }
+      ],
+      "drills": [],
+      "juego_competitivo": "actividad competitiva corta al final si aplica",
+      "estaciones_damas": null,
+      "notas": null
+    }`;
+      }
+
       return `{
       "dia_semana": "${d}",
       "hora_inicio": "${h.hi}",
@@ -108,17 +170,7 @@ Devuelve este JSON exacto:
       "lugar": "<driving_range|putting_green|campo_infantil|campo_pacos_fabios|campo_completo>",
       "objetivo": "foco concreto con métrica de sesión",
       "drills": [
-        {
-          "titulo": "nombre del drill",
-          "descripcion": "descripción y ejecución detallada",
-          "metrica_exito": "X de Y intentos / distancia / porcentaje (ej: 7 de 10 dentro de 1m)",
-          "variante_presion": "mismo drill con consecuencia o apuesta",
-          "conexion_tecnica": "qué error técnico del grupo trabaja este drill",
-          "dificultad_birdies": null,
-          "dificultad_aguilas": null,
-          "dificultad_albatros": null,
-          "dificultad_mas14": null
-        }
+        ${drillCompSchema}
       ],
       "juego_competitivo": "simulación de torneo o competencia real (especialmente sábado)",
       "estaciones_damas": null,
@@ -142,7 +194,19 @@ REGLAS:
 - OBLIGATORIO por drill: métrica de éxito clara, variante de presión, conexión con error técnico
 - Al menos UN ejercicio de simulación de torneo por semana (sábado)
 - Lenguaje técnico y exigente — tratar como profesionales junior
-- Máximo 3 drills por sesión, altamente específicos
+- Máximo 2-3 drills por sesión (opciones de martes: máximo 2 drills cada una), altamente específicos
+
+MARTES — OPCIONES DE TIPO DE SESIÓN:
+Incluye las 4 opciones en "opciones_actividad". Para cada una:
+- Elige UNA como recomendada (es_recomendada: true) según contexto del tema y período
+- Justifica en 1 frase corta por qué esa opción es la más apropiada ahora
+- Las otras 3 justifica brevemente por qué son alternativas válidas
+- Genera drills ESPECÍFICOS para cada opción (no genéricos)
+Opciones a evaluar:
+A) Toma de tests: evalúa estado actual del alumno (inicio de período, sin datos recientes)
+B) Corrección técnica: trabaja el error más crítico si hay análisis disponible
+C) Potencia y velocidad: aumenta club speed medible si está por debajo del objetivo
+D) Filmación y análisis: consciencia propioceptiva si no hay filmación reciente
 
 Devuelve SOLO JSON válido comenzando con { sin backticks ni texto adicional.`;
 
@@ -223,6 +287,20 @@ function parseAI(raw: string): any {
   return null;
 }
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function normalizeDrill(d: any): any {
+  return {
+    ...d,
+    metrica_exito: d.metrica_exito ?? null,
+    variante_presion: d.variante_presion ?? null,
+    conexion_tecnica: d.conexion_tecnica ?? null,
+    dificultad_birdies: d.dificultad_birdies ?? null,
+    dificultad_aguilas: d.dificultad_aguilas ?? null,
+    dificultad_albatros: d.dificultad_albatros ?? null,
+    dificultad_mas14: d.dificultad_mas14 ?? null,
+  };
+}
+
 // Normalize field names the AI might use as aliases
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function normalizeSesion(s: any): any {
@@ -230,16 +308,15 @@ function normalizeSesion(s: any): any {
     ...s,
     objetivo: s.objetivo ?? s.foco_principal ?? "",
     juego_competitivo: s.juego_competitivo ?? s.simulacion_torneo ?? null,
-    drills: (s.drills ?? []).map((d: any) => ({
-      ...d,
-      metrica_exito: d.metrica_exito ?? null,
-      variante_presion: d.variante_presion ?? null,
-      conexion_tecnica: d.conexion_tecnica ?? null,
-      dificultad_birdies: d.dificultad_birdies ?? null,
-      dificultad_aguilas: d.dificultad_aguilas ?? null,
-      dificultad_albatros: d.dificultad_albatros ?? null,
-      dificultad_mas14: d.dificultad_mas14 ?? null,
-    })),
+    opciones_actividad: s.opciones_actividad
+      ? s.opciones_actividad.map((opt: any) => ({
+          ...opt,
+          justificacion: opt.justificacion ?? "",
+          es_recomendada: opt.es_recomendada ?? false,
+          drills: (opt.drills ?? []).map(normalizeDrill),
+        }))
+      : null,
+    drills: (s.drills ?? []).map(normalizeDrill),
   };
 }
 

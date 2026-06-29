@@ -25,6 +25,15 @@ interface Drill {
 
 interface EstacionDamas { nombre: string; lugar: string; duracion_min: number; descripcion: string; }
 
+interface OpcionActividad {
+  id: number;
+  titulo: string;
+  descripcion_corta: string;
+  justificacion: string;
+  es_recomendada: boolean;
+  drills: Drill[];
+}
+
 interface PlanSemanal {
   id: string; semana_inicio: string; tipo_plan: TipoPlan;
   tema_semanal: string; descripcion_tema: string; objetivo_mensual: string | null;
@@ -48,6 +57,7 @@ interface PreviewSesion {
   hora_inicio: string; hora_fin: string;
   objetivo: string; drills: Drill[];
   juego_competitivo: string | null; estaciones_damas: EstacionDamas[] | null; notas: string | null;
+  opciones_actividad?: OpcionActividad[] | null;
 }
 
 interface SesionForm {
@@ -134,6 +144,14 @@ const GRUPOS_EVAL: Record<TipoPlan, string[]> = {
   juvenil: ["Birdies", "Águilas", "Albatros", "+14"],
   competencia: ["Competencia"],
   damas: ["Damas"],
+};
+
+// Day badge colors for Competencia preview
+const COMP_DIA_BADGE: Partial<Record<DiaSemana, { bg: string; text: string }>> = {
+  martes:    { bg: "#dcfce7", text: "#166534" },
+  miercoles: { bg: "#dbeafe", text: "#1e40af" },
+  jueves:    { bg: "#ede9fe", text: "#6d28d9" },
+  sabado:    { bg: "#fef3c7", text: "#92400e" },
 };
 
 // Calendar grid constants
@@ -233,6 +251,15 @@ export default function ProgramacionModule() {
   const [planError, setPlanError]               = useState<string | null>(null);
   const [expandedDrillKeys, setExpandedDrillKeys] = useState<Set<string>>(new Set());
   const [generatingPdfPadres, setGeneratingPdfPadres] = useState(false);
+
+  // AI suggestions — paso 1 (foco) y paso 2 (tema)
+  const [suggestingFocos, setSuggestingFocos]   = useState(false);
+  const [suggestedFocos, setSuggestedFocos]     = useState<{ titulo: string; descripcion_corta: string }[]>([]);
+  const [suggestingTemas, setSuggestingTemas]   = useState(false);
+  const [suggestedTemas, setSuggestedTemas]     = useState<{ titulo: string; descripcion_corta: string }[]>([]);
+
+  // Preview — selected option index per sesion (for Competencia Martes)
+  const [selectedOpcionIdx, setSelectedOpcionIdx] = useState<Record<number, number>>({});
 
   // Delete plan
   const [confirmDeletePlan, setConfirmDeletePlan] = useState(false);
@@ -354,6 +381,9 @@ export default function ProgramacionModule() {
     setTemaChip(""); setTemaCustom("");
     setIncluirContexto(false); setAiPreview(null); setPlanError(null);
     setExpandedDrillKeys(new Set());
+    setSuggestedFocos([]); setSuggestingFocos(false);
+    setSuggestedTemas([]); setSuggestingTemas(false);
+    setSelectedOpcionIdx({});
   }
 
   function updatePreviewSesion(i: number, updates: Partial<PreviewSesion>) {
@@ -379,6 +409,44 @@ export default function ProgramacionModule() {
     setExpandedDrillKeys((prev) => { const n = new Set(prev); n.has(key) ? n.delete(key) : n.add(key); return n; });
   }
 
+  async function handleSugerirFocos() {
+    setSuggestingFocos(true); setSuggestedFocos([]);
+    try {
+      const mesActual = new Date().toLocaleString("es-CO", { month: "long", year: "numeric" });
+      const res = await fetch("/api/suggest-focus", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ tipo_plan: activeTab, mes_actual: mesActual, modo: "foco" }),
+      });
+      const data = await res.json();
+      if (res.ok && data.sugerencias) setSuggestedFocos(data.sugerencias);
+    } catch { /* silencioso */ }
+    finally { setSuggestingFocos(false); }
+  }
+
+  async function handleSugerirTemas() {
+    const focoMes = focoMesChip || focoMesCustom.trim();
+    setSuggestingTemas(true); setSuggestedTemas([]);
+    try {
+      const semanaNum = Math.ceil((semana.getDate() + new Date(semana.getFullYear(), semana.getMonth(), 1).getDay()) / 7);
+      const res = await fetch("/api/suggest-focus", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ tipo_plan: activeTab, foco_mes: focoMes, semana_numero_del_mes: semanaNum, modo: "tema" }),
+      });
+      const data = await res.json();
+      if (res.ok && data.sugerencias) setSuggestedTemas(data.sugerencias);
+    } catch { /* silencioso */ }
+    finally { setSuggestingTemas(false); }
+  }
+
+  function handleSelectOpcion(si: number, optIdx: number) {
+    if (!aiPreview) return;
+    const s = aiPreview.sesiones[si];
+    const opt = s.opciones_actividad?.[optIdx];
+    if (!opt) return;
+    setSelectedOpcionIdx((prev) => ({ ...prev, [si]: optIdx }));
+    updatePreviewSesion(si, { drills: opt.drills });
+  }
+
   async function handleGenerarIA() {
     const tema = temaChip || temaCustom.trim();
     if (!tema) { setPlanError("Selecciona o escribe un tema."); return; }
@@ -402,10 +470,23 @@ export default function ProgramacionModule() {
         console.error("[IA] Error del endpoint:", data.error, "| Raw:", data.raw);
         throw new Error(data.error || "Error de IA");
       }
-      const sesionesConFecha = (data.sesiones as PreviewSesion[]).map((s) => ({
-        ...s, fecha: getFechaForDia(semana, s.dia_semana),
-        hora_inicio: s.hora_inicio ?? "", hora_fin: s.hora_fin ?? "",
-      }));
+      const initialOpcionIdx: Record<number, number> = {};
+      const sesionesConFecha = (data.sesiones as PreviewSesion[]).map((s, si) => {
+        let sesion: PreviewSesion = {
+          ...s,
+          fecha: getFechaForDia(semana, s.dia_semana),
+          hora_inicio: s.hora_inicio ?? "",
+          hora_fin: s.hora_fin ?? "",
+        };
+        if (sesion.opciones_actividad && sesion.opciones_actividad.length > 0) {
+          const recIdx = sesion.opciones_actividad.findIndex((o) => o.es_recomendada);
+          const defIdx = recIdx >= 0 ? recIdx : 0;
+          initialOpcionIdx[si] = defIdx;
+          sesion = { ...sesion, drills: sesion.opciones_actividad[defIdx]?.drills ?? [] };
+        }
+        return sesion;
+      });
+      setSelectedOpcionIdx(initialOpcionIdx);
       setAiPreview({ descripcion_tema: data.descripcion_tema ?? "", sesiones: sesionesConFecha });
     } catch (err) {
       setPlanError(err instanceof Error ? err.message : "Error desconocido");
@@ -1249,7 +1330,44 @@ export default function ProgramacionModule() {
                 <div className="px-6 py-6 space-y-4">
                   <div>
                     <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wide mb-1">Paso 1 de 3</p>
-                    <h3 className="text-base font-bold text-gray-900 mb-4">¿Cuál es el foco de este mes?</h3>
+                    <div className="flex items-center justify-between mb-4">
+                      <h3 className="text-base font-bold text-gray-900">¿Cuál es el foco de este mes?</h3>
+                      <button
+                        onClick={handleSugerirFocos}
+                        disabled={suggestingFocos}
+                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all disabled:opacity-50"
+                        style={{ borderColor: accentColor + "60", color: accentColor, background: accentColor + "08" }}
+                      >
+                        {suggestingFocos
+                          ? <><svg className="animate-spin h-3 w-3" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"/></svg>Sugiriendo...</>
+                          : <><svg width="11" height="11" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>Sugerir con IA</>
+                        }
+                      </button>
+                    </div>
+
+                    {/* AI suggestions cards */}
+                    {suggestedFocos.length > 0 && (
+                      <div className="mb-4">
+                        <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wide mb-2">Sugerencias del agente</p>
+                        <div className="grid grid-cols-2 gap-2">
+                          {suggestedFocos.map((sf, idx) => (
+                            <button
+                              key={idx}
+                              onClick={() => { setFocoMesChip(sf.titulo); setFocoMesCustom(""); }}
+                              className="text-left rounded-xl border p-3 transition-all"
+                              style={focoMesChip === sf.titulo
+                                ? { borderColor: accentColor, background: accentColor + "10" }
+                                : { borderColor: "#e5e7eb", background: "#f9fafb" }}
+                            >
+                              <p className="text-xs font-bold text-gray-900 mb-0.5">{sf.titulo}</p>
+                              <p className="text-[10px] text-gray-500 leading-snug">{sf.descripcion_corta}</p>
+                            </button>
+                          ))}
+                        </div>
+                        <div className="my-3 flex items-center gap-2"><div className="flex-1 h-px bg-gray-200"/><span className="text-[10px] text-gray-400 font-medium">o usa estas opciones</span><div className="flex-1 h-px bg-gray-200"/></div>
+                      </div>
+                    )}
+
                     <div className="flex flex-wrap gap-2 mb-3">
                       {FOCOS_MES.map((f) => (
                         <button key={f}
@@ -1290,11 +1408,48 @@ export default function ProgramacionModule() {
                 <div className="px-6 py-6 space-y-5">
                   <div>
                     <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wide mb-1">Paso 2 de 3</p>
-                    <h3 className="text-base font-bold text-gray-900 mb-3">¿Qué aspecto trabajamos esta semana?</h3>
+                    <div className="flex items-center justify-between mb-3">
+                      <h3 className="text-base font-bold text-gray-900">¿Qué aspecto trabajamos esta semana?</h3>
+                      <button
+                        onClick={handleSugerirTemas}
+                        disabled={suggestingTemas}
+                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all disabled:opacity-50"
+                        style={{ borderColor: accentColor + "60", color: accentColor, background: accentColor + "08" }}
+                      >
+                        {suggestingTemas
+                          ? <><svg className="animate-spin h-3 w-3" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"/></svg>Sugiriendo...</>
+                          : <><svg width="11" height="11" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>Sugerir con IA</>
+                        }
+                      </button>
+                    </div>
                     <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold mb-4" style={{ background: accentColor + "18", color: accentColor }}>
                       <svg width="11" height="11" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
                       Foco del mes: <span className="font-bold">{focoMesChip || focoMesCustom}</span>
                     </div>
+
+                    {/* AI suggestions cards */}
+                    {suggestedTemas.length > 0 && (
+                      <div className="mb-4">
+                        <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wide mb-2">Sugerencias del agente</p>
+                        <div className="grid grid-cols-2 gap-2">
+                          {suggestedTemas.map((st, idx) => (
+                            <button
+                              key={idx}
+                              onClick={() => { setTemaChip(st.titulo); setTemaCustom(""); }}
+                              className="text-left rounded-xl border p-3 transition-all"
+                              style={temaChip === st.titulo
+                                ? { borderColor: accentColor, background: accentColor + "10" }
+                                : { borderColor: "#e5e7eb", background: "#f9fafb" }}
+                            >
+                              <p className="text-xs font-bold text-gray-900 mb-0.5">{st.titulo}</p>
+                              <p className="text-[10px] text-gray-500 leading-snug">{st.descripcion_corta}</p>
+                            </button>
+                          ))}
+                        </div>
+                        <div className="my-3 flex items-center gap-2"><div className="flex-1 h-px bg-gray-200"/><span className="text-[10px] text-gray-400 font-medium">o usa estas opciones</span><div className="flex-1 h-px bg-gray-200"/></div>
+                      </div>
+                    )}
+
                     <div className="flex flex-wrap gap-2 mb-3">
                       {TEMAS_CHIP[activeTab].map((t) => (
                         <button key={t}
@@ -1365,11 +1520,21 @@ export default function ProgramacionModule() {
                 <div className="px-4 py-4 max-h-[65vh] overflow-y-auto space-y-3">
                   {aiPreview.sesiones.map((s, i) => {
                     const tc = TIPO_SESION_COLOR[s.tipo_sesion];
+                    const diaBadge = activeTab === "competencia" ? COMP_DIA_BADGE[s.dia_semana] : null;
+                    const hasOpciones = activeTab === "competencia" && s.opciones_actividad && s.opciones_actividad.length > 0;
+                    const recIdx = s.opciones_actividad?.findIndex((o) => o.es_recomendada) ?? -1;
+                    const curOpcionIdx = selectedOpcionIdx[i] ?? (recIdx >= 0 ? recIdx : 0);
+
                     return (
                       <div key={i} className="border border-gray-200 rounded-xl overflow-hidden">
                         {/* Session header row */}
                         <div className="flex items-center gap-2 px-4 py-3 bg-gray-50 flex-wrap">
-                          <span className="font-bold text-sm text-gray-900">{DIA_LABEL[s.dia_semana]}</span>
+                          {diaBadge ? (
+                            <span className="px-2 py-0.5 rounded-full text-xs font-bold" style={{ background: diaBadge.bg, color: diaBadge.text }}>{DIA_LABEL_SHORT[s.dia_semana]}</span>
+                          ) : (
+                            <span className="font-bold text-sm text-gray-900">{DIA_LABEL[s.dia_semana]}</span>
+                          )}
+                          {diaBadge && <span className="font-bold text-sm text-gray-900">{DIA_LABEL[s.dia_semana]}</span>}
                           <span className="text-xs text-gray-400 bg-white border border-gray-200 rounded-full px-2 py-0.5">{formatDiaFecha(s.fecha)}</span>
                           <span className="px-2 py-0.5 rounded-full text-xs font-semibold" style={{ background: tc.bg, color: tc.text }}>{TIPO_SESION_LABEL[s.tipo_sesion]}</span>
                           {s.hora_inicio && <span className="text-xs text-gray-400">{s.hora_inicio.slice(0, 5)}–{s.hora_fin.slice(0, 5)}</span>}
@@ -1384,6 +1549,43 @@ export default function ProgramacionModule() {
                               {(Object.keys(LUGAR_LABEL) as Lugar[]).map((l) => <option key={l} value={l}>{LUGAR_LABEL[l]}</option>)}
                             </select>
                           </div>
+
+                          {/* Opciones de actividad — Competencia Martes */}
+                          {hasOpciones && (
+                            <div>
+                              <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wide mb-2">Tipo de sesión — elige una opción:</p>
+                              <div className="grid gap-2" style={{ gridTemplateColumns: `repeat(${Math.min(s.opciones_actividad!.length, 3)}, 1fr)` }}>
+                                {s.opciones_actividad!.map((opt, optIdx) => {
+                                  const isSelected = curOpcionIdx === optIdx;
+                                  return (
+                                    <button
+                                      key={opt.id}
+                                      onClick={() => handleSelectOpcion(i, optIdx)}
+                                      className="text-left rounded-lg border p-2.5 transition-all text-left"
+                                      style={isSelected
+                                        ? { borderColor: "#16a34a", background: "#f0fdf4" }
+                                        : { borderColor: "#e5e7eb", background: "#fff" }}
+                                    >
+                                      {opt.es_recomendada && (
+                                        <span className="inline-flex items-center gap-0.5 text-[9px] font-bold text-green-700 bg-green-100 rounded-full px-1.5 py-0.5 mb-1.5">
+                                          <svg width="8" height="8" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth={3}><path d="M3 10l4 4 9-9"/></svg>
+                                          Recomendada
+                                        </span>
+                                      )}
+                                      <p className="text-[11px] font-bold text-gray-900 leading-tight">{opt.titulo}</p>
+                                      <p className="text-[10px] text-gray-500 mt-0.5 leading-snug">{opt.descripcion_corta}</p>
+                                      {opt.justificacion && (
+                                        <p className="text-[10px] mt-1 leading-snug italic" style={{ color: opt.es_recomendada ? "#16a34a" : "#9ca3af" }}>
+                                          {opt.justificacion}
+                                        </p>
+                                      )}
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                          )}
+
                           {/* Foco / objetivo */}
                           <textarea value={s.objetivo} onChange={(e) => updatePreviewSesion(i, { objetivo: e.target.value })} rows={2} placeholder="Foco principal del día..." className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-xs resize-none focus:outline-none focus:ring-1 focus:ring-green-500" />
                           {/* Drills */}
