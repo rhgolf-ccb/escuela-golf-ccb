@@ -111,17 +111,17 @@ const TIPO_PLAN_COLOR: Record<TipoPlan, string> = {
   juvenil: "#1B4D2E", competencia: "#1e40af", damas: "#86198f",
 };
 
-// Calendar event colours per spec
+// Calendar event colours — dark solid backgrounds with white text
 const CAL_COLOR: Record<TipoPlan, { bg: string; border: string; text: string; dot: string }> = {
-  juvenil:     { bg: "#d1fae5", border: "#2d5a27", text: "#1a3a18", dot: "#2d5a27" },
-  competencia: { bg: "#fef9c3", border: "#b7950b", text: "#6b4c07", dot: "#b7950b" },
-  damas:       { bg: "#ede9fe", border: "#8e44ad", text: "#5b2c6f", dot: "#8e44ad" },
+  juvenil:     { bg: "#2d5a27", border: "#1a3a18", text: "#ffffff", dot: "#2d5a27" },
+  competencia: { bg: "#b7950b", border: "#8a6f08", text: "#ffffff", dot: "#b7950b" },
+  damas:       { bg: "#6a1b9a", border: "#4a1070", text: "#ffffff", dot: "#6a1b9a" },
 };
 
 const TEMAS_CHIP: Record<TipoPlan, string[]> = {
-  juvenil:     ["Tiro largo", "Juego corto", "Putt", "Trabajo en campo", "Test técnico", "Test físico", "Juego completo"],
-  competencia: ["Tiro largo", "Juego corto", "Putt", "Gestión de campo", "Trackman", "Presión de torneo", "Juego completo"],
-  damas:       ["Tiro largo", "Juego corto", "Putt", "Bunker", "Ruta completa", "Juego por hoyos"],
+  juvenil:     ["Tiro largo", "Juego corto", "Putt", "Salida al campo", "Test técnico", "Test físico", "Competencia/Torneo"],
+  competencia: ["Tiro largo", "Juego corto", "Putt", "Salida al campo", "Test técnico", "Test físico", "Competencia/Torneo"],
+  damas:       ["Tiro largo", "Juego corto", "Putt", "Salida al campo", "Test técnico", "Test físico", "Competencia/Torneo"],
 };
 
 const GRUPOS_EVAL: Record<TipoPlan, string[]> = {
@@ -235,6 +235,11 @@ export default function ProgramacionModule() {
   const [sesionForm, setSesionForm]   = useState<SesionForm | null>(null);
   const [savingSesion, setSavingSesion] = useState(false);
   const [sesionError, setSesionError]   = useState<string | null>(null);
+
+  // Delete sesion
+  const [confirmDeleteSesion, setConfirmDeleteSesion] = useState<SesionSemana | null>(null);
+  const [deletingSesion, setDeletingSesion]           = useState(false);
+  const [openMenuId, setOpenMenuId]                   = useState<string | null>(null);
 
   // Toast
   const [toast, setToast] = useState<string | null>(null);
@@ -491,6 +496,16 @@ export default function ProgramacionModule() {
     } catch (err) {
       setSesionError(err instanceof Error ? err.message : "Error al guardar");
     } finally { setSavingSesion(false); }
+  }
+
+  async function handleDeleteSesion(sesion: SesionSemana) {
+    setDeletingSesion(true);
+    await supabase.from("sesiones_semana").delete().eq("id", sesion.id);
+    setConfirmDeleteSesion(null);
+    showToast("Sesión eliminada");
+    await fetchPlan();
+    if (viewMode === "semana") fetchCalSemana();
+    setDeletingSesion(false);
   }
 
   // ── Calendar cell click ───────────────────────────────────────────────────
@@ -994,7 +1009,30 @@ export default function ProgramacionModule() {
                                   <span className="px-2 py-0.5 rounded-full text-xs font-semibold" style={{ background: tc.bg, color: tc.text }}>{TIPO_SESION_LABEL[sesion.tipo_sesion]}</span>
                                   <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-600">{LUGAR_LABEL[sesion.lugar]}</span>
                                   {sesion.hora_inicio && <span className="text-xs text-gray-400">{formatHora(sesion.hora_inicio)}–{formatHora(sesion.hora_fin)}</span>}
-                                  <button onClick={() => openEditSesion(dia, sesion)} className="ml-auto text-xs font-medium text-gray-400 hover:text-gray-700 border border-gray-200 rounded px-2 py-1 hover:bg-gray-50 transition-colors">Editar</button>
+                                  <div className="relative ml-auto" onClick={(e) => e.stopPropagation()}>
+                                    <button
+                                      onClick={() => setOpenMenuId(openMenuId === sesion.id ? null : sesion.id)}
+                                      className="flex items-center gap-1 text-xs font-medium text-gray-400 hover:text-gray-700 border border-gray-200 rounded px-2 py-1 hover:bg-gray-50 transition-colors"
+                                    >
+                                      Opciones <svg width="10" height="10" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path d="M19 9l-7 7-7-7"/></svg>
+                                    </button>
+                                    {openMenuId === sesion.id && (
+                                      <div className="absolute right-0 top-full mt-1 z-20 bg-white border border-gray-200 rounded-xl shadow-lg py-1 min-w-[160px]">
+                                        <button
+                                          onClick={() => { setOpenMenuId(null); openEditSesion(dia, sesion); }}
+                                          className="w-full text-left px-4 py-2.5 text-xs text-gray-700 hover:bg-gray-50 flex items-center gap-2"
+                                        >
+                                          ✏️ Editar sesión
+                                        </button>
+                                        <button
+                                          onClick={() => { setOpenMenuId(null); setConfirmDeleteSesion(sesion); }}
+                                          className="w-full text-left px-4 py-2.5 text-xs text-red-600 hover:bg-red-50 flex items-center gap-2"
+                                        >
+                                          🗑️ Eliminar sesión
+                                        </button>
+                                      </div>
+                                    )}
+                                  </div>
                                 </div>
 
                                 {sesion.objetivo && (
@@ -1366,6 +1404,39 @@ export default function ProgramacionModule() {
                 className="px-3 py-2 rounded-xl text-xs font-medium border border-gray-200 text-gray-600 hover:bg-gray-50"
               >
                 Editar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ══ MODAL: Confirmar eliminar sesión ════════════════════════════════ */}
+      {confirmDeleteSesion && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={() => setConfirmDeleteSesion(null)}>
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-10 h-10 rounded-full bg-red-100 flex items-center justify-center shrink-0">
+                <svg width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="#dc2626" strokeWidth={2}><path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m3 0v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6"/></svg>
+              </div>
+              <div>
+                <h3 className="font-bold text-gray-900">Eliminar sesión</h3>
+                <p className="text-xs text-gray-500 mt-0.5">{DIA_LABEL[confirmDeleteSesion.dia_semana]} · {TIPO_SESION_LABEL[confirmDeleteSesion.tipo_sesion]}</p>
+              </div>
+            </div>
+            <p className="text-sm text-gray-600 mb-5">¿Eliminar esta sesión? Esta acción no se puede deshacer.</p>
+            <div className="flex gap-2">
+              <button
+                onClick={() => handleDeleteSesion(confirmDeleteSesion)}
+                disabled={deletingSesion}
+                className="flex-1 py-2.5 rounded-xl text-sm font-semibold text-white bg-red-600 hover:bg-red-700 disabled:opacity-50 transition-colors"
+              >
+                {deletingSesion ? "Eliminando..." : "Sí, eliminar"}
+              </button>
+              <button
+                onClick={() => setConfirmDeleteSesion(null)}
+                className="px-5 py-2.5 rounded-xl text-sm font-medium border border-gray-200 text-gray-600 hover:bg-gray-50 transition-colors"
+              >
+                Cancelar
               </button>
             </div>
           </div>
