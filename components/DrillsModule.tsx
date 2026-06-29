@@ -88,6 +88,22 @@ const SUBCATS: Record<Categoria, { value: string; label: string }[]> = {
   ],
 };
 
+// ── Library generation ────────────────────────────────────────────────────────
+type BatchKey = "tecnico" | "juego_corto" | "putting" | "campo";
+interface BatchState { status: "pending" | "loading" | "done" | "error"; insertados: number; errorMsg: string | null; }
+const BATCH_CONFIGS: { key: BatchKey; label: string; step: number }[] = [
+  { key: "tecnico",     label: "Drills técnicos P1-P10", step: 1 },
+  { key: "juego_corto", label: "Juego corto",            step: 2 },
+  { key: "putting",     label: "Putting",                step: 3 },
+  { key: "campo",       label: "Juegos de campo",        step: 4 },
+];
+const initBatches = (): Record<BatchKey, BatchState> => ({
+  tecnico:     { status: "pending", insertados: 0, errorMsg: null },
+  juego_corto: { status: "pending", insertados: 0, errorMsg: null },
+  putting:     { status: "pending", insertados: 0, errorMsg: null },
+  campo:       { status: "pending", insertados: 0, errorMsg: null },
+});
+
 function emptyForm(): DrillForm {
   return {
     titulo: "", descripcion: "", categoria: "tecnico", subcategoria: null,
@@ -145,7 +161,7 @@ export default function DrillsModule() {
   const [aiPreview, setAiPreview]           = useState<Drill | null>(null);
   const [aiError, setAiError]               = useState<string | null>(null);
 
-  const [generatingLibrary, setGeneratingLibrary] = useState(false);
+  const [libraryProgress, setLibraryProgress] = useState<Record<BatchKey, BatchState> | null>(null);
   const [toast, setToast]                   = useState<string | null>(null);
 
   const showToast = (msg: string) => { setToast(msg); setTimeout(() => setToast(null), 3000); };
@@ -298,19 +314,39 @@ export default function DrillsModule() {
     showToast("✨ Drill guardado — pendiente de aprobación");
   }
 
-  // ── Generate library ──────────────────────────────────────────────────────────
-  async function handleGenerarBiblioteca() {
-    if (!confirm("¿Generar los 52 drills base? Este proceso puede tardar 30-60 segundos y no puede deshacerse.")) return;
-    setGeneratingLibrary(true);
+  // ── Generate library by batch ────────────────────────────────────────────────
+  async function runBatch(key: BatchKey): Promise<boolean> {
+    setLibraryProgress(prev => prev ? { ...prev, [key]: { status: "loading", insertados: 0, errorMsg: null } } : prev);
     try {
-      const res = await fetch("/api/generate-drill-library", { method: "POST" });
+      const res = await fetch("/api/generate-drill-library", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ batch: key }),
+      });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Error generando biblioteca");
-      showToast(`✨ ${data.insertados} drills generados exitosamente`);
-      await fetchDrills();
+      if (!res.ok) throw new Error(data.error || "Error generando lote");
+      setLibraryProgress(prev => prev ? { ...prev, [key]: { status: "done", insertados: data.insertados, errorMsg: null } } : prev);
+      return true;
     } catch (err) {
-      showToast(err instanceof Error ? err.message : "Error desconocido");
-    } finally { setGeneratingLibrary(false); }
+      const msg = err instanceof Error ? err.message : "Error desconocido";
+      setLibraryProgress(prev => prev ? { ...prev, [key]: { status: "error", insertados: 0, errorMsg: msg } } : prev);
+      return false;
+    }
+  }
+
+  async function runBatchSequence(keys: BatchKey[]) {
+    for (const key of keys) {
+      const ok = await runBatch(key);
+      if (!ok) return;
+    }
+    await fetchDrills();
+    showToast("✨ Biblioteca generada — 52 drills listos");
+    setTimeout(() => setLibraryProgress(null), 4000);
+  }
+
+  async function handleGenerarBiblioteca() {
+    if (!confirm("¿Generar los 52 drills base? Este proceso hace 5 llamadas a la IA y puede tardar 1-2 minutos.")) return;
+    setLibraryProgress(initBatches());
+    await runBatchSequence(["tecnico", "juego_corto", "putting", "campo"]);
   }
 
   // ── Update form helpers ───────────────────────────────────────────────────────
@@ -431,15 +467,12 @@ export default function DrillsModule() {
           <p className="text-sm text-gray-400 mt-0.5">{total} drill{total !== 1 ? "s" : ""} en total</p>
         </div>
         <div className="flex gap-2">
-          {!loading && drills.length === 0 && (
+          {!loading && drills.length === 0 && !libraryProgress && (
             <button
               onClick={handleGenerarBiblioteca}
-              disabled={generatingLibrary}
-              className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-semibold border border-amber-300 text-amber-800 bg-amber-50 hover:bg-amber-100 shadow-sm transition-colors disabled:opacity-50"
+              className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-semibold border border-amber-300 text-amber-800 bg-amber-50 hover:bg-amber-100 shadow-sm transition-colors"
             >
-              {generatingLibrary
-                ? <><svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"/></svg>Generando 52 drills...</>
-                : "📚 Generar biblioteca base"}
+              📚 Generar biblioteca base
             </button>
           )}
           <button
@@ -458,6 +491,69 @@ export default function DrillsModule() {
           </button>
         </div>
       </div>
+
+      {/* ── Library generation progress ── */}
+      {libraryProgress && (
+        <div className="mb-6 border border-amber-200 rounded-xl bg-amber-50 p-4">
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="text-sm font-bold text-amber-900">Generando biblioteca base</h3>
+            <span className="text-xs text-amber-600 font-medium">
+              {Object.values(libraryProgress).filter(b => b.status === "done").length}/4 completados
+            </span>
+          </div>
+          <div className="space-y-2.5">
+            {BATCH_CONFIGS.map(({ key, label, step }) => {
+              const b = libraryProgress[key];
+              return (
+                <div key={key} className="flex items-center gap-3">
+                  <div className="w-5 h-5 shrink-0 flex items-center justify-center">
+                    {b.status === "loading" && (
+                      <svg className="animate-spin h-4 w-4 text-amber-600" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"/>
+                      </svg>
+                    )}
+                    {b.status === "done" && <span className="text-green-600 font-bold text-sm">✓</span>}
+                    {b.status === "error" && <span className="text-red-500 font-bold text-sm">✕</span>}
+                    {b.status === "pending" && <span className="w-2 h-2 rounded-full bg-amber-300 block" />}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className={`text-sm font-medium ${
+                        b.status === "done"    ? "text-green-800" :
+                        b.status === "error"   ? "text-red-700" :
+                        b.status === "loading" ? "text-amber-800" : "text-gray-400"
+                      }`}>
+                        {b.status === "loading"
+                          ? `Generando ${label.toLowerCase()}...`
+                          : label}
+                        <span className="text-xs font-normal ml-1 opacity-60">({step}/4)</span>
+                      </span>
+                      {b.status === "done" && (
+                        <span className="text-xs text-green-600 font-semibold">{b.insertados} drills</span>
+                      )}
+                    </div>
+                    {b.status === "error" && b.errorMsg && (
+                      <p className="text-xs text-red-600 mt-0.5 leading-snug">{b.errorMsg}</p>
+                    )}
+                  </div>
+                  {b.status === "error" && (
+                    <button
+                      onClick={() => {
+                        const idx = BATCH_CONFIGS.findIndex(x => x.key === key);
+                        runBatchSequence(BATCH_CONFIGS.slice(idx).map(x => x.key));
+                      }}
+                      className="text-xs font-semibold px-2.5 py-1.5 rounded-lg bg-red-100 text-red-700 hover:bg-red-200 transition-colors whitespace-nowrap shrink-0"
+                    >
+                      ↩ Reintentar
+                    </button>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       {/* ── Tabs ── */}
       <div className="flex gap-1 border-b border-gray-200 mb-4">
