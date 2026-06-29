@@ -29,6 +29,8 @@ const DIAS: Record<string, string[]> = {
 function buildPrompt(tipoPlan: string, tema: string, contexto: Record<string, unknown>): { system: string; user: string } {
   const dias = DIAS[tipoPlan] ?? [];
   const semanaInicio = (contexto.semana_inicio as string) ?? "próxima semana";
+  const focoMes = (contexto.foco_mes as string) || null;
+  const focoMesLine = focoMes ? `\nFOCO DEL MES: ${focoMes} — asegúrate de que cada sesión contribuya a este objetivo mayor.` : "";
   const evCtx = contexto.evaluaciones_recientes
     ? `\n\nContexto evaluaciones recientes del grupo:\n${JSON.stringify(contexto.evaluaciones_recientes, null, 2)}`
     : "";
@@ -69,7 +71,7 @@ Días y horarios:
 - Sábado 9:15-10:00am y 10:00-11:00am (DOS sesiones con grupos diferentes o énfasis distinto)
 - Domingo 9:15-10:00am y 10:00-11:00am (DOS sesiones)
 
-Tema de la semana: ${tema}${evCtx}
+Tema de la semana: ${tema}${focoMesLine}${evCtx}
 
 REGLAS PEDAGÓGICAS:
 - Máximo 3 drills por sesión — calidad sobre cantidad
@@ -131,7 +133,7 @@ Días y horarios:
 - Martes, miércoles, jueves 4:00-5:30pm campo de prácticas
 - Sábado 8:30-9:30am campo completo (simulación de torneo / condiciones reales)
 
-Tema de la semana: ${tema}${evCtx}
+Tema de la semana: ${tema}${focoMesLine}${evCtx}
 
 REGLAS:
 - Martes y jueves: práctica técnica con métricas medibles
@@ -161,7 +163,7 @@ Devuelve este JSON exacto:
 Diseña la sesión semanal para el grupo Damas CCB.
 
 Viernes 10:30am-12:00m (90 minutos).
-Tema: ${tema}${evCtx}
+Tema: ${tema}${focoMesLine}${evCtx}
 
 FORMATO OBLIGATORIO — siempre 3 estaciones rotativas de 25 min cada una:
 1. Juego largo → driving range (drives, hierros largos)
@@ -237,10 +239,11 @@ export async function POST(req: NextRequest) {
   if (!apiKey) return Response.json({ error: "API key no configurada" }, { status: 500 });
 
   const body = await req.json();
-  const { tipo_plan, tema_semanal, semana_inicio, contexto_grupo = {} } = body as {
+  const { tipo_plan, tema_semanal, semana_inicio, foco_mes, contexto_grupo = {} } = body as {
     tipo_plan: string;
     tema_semanal: string;
     semana_inicio: string;
+    foco_mes?: string;
     contexto_grupo?: Record<string, unknown>;
   };
 
@@ -248,7 +251,7 @@ export async function POST(req: NextRequest) {
     return Response.json({ error: "tipo_plan y tema_semanal son requeridos" }, { status: 400 });
   }
 
-  const contexto = { ...contexto_grupo, semana_inicio };
+  const contexto = { ...contexto_grupo, semana_inicio, foco_mes: foco_mes ?? null };
   const { system, user } = buildPrompt(tipo_plan, tema_semanal, contexto);
 
   const anthropicRes = await fetch("https://api.anthropic.com/v1/messages", {

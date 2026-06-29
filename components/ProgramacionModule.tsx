@@ -27,7 +27,8 @@ interface EstacionDamas { nombre: string; lugar: string; duracion_min: number; d
 
 interface PlanSemanal {
   id: string; semana_inicio: string; tipo_plan: TipoPlan;
-  tema_semanal: string; descripcion_tema: string; objetivo_mensual: string | null; created_at: string;
+  tema_semanal: string; descripcion_tema: string; objetivo_mensual: string | null;
+  foco_mes: string | null; created_at: string;
 }
 
 interface SesionSemana {
@@ -117,6 +118,11 @@ const CAL_COLOR: Record<TipoPlan, { bg: string; border: string; text: string; do
   competencia: { bg: "#b7950b", border: "#8a6f08", text: "#ffffff", dot: "#b7950b" },
   damas:       { bg: "#6a1b9a", border: "#4a1070", text: "#ffffff", dot: "#6a1b9a" },
 };
+
+const FOCOS_MES = [
+  "Control de distancia", "Postura y setup", "Juego corto",
+  "Putting", "Swing completo", "Preparación para torneo", "Evaluación general",
+];
 
 const TEMAS_CHIP: Record<TipoPlan, string[]> = {
   juvenil:     ["Tiro largo", "Juego corto", "Putt", "Salida al campo", "Test técnico", "Test físico", "Competencia/Torneo"],
@@ -212,18 +218,25 @@ export default function ProgramacionModule() {
   const [calEventDetail, setCalEventDetail]   = useState<CalSesion | null>(null);
   const [selectedCalDate, setSelectedCalDate] = useState<string | null>(null);
 
-  // Create plan modal
-  const [showCrearModal, setShowCrearModal] = useState(false);
-  const [temaChip, setTemaChip]             = useState("");
-  const [temaCustom, setTemaCustom]         = useState("");
-  const [objetivoMensual, setObjetivoMensual] = useState("");
-  const [incluirContexto, setIncluirContexto] = useState(false);
-  const [aiPreview, setAiPreview] = useState<{ descripcion_tema: string; sesiones: PreviewSesion[] } | null>(null);
-  const [generatingAI, setGeneratingAI] = useState(false);
-  const [savingGenerado, setSavingGenerado] = useState(false);
-  const [creandoPlan, setCreandoPlan]       = useState(false);
-  const [planError, setPlanError]           = useState<string | null>(null);
+  // Create plan modal (3-step IA wizard)
+  const [showCrearModal, setShowCrearModal]     = useState(false);
+  const [iaStep, setIaStep]                     = useState<1 | 2 | 3>(1);
+  const [focoMesChip, setFocoMesChip]           = useState("");
+  const [focoMesCustom, setFocoMesCustom]       = useState("");
+  const [temaChip, setTemaChip]                 = useState("");
+  const [temaCustom, setTemaCustom]             = useState("");
+  const [incluirContexto, setIncluirContexto]   = useState(false);
+  const [aiPreview, setAiPreview]               = useState<{ descripcion_tema: string; sesiones: PreviewSesion[] } | null>(null);
+  const [generatingAI, setGeneratingAI]         = useState(false);
+  const [savingGenerado, setSavingGenerado]     = useState(false);
+  const [creandoPlan, setCreandoPlan]           = useState(false);
+  const [planError, setPlanError]               = useState<string | null>(null);
+  const [expandedDrillKeys, setExpandedDrillKeys] = useState<Set<string>>(new Set());
   const [generatingPdfPadres, setGeneratingPdfPadres] = useState(false);
+
+  // Delete plan
+  const [confirmDeletePlan, setConfirmDeletePlan] = useState(false);
+  const [deletingPlan, setDeletingPlan]           = useState(false);
 
   // Edit tema modal
   const [showEditTema, setShowEditTema] = useState(false);
@@ -336,8 +349,11 @@ export default function ProgramacionModule() {
 
   // ── Create plan helpers ───────────────────────────────────────────────────
   function resetCrearModal() {
-    setTemaChip(""); setTemaCustom(""); setObjetivoMensual("");
+    setIaStep(1);
+    setFocoMesChip(""); setFocoMesCustom("");
+    setTemaChip(""); setTemaCustom("");
     setIncluirContexto(false); setAiPreview(null); setPlanError(null);
+    setExpandedDrillKeys(new Set());
   }
 
   function updatePreviewSesion(i: number, updates: Partial<PreviewSesion>) {
@@ -348,10 +364,26 @@ export default function ProgramacionModule() {
     });
   }
 
+  function updatePreviewDrill(si: number, di: number, updates: Partial<Drill>) {
+    setAiPreview((prev) => {
+      if (!prev) return prev;
+      const list = [...prev.sesiones];
+      const drills = [...(list[si].drills ?? [])];
+      drills[di] = { ...drills[di], ...updates };
+      list[si] = { ...list[si], drills };
+      return { ...prev, sesiones: list };
+    });
+  }
+
+  function toggleDrillKey(key: string) {
+    setExpandedDrillKeys((prev) => { const n = new Set(prev); n.has(key) ? n.delete(key) : n.add(key); return n; });
+  }
+
   async function handleGenerarIA() {
     const tema = temaChip || temaCustom.trim();
     if (!tema) { setPlanError("Selecciona o escribe un tema."); return; }
-    setPlanError(null); setGeneratingAI(true);
+    const focoMes = focoMesChip || focoMesCustom.trim();
+    setPlanError(null); setGeneratingAI(true); setIaStep(3);
     try {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const contextoGrupo: Record<string, any> = {};
@@ -363,7 +395,7 @@ export default function ProgramacionModule() {
       }
       const res = await fetch("/api/weekly-plan", {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ tipo_plan: activeTab, tema_semanal: tema, semana_inicio: toISODate(semana), contexto_grupo: contextoGrupo }),
+        body: JSON.stringify({ tipo_plan: activeTab, tema_semanal: tema, foco_mes: focoMes, semana_inicio: toISODate(semana), contexto_grupo: contextoGrupo }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Error de IA");
@@ -374,16 +406,18 @@ export default function ProgramacionModule() {
       setAiPreview({ descripcion_tema: data.descripcion_tema ?? "", sesiones: sesionesConFecha });
     } catch (err) {
       setPlanError(err instanceof Error ? err.message : "Error desconocido");
+      setIaStep(2);
     } finally { setGeneratingAI(false); }
   }
 
   async function handleGuardarPlanIA() {
     if (!aiPreview) return;
     const tema = temaChip || temaCustom.trim();
+    const focoMes = focoMesChip || focoMesCustom.trim() || null;
     setSavingGenerado(true); setPlanError(null);
     try {
       const { data: newPlan, error: planErr } = await supabase.from("planes_semanales")
-        .insert({ semana_inicio: toISODate(semana), tipo_plan: activeTab, tema_semanal: tema, descripcion_tema: aiPreview.descripcion_tema, objetivo_mensual: objetivoMensual.trim() || null })
+        .insert({ semana_inicio: toISODate(semana), tipo_plan: activeTab, tema_semanal: tema, descripcion_tema: aiPreview.descripcion_tema, objetivo_mensual: focoMes, foco_mes: focoMes })
         .select().single();
       if (planErr || !newPlan) throw new Error(planErr?.message || "Error al crear plan");
       for (const s of aiPreview.sesiones) {
@@ -409,8 +443,9 @@ export default function ProgramacionModule() {
     if (!tema) { setPlanError("Selecciona o escribe un tema."); return; }
     setPlanError(null); setCreandoPlan(true);
     try {
+      const focoMes = focoMesChip || focoMesCustom.trim() || null;
       const { data: newPlan, error: planErr } = await supabase.from("planes_semanales")
-        .insert({ semana_inicio: toISODate(semana), tipo_plan: activeTab, tema_semanal: tema, descripcion_tema: "", objetivo_mensual: objetivoMensual.trim() || null })
+        .insert({ semana_inicio: toISODate(semana), tipo_plan: activeTab, tema_semanal: tema, descripcion_tema: "", objetivo_mensual: focoMes, foco_mes: focoMes })
         .select().single();
       if (planErr || !newPlan) throw new Error(planErr?.message || "Error al crear plan");
       for (const dia of DIAS_POR_TIPO[activeTab]) {
@@ -508,6 +543,19 @@ export default function ProgramacionModule() {
     setDeletingSesion(false);
   }
 
+  async function handleBorrarPlan() {
+    if (!plan) return;
+    setDeletingPlan(true);
+    await supabase.from("sesiones_semana").delete().eq("plan_id", plan.id);
+    await supabase.from("planes_semanales").delete().eq("id", plan.id);
+    setConfirmDeletePlan(false);
+    setPlan(null); setSesiones([]);
+    showToast("Plan eliminado");
+    if (viewMode === "semana") fetchCalSemana();
+    if (viewMode === "mes") fetchCalMes();
+    setDeletingPlan(false);
+  }
+
   // ── Calendar cell click ───────────────────────────────────────────────────
   function handleCalCellClick(dia: DiaSemana, hour: number) {
     if (!plan) { showToast(`Sin plan ${TIPO_PLAN_LABEL[activeTab]} esta semana — créalo en Vista Plan`); return; }
@@ -559,7 +607,7 @@ export default function ProgramacionModule() {
   const diasRequeridos = DIAS_POR_TIPO[activeTab];
   const planCompleto   = plan !== null && diasRequeridos.every((d) => sesiones.some((s) => s.dia_semana === d && s.objetivo.trim() !== ""));
   const accentColor    = TIPO_PLAN_COLOR[activeTab];
-  const busy           = generatingAI || savingGenerado || creandoPlan;
+  const busy           = generatingAI || savingGenerado || creandoPlan || deletingPlan;
 
   // ── Calendar week view ────────────────────────────────────────────────────
   function renderWeekCal() {
@@ -847,6 +895,39 @@ export default function ProgramacionModule() {
         ))}
       </div>
 
+      {/* ── Action bar (create/delete plan) ── */}
+      {viewMode === "plan" && !loading && (
+        <div className="flex items-center justify-end mb-4 gap-2">
+          {!plan ? (
+            <button
+              onClick={() => { resetCrearModal(); setShowCrearModal(true); }}
+              className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold text-white shadow-sm hover:brightness-110 transition-all"
+              style={{ background: accentColor }}
+            >
+              <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
+              Planificar con IA
+            </button>
+          ) : (
+            <>
+              <button
+                onClick={openEditTema}
+                className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-medium border border-gray-200 text-gray-600 hover:bg-gray-50 transition-colors"
+              >
+                <svg width="13" height="13" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                Editar plan
+              </button>
+              <button
+                onClick={() => setConfirmDeletePlan(true)}
+                className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-medium text-red-600 border border-red-200 hover:bg-red-50 transition-colors"
+              >
+                <svg width="13" height="13" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m3 0v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6"/></svg>
+                Borrar plan
+              </button>
+            </>
+          )}
+        </div>
+      )}
+
       {/* ── Calendar ── */}
       {viewMode === "semana" && (
         <div className="mb-5">
@@ -896,8 +977,8 @@ export default function ProgramacionModule() {
               className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-semibold text-white shadow-sm hover:brightness-110 transition-all"
               style={{ background: accentColor }}
             >
-              <svg width="15" height="15" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path d="M12 5v14M5 12h14"/></svg>
-              Crear plan con IA
+              <svg width="15" height="15" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
+              Planificar con IA
             </button>
           </div>
         ) : (
@@ -1131,100 +1212,305 @@ export default function ProgramacionModule() {
         )
       )}
 
-      {/* ══ MODAL: Crear plan ════════════════════════════════════════════════ */}
+      {/* ══ MODAL: Agente IA — wizard 3 pasos ═════════════════════════════════ */}
       {showCrearModal && (
         <div className="fixed inset-0 bg-black/60 z-50 flex items-start justify-center p-4 overflow-y-auto" onClick={() => { if (!busy) { setShowCrearModal(false); resetCrearModal(); } }}>
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg my-6" onClick={(e) => e.stopPropagation()}>
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl my-6" onClick={(e) => e.stopPropagation()}>
+
+            {/* Header */}
             <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
               <div>
-                <h2 className="font-bold text-gray-900">Nuevo plan — {TIPO_PLAN_LABEL[activeTab]}</h2>
+                <h2 className="font-bold text-gray-900">Planificar con IA — {TIPO_PLAN_LABEL[activeTab]}</h2>
                 <p className="text-xs text-gray-400 mt-0.5">{formatWeekRange(semana)}</p>
               </div>
-              <button onClick={() => { if (!busy) { setShowCrearModal(false); resetCrearModal(); } }} disabled={busy} className="text-gray-400 hover:text-gray-600 disabled:opacity-40">
-                <svg width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path d="M18 6L6 18M6 6l12 12"/></svg>
-              </button>
+              <div className="flex items-center gap-4">
+                <div className="flex items-center gap-1">
+                  {([1, 2, 3] as const).map((s) => (
+                    <div key={s} className="flex items-center">
+                      <div className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold transition-all ${iaStep >= s ? "text-white" : "bg-gray-100 text-gray-400"}`} style={iaStep >= s ? { background: accentColor } : {}}>
+                        {iaStep > s ? <svg width="10" height="10" viewBox="0 0 20 20" fill="none" stroke="#fff" strokeWidth={3}><path d="M3 10l4 4 9-9"/></svg> : s}
+                      </div>
+                      {s < 3 && <div className={`w-5 h-0.5 mx-0.5 ${iaStep > s ? "bg-current opacity-40" : "bg-gray-200"}`} style={iaStep > s ? { color: accentColor } : {}} />}
+                    </div>
+                  ))}
+                </div>
+                <button onClick={() => { if (!busy) { setShowCrearModal(false); resetCrearModal(); } }} disabled={busy} className="text-gray-400 hover:text-gray-600 disabled:opacity-40">
+                  <svg width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path d="M18 6L6 18M6 6l12 12"/></svg>
+                </button>
+              </div>
             </div>
 
-            {!aiPreview ? (
+            {/* ── PASO 1: Foco del mes ── */}
+            {iaStep === 1 && (
               <>
-                <div className="px-6 py-5 space-y-5">
+                <div className="px-6 py-6 space-y-4">
                   <div>
-                    <label className="block text-xs font-semibold text-gray-700 mb-2">Tema de la semana <span className="text-red-400">*</span></label>
-                    <div className="flex flex-wrap gap-2 mb-2">
+                    <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wide mb-1">Paso 1 de 3</p>
+                    <h3 className="text-base font-bold text-gray-900 mb-4">¿Cuál es el foco de este mes?</h3>
+                    <div className="flex flex-wrap gap-2 mb-3">
+                      {FOCOS_MES.map((f) => (
+                        <button key={f}
+                          onClick={() => { setFocoMesChip(f === focoMesChip ? "" : f); setFocoMesCustom(""); }}
+                          className="px-3 py-1.5 rounded-full text-xs font-semibold border transition-all"
+                          style={focoMesChip === f ? { background: accentColor, color: "#fff", borderColor: accentColor } : { background: "#f9fafb", color: "#374151", borderColor: "#e5e7eb" }}
+                        >{f}</button>
+                      ))}
+                    </div>
+                    <input
+                      value={focoMesCustom}
+                      onChange={(e) => { setFocoMesCustom(e.target.value); setFocoMesChip(""); }}
+                      placeholder="o escribe el foco del mes..."
+                      className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-600"
+                    />
+                  </div>
+                  {planError && <p className="text-xs text-red-500 bg-red-50 px-3 py-2 rounded-lg">{planError}</p>}
+                </div>
+                <div className="px-6 pb-6">
+                  <button
+                    onClick={() => {
+                      const foco = focoMesChip || focoMesCustom.trim();
+                      if (!foco) { setPlanError("Selecciona o escribe el foco del mes."); return; }
+                      setPlanError(null); setIaStep(2);
+                    }}
+                    className="w-full py-2.5 rounded-xl text-sm font-semibold text-white transition-all hover:brightness-110"
+                    style={{ background: accentColor }}
+                  >
+                    Siguiente →
+                  </button>
+                </div>
+              </>
+            )}
+
+            {/* ── PASO 2: Tema de la semana ── */}
+            {iaStep === 2 && (
+              <>
+                <div className="px-6 py-6 space-y-5">
+                  <div>
+                    <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wide mb-1">Paso 2 de 3</p>
+                    <h3 className="text-base font-bold text-gray-900 mb-3">¿Qué aspecto trabajamos esta semana?</h3>
+                    <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold mb-4" style={{ background: accentColor + "18", color: accentColor }}>
+                      <svg width="11" height="11" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
+                      Foco del mes: <span className="font-bold">{focoMesChip || focoMesCustom}</span>
+                    </div>
+                    <div className="flex flex-wrap gap-2 mb-3">
                       {TEMAS_CHIP[activeTab].map((t) => (
-                        <button key={t} onClick={() => { setTemaChip(t === temaChip ? "" : t); setTemaCustom(""); }}
+                        <button key={t}
+                          onClick={() => { setTemaChip(t === temaChip ? "" : t); setTemaCustom(""); }}
                           className="px-3 py-1.5 rounded-full text-xs font-semibold border transition-all"
                           style={temaChip === t ? { background: accentColor, color: "#fff", borderColor: accentColor } : { background: "#f9fafb", color: "#374151", borderColor: "#e5e7eb" }}
                         >{t}</button>
                       ))}
                     </div>
-                    <input value={temaCustom} onChange={(e) => { setTemaCustom(e.target.value); setTemaChip(""); }} placeholder="o escribe tu propio tema..." className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-600" />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-semibold text-gray-700 mb-1.5">Objetivo mensual <span className="text-gray-400 font-normal">(opcional)</span></label>
-                    <input value={objetivoMensual} onChange={(e) => setObjetivoMensual(e.target.value)} placeholder="Meta del mes para este grupo..." className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-600" />
+                    <input
+                      value={temaCustom}
+                      onChange={(e) => { setTemaCustom(e.target.value); setTemaChip(""); }}
+                      placeholder="o escribe el tema de la semana..."
+                      className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-600"
+                    />
                   </div>
                   <label className="flex items-center gap-2.5 cursor-pointer select-none">
                     <input type="checkbox" checked={incluirContexto} onChange={(e) => setIncluirContexto(e.target.checked)} className="w-4 h-4 rounded accent-green-700" />
-                    <span className="text-sm text-gray-700">Incluir contexto de evaluaciones recientes del grupo</span>
+                    <span className="text-sm text-gray-700">Considerar evaluaciones recientes del grupo en las sugerencias</span>
                   </label>
                   {planError && <p className="text-xs text-red-500 bg-red-50 px-3 py-2 rounded-lg">{planError}</p>}
                 </div>
-                <div className="px-6 pb-5 flex gap-2">
-                  <button onClick={handleGenerarIA} disabled={busy} className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-semibold text-white disabled:opacity-50" style={{ background: accentColor }}>
-                    {generatingAI ? <><svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"/></svg>Generando...</> : "⚡ Generar plan"}
+                <div className="px-6 pb-4 flex gap-2">
+                  <button onClick={() => { setPlanError(null); setIaStep(1); }} className="px-4 py-2.5 rounded-xl text-sm font-medium border border-gray-200 text-gray-600 hover:bg-gray-50 transition-colors">← Atrás</button>
+                  <button
+                    onClick={handleGenerarIA}
+                    disabled={generatingAI}
+                    className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-semibold text-white disabled:opacity-50 hover:brightness-110 transition-all"
+                    style={{ background: accentColor }}
+                  >
+                    {generatingAI ? <><svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"/></svg>Generando...</> : "⚡ Generar plan →"}
                   </button>
-                  <button onClick={handleCrearVacio} disabled={busy} className="px-4 py-2.5 rounded-xl text-sm font-semibold border border-gray-200 text-gray-700 hover:bg-gray-50 disabled:opacity-50">
-                    {creandoPlan ? "Creando..." : "Crear vacío"}
+                </div>
+                <div className="px-6 pb-4 text-center">
+                  <button onClick={handleCrearVacio} disabled={creandoPlan} className="text-xs text-gray-400 hover:text-gray-600 underline-offset-2 hover:underline disabled:opacity-50 transition-colors">
+                    {creandoPlan ? "Creando..." : "o crear plan vacío sin IA"}
                   </button>
                 </div>
               </>
-            ) : (
+            )}
+
+            {/* ── PASO 3: Generando spinner ── */}
+            {iaStep === 3 && generatingAI && (
+              <div className="flex flex-col items-center justify-center py-20 px-6">
+                <div className="w-16 h-16 rounded-2xl flex items-center justify-center mb-5" style={{ background: accentColor + "15" }}>
+                  <svg className="animate-spin h-7 w-7" fill="none" viewBox="0 0 24 24" style={{ color: accentColor }}><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"/></svg>
+                </div>
+                <p className="text-base font-semibold text-gray-800 mb-1">El agente está diseñando el plan pedagógico...</p>
+                <p className="text-sm text-gray-400">Esto puede tardar 15–30 segundos</p>
+              </div>
+            )}
+
+            {/* ── PASO 3: Preview editable ── */}
+            {iaStep === 3 && !generatingAI && aiPreview && (
               <>
                 <div className="flex items-center justify-between px-6 py-3 bg-green-50 border-b border-green-100">
                   <div className="flex items-center gap-2">
                     <svg width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="#166534" strokeWidth={2.5}><path d="M3 10l4 4 9-9"/></svg>
                     <span className="text-xs font-semibold text-green-800">Plan generado — revisa y edita antes de guardar</span>
                   </div>
-                  <button onClick={() => setAiPreview(null)} className="text-xs text-green-700 font-medium hover:underline">← Volver</button>
+                  <p className="text-[11px] text-green-700">{aiPreview.sesiones.length} sesiones</p>
                 </div>
                 {aiPreview.descripcion_tema && (
                   <div className="px-6 py-3 bg-gray-50 border-b border-gray-100">
-                    <p className="text-xs text-gray-600 italic">{aiPreview.descripcion_tema}</p>
+                    <p className="text-xs text-gray-500 italic">{aiPreview.descripcion_tema}</p>
                   </div>
                 )}
-                <div className="px-6 py-4 max-h-[55vh] overflow-y-auto space-y-3">
+                <div className="px-4 py-4 max-h-[65vh] overflow-y-auto space-y-3">
                   {aiPreview.sesiones.map((s, i) => {
                     const tc = TIPO_SESION_COLOR[s.tipo_sesion];
                     return (
-                      <div key={i} className="border border-gray-200 rounded-xl p-4">
-                        <div className="flex items-center gap-2 mb-3 flex-wrap">
+                      <div key={i} className="border border-gray-200 rounded-xl overflow-hidden">
+                        {/* Session header row */}
+                        <div className="flex items-center gap-2 px-4 py-3 bg-gray-50 flex-wrap">
                           <span className="font-bold text-sm text-gray-900">{DIA_LABEL[s.dia_semana]}</span>
-                          <span className="text-xs text-gray-400">{formatDiaFecha(s.fecha)}</span>
+                          <span className="text-xs text-gray-400 bg-white border border-gray-200 rounded-full px-2 py-0.5">{formatDiaFecha(s.fecha)}</span>
                           <span className="px-2 py-0.5 rounded-full text-xs font-semibold" style={{ background: tc.bg, color: tc.text }}>{TIPO_SESION_LABEL[s.tipo_sesion]}</span>
-                          {s.hora_inicio && <span className="text-xs text-gray-400">{s.hora_inicio.slice(0,5)}–{s.hora_fin.slice(0,5)}</span>}
+                          {s.hora_inicio && <span className="text-xs text-gray-400">{s.hora_inicio.slice(0, 5)}–{s.hora_fin.slice(0, 5)}</span>}
                         </div>
-                        <div className="grid grid-cols-2 gap-2 mb-2">
-                          <select value={s.tipo_sesion} onChange={(e) => updatePreviewSesion(i, { tipo_sesion: e.target.value as TipoSesion })} className="border border-gray-200 rounded-lg px-2 py-1.5 text-xs bg-white focus:outline-none">
-                            {(Object.keys(TIPO_SESION_LABEL) as TipoSesion[]).map((t) => <option key={t} value={t}>{TIPO_SESION_LABEL[t]}</option>)}
-                          </select>
-                          <select value={s.lugar} onChange={(e) => updatePreviewSesion(i, { lugar: e.target.value as Lugar })} className="border border-gray-200 rounded-lg px-2 py-1.5 text-xs bg-white focus:outline-none">
-                            {(Object.keys(LUGAR_LABEL) as Lugar[]).map((l) => <option key={l} value={l}>{LUGAR_LABEL[l]}</option>)}
-                          </select>
+                        <div className="px-4 py-3 space-y-3">
+                          {/* Lugar + tipo */}
+                          <div className="grid grid-cols-2 gap-2">
+                            <select value={s.tipo_sesion} onChange={(e) => updatePreviewSesion(i, { tipo_sesion: e.target.value as TipoSesion })} className="border border-gray-200 rounded-lg px-2 py-1.5 text-xs bg-white focus:outline-none focus:ring-1 focus:ring-green-500">
+                              {(Object.keys(TIPO_SESION_LABEL) as TipoSesion[]).map((t) => <option key={t} value={t}>{TIPO_SESION_LABEL[t]}</option>)}
+                            </select>
+                            <select value={s.lugar} onChange={(e) => updatePreviewSesion(i, { lugar: e.target.value as Lugar })} className="border border-gray-200 rounded-lg px-2 py-1.5 text-xs bg-white focus:outline-none focus:ring-1 focus:ring-green-500">
+                              {(Object.keys(LUGAR_LABEL) as Lugar[]).map((l) => <option key={l} value={l}>{LUGAR_LABEL[l]}</option>)}
+                            </select>
+                          </div>
+                          {/* Foco / objetivo */}
+                          <textarea value={s.objetivo} onChange={(e) => updatePreviewSesion(i, { objetivo: e.target.value })} rows={2} placeholder="Foco principal del día..." className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-xs resize-none focus:outline-none focus:ring-1 focus:ring-green-500" />
+                          {/* Drills */}
+                          {s.drills && s.drills.length > 0 && (
+                            <div className="space-y-2">
+                              <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wide">Drills</p>
+                              {s.drills.map((drill, j) => {
+                                const dk = `${i}-${j}`;
+                                const isOpen = expandedDrillKeys.has(dk);
+                                return (
+                                  <div key={j} className="border border-gray-100 rounded-lg overflow-hidden">
+                                    <div className="flex items-start gap-2 px-3 py-2.5 bg-gray-50/60">
+                                      <div className="flex-1 min-w-0 space-y-1.5">
+                                        <input
+                                          value={drill.titulo}
+                                          onChange={(e) => updatePreviewDrill(i, j, { titulo: e.target.value })}
+                                          placeholder="Título del drill"
+                                          className="w-full bg-transparent text-xs font-semibold text-gray-800 border-0 border-b border-gray-200 pb-0.5 focus:outline-none focus:border-green-500"
+                                        />
+                                        <input
+                                          value={drill.descripcion}
+                                          onChange={(e) => updatePreviewDrill(i, j, { descripcion: e.target.value })}
+                                          placeholder="Descripción..."
+                                          className="w-full bg-transparent text-xs text-gray-500 border-0 focus:outline-none"
+                                        />
+                                      </div>
+                                      {activeTab === "juvenil" && (
+                                        <button
+                                          onClick={() => toggleDrillKey(dk)}
+                                          className="shrink-0 text-[10px] font-semibold text-blue-600 hover:text-blue-800 whitespace-nowrap"
+                                        >
+                                          {isOpen ? "▲ variantes" : "▼ variantes"}
+                                        </button>
+                                      )}
+                                    </div>
+                                    {/* Juvenil variantes accordion */}
+                                    {activeTab === "juvenil" && isOpen && (
+                                      <div className="grid grid-cols-2 gap-1.5 p-2.5 bg-white border-t border-gray-100">
+                                        {[
+                                          { key: "dificultad_birdies" as const, label: "Birdies", bg: "#dbeafe", tc: "#1e40af" },
+                                          { key: "dificultad_aguilas" as const, label: "Águilas", bg: "#dcfce7", tc: "#166534" },
+                                          { key: "dificultad_albatros" as const, label: "Albatros", bg: "#fef9c3", tc: "#854d0e" },
+                                          { key: "dificultad_mas14" as const, label: "+14", bg: "#ede9fe", tc: "#6d28d9" },
+                                        ].map(({ key, label, bg, tc: tcolor }) => (
+                                          <div key={key} className="rounded p-1.5" style={{ background: bg }}>
+                                            <p className="text-[9px] font-bold mb-1" style={{ color: tcolor }}>{label}</p>
+                                            <textarea
+                                              rows={2}
+                                              value={drill[key] ?? ""}
+                                              onChange={(e) => updatePreviewDrill(i, j, { [key]: e.target.value })}
+                                              className="w-full bg-white rounded text-[10px] px-1.5 py-1 resize-none border-0 focus:outline-none focus:ring-1 focus:ring-blue-300"
+                                            />
+                                          </div>
+                                        ))}
+                                      </div>
+                                    )}
+                                    {/* Competencia metrica/presion */}
+                                    {activeTab === "competencia" && (drill.metrica_exito || drill.variante_presion || drill.conexion_tecnica) && (
+                                      <div className="space-y-1 p-2.5 bg-white border-t border-gray-100">
+                                        {drill.metrica_exito !== undefined && (
+                                          <div className="flex items-center gap-2 bg-blue-50 rounded px-2 py-1">
+                                            <span className="text-[9px] font-bold text-blue-700 shrink-0 w-12">META</span>
+                                            <input value={drill.metrica_exito ?? ""} onChange={(e) => updatePreviewDrill(i, j, { metrica_exito: e.target.value })} className="flex-1 bg-transparent text-[10px] text-blue-900 border-0 focus:outline-none" />
+                                          </div>
+                                        )}
+                                        {drill.variante_presion !== undefined && (
+                                          <div className="flex items-center gap-2 bg-orange-50 rounded px-2 py-1">
+                                            <span className="text-[9px] font-bold text-orange-700 shrink-0 w-12">PRESIÓN</span>
+                                            <input value={drill.variante_presion ?? ""} onChange={(e) => updatePreviewDrill(i, j, { variante_presion: e.target.value })} className="flex-1 bg-transparent text-[10px] text-orange-900 border-0 focus:outline-none" />
+                                          </div>
+                                        )}
+                                        {drill.conexion_tecnica !== undefined && (
+                                          <div className="flex items-center gap-2 bg-purple-50 rounded px-2 py-1">
+                                            <span className="text-[9px] font-bold text-purple-700 shrink-0 w-12">TÉCNICA</span>
+                                            <input value={drill.conexion_tecnica ?? ""} onChange={(e) => updatePreviewDrill(i, j, { conexion_tecnica: e.target.value })} className="flex-1 bg-transparent text-[10px] text-purple-900 border-0 focus:outline-none" />
+                                          </div>
+                                        )}
+                                      </div>
+                                    )}
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          )}
+                          {/* Estaciones damas */}
+                          {s.estaciones_damas && s.estaciones_damas.length > 0 && (
+                            <div className="space-y-1.5">
+                              <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wide">Estaciones</p>
+                              {s.estaciones_damas.map((est, k) => (
+                                <div key={k} className="flex gap-2 bg-fuchsia-50 rounded-lg px-3 py-2">
+                                  <span className="text-[10px] font-bold text-fuchsia-800 shrink-0 w-28">{est.nombre}</span>
+                                  <span className="text-[10px] text-gray-500 flex-1">{est.descripcion}</span>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                          {/* Juego competitivo */}
+                          {s.juego_competitivo !== null && (
+                            <div>
+                              <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wide mb-1">Juego competitivo</p>
+                              <input
+                                value={s.juego_competitivo ?? ""}
+                                onChange={(e) => updatePreviewSesion(i, { juego_competitivo: e.target.value || null })}
+                                className="w-full border border-orange-200 bg-orange-50 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-orange-400"
+                              />
+                            </div>
+                          )}
                         </div>
-                        <textarea value={s.objetivo} onChange={(e) => updatePreviewSesion(i, { objetivo: e.target.value })} rows={2} placeholder="Objetivo..." className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-xs resize-none focus:outline-none focus:ring-1 focus:ring-green-500" />
-                        {s.drills?.length > 0 && <p className="text-[11px] text-gray-400 mt-2">{s.drills.length} drills: {s.drills.map((d) => d.titulo).join(" · ")}</p>}
-                        {s.estaciones_damas && s.estaciones_damas.length > 0 && <p className="text-[11px] text-gray-400 mt-2">Est.: {s.estaciones_damas.map((e) => e.nombre).join(" → ")}</p>}
-                        {s.juego_competitivo && <div className="mt-2 px-2 py-1.5 bg-orange-50 rounded text-[11px] text-orange-800">🏆 {s.juego_competitivo}</div>}
                       </div>
                     );
                   })}
                 </div>
-                <div className="px-6 pb-5 pt-3 border-t border-gray-100">
-                  {planError && <p className="text-xs text-red-500 bg-red-50 px-3 py-2 rounded-lg mb-3">{planError}</p>}
-                  <button onClick={handleGuardarPlanIA} disabled={savingGenerado} className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-semibold text-white disabled:opacity-50" style={{ background: accentColor }}>
-                    {savingGenerado ? <><svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"/></svg>Guardando...</> : "Guardar plan de la semana"}
-                  </button>
+                <div className="px-5 pb-5 pt-3 border-t border-gray-100 space-y-2">
+                  {planError && <p className="text-xs text-red-500 bg-red-50 px-3 py-2 rounded-lg">{planError}</p>}
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => { setAiPreview(null); setIaStep(2); }}
+                      className="px-4 py-2.5 rounded-xl text-sm font-medium border border-gray-200 text-gray-600 hover:bg-gray-50 transition-colors"
+                    >
+                      ← Regenerar
+                    </button>
+                    <button
+                      onClick={handleGuardarPlanIA}
+                      disabled={savingGenerado}
+                      className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-semibold text-white disabled:opacity-50 hover:brightness-110 transition-all"
+                      style={{ background: accentColor }}
+                    >
+                      {savingGenerado ? <><svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"/></svg>Guardando...</> : "✓ Guardar plan completo"}
+                    </button>
+                  </div>
                 </div>
               </>
             )}
@@ -1435,6 +1721,40 @@ export default function ProgramacionModule() {
               <button
                 onClick={() => setConfirmDeleteSesion(null)}
                 className="px-5 py-2.5 rounded-xl text-sm font-medium border border-gray-200 text-gray-600 hover:bg-gray-50 transition-colors"
+              >
+                Cancelar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ══ MODAL: Confirmar borrar plan ═════════════════════════════════════ */}
+      {confirmDeletePlan && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={() => { if (!deletingPlan) setConfirmDeletePlan(false); }}>
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-10 h-10 rounded-full bg-red-100 flex items-center justify-center shrink-0">
+                <svg width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="#dc2626" strokeWidth={2}><path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m3 0v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6"/></svg>
+              </div>
+              <div>
+                <h3 className="font-bold text-gray-900">Borrar plan semanal</h3>
+                <p className="text-xs text-gray-500 mt-0.5">{TIPO_PLAN_LABEL[activeTab]} · {formatWeekRange(semana)}</p>
+              </div>
+            </div>
+            <p className="text-sm text-gray-600 mb-5">Esto eliminará el plan y <strong>todas las sesiones</strong> de la semana. Esta acción no se puede deshacer.</p>
+            <div className="flex gap-2">
+              <button
+                onClick={handleBorrarPlan}
+                disabled={deletingPlan}
+                className="flex-1 py-2.5 rounded-xl text-sm font-semibold text-white bg-red-600 hover:bg-red-700 disabled:opacity-50 transition-colors"
+              >
+                {deletingPlan ? "Borrando..." : "Sí, borrar todo"}
+              </button>
+              <button
+                onClick={() => setConfirmDeletePlan(false)}
+                disabled={deletingPlan}
+                className="px-5 py-2.5 rounded-xl text-sm font-medium border border-gray-200 text-gray-600 hover:bg-gray-50 transition-colors disabled:opacity-50"
               >
                 Cancelar
               </button>
