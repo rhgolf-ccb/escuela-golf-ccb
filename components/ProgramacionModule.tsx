@@ -5,10 +5,11 @@ import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
-type TipoPlan = "juvenil" | "competencia" | "damas";
-type DiaSemana = "martes" | "miercoles" | "jueves" | "viernes" | "sabado" | "domingo";
+type TipoPlan   = "juvenil" | "competencia" | "damas";
+type DiaSemana  = "martes" | "miercoles" | "jueves" | "viernes" | "sabado" | "domingo";
 type TipoSesion = "tiro_largo" | "juego_corto" | "putt" | "campo" | "test_tecnico" | "test_fisico" | "competencia" | "damas_estaciones";
-type Lugar = "driving_range" | "putting_green" | "campo_infantil" | "campo_pacos_fabios" | "campo_completo";
+type Lugar      = "driving_range" | "putting_green" | "campo_infantil" | "campo_pacos_fabios" | "campo_completo";
+type ViewMode   = "plan" | "semana" | "mes";
 
 interface Drill {
   titulo: string;
@@ -22,76 +23,57 @@ interface Drill {
   conexion_tecnica?: string | null;
 }
 
-interface EstacionDamas {
-  nombre: string;
-  lugar: string;
-  duracion_min: number;
-  descripcion: string;
-}
+interface EstacionDamas { nombre: string; lugar: string; duracion_min: number; descripcion: string; }
 
 interface PlanSemanal {
-  id: string;
-  semana_inicio: string;
-  tipo_plan: TipoPlan;
-  tema_semanal: string;
-  descripcion_tema: string;
-  objetivo_mensual: string | null;
-  created_at: string;
+  id: string; semana_inicio: string; tipo_plan: TipoPlan;
+  tema_semanal: string; descripcion_tema: string; objetivo_mensual: string | null; created_at: string;
 }
 
 interface SesionSemana {
-  id: string;
-  plan_id: string;
-  dia_semana: DiaSemana;
-  fecha: string;
-  tipo_sesion: TipoSesion;
-  lugar: Lugar;
-  hora_inicio: string | null;
-  hora_fin: string | null;
-  objetivo: string;
-  drills: Drill[];
-  juego_competitivo: string | null;
-  estaciones_damas: EstacionDamas[] | null;
-  notas: string | null;
-  asistencia_registrada: boolean;
+  id: string; plan_id: string; dia_semana: DiaSemana; fecha: string;
+  tipo_sesion: TipoSesion; lugar: Lugar;
+  hora_inicio: string | null; hora_fin: string | null;
+  objetivo: string; drills: Drill[];
+  juego_competitivo: string | null; estaciones_damas: EstacionDamas[] | null;
+  notas: string | null; asistencia_registrada: boolean;
 }
 
+interface CalSesion extends SesionSemana { tipo_plan: TipoPlan; }
+
 interface PreviewSesion {
-  dia_semana: DiaSemana;
-  fecha: string;
-  tipo_sesion: TipoSesion;
-  lugar: Lugar;
-  hora_inicio: string;
-  hora_fin: string;
-  objetivo: string;
-  drills: Drill[];
-  juego_competitivo: string | null;
-  estaciones_damas: EstacionDamas[] | null;
-  notas: string | null;
+  dia_semana: DiaSemana; fecha: string;
+  tipo_sesion: TipoSesion; lugar: Lugar;
+  hora_inicio: string; hora_fin: string;
+  objetivo: string; drills: Drill[];
+  juego_competitivo: string | null; estaciones_damas: EstacionDamas[] | null; notas: string | null;
 }
 
 interface SesionForm {
-  tipo_sesion: TipoSesion;
-  lugar: Lugar;
-  hora_inicio: string;
-  hora_fin: string;
-  objetivo: string;
-  drills: Drill[];
-  juego_competitivo: string;
-  estaciones_damas: EstacionDamas[];
-  notas: string;
+  tipo_sesion: TipoSesion; lugar: Lugar;
+  hora_inicio: string; hora_fin: string; objetivo: string;
+  drills: Drill[]; juego_competitivo: string;
+  estaciones_damas: EstacionDamas[]; notas: string;
 }
+
+interface HorarioDefecto { tipo_plan: TipoPlan; dia_semana: DiaSemana; hora_inicio: string; hora_fin: string; }
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 const DIAS_POR_TIPO: Record<TipoPlan, DiaSemana[]> = {
-  juvenil: ["martes", "jueves", "sabado", "domingo"],
+  juvenil:     ["martes", "miercoles", "jueves", "sabado", "domingo"],
   competencia: ["martes", "miercoles", "jueves", "sabado"],
-  damas: ["viernes"],
+  damas:       ["viernes"],
 };
+
+const CAL_DIAS: DiaSemana[] = ["martes", "miercoles", "jueves", "viernes", "sabado", "domingo"];
 
 const DIA_LABEL: Record<DiaSemana, string> = {
   martes: "Martes", miercoles: "Miércoles", jueves: "Jueves",
   viernes: "Viernes", sabado: "Sábado", domingo: "Domingo",
+};
+const DIA_LABEL_SHORT: Record<DiaSemana, string> = {
+  martes: "Mar", miercoles: "Mié", jueves: "Jue",
+  viernes: "Vie", sabado: "Sáb", domingo: "Dom",
 };
 
 const DIA_OFFSET: Record<DiaSemana, number> = {
@@ -105,14 +87,14 @@ const TIPO_SESION_LABEL: Record<TipoSesion, string> = {
 };
 
 const TIPO_SESION_COLOR: Record<TipoSesion, { bg: string; text: string }> = {
-  tiro_largo: { bg: "#dbeafe", text: "#1e40af" },
-  juego_corto: { bg: "#dcfce7", text: "#166534" },
-  putt: { bg: "#fef9c3", text: "#854d0e" },
-  campo: { bg: "#f0fdf4", text: "#15803d" },
-  test_tecnico: { bg: "#fce7f3", text: "#9d174d" },
-  test_fisico: { bg: "#ede9fe", text: "#6d28d9" },
-  competencia: { bg: "#fff7ed", text: "#9a3412" },
-  damas_estaciones: { bg: "#fdf2f8", text: "#86198f" },
+  tiro_largo:      { bg: "#dbeafe", text: "#1e40af" },
+  juego_corto:     { bg: "#dcfce7", text: "#166534" },
+  putt:            { bg: "#fef9c3", text: "#854d0e" },
+  campo:           { bg: "#f0fdf4", text: "#15803d" },
+  test_tecnico:    { bg: "#fce7f3", text: "#9d174d" },
+  test_fisico:     { bg: "#ede9fe", text: "#6d28d9" },
+  competencia:     { bg: "#fff7ed", text: "#9a3412" },
+  damas_estaciones:{ bg: "#fdf2f8", text: "#86198f" },
 };
 
 const LUGAR_LABEL: Record<Lugar, string> = {
@@ -129,10 +111,17 @@ const TIPO_PLAN_COLOR: Record<TipoPlan, string> = {
   juvenil: "#1B4D2E", competencia: "#1e40af", damas: "#86198f",
 };
 
+// Calendar event colours per spec
+const CAL_COLOR: Record<TipoPlan, { bg: string; border: string; text: string; dot: string }> = {
+  juvenil:     { bg: "#d1fae5", border: "#2d5a27", text: "#1a3a18", dot: "#2d5a27" },
+  competencia: { bg: "#fef9c3", border: "#b7950b", text: "#6b4c07", dot: "#b7950b" },
+  damas:       { bg: "#ede9fe", border: "#8e44ad", text: "#5b2c6f", dot: "#8e44ad" },
+};
+
 const TEMAS_CHIP: Record<TipoPlan, string[]> = {
-  juvenil: ["Tiro largo", "Juego corto", "Putt", "Trabajo en campo", "Test técnico", "Test físico", "Juego completo"],
+  juvenil:     ["Tiro largo", "Juego corto", "Putt", "Trabajo en campo", "Test técnico", "Test físico", "Juego completo"],
   competencia: ["Tiro largo", "Juego corto", "Putt", "Gestión de campo", "Trackman", "Presión de torneo", "Juego completo"],
-  damas: ["Tiro largo", "Juego corto", "Putt", "Bunker", "Ruta completa", "Juego por hoyos"],
+  damas:       ["Tiro largo", "Juego corto", "Putt", "Bunker", "Ruta completa", "Juego por hoyos"],
 };
 
 const GRUPOS_EVAL: Record<TipoPlan, string[]> = {
@@ -141,64 +130,59 @@ const GRUPOS_EVAL: Record<TipoPlan, string[]> = {
   damas: ["Damas"],
 };
 
+// Calendar grid constants
+const CAL_HOUR_START = 7;
+const CAL_HOUR_END   = 18;
+const CAL_ROW_H      = 52; // px per hour
+const CAL_HOURS      = Array.from({ length: CAL_HOUR_END - CAL_HOUR_START }, (_, i) => CAL_HOUR_START + i);
+const CAL_PROMINENT  = new Set([7, 8, 9, 10, 11, 16, 17]);
+
 // ── Date helpers ──────────────────────────────────────────────────────────────
 function getMonday(d: Date): Date {
-  const date = new Date(d);
-  const day = date.getDay();
-  const diff = day === 0 ? -6 : 1 - day;
-  date.setDate(date.getDate() + diff);
-  date.setHours(0, 0, 0, 0);
-  return date;
+  const date = new Date(d); const day = date.getDay();
+  date.setDate(date.getDate() + (day === 0 ? -6 : 1 - day));
+  date.setHours(0, 0, 0, 0); return date;
 }
-
-function toISODate(d: Date): string {
-  return d.toISOString().split("T")[0];
-}
-
-function addDays(d: Date, n: number): Date {
-  const r = new Date(d);
-  r.setDate(r.getDate() + n);
-  return r;
-}
-
-function getFechaForDia(monday: Date, dia: DiaSemana): string {
-  return toISODate(addDays(monday, DIA_OFFSET[dia]));
-}
-
+function toISODate(d: Date): string { return d.toISOString().split("T")[0]; }
+function addDays(d: Date, n: number): Date { const r = new Date(d); r.setDate(r.getDate() + n); return r; }
+function getFechaForDia(monday: Date, dia: DiaSemana): string { return toISODate(addDays(monday, DIA_OFFSET[dia])); }
 function formatWeekRange(monday: Date): string {
-  const domingo = addDays(monday, 6);
-  const optsShort: Intl.DateTimeFormatOptions = { day: "numeric", month: "long" };
-  const optsLong: Intl.DateTimeFormatOptions = { day: "numeric", month: "long", year: "numeric" };
-  return `${monday.toLocaleDateString("es-CO", optsShort)} — ${domingo.toLocaleDateString("es-CO", optsLong)}`;
+  const dom = addDays(monday, 6);
+  return `${monday.toLocaleDateString("es-CO", { day: "numeric", month: "long" })} — ${dom.toLocaleDateString("es-CO", { day: "numeric", month: "long", year: "numeric" })}`;
 }
-
 function formatDiaFecha(fecha: string): string {
-  const d = new Date(fecha + "T00:00:00");
-  return d.toLocaleDateString("es-CO", { day: "numeric", month: "short" });
+  return new Date(fecha + "T00:00:00").toLocaleDateString("es-CO", { day: "numeric", month: "short" });
+}
+function formatHora(t: string | null): string { return t ? t.slice(0, 5) : ""; }
+
+// Calendar helpers
+function calTop(hora: string): number {
+  const [h, m] = hora.split(":").map(Number);
+  return ((h + m / 60) - CAL_HOUR_START) * CAL_ROW_H;
+}
+function calHeight(hi: string, hf: string): number {
+  const toMin = (t: string) => { const [h, m] = t.split(":").map(Number); return h * 60 + m; };
+  return Math.max(((toMin(hf) - toMin(hi)) / 60) * CAL_ROW_H, 22);
+}
+function getMesRange(mesCal: Date): { start: Date; end: Date } {
+  const first = new Date(mesCal.getFullYear(), mesCal.getMonth(), 1);
+  const last  = new Date(mesCal.getFullYear(), mesCal.getMonth() + 1, 0);
+  const start = getMonday(first);
+  const lastDow = last.getDay();
+  const end = addDays(last, lastDow === 0 ? 0 : 7 - lastDow);
+  return { start, end };
 }
 
-function formatHora(t: string | null): string {
-  if (!t) return "";
-  return t.slice(0, 5);
-}
-
+// ── Form defaults ─────────────────────────────────────────────────────────────
 function defaultDrill(): Drill {
   return { titulo: "", descripcion: "", dificultad_birdies: "", dificultad_aguilas: "", dificultad_albatros: "", dificultad_mas14: "" };
 }
-
-function defaultEstacion(): EstacionDamas {
-  return { nombre: "", lugar: "", duracion_min: 20, descripcion: "" };
-}
-
+function defaultEstacion(): EstacionDamas { return { nombre: "", lugar: "", duracion_min: 20, descripcion: "" }; }
 function defaultSesionForm(tipoPlan: TipoPlan): SesionForm {
   return {
     tipo_sesion: tipoPlan === "damas" ? "damas_estaciones" : "tiro_largo",
-    lugar: "driving_range",
-    hora_inicio: "",
-    hora_fin: "",
-    objetivo: "",
-    drills: [],
-    juego_competitivo: "",
+    lugar: "driving_range", hora_inicio: "", hora_fin: "", objetivo: "",
+    drills: [], juego_competitivo: "",
     estaciones_damas: tipoPlan === "damas" ? [defaultEstacion(), defaultEstacion(), defaultEstacion()] : [],
     notas: "",
   };
@@ -209,98 +193,152 @@ export default function ProgramacionModule() {
   const router = useRouter();
   const padresPdfRef = useRef<HTMLDivElement>(null);
 
-  const [semana, setSemana] = useState<Date>(() => getMonday(new Date()));
+  // Plan state
+  const [semana, setSemana]       = useState<Date>(() => getMonday(new Date()));
   const [activeTab, setActiveTab] = useState<TipoPlan>("juvenil");
-  const [plan, setPlan] = useState<PlanSemanal | null>(null);
-  const [sesiones, setSesiones] = useState<SesionSemana[]>([]);
-  const [loading, setLoading] = useState(false);
+  const [plan, setPlan]           = useState<PlanSemanal | null>(null);
+  const [sesiones, setSesiones]   = useState<SesionSemana[]>([]);
+  const [loading, setLoading]     = useState(false);
   const [expandedDias, setExpandedDias] = useState<Set<string>>(new Set());
 
-  // ── Create plan modal state ──
+  // Default schedules
+  const [horariosDefecto, setHorariosDefecto] = useState<HorarioDefecto[]>([]);
+
+  // Calendar state
+  const [viewMode, setViewMode]               = useState<ViewMode>("plan");
+  const [calSesiones, setCalSesiones]         = useState<CalSesion[]>([]);
+  const [calLoading, setCalLoading]           = useState(false);
+  const [mesCal, setMesCal]                   = useState<Date>(() => new Date());
+  const [calEventDetail, setCalEventDetail]   = useState<CalSesion | null>(null);
+  const [selectedCalDate, setSelectedCalDate] = useState<string | null>(null);
+
+  // Create plan modal
   const [showCrearModal, setShowCrearModal] = useState(false);
-  const [temaChip, setTemaChip] = useState("");
-  const [temaCustom, setTemaCustom] = useState("");
+  const [temaChip, setTemaChip]             = useState("");
+  const [temaCustom, setTemaCustom]         = useState("");
   const [objetivoMensual, setObjetivoMensual] = useState("");
   const [incluirContexto, setIncluirContexto] = useState(false);
   const [aiPreview, setAiPreview] = useState<{ descripcion_tema: string; sesiones: PreviewSesion[] } | null>(null);
   const [generatingAI, setGeneratingAI] = useState(false);
   const [savingGenerado, setSavingGenerado] = useState(false);
-  const [creandoPlan, setCreandoPlan] = useState(false);
-  const [planError, setPlanError] = useState<string | null>(null);
+  const [creandoPlan, setCreandoPlan]       = useState(false);
+  const [planError, setPlanError]           = useState<string | null>(null);
   const [generatingPdfPadres, setGeneratingPdfPadres] = useState(false);
 
-  // ── Edit tema modal ──
+  // Edit tema modal
   const [showEditTema, setShowEditTema] = useState(false);
   const [temaForm, setTemaForm] = useState({ tema_semanal: "", descripcion_tema: "", objetivo_mensual: "" });
   const [savingTema, setSavingTema] = useState(false);
 
-  // ── Edit sesion modal ──
+  // Edit sesion modal
   const [editSesionCtx, setEditSesionCtx] = useState<{ dia: DiaSemana; fecha: string; sesion: SesionSemana | null } | null>(null);
-  const [sesionForm, setSesionForm] = useState<SesionForm | null>(null);
+  const [sesionForm, setSesionForm]   = useState<SesionForm | null>(null);
   const [savingSesion, setSavingSesion] = useState(false);
-  const [sesionError, setSesionError] = useState<string | null>(null);
+  const [sesionError, setSesionError]   = useState<string | null>(null);
 
-  // ── Toast ──
+  // Toast
   const [toast, setToast] = useState<string | null>(null);
-  const showToast = (msg: string) => { setToast(msg); setTimeout(() => setToast(null), 3000); };
+  const showToast = (msg: string) => { setToast(msg); setTimeout(() => setToast(null), 3500); };
 
-  // ── Fetch ─────────────────────────────────────────────────────────────────
+  // ── Load horarios_defecto once ────────────────────────────────────────────
+  useEffect(() => {
+    supabase.from("horarios_defecto").select("tipo_plan, dia_semana, hora_inicio, hora_fin")
+      .then(({ data }) => { if (data) setHorariosDefecto(data as HorarioDefecto[]); });
+  }, []);
+
+  // ── Fetch plan (for active tab & week) ───────────────────────────────────
   const fetchPlan = useCallback(async () => {
-    setLoading(true);
-    setExpandedDias(new Set());
-    const semanaStr = toISODate(semana);
+    setLoading(true); setExpandedDias(new Set());
     const { data: planData } = await supabase
-      .from("planes_semanales")
-      .select("*")
-      .eq("semana_inicio", semanaStr)
-      .eq("tipo_plan", activeTab)
-      .maybeSingle();
-
+      .from("planes_semanales").select("*")
+      .eq("semana_inicio", toISODate(semana)).eq("tipo_plan", activeTab).maybeSingle();
     if (planData) {
       setPlan(planData as PlanSemanal);
       const { data: sesData } = await supabase
-        .from("sesiones_semana")
-        .select("*")
-        .eq("plan_id", planData.id)
-        .order("fecha");
+        .from("sesiones_semana").select("*").eq("plan_id", planData.id).order("hora_inicio");
       setSesiones((sesData as SesionSemana[]) ?? []);
-    } else {
-      setPlan(null);
-      setSesiones([]);
-    }
+    } else { setPlan(null); setSesiones([]); }
     setLoading(false);
   }, [semana, activeTab]);
 
   useEffect(() => { fetchPlan(); }, [fetchPlan]);
 
-  // ── Week nav ──────────────────────────────────────────────────────────────
-  const prevWeek = () => setSemana((s) => addDays(s, -7));
-  const nextWeek = () => setSemana((s) => addDays(s, 7));
-  const goToday = () => setSemana(getMonday(new Date()));
+  // ── Fetch calendar data ───────────────────────────────────────────────────
+  const fetchCalSemana = useCallback(async () => {
+    setCalLoading(true);
+    const { data: plans } = await supabase
+      .from("planes_semanales").select("id, tipo_plan").eq("semana_inicio", toISODate(semana));
+    if (!plans?.length) { setCalSesiones([]); setCalLoading(false); return; }
+    const planMap = Object.fromEntries(plans.map((p) => [p.id, p.tipo_plan as TipoPlan]));
+    const { data: seses } = await supabase
+      .from("sesiones_semana").select("*").in("plan_id", plans.map((p) => p.id)).order("hora_inicio");
+    setCalSesiones(
+      (seses ?? []).map((s) => {
+        const ss = s as SesionSemana;
+        return planMap[ss.plan_id] ? { ...ss, tipo_plan: planMap[ss.plan_id] } : null;
+      }).filter(Boolean) as CalSesion[]
+    );
+    setCalLoading(false);
+  }, [semana]);
+
+  const fetchCalMes = useCallback(async () => {
+    setCalLoading(true);
+    const { start, end } = getMesRange(mesCal);
+    const { data: plans } = await supabase
+      .from("planes_semanales").select("id, tipo_plan")
+      .gte("semana_inicio", toISODate(start)).lte("semana_inicio", toISODate(end));
+    if (!plans?.length) { setCalSesiones([]); setCalLoading(false); return; }
+    const planMap = Object.fromEntries(plans.map((p) => [p.id, p.tipo_plan as TipoPlan]));
+    const { data: seses } = await supabase
+      .from("sesiones_semana").select("*")
+      .in("plan_id", plans.map((p) => p.id))
+      .gte("fecha", toISODate(start)).lte("fecha", toISODate(end));
+    setCalSesiones(
+      (seses ?? []).map((s) => {
+        const ss = s as SesionSemana;
+        return planMap[ss.plan_id] ? { ...ss, tipo_plan: planMap[ss.plan_id] } : null;
+      }).filter(Boolean) as CalSesion[]
+    );
+    setCalLoading(false);
+  }, [mesCal]);
+
+  useEffect(() => {
+    if (viewMode === "semana") fetchCalSemana();
+    else if (viewMode === "mes") fetchCalMes();
+  }, [viewMode, fetchCalSemana, fetchCalMes]);
+
+  // ── Week / month nav ──────────────────────────────────────────────────────
+  const prevWeek  = () => setSemana((s) => addDays(s, -7));
+  const nextWeek  = () => setSemana((s) => addDays(s, 7));
+  const goToday   = () => setSemana(getMonday(new Date()));
+  const prevMonth = () => setMesCal((d) => new Date(d.getFullYear(), d.getMonth() - 1, 1));
+  const nextMonth = () => setMesCal((d) => new Date(d.getFullYear(), d.getMonth() + 1, 1));
 
   function toggleDia(dia: string) {
-    setExpandedDias((prev) => {
-      const next = new Set(prev);
-      next.has(dia) ? next.delete(dia) : next.add(dia);
-      return next;
-    });
+    setExpandedDias((prev) => { const n = new Set(prev); n.has(dia) ? n.delete(dia) : n.add(dia); return n; });
+  }
+
+  // ── Default hours helper ──────────────────────────────────────────────────
+  function getDefaultHoras(tipoPlan: TipoPlan, dia: DiaSemana, takenHoras: string[]): { hi: string; hf: string } | null {
+    const slots = horariosDefecto
+      .filter((h) => h.tipo_plan === tipoPlan && h.dia_semana === dia)
+      .sort((a, b) => a.hora_inicio.localeCompare(b.hora_inicio));
+    for (const s of slots) {
+      if (!takenHoras.includes(s.hora_inicio.slice(0, 5))) return { hi: s.hora_inicio.slice(0, 5), hf: s.hora_fin.slice(0, 5) };
+    }
+    return slots[0] ? { hi: slots[0].hora_inicio.slice(0, 5), hf: slots[0].hora_fin.slice(0, 5) } : null;
   }
 
   // ── Create plan helpers ───────────────────────────────────────────────────
   function resetCrearModal() {
-    setTemaChip("");
-    setTemaCustom("");
-    setObjetivoMensual("");
-    setIncluirContexto(false);
-    setAiPreview(null);
-    setPlanError(null);
+    setTemaChip(""); setTemaCustom(""); setObjetivoMensual("");
+    setIncluirContexto(false); setAiPreview(null); setPlanError(null);
   }
 
   function updatePreviewSesion(i: number, updates: Partial<PreviewSesion>) {
     setAiPreview((prev) => {
       if (!prev) return prev;
-      const list = [...prev.sesiones];
-      list[i] = { ...list[i], ...updates };
+      const list = [...prev.sesiones]; list[i] = { ...list[i], ...updates };
       return { ...prev, sesiones: list };
     });
   }
@@ -308,55 +346,41 @@ export default function ProgramacionModule() {
   async function handleGenerarIA() {
     const tema = temaChip || temaCustom.trim();
     if (!tema) { setPlanError("Selecciona o escribe un tema."); return; }
-    setPlanError(null);
-    setGeneratingAI(true);
+    setPlanError(null); setGeneratingAI(true);
     try {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const contextoGrupo: Record<string, any> = {};
       if (incluirContexto) {
         const { data: swingData } = await supabase
-          .from("swing_evaluations")
-          .select("grupo, score_promedio, evaluation_date")
-          .in("grupo", GRUPOS_EVAL[activeTab])
-          .order("evaluation_date", { ascending: false })
-          .limit(5);
+          .from("swing_evaluations").select("grupo, score_promedio, evaluation_date")
+          .in("grupo", GRUPOS_EVAL[activeTab]).order("evaluation_date", { ascending: false }).limit(5);
         if (swingData?.length) contextoGrupo.evaluaciones_recientes = swingData;
       }
-
       const res = await fetch("/api/weekly-plan", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
+        method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ tipo_plan: activeTab, tema_semanal: tema, semana_inicio: toISODate(semana), contexto_grupo: contextoGrupo }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Error de IA");
-
       const sesionesConFecha = (data.sesiones as PreviewSesion[]).map((s) => ({
-        ...s,
-        fecha: getFechaForDia(semana, s.dia_semana),
-        hora_inicio: s.hora_inicio ?? "",
-        hora_fin: s.hora_fin ?? "",
+        ...s, fecha: getFechaForDia(semana, s.dia_semana),
+        hora_inicio: s.hora_inicio ?? "", hora_fin: s.hora_fin ?? "",
       }));
       setAiPreview({ descripcion_tema: data.descripcion_tema ?? "", sesiones: sesionesConFecha });
     } catch (err) {
       setPlanError(err instanceof Error ? err.message : "Error desconocido");
-    } finally {
-      setGeneratingAI(false);
-    }
+    } finally { setGeneratingAI(false); }
   }
 
   async function handleGuardarPlanIA() {
     if (!aiPreview) return;
     const tema = temaChip || temaCustom.trim();
-    setSavingGenerado(true);
-    setPlanError(null);
+    setSavingGenerado(true); setPlanError(null);
     try {
-      const { data: newPlan, error: planErr } = await supabase
-        .from("planes_semanales")
+      const { data: newPlan, error: planErr } = await supabase.from("planes_semanales")
         .insert({ semana_inicio: toISODate(semana), tipo_plan: activeTab, tema_semanal: tema, descripcion_tema: aiPreview.descripcion_tema, objetivo_mensual: objetivoMensual.trim() || null })
         .select().single();
       if (planErr || !newPlan) throw new Error(planErr?.message || "Error al crear plan");
-
       for (const s of aiPreview.sesiones) {
         await supabase.from("sesiones_semana").insert({
           plan_id: newPlan.id, dia_semana: s.dia_semana, fecha: s.fecha,
@@ -367,46 +391,38 @@ export default function ProgramacionModule() {
           estaciones_damas: s.estaciones_damas || null, notas: s.notas || null,
         });
       }
-      setShowCrearModal(false);
-      resetCrearModal();
+      setShowCrearModal(false); resetCrearModal();
       showToast("Plan generado con IA ✓");
-      await fetchPlan();
+      await fetchPlan(); if (viewMode === "semana") fetchCalSemana();
     } catch (err) {
       setPlanError(err instanceof Error ? err.message : "Error al guardar");
-    } finally {
-      setSavingGenerado(false);
-    }
+    } finally { setSavingGenerado(false); }
   }
 
   async function handleCrearVacio() {
     const tema = temaChip || temaCustom.trim();
     if (!tema) { setPlanError("Selecciona o escribe un tema."); return; }
-    setPlanError(null);
-    setCreandoPlan(true);
+    setPlanError(null); setCreandoPlan(true);
     try {
-      const { data: newPlan, error: planErr } = await supabase
-        .from("planes_semanales")
+      const { data: newPlan, error: planErr } = await supabase.from("planes_semanales")
         .insert({ semana_inicio: toISODate(semana), tipo_plan: activeTab, tema_semanal: tema, descripcion_tema: "", objetivo_mensual: objetivoMensual.trim() || null })
         .select().single();
       if (planErr || !newPlan) throw new Error(planErr?.message || "Error al crear plan");
-
       for (const dia of DIAS_POR_TIPO[activeTab]) {
+        const defaultH = getDefaultHoras(activeTab, dia, []);
         await supabase.from("sesiones_semana").insert({
           plan_id: newPlan.id, dia_semana: dia, fecha: getFechaForDia(semana, dia),
           tipo_sesion: activeTab === "damas" ? "damas_estaciones" : "tiro_largo",
           lugar: "driving_range", objetivo: "", drills: [],
+          hora_inicio: defaultH?.hi || null, hora_fin: defaultH?.hf || null,
           estaciones_damas: activeTab === "damas" ? [] : null,
         });
       }
-      setShowCrearModal(false);
-      resetCrearModal();
-      showToast("Plan creado ✓");
-      await fetchPlan();
+      setShowCrearModal(false); resetCrearModal();
+      showToast("Plan creado ✓"); await fetchPlan();
     } catch (err) {
       setPlanError(err instanceof Error ? err.message : "Error al crear");
-    } finally {
-      setCreandoPlan(false);
-    }
+    } finally { setCreandoPlan(false); }
   }
 
   // ── Edit tema ─────────────────────────────────────────────────────────────
@@ -415,40 +431,47 @@ export default function ProgramacionModule() {
     setTemaForm({ tema_semanal: plan.tema_semanal, descripcion_tema: plan.descripcion_tema, objetivo_mensual: plan.objetivo_mensual ?? "" });
     setShowEditTema(true);
   }
-
   async function handleSaveTema() {
     if (!plan) return;
     setSavingTema(true);
     await supabase.from("planes_semanales").update({
-      tema_semanal: temaForm.tema_semanal.trim(),
-      descripcion_tema: temaForm.descripcion_tema.trim(),
+      tema_semanal: temaForm.tema_semanal.trim(), descripcion_tema: temaForm.descripcion_tema.trim(),
       objetivo_mensual: temaForm.objetivo_mensual.trim() || null,
     }).eq("id", plan.id);
     setPlan((p) => p ? { ...p, ...temaForm, objetivo_mensual: temaForm.objetivo_mensual || null } : p);
-    setSavingTema(false);
-    setShowEditTema(false);
-    showToast("Tema actualizado ✓");
+    setSavingTema(false); setShowEditTema(false); showToast("Tema actualizado ✓");
   }
 
   // ── Edit sesion ───────────────────────────────────────────────────────────
-  function openEditSesion(dia: DiaSemana, sesion: SesionSemana | null) {
+  function openEditSesion(dia: DiaSemana, sesion: SesionSemana | null, defaultHora?: string) {
     const fecha = getFechaForDia(semana, dia);
-    const form: SesionForm = sesion ? {
-      tipo_sesion: sesion.tipo_sesion, lugar: sesion.lugar,
-      hora_inicio: formatHora(sesion.hora_inicio), hora_fin: formatHora(sesion.hora_fin),
-      objetivo: sesion.objetivo, drills: sesion.drills ?? [],
-      juego_competitivo: sesion.juego_competitivo ?? "",
-      estaciones_damas: sesion.estaciones_damas ?? [], notas: sesion.notas ?? "",
-    } : defaultSesionForm(activeTab);
-    setEditSesionCtx({ dia, fecha, sesion });
-    setSesionForm(form);
-    setSesionError(null);
+    let form: SesionForm;
+    if (sesion) {
+      form = {
+        tipo_sesion: sesion.tipo_sesion, lugar: sesion.lugar,
+        hora_inicio: formatHora(sesion.hora_inicio), hora_fin: formatHora(sesion.hora_fin),
+        objetivo: sesion.objetivo, drills: sesion.drills ?? [],
+        juego_competitivo: sesion.juego_competitivo ?? "",
+        estaciones_damas: sesion.estaciones_damas ?? [], notas: sesion.notas ?? "",
+      };
+    } else {
+      form = defaultSesionForm(activeTab);
+      if (defaultHora) {
+        const [h, m] = defaultHora.split(":").map(Number);
+        form.hora_inicio = defaultHora;
+        form.hora_fin = `${Math.min(h + 2, 18).toString().padStart(2, "0")}:${m.toString().padStart(2, "0")}`;
+      } else {
+        const taken = sesiones.filter((s) => s.dia_semana === dia).map((s) => formatHora(s.hora_inicio));
+        const defaultH = getDefaultHoras(activeTab, dia, taken);
+        if (defaultH) { form.hora_inicio = defaultH.hi; form.hora_fin = defaultH.hf; }
+      }
+    }
+    setEditSesionCtx({ dia, fecha, sesion }); setSesionForm(form); setSesionError(null);
   }
 
   async function handleSaveSesion() {
     if (!sesionForm || !editSesionCtx || !plan) return;
-    setSavingSesion(true);
-    setSesionError(null);
+    setSavingSesion(true); setSesionError(null);
     try {
       const payload = {
         plan_id: plan.id, dia_semana: editSesionCtx.dia, fecha: editSesionCtx.fecha,
@@ -459,47 +482,42 @@ export default function ProgramacionModule() {
         estaciones_damas: activeTab === "damas" ? sesionForm.estaciones_damas : null,
         notas: sesionForm.notas.trim() || null,
       };
-      if (editSesionCtx.sesion) {
-        await supabase.from("sesiones_semana").update(payload).eq("id", editSesionCtx.sesion.id);
-      } else {
-        await supabase.from("sesiones_semana").insert(payload);
-      }
-      setEditSesionCtx(null);
-      setSesionForm(null);
+      if (editSesionCtx.sesion) await supabase.from("sesiones_semana").update(payload).eq("id", editSesionCtx.sesion.id);
+      else await supabase.from("sesiones_semana").insert(payload);
+      setEditSesionCtx(null); setSesionForm(null);
       showToast("Sesión guardada ✓");
       await fetchPlan();
+      if (viewMode === "semana") fetchCalSemana();
     } catch (err) {
       setSesionError(err instanceof Error ? err.message : "Error al guardar");
-    } finally {
-      setSavingSesion(false);
-    }
+    } finally { setSavingSesion(false); }
   }
 
-  // ── PDF semanal (instructor) ──────────────────────────────────────────────
+  // ── Calendar cell click ───────────────────────────────────────────────────
+  function handleCalCellClick(dia: DiaSemana, hour: number) {
+    if (!plan) { showToast(`Sin plan ${TIPO_PLAN_LABEL[activeTab]} esta semana — créalo en Vista Plan`); return; }
+    const hourStr = `${hour.toString().padStart(2, "0")}:00`;
+    openEditSesion(dia, null, hourStr);
+  }
+
+  // ── PDF semanal ───────────────────────────────────────────────────────────
   async function handlePdfSemanal() {
     if (!plan) return;
     const [{ default: jsPDF }, { default: html2canvas }] = await Promise.all([import("jspdf"), import("html2canvas")]);
-    const el = document.getElementById("plan-pdf-content");
-    if (!el) return;
+    const el = document.getElementById("plan-pdf-content"); if (!el) return;
     const canvas = await html2canvas(el, { scale: 1.8, backgroundColor: "#fff", useCORS: true });
     const pdf = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
     const pdfW = pdf.internal.pageSize.getWidth();
     const pdfH = (canvas.height * pdfW) / canvas.width;
     const pageH = pdf.internal.pageSize.getHeight();
     let y = 0;
-    while (y < pdfH) {
-      if (y > 0) pdf.addPage();
-      pdf.addImage(canvas.toDataURL("image/jpeg", 0.92), "JPEG", 0, -y, pdfW, pdfH);
-      y += pageH;
-    }
+    while (y < pdfH) { if (y > 0) pdf.addPage(); pdf.addImage(canvas.toDataURL("image/jpeg", 0.92), "JPEG", 0, -y, pdfW, pdfH); y += pageH; }
     pdf.save(`Plan_${activeTab}_${toISODate(semana)}.pdf`);
   }
 
-  // ── PDF padres ────────────────────────────────────────────────────────────
   async function handlePdfPadres() {
     if (!plan) return;
-    const el = padresPdfRef.current;
-    if (!el) return;
+    const el = padresPdfRef.current; if (!el) return;
     setGeneratingPdfPadres(true);
     try {
       const [{ default: jsPDF }, { default: html2canvas }] = await Promise.all([import("jspdf"), import("html2canvas")]);
@@ -509,40 +527,243 @@ export default function ProgramacionModule() {
       const pdfH = (canvas.height * pdfW) / canvas.width;
       const pageH = pdf.internal.pageSize.getHeight();
       let y = 0;
-      while (y < pdfH) {
-        if (y > 0) pdf.addPage();
-        pdf.addImage(canvas.toDataURL("image/jpeg", 0.92), "JPEG", 0, -y, pdfW, pdfH);
-        y += pageH;
-      }
+      while (y < pdfH) { if (y > 0) pdf.addPage(); pdf.addImage(canvas.toDataURL("image/jpeg", 0.92), "JPEG", 0, -y, pdfW, pdfH); y += pageH; }
       pdf.save(`Plan_Padres_${TIPO_PLAN_LABEL[activeTab]}_${toISODate(semana)}.pdf`);
-    } finally {
-      setGeneratingPdfPadres(false);
-    }
+    } finally { setGeneratingPdfPadres(false); }
   }
 
   function handleWhatsApp() {
     if (!plan) return;
-    const lines = [
-      `Programación *${TIPO_PLAN_LABEL[activeTab]}* · Semana del ${formatWeekRange(semana)}`,
-      ``,
-      `*Tema:* ${plan.tema_semanal}`,
-      plan.descripcion_tema ? plan.descripcion_tema : null,
-      ``,
-    ].filter(Boolean) as string[];
-    for (const s of sesiones) {
-      lines.push(`• *${DIA_LABEL[s.dia_semana]} ${formatDiaFecha(s.fecha)}:* ${s.objetivo || TIPO_SESION_LABEL[s.tipo_sesion]}`);
-    }
+    const lines = [`Programación *${TIPO_PLAN_LABEL[activeTab]}* · Semana del ${formatWeekRange(semana)}`, ``, `*Tema:* ${plan.tema_semanal}`, plan.descripcion_tema || null, ``].filter(Boolean) as string[];
+    for (const s of sesiones) lines.push(`• *${DIA_LABEL[s.dia_semana]} ${formatDiaFecha(s.fecha)}:* ${s.objetivo || TIPO_SESION_LABEL[s.tipo_sesion]}`);
     lines.push(``, `Escuela de Golf CCB`);
     window.open(`https://wa.me/?text=${encodeURIComponent(lines.join("\n"))}`, "_blank");
   }
 
   // ── Computed ──────────────────────────────────────────────────────────────
   const diasRequeridos = DIAS_POR_TIPO[activeTab];
-  const planCompleto = plan !== null && diasRequeridos.every((d) => sesiones.some((s) => s.dia_semana === d && s.objetivo.trim() !== ""));
-  const accentColor = TIPO_PLAN_COLOR[activeTab];
-  const busy = generatingAI || savingGenerado || creandoPlan;
+  const planCompleto   = plan !== null && diasRequeridos.every((d) => sesiones.some((s) => s.dia_semana === d && s.objetivo.trim() !== ""));
+  const accentColor    = TIPO_PLAN_COLOR[activeTab];
+  const busy           = generatingAI || savingGenerado || creandoPlan;
 
-  // ── Render ────────────────────────────────────────────────────────────────
+  // ── Calendar week view ────────────────────────────────────────────────────
+  function renderWeekCal() {
+    const totalH = (CAL_HOUR_END - CAL_HOUR_START) * CAL_ROW_H;
+    return (
+      <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+        {calLoading && (
+          <div className="flex items-center justify-center py-12 text-gray-400">
+            <svg className="animate-spin h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"/></svg>
+            Cargando...
+          </div>
+        )}
+        {!calLoading && (
+          <div className="overflow-x-auto">
+            <div style={{ minWidth: 580 }}>
+              {/* Day headers */}
+              <div className="grid border-b border-gray-100" style={{ gridTemplateColumns: "44px repeat(6, 1fr)" }}>
+                <div className="py-2.5 border-r border-gray-50" />
+                {CAL_DIAS.map((dia) => {
+                  const fecha = getFechaForDia(semana, dia);
+                  const isToday = fecha === toISODate(new Date());
+                  return (
+                    <div key={dia} className="py-2.5 text-center border-r border-gray-50 last:border-0">
+                      <p className={`text-xs font-bold ${isToday ? "text-green-700" : "text-gray-500"}`}>{DIA_LABEL_SHORT[dia]}</p>
+                      <p className={`text-xs mt-0.5 ${isToday ? "bg-green-700 text-white rounded-full px-1.5 inline-block" : "text-gray-400"}`}>{formatDiaFecha(fecha)}</p>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* Grid body */}
+              <div className="overflow-y-auto" style={{ maxHeight: 420 }}>
+                <div className="grid relative" style={{ gridTemplateColumns: "44px repeat(6, 1fr)" }}>
+                  {/* Time labels */}
+                  <div>
+                    {CAL_HOURS.map((h) => (
+                      <div key={h} style={{ height: CAL_ROW_H }} className="border-b border-gray-50 flex items-start justify-end pr-1.5 pt-1">
+                        <span className={`text-[10px] ${CAL_PROMINENT.has(h) ? "text-gray-400 font-semibold" : "text-gray-200"}`}>
+                          {h > 12 ? `${h - 12}pm` : `${h}am`}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Day columns */}
+                  {CAL_DIAS.map((dia) => {
+                    const daySesiones = calSesiones.filter((s) => s.dia_semana === dia);
+                    return (
+                      <div key={dia} className="border-l border-gray-100 relative" style={{ height: totalH }}>
+                        {/* Hour cells (clickable) */}
+                        {CAL_HOURS.map((h) => (
+                          <div
+                            key={h}
+                            style={{ position: "absolute", top: (h - CAL_HOUR_START) * CAL_ROW_H, left: 0, right: 0, height: CAL_ROW_H }}
+                            className={`border-b ${CAL_PROMINENT.has(h) ? "border-gray-100" : "border-gray-50"} hover:bg-gray-50/60 cursor-pointer transition-colors`}
+                            onClick={() => handleCalCellClick(dia, h)}
+                          />
+                        ))}
+                        {/* Events */}
+                        {daySesiones.map((ses, i) => {
+                          if (!ses.hora_inicio) return null;
+                          const top = calTop(ses.hora_inicio);
+                          const height = ses.hora_fin ? calHeight(ses.hora_inicio, ses.hora_fin) : CAL_ROW_H;
+                          const c = CAL_COLOR[ses.tipo_plan];
+                          // offset overlapping events
+                          const overlap = daySesiones.filter((s2, j) => j < i && s2.hora_inicio === ses.hora_inicio).length;
+                          return (
+                            <div
+                              key={ses.id}
+                              style={{
+                                position: "absolute", top: top + 2, height: Math.max(height - 4, 22),
+                                left: `${4 + overlap * 4}px`, right: `${4 + overlap * 4}px`,
+                                background: c.bg, border: `1.5px solid ${c.border}`,
+                                borderRadius: 5, padding: "2px 5px", overflow: "hidden",
+                                cursor: "pointer", zIndex: 10 + i,
+                              }}
+                              onClick={(e) => { e.stopPropagation(); setCalEventDetail(ses); }}
+                            >
+                              <p style={{ margin: 0, fontSize: 10, fontWeight: 700, color: c.text, lineHeight: 1.2 }}>
+                                {TIPO_PLAN_LABEL[ses.tipo_plan]}
+                              </p>
+                              <p style={{ margin: 0, fontSize: 9, color: c.text, opacity: 0.8 }}>
+                                {ses.hora_inicio.slice(0, 5)} · {LUGAR_LABEL[ses.lugar].split(" ")[0]}
+                              </p>
+                              {height > 36 && ses.objetivo && (
+                                <p style={{ margin: "2px 0 0", fontSize: 9, color: c.text, opacity: 0.7, overflow: "hidden", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical" }}>
+                                  {ses.objetivo}
+                                </p>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  // ── Calendar month view ───────────────────────────────────────────────────
+  function renderMesCal() {
+    const year = mesCal.getFullYear(); const month = mesCal.getMonth();
+    const firstDay = new Date(year, month, 1); const lastDay = new Date(year, month + 1, 0);
+    const todayStr = toISODate(new Date());
+    let startDow = firstDay.getDay() - 1; if (startDow < 0) startDow = 6;
+    const cells: (Date | null)[] = [];
+    for (let i = 0; i < startDow; i++) cells.push(null);
+    for (let d = 1; d <= lastDay.getDate(); d++) cells.push(new Date(year, month, d));
+    while (cells.length % 7 !== 0) cells.push(null);
+    const HEADERS = ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"];
+
+    const selectedDaySesiones = selectedCalDate ? calSesiones.filter((s) => s.fecha === selectedCalDate) : [];
+
+    return (
+      <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+        {/* Month nav */}
+        <div className="flex items-center justify-between px-5 py-3 border-b border-gray-100">
+          <button onClick={prevMonth} className="p-1.5 rounded-lg hover:bg-gray-50 text-gray-500 transition-colors">
+            <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path d="M15 18l-6-6 6-6"/></svg>
+          </button>
+          <h3 className="font-bold text-gray-900 capitalize">
+            {firstDay.toLocaleDateString("es-CO", { month: "long", year: "numeric" })}
+          </h3>
+          <button onClick={nextMonth} className="p-1.5 rounded-lg hover:bg-gray-50 text-gray-500 transition-colors">
+            <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path d="M9 18l6-6-6-6"/></svg>
+          </button>
+        </div>
+
+        {calLoading && <div className="py-12 text-center text-gray-400 text-sm">Cargando...</div>}
+
+        {!calLoading && (
+          <>
+            {/* Day headers */}
+            <div className="grid grid-cols-7 border-b border-gray-100">
+              {HEADERS.map((h) => (
+                <div key={h} className="py-2 text-center text-[11px] font-bold text-gray-400 uppercase">{h}</div>
+              ))}
+            </div>
+
+            {/* Calendar grid */}
+            <div className="grid grid-cols-7">
+              {cells.map((date, i) => {
+                if (!date) return <div key={i} className="h-16 border-b border-r border-gray-50 bg-gray-50/30" />;
+                const dateStr = toISODate(date);
+                const isToday = dateStr === todayStr;
+                const isCurrentMonth = date.getMonth() === month;
+                const daySes = calSesiones.filter((s) => s.fecha === dateStr);
+                const isSelected = selectedCalDate === dateStr;
+
+                return (
+                  <div
+                    key={i}
+                    onClick={() => setSelectedCalDate(isSelected ? null : dateStr)}
+                    className={`h-16 border-b border-r border-gray-50 p-1.5 cursor-pointer transition-colors ${isSelected ? "bg-green-50 border-green-200" : "hover:bg-gray-50"} ${!isCurrentMonth ? "opacity-40" : ""}`}
+                  >
+                    <div className={`w-5 h-5 flex items-center justify-center rounded-full text-[11px] font-bold mb-1 ${isToday ? "bg-green-700 text-white" : "text-gray-700"}`}>
+                      {date.getDate()}
+                    </div>
+                    <div className="flex gap-0.5 flex-wrap">
+                      {daySes.slice(0, 5).map((s, j) => (
+                        <div key={j} className="w-1.5 h-1.5 rounded-full" style={{ background: CAL_COLOR[s.tipo_plan].dot }} title={TIPO_PLAN_LABEL[s.tipo_plan]} />
+                      ))}
+                      {daySes.length > 5 && <span className="text-[8px] text-gray-400">+{daySes.length - 5}</span>}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Selected day detail */}
+            {selectedCalDate && (
+              <div className="border-t border-gray-100 px-5 py-4">
+                <div className="flex items-center justify-between mb-3">
+                  <h4 className="text-sm font-bold text-gray-800 capitalize">
+                    {new Date(selectedCalDate + "T00:00:00").toLocaleDateString("es-CO", { weekday: "long", day: "numeric", month: "long" })}
+                  </h4>
+                  <button onClick={() => setSelectedCalDate(null)} className="text-gray-400 hover:text-gray-600 text-xs">✕</button>
+                </div>
+                {selectedDaySesiones.length === 0
+                  ? <p className="text-xs text-gray-400 italic">Sin sesiones programadas</p>
+                  : (
+                    <div className="space-y-2">
+                      {selectedDaySesiones.map((ses) => {
+                        const c = CAL_COLOR[ses.tipo_plan];
+                        const tc = TIPO_SESION_COLOR[ses.tipo_sesion];
+                        return (
+                          <div key={ses.id} className="flex items-start gap-3 p-3 rounded-lg border" style={{ borderColor: c.border + "40", background: c.bg }}>
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-2 flex-wrap mb-1">
+                                <span className="text-xs font-bold" style={{ color: c.border }}>{TIPO_PLAN_LABEL[ses.tipo_plan]}</span>
+                                <span className="px-1.5 py-0.5 rounded-full text-[10px] font-semibold" style={{ background: tc.bg, color: tc.text }}>{TIPO_SESION_LABEL[ses.tipo_sesion]}</span>
+                                <span className="text-[10px] text-gray-500">{LUGAR_LABEL[ses.lugar]}</span>
+                                {ses.hora_inicio && <span className="text-[10px] text-gray-500">{formatHora(ses.hora_inicio)}–{formatHora(ses.hora_fin)}</span>}
+                              </div>
+                              {ses.objetivo && <p className="text-xs text-gray-700 line-clamp-2">{ses.objetivo}</p>}
+                            </div>
+                            <button onClick={() => router.push(`/programacion/sesion/${ses.id}`)} className="text-[10px] font-semibold shrink-0" style={{ color: c.border }}>
+                              Asistencia →
+                            </button>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )
+                }
+              </div>
+            )}
+          </>
+        )}
+      </div>
+    );
+  }
+
+  // ── Main render ───────────────────────────────────────────────────────────
   return (
     <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
       {/* Toast */}
@@ -553,24 +774,52 @@ export default function ProgramacionModule() {
         </div>
       )}
 
-      {/* ── Week selector ── */}
-      <div className="flex items-center justify-between mb-6 flex-wrap gap-3">
-        <button onClick={prevWeek} className="flex items-center gap-1.5 px-3 py-2 rounded-lg border border-gray-200 text-sm font-medium text-gray-600 hover:bg-gray-50 transition-colors">
-          <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path d="M15 18l-6-6 6-6"/></svg>
-          Anterior
-        </button>
-        <div className="text-center">
-          <h1 className="text-base font-bold text-gray-900">{formatWeekRange(semana)}</h1>
-          <button onClick={goToday} className="text-xs text-gray-400 hover:text-gray-600 mt-0.5 transition-colors">ir a esta semana</button>
+      {/* ── Header: view toggle + navigator ── */}
+      <div className="flex items-center justify-between mb-5 flex-wrap gap-3">
+        {/* View toggle */}
+        <div className="flex gap-0.5 bg-gray-100 rounded-xl p-1">
+          {([["plan", "Plan"], ["semana", "Semana"], ["mes", "Mes"]] as const).map(([mode, label]) => (
+            <button
+              key={mode}
+              onClick={() => setViewMode(mode)}
+              className={`px-4 py-1.5 rounded-lg text-sm font-semibold transition-all ${viewMode === mode ? "bg-white shadow-sm text-gray-900" : "text-gray-500 hover:text-gray-700"}`}
+            >
+              {label}
+            </button>
+          ))}
         </div>
-        <button onClick={nextWeek} className="flex items-center gap-1.5 px-3 py-2 rounded-lg border border-gray-200 text-sm font-medium text-gray-600 hover:bg-gray-50 transition-colors">
-          Siguiente
-          <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path d="M9 18l6-6-6-6"/></svg>
-        </button>
+
+        {/* Navigator */}
+        {viewMode !== "mes" ? (
+          <div className="flex items-center gap-2">
+            <button onClick={prevWeek} className="flex items-center gap-1 px-3 py-2 rounded-lg border border-gray-200 text-sm font-medium text-gray-600 hover:bg-gray-50 transition-colors">
+              <svg width="13" height="13" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path d="M15 18l-6-6 6-6"/></svg>
+              Ant.
+            </button>
+            <div className="text-center">
+              <p className="text-sm font-bold text-gray-900 leading-tight">{formatWeekRange(semana)}</p>
+              <button onClick={goToday} className="text-[11px] text-gray-400 hover:text-gray-600 transition-colors">esta semana</button>
+            </div>
+            <button onClick={nextWeek} className="flex items-center gap-1 px-3 py-2 rounded-lg border border-gray-200 text-sm font-medium text-gray-600 hover:bg-gray-50 transition-colors">
+              Sig.
+              <svg width="13" height="13" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path d="M9 18l6-6-6-6"/></svg>
+            </button>
+          </div>
+        ) : (
+          <div className="flex items-center gap-3">
+            <button onClick={prevMonth} className="flex items-center gap-1 px-3 py-2 rounded-lg border border-gray-200 text-sm font-medium text-gray-600 hover:bg-gray-50 transition-colors">
+              <svg width="13" height="13" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path d="M15 18l-6-6 6-6"/></svg>
+            </button>
+            <p className="text-sm font-bold text-gray-900 capitalize">{mesCal.toLocaleDateString("es-CO", { month: "long", year: "numeric" })}</p>
+            <button onClick={nextMonth} className="flex items-center gap-1 px-3 py-2 rounded-lg border border-gray-200 text-sm font-medium text-gray-600 hover:bg-gray-50 transition-colors">
+              <svg width="13" height="13" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path d="M9 18l6-6-6-6"/></svg>
+            </button>
+          </div>
+        )}
       </div>
 
-      {/* ── Tabs ── */}
-      <div className="flex gap-1 border-b border-gray-200 mb-6">
+      {/* ── Tabs (always visible) ── */}
+      <div className="flex gap-1 border-b border-gray-200 mb-5">
         {(["juvenil", "competencia", "damas"] as TipoPlan[]).map((tab) => (
           <button
             key={tab}
@@ -583,463 +832,360 @@ export default function ProgramacionModule() {
         ))}
       </div>
 
-      {/* ── Content ── */}
-      {loading ? (
-        <div className="flex items-center justify-center py-24 text-gray-400">
-          <svg className="animate-spin mr-3 h-5 w-5" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"/></svg>
-          Cargando...
-        </div>
-      ) : !plan ? (
-        /* ── Empty state ── */
-        <div className="flex flex-col items-center justify-center py-20 text-gray-400">
-          <div className="w-14 h-14 rounded-2xl flex items-center justify-center mb-4" style={{ background: accentColor + "15" }}>
-            <svg width="28" height="28" fill="none" viewBox="0 0 24 24" stroke={accentColor} strokeWidth={1.5}><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>
+      {/* ── Calendar ── */}
+      {viewMode === "semana" && (
+        <div className="mb-5">
+          <div className="flex items-center gap-2 mb-2">
+            {(["juvenil", "competencia", "damas"] as TipoPlan[]).map((tp) => (
+              <span key={tp} className="flex items-center gap-1.5 text-xs text-gray-500">
+                <span className="w-2.5 h-2.5 rounded-full inline-block" style={{ background: CAL_COLOR[tp].dot }} />
+                {TIPO_PLAN_LABEL[tp]}
+              </span>
+            ))}
+            <span className="text-xs text-gray-300 ml-1">· clic en celda vacía agrega sesión al plan {TIPO_PLAN_LABEL[activeTab]}</span>
           </div>
-          <p className="text-base font-semibold text-gray-700 mb-1">Sin plan para esta semana</p>
-          <p className="text-sm text-gray-400 mb-6">No hay plan {TIPO_PLAN_LABEL[activeTab]} para la semana seleccionada.</p>
-          <button
-            onClick={() => { resetCrearModal(); setShowCrearModal(true); }}
-            className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-semibold text-white shadow-sm transition-all hover:brightness-110"
-            style={{ background: accentColor }}
-          >
-            <svg width="15" height="15" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path d="M12 5v14M5 12h14"/></svg>
-            Crear plan con IA
-          </button>
+          {renderWeekCal()}
         </div>
-      ) : (
-        /* ── Plan view ── */
-        <div id="plan-pdf-content">
-          {/* Tema card */}
-          <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5 mb-4">
-            <div className="flex items-start justify-between gap-4">
-              <div className="flex-1">
-                <div className="flex items-center gap-2 mb-1">
-                  <div className="w-2 h-2 rounded-full" style={{ background: accentColor }} />
-                  <span className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Tema semanal · {TIPO_PLAN_LABEL[activeTab]}</span>
-                </div>
-                <h2 className="text-lg font-bold text-gray-900 mb-1">{plan.tema_semanal}</h2>
-                {plan.descripcion_tema && <p className="text-sm text-gray-600">{plan.descripcion_tema}</p>}
-                {plan.objetivo_mensual && (
-                  <div className="mt-3 flex items-start gap-2 bg-gray-50 rounded-lg px-3 py-2">
-                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#6b7280" strokeWidth={2} className="mt-0.5 shrink-0"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
-                    <span className="text-xs text-gray-500"><span className="font-semibold">Objetivo mensual:</span> {plan.objetivo_mensual}</span>
-                  </div>
-                )}
-              </div>
-              <div className="flex items-center gap-2 shrink-0 flex-wrap justify-end">
-                {/* WhatsApp */}
-                <button
-                  onClick={handleWhatsApp}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-gray-200 text-xs font-medium text-gray-600 hover:bg-gray-50 transition-colors"
-                  title="Compartir por WhatsApp"
-                >
-                  <svg width="12" height="12" viewBox="0 0 24 24" fill="#25D366"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>
-                  WhatsApp
-                </button>
-                {/* PDF padres */}
-                <button
-                  onClick={handlePdfPadres}
-                  disabled={generatingPdfPadres}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-gray-200 text-xs font-medium text-gray-600 hover:bg-gray-50 transition-colors disabled:opacity-50"
-                >
-                  <svg width="12" height="12" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
-                  {generatingPdfPadres ? "Generando..." : "PDF padres"}
-                </button>
-                {/* PDF semanal instructor */}
-                {planCompleto && (
-                  <button onClick={handlePdfSemanal} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-gray-200 text-xs font-medium text-gray-600 hover:bg-gray-50 transition-colors">
-                    <svg width="12" height="12" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
-                    PDF instructor
-                  </button>
-                )}
-                <button onClick={openEditTema} className="p-1.5 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-50 transition-colors">
-                  <svg width="15" height="15" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
-                </button>
-              </div>
+      )}
+
+      {viewMode === "mes" && (
+        <div className="mb-5">
+          <div className="flex items-center gap-2 mb-2">
+            {(["juvenil", "competencia", "damas"] as TipoPlan[]).map((tp) => (
+              <span key={tp} className="flex items-center gap-1.5 text-xs text-gray-500">
+                <span className="w-2.5 h-2.5 rounded-full inline-block" style={{ background: CAL_COLOR[tp].dot }} />
+                {TIPO_PLAN_LABEL[tp]}
+              </span>
+            ))}
+          </div>
+          {renderMesCal()}
+        </div>
+      )}
+
+      {/* ── Plan list view ── */}
+      {viewMode === "plan" && (
+        loading ? (
+          <div className="flex items-center justify-center py-24 text-gray-400">
+            <svg className="animate-spin mr-3 h-5 w-5" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"/></svg>
+            Cargando...
+          </div>
+        ) : !plan ? (
+          <div className="flex flex-col items-center justify-center py-20">
+            <div className="w-14 h-14 rounded-2xl flex items-center justify-center mb-4" style={{ background: accentColor + "15" }}>
+              <svg width="28" height="28" fill="none" viewBox="0 0 24 24" stroke={accentColor} strokeWidth={1.5}><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>
             </div>
+            <p className="text-base font-semibold text-gray-700 mb-1">Sin plan para esta semana</p>
+            <p className="text-sm text-gray-400 mb-6">No hay plan {TIPO_PLAN_LABEL[activeTab]} para la semana seleccionada.</p>
+            <button
+              onClick={() => { resetCrearModal(); setShowCrearModal(true); }}
+              className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-semibold text-white shadow-sm hover:brightness-110 transition-all"
+              style={{ background: accentColor }}
+            >
+              <svg width="15" height="15" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path d="M12 5v14M5 12h14"/></svg>
+              Crear plan con IA
+            </button>
           </div>
-
-          {/* Day cards */}
-          <div className="space-y-3">
-            {diasRequeridos.map((dia) => {
-              const sesion = sesiones.find((s) => s.dia_semana === dia) ?? null;
-              const fecha = getFechaForDia(semana, dia);
-              const isExpanded = expandedDias.has(dia);
-              const tipColor = sesion ? TIPO_SESION_COLOR[sesion.tipo_sesion] : null;
-
-              return (
-                <div key={dia} className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-                  {/* Card header */}
-                  <div
-                    className="flex items-center justify-between px-5 py-3.5 cursor-pointer hover:bg-gray-50 transition-colors"
-                    onClick={() => sesion && toggleDia(dia)}
-                  >
-                    <div className="flex items-center gap-3 flex-wrap">
-                      <div className="w-20 shrink-0">
-                        <p className="text-sm font-bold text-gray-900">{DIA_LABEL[dia]}</p>
-                        <p className="text-xs text-gray-400">{formatDiaFecha(fecha)}</p>
-                      </div>
-                      {sesion ? (
-                        <>
-                          <span className="px-2 py-0.5 rounded-full text-xs font-semibold" style={{ background: tipColor!.bg, color: tipColor!.text }}>
-                            {TIPO_SESION_LABEL[sesion.tipo_sesion]}
-                          </span>
-                          <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-600">
-                            {LUGAR_LABEL[sesion.lugar]}
-                          </span>
-                          {sesion.hora_inicio && (
-                            <span className="text-xs text-gray-400">{formatHora(sesion.hora_inicio)}–{formatHora(sesion.hora_fin)}</span>
-                          )}
-                          {sesion.asistencia_registrada && (
-                            <span className="flex items-center gap-1 text-xs text-emerald-600 font-medium">
-                              <svg width="12" height="12" viewBox="0 0 20 20" fill="none" stroke="#059669" strokeWidth={2.5}><path d="M3 10l4 4 9-9"/></svg>
-                              Asistencia ✓
-                            </span>
-                          )}
-                        </>
-                      ) : (
-                        <span className="text-xs text-gray-300 italic">Sin sesión definida</span>
-                      )}
-                    </div>
-                    <div className="flex items-center gap-2 shrink-0">
-                      <button
-                        onClick={(e) => { e.stopPropagation(); openEditSesion(dia, sesion); }}
-                        className="px-2.5 py-1.5 rounded-lg text-xs font-medium border border-gray-200 text-gray-600 hover:bg-gray-50 transition-colors"
-                      >
-                        {sesion ? "Editar" : "+ Agregar"}
-                      </button>
-                      {sesion && (
-                        <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} className={`text-gray-400 transition-transform ${isExpanded ? "rotate-180" : ""}`}><path d="M19 9l-7 7-7-7"/></svg>
-                      )}
-                    </div>
+        ) : (
+          <div id="plan-pdf-content">
+            {/* Tema card */}
+            <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5 mb-4">
+              <div className="flex items-start justify-between gap-4">
+                <div className="flex-1">
+                  <div className="flex items-center gap-2 mb-1">
+                    <div className="w-2 h-2 rounded-full" style={{ background: accentColor }} />
+                    <span className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Tema semanal · {TIPO_PLAN_LABEL[activeTab]}</span>
                   </div>
-
-                  {/* Expanded body */}
-                  {isExpanded && sesion && (
-                    <div className="px-5 pb-5 border-t border-gray-50">
-                      <div className="pt-4 space-y-4">
-                        {sesion.objetivo && (
-                          <div>
-                            <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-1">Objetivo</p>
-                            <p className="text-sm text-gray-700">{sesion.objetivo}</p>
-                          </div>
-                        )}
-
-                        {/* Estaciones damas */}
-                        {sesion.estaciones_damas && sesion.estaciones_damas.length > 0 && (
-                          <div>
-                            <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">Estaciones</p>
-                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                              {sesion.estaciones_damas.map((est, i) => (
-                                <div key={i} className="bg-fuchsia-50 border border-fuchsia-100 rounded-lg p-3">
-                                  <p className="text-xs font-bold text-fuchsia-800 mb-0.5">Estación {i + 1}: {est.nombre}</p>
-                                  <p className="text-xs text-fuchsia-700 mb-1">{est.lugar} · {est.duracion_min} min</p>
-                                  <p className="text-xs text-gray-600">{est.descripcion}</p>
-                                </div>
-                              ))}
-                            </div>
-                          </div>
-                        )}
-
-                        {/* Drills */}
-                        {sesion.drills && sesion.drills.length > 0 && (
-                          <div>
-                            <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">Drills ({sesion.drills.length})</p>
-                            <div className="space-y-3">
-                              {sesion.drills.map((drill, i) => (
-                                <div key={i} className="border border-gray-100 rounded-lg p-3 bg-gray-50">
-                                  <p className="text-sm font-semibold text-gray-900 mb-1">{i + 1}. {drill.titulo}</p>
-                                  <p className="text-xs text-gray-600 mb-2">{drill.descripcion}</p>
-
-                                  {/* Juvenil: por grupo */}
-                                  {activeTab === "juvenil" && (drill.dificultad_birdies || drill.dificultad_aguilas || drill.dificultad_albatros || drill.dificultad_mas14) && (
-                                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5">
-                                      {[
-                                        { label: "Birdies", val: drill.dificultad_birdies, color: "#dbeafe", tc: "#1e40af" },
-                                        { label: "Águilas", val: drill.dificultad_aguilas, color: "#dcfce7", tc: "#166534" },
-                                        { label: "Albatros", val: drill.dificultad_albatros, color: "#fef9c3", tc: "#854d0e" },
-                                        { label: "+14", val: drill.dificultad_mas14, color: "#ede9fe", tc: "#6d28d9" },
-                                      ].filter((x) => x.val).map((x) => (
-                                        <div key={x.label} className="rounded-md p-2" style={{ background: x.color }}>
-                                          <p className="text-[10px] font-bold mb-0.5" style={{ color: x.tc }}>{x.label}</p>
-                                          <p className="text-[11px] text-gray-700">{x.val}</p>
-                                        </div>
-                                      ))}
-                                    </div>
-                                  )}
-
-                                  {/* Competencia: métricas */}
-                                  {activeTab === "competencia" && (drill.metrica_exito || drill.variante_presion || drill.conexion_tecnica) && (
-                                    <div className="space-y-1.5 mt-1">
-                                      {drill.metrica_exito && (
-                                        <div className="flex items-start gap-2 bg-blue-50 rounded px-2 py-1.5">
-                                          <span className="text-[10px] font-bold text-blue-700 shrink-0 mt-0.5">META</span>
-                                          <span className="text-[11px] text-blue-900">{drill.metrica_exito}</span>
-                                        </div>
-                                      )}
-                                      {drill.variante_presion && (
-                                        <div className="flex items-start gap-2 bg-orange-50 rounded px-2 py-1.5">
-                                          <span className="text-[10px] font-bold text-orange-700 shrink-0 mt-0.5">PRESIÓN</span>
-                                          <span className="text-[11px] text-orange-900">{drill.variante_presion}</span>
-                                        </div>
-                                      )}
-                                      {drill.conexion_tecnica && (
-                                        <div className="flex items-start gap-2 bg-purple-50 rounded px-2 py-1.5">
-                                          <span className="text-[10px] font-bold text-purple-700 shrink-0 mt-0.5">TÉCNICA</span>
-                                          <span className="text-[11px] text-purple-900">{drill.conexion_tecnica}</span>
-                                        </div>
-                                      )}
-                                    </div>
-                                  )}
-                                </div>
-                              ))}
-                            </div>
-                          </div>
-                        )}
-
-                        {sesion.juego_competitivo && (
-                          <div className="bg-orange-50 border border-orange-100 rounded-lg p-3">
-                            <p className="text-xs font-semibold text-orange-700 mb-1">🏆 Juego competitivo</p>
-                            <p className="text-xs text-gray-700">{sesion.juego_competitivo}</p>
-                          </div>
-                        )}
-
-                        {sesion.notas && (
-                          <div className="bg-yellow-50 border border-yellow-100 rounded-lg p-3">
-                            <p className="text-xs font-semibold text-yellow-700 mb-1">📝 Notas</p>
-                            <p className="text-xs text-gray-700">{sesion.notas}</p>
-                          </div>
-                        )}
-
-                        <div className="pt-2 border-t border-gray-100">
-                          <button
-                            onClick={() => router.push(`/programacion/sesion/${sesion.id}`)}
-                            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-semibold transition-colors ${sesion.asistencia_registrada ? "bg-emerald-50 text-emerald-700 border border-emerald-200" : "text-white"}`}
-                            style={sesion.asistencia_registrada ? {} : { background: accentColor }}
-                          >
-                            <svg width="13" height="13" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg>
-                            {sesion.asistencia_registrada ? "Ver asistencia" : "Pasar asistencia"}
-                          </button>
-                        </div>
-                      </div>
+                  <h2 className="text-lg font-bold text-gray-900 mb-1">{plan.tema_semanal}</h2>
+                  {plan.descripcion_tema && <p className="text-sm text-gray-600">{plan.descripcion_tema}</p>}
+                  {plan.objetivo_mensual && (
+                    <div className="mt-3 flex items-start gap-2 bg-gray-50 rounded-lg px-3 py-2">
+                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#6b7280" strokeWidth={2} className="mt-0.5 shrink-0"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
+                      <span className="text-xs text-gray-500"><span className="font-semibold">Objetivo mensual:</span> {plan.objetivo_mensual}</span>
                     </div>
                   )}
                 </div>
-              );
-            })}
+                <div className="flex items-center gap-2 shrink-0 flex-wrap justify-end">
+                  <button onClick={handleWhatsApp} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-gray-200 text-xs font-medium text-gray-600 hover:bg-gray-50 transition-colors">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="#25D366"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>
+                    WhatsApp
+                  </button>
+                  <button onClick={handlePdfPadres} disabled={generatingPdfPadres} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-gray-200 text-xs font-medium text-gray-600 hover:bg-gray-50 transition-colors disabled:opacity-50">
+                    <svg width="12" height="12" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
+                    {generatingPdfPadres ? "..." : "PDF padres"}
+                  </button>
+                  {planCompleto && (
+                    <button onClick={handlePdfSemanal} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-gray-200 text-xs font-medium text-gray-600 hover:bg-gray-50 transition-colors">
+                      <svg width="12" height="12" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
+                      PDF instructor
+                    </button>
+                  )}
+                  <button onClick={openEditTema} className="p-1.5 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-50 transition-colors">
+                    <svg width="15" height="15" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* Day cards — supports multiple sessions per day */}
+            <div className="space-y-3">
+              {diasRequeridos.map((dia) => {
+                const diaySesiones = sesiones.filter((s) => s.dia_semana === dia);
+                const fecha = getFechaForDia(semana, dia);
+                const isExpanded = expandedDias.has(dia);
+
+                return (
+                  <div key={dia} className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+                    {/* Card header */}
+                    <div
+                      className="flex items-center justify-between px-5 py-3.5 cursor-pointer hover:bg-gray-50 transition-colors"
+                      onClick={() => diaySesiones.length > 0 && toggleDia(dia)}
+                    >
+                      <div className="flex items-center gap-3 flex-wrap">
+                        <div className="w-20 shrink-0">
+                          <p className="text-sm font-bold text-gray-900">{DIA_LABEL[dia]}</p>
+                          <p className="text-xs text-gray-400">{formatDiaFecha(fecha)}</p>
+                        </div>
+                        {diaySesiones.length > 0 ? (
+                          <div className="flex items-center gap-2 flex-wrap">
+                            {diaySesiones.slice(0, 2).map((ses) => {
+                              const tc = TIPO_SESION_COLOR[ses.tipo_sesion];
+                              return (
+                                <span key={ses.id} className="flex items-center gap-1.5">
+                                  <span className="px-2 py-0.5 rounded-full text-xs font-semibold" style={{ background: tc.bg, color: tc.text }}>{TIPO_SESION_LABEL[ses.tipo_sesion]}</span>
+                                  {ses.hora_inicio && <span className="text-xs text-gray-400">{formatHora(ses.hora_inicio)}</span>}
+                                </span>
+                              );
+                            })}
+                            {diaySesiones.length > 2 && <span className="text-xs text-gray-400">+{diaySesiones.length - 2}</span>}
+                            {diaySesiones.some((s) => s.asistencia_registrada) && (
+                              <span className="flex items-center gap-1 text-xs text-emerald-600 font-medium">
+                                <svg width="11" height="11" viewBox="0 0 20 20" fill="none" stroke="#059669" strokeWidth={2.5}><path d="M3 10l4 4 9-9"/></svg>
+                                Asistencia ✓
+                              </span>
+                            )}
+                          </div>
+                        ) : (
+                          <span className="text-xs text-gray-300 italic">Sin sesión definida</span>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-2 shrink-0">
+                        <button
+                          onClick={(e) => { e.stopPropagation(); openEditSesion(dia, null); }}
+                          className="px-2.5 py-1.5 rounded-lg text-xs font-medium border border-gray-200 text-gray-600 hover:bg-gray-50 transition-colors"
+                        >
+                          + Agregar
+                        </button>
+                        {diaySesiones.length > 0 && (
+                          <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} className={`text-gray-400 transition-transform ${isExpanded ? "rotate-180" : ""}`}><path d="M19 9l-7 7-7-7"/></svg>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Expanded: all sessions for this day */}
+                    {isExpanded && diaySesiones.length > 0 && (
+                      <div className="border-t border-gray-50">
+                        {diaySesiones.map((sesion, idx) => {
+                          const tc = TIPO_SESION_COLOR[sesion.tipo_sesion];
+                          return (
+                            <div key={sesion.id} className={`px-5 pb-5 ${idx > 0 ? "border-t border-gray-50" : ""}`}>
+                              <div className="pt-4 space-y-4">
+                                {/* Session meta */}
+                                <div className="flex items-center gap-2 flex-wrap">
+                                  <span className="px-2 py-0.5 rounded-full text-xs font-semibold" style={{ background: tc.bg, color: tc.text }}>{TIPO_SESION_LABEL[sesion.tipo_sesion]}</span>
+                                  <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-600">{LUGAR_LABEL[sesion.lugar]}</span>
+                                  {sesion.hora_inicio && <span className="text-xs text-gray-400">{formatHora(sesion.hora_inicio)}–{formatHora(sesion.hora_fin)}</span>}
+                                  <button onClick={() => openEditSesion(dia, sesion)} className="ml-auto text-xs font-medium text-gray-400 hover:text-gray-700 border border-gray-200 rounded px-2 py-1 hover:bg-gray-50 transition-colors">Editar</button>
+                                </div>
+
+                                {sesion.objetivo && (
+                                  <div>
+                                    <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-1">Objetivo</p>
+                                    <p className="text-sm text-gray-700">{sesion.objetivo}</p>
+                                  </div>
+                                )}
+
+                                {sesion.estaciones_damas && sesion.estaciones_damas.length > 0 && (
+                                  <div>
+                                    <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">Estaciones</p>
+                                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                                      {sesion.estaciones_damas.map((est, i) => (
+                                        <div key={i} className="bg-fuchsia-50 border border-fuchsia-100 rounded-lg p-3">
+                                          <p className="text-xs font-bold text-fuchsia-800 mb-0.5">Est. {i + 1}: {est.nombre}</p>
+                                          <p className="text-xs text-fuchsia-700 mb-1">{est.lugar} · {est.duracion_min} min</p>
+                                          <p className="text-xs text-gray-600">{est.descripcion}</p>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  </div>
+                                )}
+
+                                {sesion.drills && sesion.drills.length > 0 && (
+                                  <div>
+                                    <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">Drills ({sesion.drills.length})</p>
+                                    <div className="space-y-3">
+                                      {sesion.drills.map((drill, i) => (
+                                        <div key={i} className="border border-gray-100 rounded-lg p-3 bg-gray-50">
+                                          <p className="text-sm font-semibold text-gray-900 mb-1">{i + 1}. {drill.titulo}</p>
+                                          <p className="text-xs text-gray-600 mb-2">{drill.descripcion}</p>
+                                          {activeTab === "juvenil" && (drill.dificultad_birdies || drill.dificultad_aguilas || drill.dificultad_albatros || drill.dificultad_mas14) && (
+                                            <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5">
+                                              {[
+                                                { label: "Birdies", val: drill.dificultad_birdies, color: "#dbeafe", tc: "#1e40af" },
+                                                { label: "Águilas", val: drill.dificultad_aguilas, color: "#dcfce7", tc: "#166534" },
+                                                { label: "Albatros", val: drill.dificultad_albatros, color: "#fef9c3", tc: "#854d0e" },
+                                                { label: "+14", val: drill.dificultad_mas14, color: "#ede9fe", tc: "#6d28d9" },
+                                              ].filter((x) => x.val).map((x) => (
+                                                <div key={x.label} className="rounded-md p-2" style={{ background: x.color }}>
+                                                  <p className="text-[10px] font-bold mb-0.5" style={{ color: x.tc }}>{x.label}</p>
+                                                  <p className="text-[11px] text-gray-700">{x.val}</p>
+                                                </div>
+                                              ))}
+                                            </div>
+                                          )}
+                                          {activeTab === "competencia" && (drill.metrica_exito || drill.variante_presion || drill.conexion_tecnica) && (
+                                            <div className="space-y-1.5 mt-1">
+                                              {drill.metrica_exito && <div className="flex items-start gap-2 bg-blue-50 rounded px-2 py-1.5"><span className="text-[10px] font-bold text-blue-700 shrink-0 mt-0.5">META</span><span className="text-[11px] text-blue-900">{drill.metrica_exito}</span></div>}
+                                              {drill.variante_presion && <div className="flex items-start gap-2 bg-orange-50 rounded px-2 py-1.5"><span className="text-[10px] font-bold text-orange-700 shrink-0 mt-0.5">PRESIÓN</span><span className="text-[11px] text-orange-900">{drill.variante_presion}</span></div>}
+                                              {drill.conexion_tecnica && <div className="flex items-start gap-2 bg-purple-50 rounded px-2 py-1.5"><span className="text-[10px] font-bold text-purple-700 shrink-0 mt-0.5">TÉCNICA</span><span className="text-[11px] text-purple-900">{drill.conexion_tecnica}</span></div>}
+                                            </div>
+                                          )}
+                                        </div>
+                                      ))}
+                                    </div>
+                                  </div>
+                                )}
+
+                                {sesion.juego_competitivo && (
+                                  <div className="bg-orange-50 border border-orange-100 rounded-lg p-3">
+                                    <p className="text-xs font-semibold text-orange-700 mb-1">🏆 Juego competitivo</p>
+                                    <p className="text-xs text-gray-700">{sesion.juego_competitivo}</p>
+                                  </div>
+                                )}
+
+                                {sesion.notas && (
+                                  <div className="bg-yellow-50 border border-yellow-100 rounded-lg p-3">
+                                    <p className="text-xs font-semibold text-yellow-700 mb-1">📝 Notas</p>
+                                    <p className="text-xs text-gray-700">{sesion.notas}</p>
+                                  </div>
+                                )}
+
+                                <div className="pt-2 border-t border-gray-100">
+                                  <button
+                                    onClick={() => router.push(`/programacion/sesion/${sesion.id}`)}
+                                    className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-semibold transition-colors ${sesion.asistencia_registrada ? "bg-emerald-50 text-emerald-700 border border-emerald-200" : "text-white"}`}
+                                    style={sesion.asistencia_registrada ? {} : { background: accentColor }}
+                                  >
+                                    <svg width="13" height="13" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+                                    {sesion.asistencia_registrada ? "Ver asistencia" : "Pasar asistencia"}
+                                  </button>
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
           </div>
-        </div>
+        )
       )}
 
       {/* ══ MODAL: Crear plan ════════════════════════════════════════════════ */}
       {showCrearModal && (
-        <div
-          className="fixed inset-0 bg-black/60 z-50 flex items-start justify-center p-4 overflow-y-auto"
-          onClick={() => { if (!busy) { setShowCrearModal(false); resetCrearModal(); } }}
-        >
+        <div className="fixed inset-0 bg-black/60 z-50 flex items-start justify-center p-4 overflow-y-auto" onClick={() => { if (!busy) { setShowCrearModal(false); resetCrearModal(); } }}>
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg my-6" onClick={(e) => e.stopPropagation()}>
-            {/* Header */}
             <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
               <div>
                 <h2 className="font-bold text-gray-900">Nuevo plan — {TIPO_PLAN_LABEL[activeTab]}</h2>
                 <p className="text-xs text-gray-400 mt-0.5">{formatWeekRange(semana)}</p>
               </div>
-              <button
-                onClick={() => { if (!busy) { setShowCrearModal(false); resetCrearModal(); } }}
-                disabled={busy}
-                className="text-gray-400 hover:text-gray-600 disabled:opacity-40"
-              >
+              <button onClick={() => { if (!busy) { setShowCrearModal(false); resetCrearModal(); } }} disabled={busy} className="text-gray-400 hover:text-gray-600 disabled:opacity-40">
                 <svg width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path d="M18 6L6 18M6 6l12 12"/></svg>
               </button>
             </div>
 
             {!aiPreview ? (
-              /* ── Step 1: Form ── */
               <>
                 <div className="px-6 py-5 space-y-5">
-                  {/* Tema chips */}
                   <div>
-                    <label className="block text-xs font-semibold text-gray-700 mb-2">
-                      Tema de la semana <span className="text-red-400">*</span>
-                    </label>
+                    <label className="block text-xs font-semibold text-gray-700 mb-2">Tema de la semana <span className="text-red-400">*</span></label>
                     <div className="flex flex-wrap gap-2 mb-2">
-                      {TEMAS_CHIP[activeTab].map((t) => {
-                        const sel = temaChip === t;
-                        return (
-                          <button
-                            key={t}
-                            onClick={() => { setTemaChip(sel ? "" : t); setTemaCustom(""); }}
-                            className="px-3 py-1.5 rounded-full text-xs font-semibold border transition-all"
-                            style={sel
-                              ? { background: accentColor, color: "#fff", borderColor: accentColor }
-                              : { background: "#f9fafb", color: "#374151", borderColor: "#e5e7eb" }
-                            }
-                          >
-                            {t}
-                          </button>
-                        );
-                      })}
+                      {TEMAS_CHIP[activeTab].map((t) => (
+                        <button key={t} onClick={() => { setTemaChip(t === temaChip ? "" : t); setTemaCustom(""); }}
+                          className="px-3 py-1.5 rounded-full text-xs font-semibold border transition-all"
+                          style={temaChip === t ? { background: accentColor, color: "#fff", borderColor: accentColor } : { background: "#f9fafb", color: "#374151", borderColor: "#e5e7eb" }}
+                        >{t}</button>
+                      ))}
                     </div>
-                    <input
-                      value={temaCustom}
-                      onChange={(e) => { setTemaCustom(e.target.value); setTemaChip(""); }}
-                      placeholder="o escribe tu propio tema..."
-                      className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-600"
-                    />
+                    <input value={temaCustom} onChange={(e) => { setTemaCustom(e.target.value); setTemaChip(""); }} placeholder="o escribe tu propio tema..." className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-600" />
                   </div>
-
-                  {/* Objetivo mensual */}
                   <div>
-                    <label className="block text-xs font-semibold text-gray-700 mb-1.5">
-                      Objetivo mensual <span className="text-gray-400 font-normal">(opcional)</span>
-                    </label>
-                    <input
-                      value={objetivoMensual}
-                      onChange={(e) => setObjetivoMensual(e.target.value)}
-                      placeholder="Meta del mes para este grupo..."
-                      className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-600"
-                    />
+                    <label className="block text-xs font-semibold text-gray-700 mb-1.5">Objetivo mensual <span className="text-gray-400 font-normal">(opcional)</span></label>
+                    <input value={objetivoMensual} onChange={(e) => setObjetivoMensual(e.target.value)} placeholder="Meta del mes para este grupo..." className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-600" />
                   </div>
-
-                  {/* Contexto checkbox */}
                   <label className="flex items-center gap-2.5 cursor-pointer select-none">
-                    <input
-                      type="checkbox"
-                      checked={incluirContexto}
-                      onChange={(e) => setIncluirContexto(e.target.checked)}
-                      className="w-4 h-4 rounded accent-green-700"
-                    />
+                    <input type="checkbox" checked={incluirContexto} onChange={(e) => setIncluirContexto(e.target.checked)} className="w-4 h-4 rounded accent-green-700" />
                     <span className="text-sm text-gray-700">Incluir contexto de evaluaciones recientes del grupo</span>
                   </label>
-
                   {planError && <p className="text-xs text-red-500 bg-red-50 px-3 py-2 rounded-lg">{planError}</p>}
                 </div>
-
                 <div className="px-6 pb-5 flex gap-2">
-                  <button
-                    onClick={handleGenerarIA}
-                    disabled={busy}
-                    className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-semibold text-white disabled:opacity-50 transition-all"
-                    style={{ background: accentColor }}
-                  >
-                    {generatingAI
-                      ? <><svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"/></svg>Generando con IA...</>
-                      : <><svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>Generar plan ⚡</>
-                    }
+                  <button onClick={handleGenerarIA} disabled={busy} className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-semibold text-white disabled:opacity-50" style={{ background: accentColor }}>
+                    {generatingAI ? <><svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"/></svg>Generando...</> : "⚡ Generar plan"}
                   </button>
-                  <button
-                    onClick={handleCrearVacio}
-                    disabled={busy}
-                    className="flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-xl text-sm font-semibold border border-gray-200 text-gray-700 hover:bg-gray-50 disabled:opacity-50"
-                  >
+                  <button onClick={handleCrearVacio} disabled={busy} className="px-4 py-2.5 rounded-xl text-sm font-semibold border border-gray-200 text-gray-700 hover:bg-gray-50 disabled:opacity-50">
                     {creandoPlan ? "Creando..." : "Crear vacío"}
                   </button>
                 </div>
               </>
             ) : (
-              /* ── Step 2: Preview ── */
               <>
                 <div className="flex items-center justify-between px-6 py-3 bg-green-50 border-b border-green-100">
                   <div className="flex items-center gap-2">
                     <svg width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="#166534" strokeWidth={2.5}><path d="M3 10l4 4 9-9"/></svg>
                     <span className="text-xs font-semibold text-green-800">Plan generado — revisa y edita antes de guardar</span>
                   </div>
-                  <button
-                    onClick={() => setAiPreview(null)}
-                    className="text-xs text-green-700 font-medium hover:underline"
-                  >
-                    ← Volver
-                  </button>
+                  <button onClick={() => setAiPreview(null)} className="text-xs text-green-700 font-medium hover:underline">← Volver</button>
                 </div>
-
-                {/* Descripción del tema */}
                 {aiPreview.descripcion_tema && (
                   <div className="px-6 py-3 bg-gray-50 border-b border-gray-100">
                     <p className="text-xs text-gray-600 italic">{aiPreview.descripcion_tema}</p>
                   </div>
                 )}
-
                 <div className="px-6 py-4 max-h-[55vh] overflow-y-auto space-y-3">
                   {aiPreview.sesiones.map((s, i) => {
                     const tc = TIPO_SESION_COLOR[s.tipo_sesion];
                     return (
                       <div key={i} className="border border-gray-200 rounded-xl p-4">
-                        {/* Day header */}
                         <div className="flex items-center gap-2 mb-3 flex-wrap">
                           <span className="font-bold text-sm text-gray-900">{DIA_LABEL[s.dia_semana]}</span>
                           <span className="text-xs text-gray-400">{formatDiaFecha(s.fecha)}</span>
                           <span className="px-2 py-0.5 rounded-full text-xs font-semibold" style={{ background: tc.bg, color: tc.text }}>{TIPO_SESION_LABEL[s.tipo_sesion]}</span>
                           {s.hora_inicio && <span className="text-xs text-gray-400">{s.hora_inicio.slice(0,5)}–{s.hora_fin.slice(0,5)}</span>}
                         </div>
-
-                        {/* Editable: tipo + lugar */}
                         <div className="grid grid-cols-2 gap-2 mb-2">
-                          <select
-                            value={s.tipo_sesion}
-                            onChange={(e) => updatePreviewSesion(i, { tipo_sesion: e.target.value as TipoSesion })}
-                            className="border border-gray-200 rounded-lg px-2 py-1.5 text-xs bg-white focus:outline-none focus:ring-1 focus:ring-green-500"
-                          >
-                            {(Object.keys(TIPO_SESION_LABEL) as TipoSesion[]).map((t) => (
-                              <option key={t} value={t}>{TIPO_SESION_LABEL[t]}</option>
-                            ))}
+                          <select value={s.tipo_sesion} onChange={(e) => updatePreviewSesion(i, { tipo_sesion: e.target.value as TipoSesion })} className="border border-gray-200 rounded-lg px-2 py-1.5 text-xs bg-white focus:outline-none">
+                            {(Object.keys(TIPO_SESION_LABEL) as TipoSesion[]).map((t) => <option key={t} value={t}>{TIPO_SESION_LABEL[t]}</option>)}
                           </select>
-                          <select
-                            value={s.lugar}
-                            onChange={(e) => updatePreviewSesion(i, { lugar: e.target.value as Lugar })}
-                            className="border border-gray-200 rounded-lg px-2 py-1.5 text-xs bg-white focus:outline-none focus:ring-1 focus:ring-green-500"
-                          >
-                            {(Object.keys(LUGAR_LABEL) as Lugar[]).map((l) => (
-                              <option key={l} value={l}>{LUGAR_LABEL[l]}</option>
-                            ))}
+                          <select value={s.lugar} onChange={(e) => updatePreviewSesion(i, { lugar: e.target.value as Lugar })} className="border border-gray-200 rounded-lg px-2 py-1.5 text-xs bg-white focus:outline-none">
+                            {(Object.keys(LUGAR_LABEL) as Lugar[]).map((l) => <option key={l} value={l}>{LUGAR_LABEL[l]}</option>)}
                           </select>
                         </div>
-
-                        {/* Editable: objetivo */}
-                        <textarea
-                          value={s.objetivo}
-                          onChange={(e) => updatePreviewSesion(i, { objetivo: e.target.value })}
-                          rows={2}
-                          placeholder="Objetivo de la sesión..."
-                          className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-xs resize-none focus:outline-none focus:ring-1 focus:ring-green-500"
-                        />
-
-                        {/* Drills summary */}
-                        {s.drills?.length > 0 && (
-                          <p className="text-[11px] text-gray-400 mt-2">
-                            {s.drills.length} drill{s.drills.length !== 1 ? "s" : ""}: {s.drills.map((d) => d.titulo).join(" · ")}
-                          </p>
-                        )}
-
-                        {/* Estaciones summary */}
-                        {s.estaciones_damas && s.estaciones_damas.length > 0 && (
-                          <p className="text-[11px] text-gray-400 mt-2">
-                            Estaciones: {s.estaciones_damas.map((e) => e.nombre).join(" → ")}
-                          </p>
-                        )}
-
-                        {/* Juego competitivo */}
-                        {s.juego_competitivo && (
-                          <div className="mt-2 px-2 py-1.5 bg-orange-50 rounded-lg text-[11px] text-orange-800">
-                            🏆 {s.juego_competitivo}
-                          </div>
-                        )}
+                        <textarea value={s.objetivo} onChange={(e) => updatePreviewSesion(i, { objetivo: e.target.value })} rows={2} placeholder="Objetivo..." className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-xs resize-none focus:outline-none focus:ring-1 focus:ring-green-500" />
+                        {s.drills?.length > 0 && <p className="text-[11px] text-gray-400 mt-2">{s.drills.length} drills: {s.drills.map((d) => d.titulo).join(" · ")}</p>}
+                        {s.estaciones_damas && s.estaciones_damas.length > 0 && <p className="text-[11px] text-gray-400 mt-2">Est.: {s.estaciones_damas.map((e) => e.nombre).join(" → ")}</p>}
+                        {s.juego_competitivo && <div className="mt-2 px-2 py-1.5 bg-orange-50 rounded text-[11px] text-orange-800">🏆 {s.juego_competitivo}</div>}
                       </div>
                     );
                   })}
                 </div>
-
                 <div className="px-6 pb-5 pt-3 border-t border-gray-100">
                   {planError && <p className="text-xs text-red-500 bg-red-50 px-3 py-2 rounded-lg mb-3">{planError}</p>}
-                  <button
-                    onClick={handleGuardarPlanIA}
-                    disabled={savingGenerado}
-                    className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-semibold text-white disabled:opacity-50"
-                    style={{ background: accentColor }}
-                  >
-                    {savingGenerado
-                      ? <><svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"/></svg>Guardando...</>
-                      : "Guardar plan de la semana"
-                    }
+                  <button onClick={handleGuardarPlanIA} disabled={savingGenerado} className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-semibold text-white disabled:opacity-50" style={{ background: accentColor }}>
+                    {savingGenerado ? <><svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"/></svg>Guardando...</> : "Guardar plan de la semana"}
                   </button>
                 </div>
               </>
@@ -1054,31 +1200,16 @@ export default function ProgramacionModule() {
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
               <h2 className="font-bold text-gray-900">Editar tema semanal</h2>
-              <button onClick={() => setShowEditTema(false)} className="text-gray-400 hover:text-gray-600">
-                <svg width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path d="M18 6L6 18M6 6l12 12"/></svg>
-              </button>
+              <button onClick={() => setShowEditTema(false)} className="text-gray-400 hover:text-gray-600"><svg width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path d="M18 6L6 18M6 6l12 12"/></svg></button>
             </div>
             <div className="px-6 py-5 space-y-4">
-              <div>
-                <label className="block text-xs font-semibold text-gray-700 mb-1.5">Tema semanal</label>
-                <input value={temaForm.tema_semanal} onChange={(e) => setTemaForm((f) => ({ ...f, tema_semanal: e.target.value }))} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-600" />
-              </div>
-              <div>
-                <label className="block text-xs font-semibold text-gray-700 mb-1.5">Descripción</label>
-                <textarea value={temaForm.descripcion_tema} onChange={(e) => setTemaForm((f) => ({ ...f, descripcion_tema: e.target.value }))} rows={2} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-600 resize-none" />
-              </div>
-              <div>
-                <label className="block text-xs font-semibold text-gray-700 mb-1.5">Objetivo mensual</label>
-                <input value={temaForm.objetivo_mensual} onChange={(e) => setTemaForm((f) => ({ ...f, objetivo_mensual: e.target.value }))} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-600" />
-              </div>
+              <div><label className="block text-xs font-semibold text-gray-700 mb-1.5">Tema semanal</label><input value={temaForm.tema_semanal} onChange={(e) => setTemaForm((f) => ({ ...f, tema_semanal: e.target.value }))} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-600" /></div>
+              <div><label className="block text-xs font-semibold text-gray-700 mb-1.5">Descripción</label><textarea value={temaForm.descripcion_tema} onChange={(e) => setTemaForm((f) => ({ ...f, descripcion_tema: e.target.value }))} rows={2} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-600 resize-none" /></div>
+              <div><label className="block text-xs font-semibold text-gray-700 mb-1.5">Objetivo mensual</label><input value={temaForm.objetivo_mensual} onChange={(e) => setTemaForm((f) => ({ ...f, objetivo_mensual: e.target.value }))} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-600" /></div>
             </div>
             <div className="px-6 pb-5 flex gap-2">
-              <button onClick={handleSaveTema} disabled={savingTema} className="flex-1 py-2.5 rounded-xl text-sm font-semibold text-white disabled:opacity-50" style={{ background: accentColor }}>
-                {savingTema ? "Guardando..." : "Guardar cambios"}
-              </button>
-              <button onClick={() => setShowEditTema(false)} className="px-4 py-2.5 rounded-xl text-sm font-medium border border-gray-200 text-gray-600 hover:bg-gray-50">
-                Cancelar
-              </button>
+              <button onClick={handleSaveTema} disabled={savingTema} className="flex-1 py-2.5 rounded-xl text-sm font-semibold text-white disabled:opacity-50" style={{ background: accentColor }}>{savingTema ? "Guardando..." : "Guardar cambios"}</button>
+              <button onClick={() => setShowEditTema(false)} className="px-4 py-2.5 rounded-xl text-sm font-medium border border-gray-200 text-gray-600 hover:bg-gray-50">Cancelar</button>
             </div>
           </div>
         </div>
@@ -1093,73 +1224,51 @@ export default function ProgramacionModule() {
                 <h2 className="font-bold text-gray-900">{editSesionCtx.sesion ? "Editar sesión" : "Nueva sesión"} — {DIA_LABEL[editSesionCtx.dia]}</h2>
                 <p className="text-xs text-gray-400 mt-0.5">{formatDiaFecha(editSesionCtx.fecha)}</p>
               </div>
-              <button onClick={() => { setEditSesionCtx(null); setSesionForm(null); }} className="text-gray-400 hover:text-gray-600">
-                <svg width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path d="M18 6L6 18M6 6l12 12"/></svg>
-              </button>
+              <button onClick={() => { setEditSesionCtx(null); setSesionForm(null); }} className="text-gray-400 hover:text-gray-600"><svg width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path d="M18 6L6 18M6 6l12 12"/></svg></button>
             </div>
-
             <div className="px-6 py-5 space-y-5">
               <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-semibold text-gray-700 mb-1.5">Tipo de sesión</label>
+                <div><label className="block text-xs font-semibold text-gray-700 mb-1.5">Tipo de sesión</label>
                   <select value={sesionForm.tipo_sesion} onChange={(e) => setSesionForm((f) => f ? { ...f, tipo_sesion: e.target.value as TipoSesion } : f)} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-600 bg-white">
                     {(Object.keys(TIPO_SESION_LABEL) as TipoSesion[]).map((t) => <option key={t} value={t}>{TIPO_SESION_LABEL[t]}</option>)}
                   </select>
                 </div>
-                <div>
-                  <label className="block text-xs font-semibold text-gray-700 mb-1.5">Lugar</label>
+                <div><label className="block text-xs font-semibold text-gray-700 mb-1.5">Lugar</label>
                   <select value={sesionForm.lugar} onChange={(e) => setSesionForm((f) => f ? { ...f, lugar: e.target.value as Lugar } : f)} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-600 bg-white">
                     {(Object.keys(LUGAR_LABEL) as Lugar[]).map((l) => <option key={l} value={l}>{LUGAR_LABEL[l]}</option>)}
                   </select>
                 </div>
               </div>
-
               <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-semibold text-gray-700 mb-1.5">Hora inicio</label>
-                  <input type="time" value={sesionForm.hora_inicio} onChange={(e) => setSesionForm((f) => f ? { ...f, hora_inicio: e.target.value } : f)} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-600" />
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold text-gray-700 mb-1.5">Hora fin</label>
-                  <input type="time" value={sesionForm.hora_fin} onChange={(e) => setSesionForm((f) => f ? { ...f, hora_fin: e.target.value } : f)} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-600" />
-                </div>
+                <div><label className="block text-xs font-semibold text-gray-700 mb-1.5">Hora inicio</label><input type="time" value={sesionForm.hora_inicio} onChange={(e) => setSesionForm((f) => f ? { ...f, hora_inicio: e.target.value } : f)} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-600" /></div>
+                <div><label className="block text-xs font-semibold text-gray-700 mb-1.5">Hora fin</label><input type="time" value={sesionForm.hora_fin} onChange={(e) => setSesionForm((f) => f ? { ...f, hora_fin: e.target.value } : f)} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-600" /></div>
               </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-gray-700 mb-1.5">Objetivo de la sesión</label>
+              <div><label className="block text-xs font-semibold text-gray-700 mb-1.5">Objetivo</label>
                 <textarea value={sesionForm.objetivo} onChange={(e) => setSesionForm((f) => f ? { ...f, objetivo: e.target.value } : f)} placeholder="Qué van a lograr al finalizar esta sesión..." rows={2} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-600 resize-none" />
               </div>
 
-              {/* Estaciones damas */}
               {activeTab === "damas" && (
                 <div>
                   <div className="flex items-center justify-between mb-2">
                     <label className="text-xs font-semibold text-gray-700">Estaciones ({sesionForm.estaciones_damas.length})</label>
-                    <button onClick={() => setSesionForm((f) => f ? { ...f, estaciones_damas: [...f.estaciones_damas, defaultEstacion()] } : f)} className="text-xs text-fuchsia-700 font-medium hover:underline">+ Agregar estación</button>
+                    <button onClick={() => setSesionForm((f) => f ? { ...f, estaciones_damas: [...f.estaciones_damas, defaultEstacion()] } : f)} className="text-xs text-fuchsia-700 font-medium hover:underline">+ Agregar</button>
                   </div>
                   <div className="space-y-3">
                     {sesionForm.estaciones_damas.map((est, i) => (
                       <div key={i} className="border border-fuchsia-100 bg-fuchsia-50 rounded-lg p-3">
-                        <div className="flex items-center justify-between mb-2">
-                          <span className="text-xs font-bold text-fuchsia-800">Estación {i + 1}</span>
-                          <button onClick={() => setSesionForm((f) => f ? { ...f, estaciones_damas: f.estaciones_damas.filter((_, j) => j !== i) } : f)} className="text-xs text-red-400 hover:text-red-600">Eliminar</button>
-                        </div>
+                        <div className="flex items-center justify-between mb-2"><span className="text-xs font-bold text-fuchsia-800">Est. {i + 1}</span><button onClick={() => setSesionForm((f) => f ? { ...f, estaciones_damas: f.estaciones_damas.filter((_, j) => j !== i) } : f)} className="text-xs text-red-400">Eliminar</button></div>
                         <div className="grid grid-cols-2 gap-2 mb-2">
-                          <input placeholder="Nombre" value={est.nombre} onChange={(e) => setSesionForm((f) => { if (!f) return f; const d = [...f.estaciones_damas]; d[i] = { ...d[i], nombre: e.target.value }; return { ...f, estaciones_damas: d }; })} className="border border-gray-200 rounded px-2 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-fuchsia-400" />
-                          <input placeholder="Lugar/área" value={est.lugar} onChange={(e) => setSesionForm((f) => { if (!f) return f; const d = [...f.estaciones_damas]; d[i] = { ...d[i], lugar: e.target.value }; return { ...f, estaciones_damas: d }; })} className="border border-gray-200 rounded px-2 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-fuchsia-400" />
+                          <input placeholder="Nombre" value={est.nombre} onChange={(e) => setSesionForm((f) => { if (!f) return f; const d = [...f.estaciones_damas]; d[i] = { ...d[i], nombre: e.target.value }; return { ...f, estaciones_damas: d }; })} className="border border-gray-200 rounded px-2 py-1.5 text-xs" />
+                          <input placeholder="Lugar/área" value={est.lugar} onChange={(e) => setSesionForm((f) => { if (!f) return f; const d = [...f.estaciones_damas]; d[i] = { ...d[i], lugar: e.target.value }; return { ...f, estaciones_damas: d }; })} className="border border-gray-200 rounded px-2 py-1.5 text-xs" />
                         </div>
-                        <div className="flex items-center gap-2 mb-2">
-                          <input type="number" min={5} max={60} value={est.duracion_min} onChange={(e) => setSesionForm((f) => { if (!f) return f; const d = [...f.estaciones_damas]; d[i] = { ...d[i], duracion_min: +e.target.value }; return { ...f, estaciones_damas: d }; })} className="w-20 border border-gray-200 rounded px-2 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-fuchsia-400" />
-                          <span className="text-xs text-gray-400">minutos</span>
-                        </div>
-                        <textarea placeholder="Descripción..." value={est.descripcion} onChange={(e) => setSesionForm((f) => { if (!f) return f; const d = [...f.estaciones_damas]; d[i] = { ...d[i], descripcion: e.target.value }; return { ...f, estaciones_damas: d }; })} rows={2} className="w-full border border-gray-200 rounded px-2 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-fuchsia-400 resize-none" />
+                        <div className="flex items-center gap-2 mb-2"><input type="number" min={5} max={60} value={est.duracion_min} onChange={(e) => setSesionForm((f) => { if (!f) return f; const d = [...f.estaciones_damas]; d[i] = { ...d[i], duracion_min: +e.target.value }; return { ...f, estaciones_damas: d }; })} className="w-20 border border-gray-200 rounded px-2 py-1.5 text-xs" /><span className="text-xs text-gray-400">min</span></div>
+                        <textarea placeholder="Descripción..." value={est.descripcion} onChange={(e) => setSesionForm((f) => { if (!f) return f; const d = [...f.estaciones_damas]; d[i] = { ...d[i], descripcion: e.target.value }; return { ...f, estaciones_damas: d }; })} rows={2} className="w-full border border-gray-200 rounded px-2 py-1.5 text-xs resize-none" />
                       </div>
                     ))}
                   </div>
                 </div>
               )}
 
-              {/* Drills */}
               {activeTab !== "damas" && (
                 <div>
                   <div className="flex items-center justify-between mb-2">
@@ -1169,39 +1278,25 @@ export default function ProgramacionModule() {
                   <div className="space-y-3">
                     {sesionForm.drills.map((drill, i) => (
                       <div key={i} className="border border-gray-200 rounded-lg p-3 bg-gray-50">
-                        <div className="flex items-center justify-between mb-2">
-                          <span className="text-xs font-semibold text-gray-600">Drill {i + 1}</span>
-                          <button onClick={() => setSesionForm((f) => f ? { ...f, drills: f.drills.filter((_, j) => j !== i) } : f)} className="text-xs text-red-400 hover:text-red-600">Eliminar</button>
-                        </div>
+                        <div className="flex items-center justify-between mb-2"><span className="text-xs font-semibold text-gray-600">Drill {i + 1}</span><button onClick={() => setSesionForm((f) => f ? { ...f, drills: f.drills.filter((_, j) => j !== i) } : f)} className="text-xs text-red-400">Eliminar</button></div>
                         <input placeholder="Título del drill" value={drill.titulo} onChange={(e) => setSesionForm((f) => { if (!f) return f; const d = [...f.drills]; d[i] = { ...d[i], titulo: e.target.value }; return { ...f, drills: d }; })} className="w-full border border-gray-200 rounded px-2 py-1.5 text-xs mb-2 focus:outline-none focus:ring-1 focus:ring-green-500" />
                         <textarea placeholder="Descripción y ejecución..." value={drill.descripcion} onChange={(e) => setSesionForm((f) => { if (!f) return f; const d = [...f.drills]; d[i] = { ...d[i], descripcion: e.target.value }; return { ...f, drills: d }; })} rows={2} className="w-full border border-gray-200 rounded px-2 py-1.5 text-xs mb-2 resize-none focus:outline-none focus:ring-1 focus:ring-green-500" />
-
                         {activeTab === "juvenil" && (
                           <div className="grid grid-cols-2 gap-2">
-                            {[
-                              { key: "dificultad_birdies" as const, label: "Birdies", color: "#dbeafe" },
-                              { key: "dificultad_aguilas" as const, label: "Águilas", color: "#dcfce7" },
-                              { key: "dificultad_albatros" as const, label: "Albatros", color: "#fef9c3" },
-                              { key: "dificultad_mas14" as const, label: "+14", color: "#ede9fe" },
-                            ].map(({ key, label, color }) => (
+                            {[{ key: "dificultad_birdies" as const, label: "Birdies", color: "#dbeafe" }, { key: "dificultad_aguilas" as const, label: "Águilas", color: "#dcfce7" }, { key: "dificultad_albatros" as const, label: "Albatros", color: "#fef9c3" }, { key: "dificultad_mas14" as const, label: "+14", color: "#ede9fe" }].map(({ key, label, color }) => (
                               <div key={key} className="rounded p-1.5" style={{ background: color }}>
                                 <p className="text-[10px] font-bold text-gray-500 mb-1">{label}</p>
-                                <textarea placeholder={`Adaptación ${label}...`} value={drill[key] ?? ""} onChange={(e) => setSesionForm((f) => { if (!f) return f; const d = [...f.drills]; d[i] = { ...d[i], [key]: e.target.value }; return { ...f, drills: d }; })} rows={2} className="w-full bg-white border border-gray-200 rounded px-1.5 py-1 text-[11px] resize-none focus:outline-none focus:ring-1 focus:ring-green-400" />
+                                <textarea placeholder={`Adaptación ${label}...`} value={drill[key] ?? ""} onChange={(e) => setSesionForm((f) => { if (!f) return f; const d = [...f.drills]; d[i] = { ...d[i], [key]: e.target.value }; return { ...f, drills: d }; })} rows={2} className="w-full bg-white border border-gray-200 rounded px-1.5 py-1 text-[11px] resize-none" />
                               </div>
                             ))}
                           </div>
                         )}
-
                         {activeTab === "competencia" && (
                           <div className="space-y-2 mt-1">
-                            {[
-                              { key: "metrica_exito" as const, label: "Métrica de éxito", placeholder: "ej: 7 de 10 chips dentro de 1m...", color: "#eff6ff" },
-                              { key: "variante_presion" as const, label: "Variante de presión", placeholder: "misma tarea con consecuencia...", color: "#fff7ed" },
-                              { key: "conexion_tecnica" as const, label: "Conexión técnica", placeholder: "qué error trabaja este drill...", color: "#faf5ff" },
-                            ].map(({ key, label, placeholder, color }) => (
+                            {[{ key: "metrica_exito" as const, label: "Métrica de éxito", color: "#eff6ff" }, { key: "variante_presion" as const, label: "Variante de presión", color: "#fff7ed" }, { key: "conexion_tecnica" as const, label: "Conexión técnica", color: "#faf5ff" }].map(({ key, label, color }) => (
                               <div key={key} className="rounded p-1.5" style={{ background: color }}>
                                 <p className="text-[10px] font-bold text-gray-500 mb-1">{label}</p>
-                                <textarea placeholder={placeholder} value={drill[key] ?? ""} onChange={(e) => setSesionForm((f) => { if (!f) return f; const d = [...f.drills]; d[i] = { ...d[i], [key]: e.target.value }; return { ...f, drills: d }; })} rows={2} className="w-full bg-white border border-gray-200 rounded px-1.5 py-1 text-[11px] resize-none focus:outline-none focus:ring-1 focus:ring-green-400" />
+                                <textarea placeholder="..." value={drill[key] ?? ""} onChange={(e) => setSesionForm((f) => { if (!f) return f; const d = [...f.drills]; d[i] = { ...d[i], [key]: e.target.value }; return { ...f, drills: d }; })} rows={2} className="w-full bg-white border border-gray-200 rounded px-1.5 py-1 text-[11px] resize-none" />
                               </div>
                             ))}
                           </div>
@@ -1212,91 +1307,104 @@ export default function ProgramacionModule() {
                 </div>
               )}
 
-              {/* Juego competitivo */}
               {activeTab !== "damas" && (
-                <div>
-                  <label className="block text-xs font-semibold text-gray-700 mb-1.5">Juego competitivo <span className="text-gray-400 font-normal">(opcional)</span></label>
+                <div><label className="block text-xs font-semibold text-gray-700 mb-1.5">Juego competitivo <span className="text-gray-400 font-normal">(opcional)</span></label>
                   <textarea value={sesionForm.juego_competitivo} onChange={(e) => setSesionForm((f) => f ? { ...f, juego_competitivo: e.target.value } : f)} placeholder="Actividad competitiva al final..." rows={2} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-600 resize-none" />
                 </div>
               )}
-
-              <div>
-                <label className="block text-xs font-semibold text-gray-700 mb-1.5">Notas <span className="text-gray-400 font-normal">(opcional)</span></label>
+              <div><label className="block text-xs font-semibold text-gray-700 mb-1.5">Notas <span className="text-gray-400 font-normal">(opcional)</span></label>
                 <textarea value={sesionForm.notas} onChange={(e) => setSesionForm((f) => f ? { ...f, notas: e.target.value } : f)} placeholder="Observaciones adicionales..." rows={2} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-600 resize-none" />
               </div>
-
               {sesionError && <p className="text-xs text-red-500 bg-red-50 px-3 py-2 rounded-lg">{sesionError}</p>}
             </div>
-
             <div className="px-6 pb-5 flex gap-2 border-t border-gray-100 pt-4">
-              <button onClick={handleSaveSesion} disabled={savingSesion} className="flex-1 py-2.5 rounded-xl text-sm font-semibold text-white disabled:opacity-50" style={{ background: accentColor }}>
-                {savingSesion ? "Guardando..." : "Guardar sesión"}
+              <button onClick={handleSaveSesion} disabled={savingSesion} className="flex-1 py-2.5 rounded-xl text-sm font-semibold text-white disabled:opacity-50" style={{ background: accentColor }}>{savingSesion ? "Guardando..." : "Guardar sesión"}</button>
+              <button onClick={() => { setEditSesionCtx(null); setSesionForm(null); }} className="px-5 py-2.5 rounded-xl text-sm font-medium border border-gray-200 text-gray-600 hover:bg-gray-50">Cancelar</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ══ MODAL: Detalle evento calendario ════════════════════════════════ */}
+      {calEventDetail && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={() => setCalEventDetail(null)}>
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100" style={{ borderLeft: `4px solid ${CAL_COLOR[calEventDetail.tipo_plan].border}` }}>
+              <div>
+                <div className="flex items-center gap-2 mb-0.5">
+                  <span className="text-xs font-bold" style={{ color: CAL_COLOR[calEventDetail.tipo_plan].border }}>{TIPO_PLAN_LABEL[calEventDetail.tipo_plan]}</span>
+                  <span className="px-1.5 py-0.5 rounded-full text-[10px] font-semibold" style={{ background: TIPO_SESION_COLOR[calEventDetail.tipo_sesion].bg, color: TIPO_SESION_COLOR[calEventDetail.tipo_sesion].text }}>{TIPO_SESION_LABEL[calEventDetail.tipo_sesion]}</span>
+                </div>
+                <p className="text-sm font-bold text-gray-900">{DIA_LABEL[calEventDetail.dia_semana]} · {formatDiaFecha(calEventDetail.fecha)}</p>
+              </div>
+              <button onClick={() => setCalEventDetail(null)} className="text-gray-400 hover:text-gray-600"><svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path d="M18 6L6 18M6 6l12 12"/></svg></button>
+            </div>
+            <div className="px-5 py-4 space-y-3">
+              <div className="flex gap-3 text-xs text-gray-500">
+                <span>{LUGAR_LABEL[calEventDetail.lugar]}</span>
+                {calEventDetail.hora_inicio && <><span>·</span><span>{formatHora(calEventDetail.hora_inicio)}–{formatHora(calEventDetail.hora_fin)}</span></>}
+              </div>
+              {calEventDetail.objetivo && <p className="text-sm text-gray-700">{calEventDetail.objetivo}</p>}
+              {calEventDetail.drills?.length > 0 && <p className="text-xs text-gray-400">{calEventDetail.drills.length} drills: {calEventDetail.drills.map((d) => d.titulo).join(" · ")}</p>}
+              {calEventDetail.juego_competitivo && <div className="bg-orange-50 rounded-lg px-3 py-2"><p className="text-xs font-semibold text-orange-700 mb-0.5">🏆 Juego competitivo</p><p className="text-xs text-gray-700">{calEventDetail.juego_competitivo}</p></div>}
+            </div>
+            <div className="px-5 pb-4 flex gap-2">
+              <button
+                onClick={() => { router.push(`/programacion/sesion/${calEventDetail.id}`); setCalEventDetail(null); }}
+                className="flex-1 py-2 rounded-xl text-xs font-semibold text-white"
+                style={{ background: CAL_COLOR[calEventDetail.tipo_plan].border }}
+              >
+                Pasar asistencia →
               </button>
-              <button onClick={() => { setEditSesionCtx(null); setSesionForm(null); }} className="px-5 py-2.5 rounded-xl text-sm font-medium border border-gray-200 text-gray-600 hover:bg-gray-50">
-                Cancelar
+              <button
+                onClick={() => {
+                  setCalEventDetail(null);
+                  setActiveTab(calEventDetail.tipo_plan);
+                  setViewMode("plan");
+                  setTimeout(() => openEditSesion(calEventDetail.dia_semana, calEventDetail), 100);
+                }}
+                className="px-3 py-2 rounded-xl text-xs font-medium border border-gray-200 text-gray-600 hover:bg-gray-50"
+              >
+                Editar
               </button>
             </div>
           </div>
         </div>
       )}
 
-      {/* ── Hidden PDF padres ─────────────────────────────────────────────────── */}
+      {/* ── Hidden PDF padres ─────────────────────────────────────────────── */}
       <div ref={padresPdfRef} style={{ position: "absolute", left: "-9999px", top: 0, width: "720px", background: "#fff", fontFamily: "Arial, sans-serif" }}>
         {plan && (
           <>
-            {/* Header */}
             <div style={{ background: accentColor, color: "#fff", padding: "20px 28px" }}>
               <p style={{ margin: 0, fontSize: 10, fontWeight: 700, opacity: 0.75, letterSpacing: "0.1em", textTransform: "uppercase" }}>Escuela de Golf CCB</p>
               <h1 style={{ margin: "4px 0 2px", fontSize: 20, fontWeight: 800 }}>Programación Semanal</h1>
               <p style={{ margin: 0, fontSize: 12, opacity: 0.85 }}>Grupo {TIPO_PLAN_LABEL[activeTab]} · {formatWeekRange(semana)}</p>
             </div>
-
-            {/* Tema */}
             <div style={{ background: "#f0fdf4", borderBottom: "2px solid #bbf7d0", padding: "14px 28px" }}>
-              <p style={{ margin: "0 0 4px", fontSize: 10, fontWeight: 700, color: "#6b7280", textTransform: "uppercase", letterSpacing: "0.06em" }}>Tema de la semana</p>
+              <p style={{ margin: "0 0 4px", fontSize: 10, fontWeight: 700, color: "#6b7280", textTransform: "uppercase" }}>Tema de la semana</p>
               <h2 style={{ margin: "0 0 4px", fontSize: 15, fontWeight: 800, color: "#111827" }}>{plan.tema_semanal}</h2>
               {plan.descripcion_tema && <p style={{ margin: 0, fontSize: 12, color: "#374151", lineHeight: 1.5 }}>{plan.descripcion_tema}</p>}
             </div>
-
-            {/* Sessions */}
             {sesiones.map((sesion, idx) => (
               <div key={sesion.id} style={{ padding: "14px 28px", borderBottom: "1px solid #f3f4f6", background: idx % 2 === 0 ? "#fff" : "#fafafa" }}>
                 <div style={{ display: "flex", alignItems: "baseline", gap: 8, marginBottom: 6, flexWrap: "wrap" }}>
                   <span style={{ fontWeight: 800, fontSize: 14, color: "#111827" }}>{DIA_LABEL[sesion.dia_semana]}</span>
                   <span style={{ fontSize: 11, color: "#9ca3af" }}>{formatDiaFecha(sesion.fecha)}</span>
-                  <span style={{ fontSize: 11, color: "#6b7280" }}>·</span>
-                  <span style={{ fontSize: 11, color: "#6b7280" }}>{LUGAR_LABEL[sesion.lugar]}</span>
-                  {sesion.hora_inicio && (
-                    <>
-                      <span style={{ fontSize: 11, color: "#6b7280" }}>·</span>
-                      <span style={{ fontSize: 11, color: "#6b7280" }}>{formatHora(sesion.hora_inicio)}–{formatHora(sesion.hora_fin)}</span>
-                    </>
-                  )}
+                  <span style={{ fontSize: 11, color: "#6b7280" }}>· {LUGAR_LABEL[sesion.lugar]}</span>
+                  {sesion.hora_inicio && <span style={{ fontSize: 11, color: "#6b7280" }}>· {formatHora(sesion.hora_inicio)}–{formatHora(sesion.hora_fin)}</span>}
                 </div>
-
-                {sesion.objetivo && (
-                  <p style={{ margin: "0 0 8px", fontSize: 12, color: "#374151", lineHeight: 1.5 }}>{sesion.objetivo}</p>
-                )}
-
-                {/* Drills — simplified for parents */}
-                {sesion.drills && sesion.drills.length > 0 && (
+                {sesion.objetivo && <p style={{ margin: "0 0 8px", fontSize: 12, color: "#374151", lineHeight: 1.5 }}>{sesion.objetivo}</p>}
+                {sesion.drills?.length > 0 && (
                   <ul style={{ margin: "4px 0 0", paddingLeft: 16, fontSize: 11, color: "#4b5563" }}>
                     {sesion.drills.map((d, j) => (
-                      <li key={j} style={{ marginBottom: 3 }}>
-                        <strong>{d.titulo}</strong>
-                        {d.descripcion && <span style={{ color: "#6b7280" }}> — {d.descripcion}</span>}
-                        {activeTab === "competencia" && d.metrica_exito && (
-                          <span style={{ color: "#1d4ed8", fontSize: 10 }}> · Meta: {d.metrica_exito}</span>
-                        )}
-                      </li>
+                      <li key={j} style={{ marginBottom: 3 }}><strong>{d.titulo}</strong>{d.descripcion && <span style={{ color: "#6b7280" }}> — {d.descripcion}</span>}{activeTab === "competencia" && d.metrica_exito && <span style={{ color: "#1d4ed8", fontSize: 10 }}> · Meta: {d.metrica_exito}</span>}</li>
                     ))}
                   </ul>
                 )}
-
-                {/* Estaciones damas */}
-                {sesion.estaciones_damas && sesion.estaciones_damas.length > 0 && (
+                {(sesion.estaciones_damas?.length ?? 0) > 0 && (
                   <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
-                    {sesion.estaciones_damas.map((est, j) => (
+                    {(sesion.estaciones_damas ?? []).map((est, j) => (
                       <div key={j} style={{ flex: 1, background: "#fdf4ff", border: "1px solid #e9d5ff", borderRadius: 6, padding: "8px 10px" }}>
                         <p style={{ margin: "0 0 2px", fontSize: 10, fontWeight: 700, color: "#6b21a8" }}>{est.nombre} · {est.duracion_min} min</p>
                         <p style={{ margin: 0, fontSize: 11, color: "#374151" }}>{est.descripcion}</p>
@@ -1304,7 +1412,6 @@ export default function ProgramacionModule() {
                     ))}
                   </div>
                 )}
-
                 {sesion.juego_competitivo && (
                   <div style={{ marginTop: 8, padding: "6px 10px", background: "#fff7ed", borderRadius: 6, border: "1px solid #fed7aa" }}>
                     <span style={{ fontSize: 10, fontWeight: 700, color: "#92400e" }}>Actividad final: </span>
@@ -1313,8 +1420,6 @@ export default function ProgramacionModule() {
                 )}
               </div>
             ))}
-
-            {/* Footer */}
             <div style={{ background: accentColor, color: "rgba(255,255,255,0.75)", padding: "12px 28px", fontSize: 10, textAlign: "center" }}>
               Escuela de Golf CCB · Para consultas, contacte a su instructor
             </div>
