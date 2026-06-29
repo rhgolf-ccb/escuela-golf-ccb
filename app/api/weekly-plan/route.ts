@@ -46,7 +46,7 @@ function buildPrompt(tipoPlan: string, tema: string, contexto: Record<string, un
       "hora_inicio": "${hi}",
       "hora_fin": "${hf}",
       "tipo_sesion": "<tiro_largo|juego_corto|putt|campo|test_tecnico|test_fisico>",
-      "lugar": "<driving_range|putting_green|campo_infantil|campo_pacos_fabios|campo_completo>",
+      "lugar": "<campo_practica|putting_green|campo_infantil|campo_pacos_fabios|campo_completo>",
       "objetivo": "foco concreto de la sesión — qué van a lograr al terminar",
       "drills": [
         {
@@ -98,85 +98,193 @@ Devuelve este JSON exacto:
   }
 
   if (tipoPlan === "competencia") {
-    // Schema compacto de drill para no repetirlo 8+ veces en el prompt
-    const drillRef = `{"titulo":"string","descripcion":"string","metrica_exito":"string","variante_presion":"string","conexion_tecnica":"string","dificultad_birdies":null,"dificultad_aguilas":null,"dificultad_albatros":null,"dificultad_mas14":null}`;
+    const modo       = (contexto.modo       as string)   || "construccion";
+    const torneo     = (contexto.torneo     as string)   || "sin_torneo";
+    const posiciones = (contexto.posiciones as string[]) || [];
+    const primerDia  = (contexto.primer_dia as string)   || "martes";
 
-    const diasSchema = dias.map((d) => {
-      const h = (HORARIOS[tipoPlan]?.[d] ?? [{ hi: "16:00", hf: "17:30" }])[0];
+    // Días según primer día hábil
+    const diasComp = primerDia === "miercoles"
+      ? ["miercoles", "jueves", "sabado"]
+      : ["martes", "miercoles", "jueves", "sabado"];
 
-      if (d === "martes") {
-        return `{
-      "dia_semana": "martes",
+    const posicionesStr = posiciones.length > 0
+      ? posiciones.join(", ")
+      : "P1–P7 en orden progresivo (sin tests realizados)";
+
+    const torneoLabel: Record<string, string> = {
+      sin_torneo:        "Sin torneo esta semana",
+      torneo_1_semana:   "Torneo en 1 semana",
+      torneo_2_semanas:  "Torneo en 2 semanas",
+      torneo_este_finde: "Torneo este fin de semana",
+    };
+    const torneoStr = torneoLabel[torneo] ?? torneo;
+    const hayTorneo = torneo !== "sin_torneo";
+
+    // Schema de drill para Competencia (nuevos campos pedagógicos)
+    const drillComp = `{"titulo":"string","posicion_objetivo":"ej: P3 — media subida","descripcion":"descripción del movimiento correcto","error_comun":"error frecuente a evitar","sensacion":"sensación propioceptiva buscada","repeticiones":"ej: 3 series de 10","metrica_exito":"métrica medible de éxito"}`;
+
+    const diasSchema = diasComp.map((d, idx) => {
+      const h = (HORARIOS["competencia"]?.[d] ?? [{ hi: "16:00", hf: "17:30" }])[0];
+      const isDia1   = idx === 0;
+      const isDia2   = idx === 1;
+      const isSabado = d === "sabado";
+
+      if (isDia1) {
+        if (modo === "construccion") {
+          return `{
+      "dia_semana": "${d}",
       "hora_inicio": "${h.hi}",
       "hora_fin": "${h.hf}",
       "tipo_sesion": "tiro_largo",
-      "lugar": "driving_range",
-      "objetivo": "foco concreto de la sesión con métrica",
+      "lugar": "campo_practica",
+      "foco_principal": "Tiro largo — construcción de swing",
       "opciones_actividad": [
-        {"id":1,"titulo":"Toma de tests / Evaluación","descripcion_corta":"Test técnico P1-P10, test físico TPI o medición Trackman.","justificacion":"<1 frase>","es_recomendada":false,"drills":[${drillRef},${drillRef}]},
-        {"id":2,"titulo":"Corrección técnica con drill","descripcion_corta":"Trabajar el error técnico más crítico identificado.","justificacion":"<1 frase>","es_recomendada":false,"drills":[${drillRef},${drillRef}]},
-        {"id":3,"titulo":"Sesión de potencia y velocidad","descripcion_corta":"Velocidad de swing, SuperSpeed o potencia con medición.","justificacion":"<1 frase>","es_recomendada":false,"drills":[${drillRef},${drillRef}]},
-        {"id":4,"titulo":"Filmación y análisis","descripcion_corta":"Grabar swing frente y lado, analizar posiciones P1-P10.","justificacion":"<1 frase>","es_recomendada":false,"drills":[${drillRef},${drillRef}]}
+        {"id":1,"titulo":"Toma de datos","descripcion_corta":"Trackman o filmación de swing (recomendada si no hay datos recientes)","justificacion":"<1 frase>","es_recomendada":false,"drills":[${drillComp},${drillComp}]},
+        {"id":2,"titulo":"Drills técnicos","descripcion_corta":"Drills progresivos para posiciones ${posicionesStr}","justificacion":"<1 frase>","es_recomendada":false,"drills":[${drillComp},${drillComp},${drillComp}]},
+        {"id":3,"titulo":"Potencia y velocidad","descripcion_corta":"Trabajo de club speed con medición y SuperSpeed","justificacion":"<1 frase>","es_recomendada":false,"drills":[${drillComp},${drillComp}]}
       ],
       "drills": [],
       "juego_competitivo": "string o null",
-      "estaciones_damas": null,
-      "notas": null
+      "objetivo_sesion": "string"
+    }`;
+        } else {
+          return `{
+      "dia_semana": "${d}",
+      "hora_inicio": "${h.hi}",
+      "hora_fin": "${h.hf}",
+      "tipo_sesion": "juego_corto",
+      "lugar": "campo_practica",
+      "foco_principal": "Juego corto — approach shots, chipping, bunker",
+      "opciones_actividad": [
+        {"id":1,"titulo":"Control de distancia en chipping","descripcion_corta":"3 distancias: 10m, 20m, 30m","justificacion":"<1 frase>","es_recomendada":false,"drills":[${drillComp}]},
+        {"id":2,"titulo":"Juego de bunker","descripcion_corta":"Salida y control desde arena","justificacion":"<1 frase>","es_recomendada":false,"drills":[${drillComp}]},
+        {"id":3,"titulo":"Approach shots 50-100 yds","descripcion_corta":"Diferentes palos con objetivo de distancia","justificacion":"<1 frase>","es_recomendada":false,"drills":[${drillComp}]},
+        {"id":4,"titulo":"Up & down challenge","descripcion_corta":"Chip + putt completando el hoyo","justificacion":"<1 frase>","es_recomendada":false,"drills":[${drillComp}]}
+      ],
+      "drills": [],
+      "juego_competitivo": "string o null",
+      "objetivo_sesion": "string"
+    }`;
+        }
+      }
+
+      if (isDia2 && !isSabado) {
+        if (modo === "preparacion") {
+          return `{
+      "dia_semana": "${d}",
+      "hora_inicio": "${h.hi}",
+      "hora_fin": "${h.hf}",
+      "tipo_sesion": "campo",
+      "lugar": "campo_pacos_fabios",
+      "foco_principal": "Juego en campo real — hoyos con objetivos específicos",
+      "opciones_actividad": null,
+      "drills": [${drillComp},${drillComp}],
+      "juego_competitivo": "string o null",
+      "objetivo_sesion": "string"
+    }`;
+        } else {
+          return `{
+      "dia_semana": "${d}",
+      "hora_inicio": "${h.hi}",
+      "hora_fin": "${h.hf}",
+      "tipo_sesion": "<putt|campo>",
+      "lugar": "<putting_green|campo_pacos_fabios>",
+      "foco_principal": "Putting green Fundadores O Campo Pacos y Fabios — elige según alternancia semanal${hayTorneo ? " (priorizar campo real por torneo próximo)" : ""}",
+      "opciones_actividad": null,
+      "drills": [${drillComp},${drillComp}],
+      "juego_competitivo": "string o null",
+      "objetivo_sesion": "string"
+    }`;
+        }
+      }
+
+      if (isSabado) {
+        return `{
+      "dia_semana": "sabado",
+      "hora_inicio": "${h.hi}",
+      "hora_fin": "${h.hf}",
+      "tipo_sesion": "<tiro_largo|juego_corto>",
+      "lugar": "campo_practica",
+      "foco_principal": "${modo === "preparacion" ? "Repaso general — mezcla juego corto y largo" : "Tiro largo O juego corto según progreso de la semana"}",
+      "opciones_actividad": null,
+      "drills": [${drillComp},${drillComp}],
+      "juego_competitivo": "string o null",
+      "objetivo_sesion": "string"
     }`;
       }
 
+      // Día 3 (jueves en semana normal)
       return `{
       "dia_semana": "${d}",
       "hora_inicio": "${h.hi}",
       "hora_fin": "${h.hf}",
-      "tipo_sesion": "<tiro_largo|juego_corto|putt|campo|test_tecnico|test_fisico|competencia>",
-      "lugar": "<driving_range|putting_green|campo_infantil|campo_pacos_fabios|campo_completo>",
-      "objetivo": "foco concreto con métrica de sesión",
-      "drills": [${drillRef},${drillRef}],
+      "tipo_sesion": "${modo === "preparacion" ? "putt" : "<tiro_largo|juego_corto>"}",
+      "lugar": "${modo === "preparacion" ? "putting_green" : "campo_practica"}",
+      "foco_principal": "${modo === "preparacion" ? "Putting — distancias 1-5 metros bajo presión" : "Continúa tiro largo O introduce juego corto"}",
+      "opciones_actividad": null,
+      "drills": [${drillComp},${drillComp}],
       "juego_competitivo": "string o null",
-      "estaciones_damas": null,
-      "notas": null
+      "objetivo_sesion": "string"
     }`;
     });
 
-    const system = `Eres entrenador de alto rendimiento golf junior.
-Diseña plan semanal Competencia CCB (13-17 años, nivel competitivo).
+    const system = `Eres el asistente pedagógico de la Escuela de Golf del Country Club de Bogotá para el grupo Competencia (13-17 años, nivel intermedio-avanzado en construcción).
 
-Días y horarios:
-- Martes, miércoles, jueves 4:00-5:30pm campo de prácticas
-- Sábado 8:30-9:30am campo completo (simulación de torneo / condiciones reales)
+CONTEXTO IMPORTANTE:
+- Son niños que practican 2-3 veces por semana
+- El foco principal es CONSTRUIR SWING correctamente
+- No asumir nivel competitivo alto
+- Instalaciones: Campo de práctica (tiro largo Y corto), Putting green Fundadores (solo putt), Campo Pacos y Fabios (juego en campo real)
+- Los SÁBADOS NUNCA se va al campo real — siempre campo_practica
+- NUNCA usar el término 'Driving Range' — siempre 'Campo de práctica'
 
-Tema de la semana: ${tema}${focoMesLine}${evCtx}
+MODO DE LA SEMANA: ${modo === "construccion" ? "Construcción de swing" : "Preparación para competencia"}
+TORNEO PRÓXIMO: ${torneoStr}
+POSICIONES EN TRABAJO: ${posicionesStr}
+PRIMER DÍA HÁBIL: ${primerDia}${focoMesLine}${evCtx}
 
-REGLAS:
-- Martes y jueves: práctica técnica con métricas medibles
-- Miércoles: puede ser Trackman, test físico o trabajo mental/estratégico
-- Sábado: campo completo o simulación de torneo con presión real
-- OBLIGATORIO por drill: métrica de éxito clara, variante de presión, conexión con error técnico
-- Al menos UN ejercicio de simulación de torneo por semana (sábado)
-- Lenguaje técnico y exigente — tratar como profesionales junior
-- Máximo 2-3 drills por sesión (opciones de martes: máximo 2 drills cada una), altamente específicos
+REGLAS MODO CONSTRUCCIÓN DE SWING:
+- Día 1 (tiro largo): Siempre campo_practica
+  Incluir 3 opciones en opciones_actividad. Elegir UNA como recomendada (es_recomendada: true):
+  * id:1 Toma de datos — Trackman o filmación (recomendada si no hay datos recientes)
+  * id:2 Drills técnicos para posiciones ${posicionesStr} — 2-3 drills progresivos con posicion_objetivo
+  * id:3 Trabajo de potencia y velocidad con medición de club speed
+  Cada drill DEBE incluir: posicion_objetivo, descripcion, error_comun, sensacion, repeticiones, metrica_exito
+- Día 2: Alternar entre putting_green (Fundadores) y campo_pacos_fabios${hayTorneo ? " — priorizar campo real por torneo" : ""}
+- Día 3: campo_practica — continuar tiro largo o introducir juego corto como complemento
+- Sábado: campo_practica — tiro largo O juego corto (NUNCA campo real)
 
-MARTES — OPCIONES DE TIPO DE SESIÓN:
-Incluye las 4 opciones en "opciones_actividad". Para cada una:
-- Elige UNA como recomendada (es_recomendada: true) según contexto del tema y período
-- Justifica en 1 frase corta por qué esa opción es la más apropiada ahora
-- Las otras 3 justifica brevemente por qué son alternativas válidas
-- Genera drills ESPECÍFICOS para cada opción (no genéricos)
-Opciones a evaluar:
-A) Toma de tests: evalúa estado actual del alumno (inicio de período, sin datos recientes)
-B) Corrección técnica: trabaja el error más crítico si hay análisis disponible
-C) Potencia y velocidad: aumenta club speed medible si está por debajo del objetivo
-D) Filmación y análisis: consciencia propioceptiva si no hay filmación reciente
+REGLAS MODO PREPARACIÓN COMPETENCIA:
+- Día 1: campo_practica — juego corto con opciones variadas (approach, chipping, bunker)
+  Incluir 4 opciones en opciones_actividad, elegir UNA como recomendada
+- Día 2: campo_pacos_fabios — juego real con hoyos y objetivos
+- Día 3: putting_green — putting con presión y distancias 1-5 metros
+- Sábado: campo_practica — repaso general juego corto y largo
+
+OPCIONES JUEGO CORTO (para modo preparación):
+1. Control de distancia en chipping (10m, 20m, 30m)
+2. Juego de bunker — salida y control
+3. Approach shots 50-100 yds diferentes palos
+4. Up & down challenge (chip + putt)
+
+OPCIONES PUTTING:
+1. Putts de control de distancia 3-6-9 metros
+2. Gate drill — precisión de dirección
+3. Putting bajo presión: primero en hacer 10 seguidos
 
 Devuelve SOLO JSON válido comenzando con { sin backticks ni texto adicional.`;
 
     const user = `Genera el plan semanal COMPETENCIA para la semana del ${semanaInicio}.
-Tema: ${tema}
+Modo: ${modo === "construccion" ? "Construcción de swing" : "Preparación para competencia"}
+Posiciones en trabajo: ${posicionesStr}
+Torneo próximo: ${torneoStr}
+Primer día hábil: ${primerDia}
 
 Devuelve este JSON exacto:
 {
-  "descripcion_tema": "descripción técnica del tema con enfoque en rendimiento competitivo",
+  "descripcion_plan": "descripción pedagógica del plan (2-3 oraciones)",
+  "modo": "${modo}",
   "sesiones": [${diasSchema.join(",\n  ")}]
 }`;
 
@@ -211,14 +319,14 @@ Devuelve este JSON exacto:
   "sesiones": [{
     "dia_semana": "viernes",
     "tipo_sesion": "damas_estaciones",
-    "lugar": "driving_range",
+    "lugar": "campo_practica",
     "hora_inicio": "10:30",
     "hora_fin": "12:00",
     "objetivo": "objetivo de la sesión en lenguaje simple",
     "drills": [],
     "juego_competitivo": null,
     "estaciones_damas": [
-      {"nombre": "Juego Largo", "lugar": "Driving Range", "duracion_min": 25, "descripcion": "actividad relacionada con ${tema}", "objetivo_especifico": "qué mejoran en este bloque"},
+      {"nombre": "Juego Largo", "lugar": "Campo de práctica", "duracion_min": 25, "descripcion": "actividad relacionada con ${tema}", "objetivo_especifico": "qué mejoran en este bloque"},
       {"nombre": "Juego Corto", "lugar": "Área de chips y pitches", "duracion_min": 25, "descripcion": "actividad de chips/pitches/bunker relacionada con ${tema}", "objetivo_especifico": "qué mejoran en este bloque"},
       {"nombre": "Putt", "lugar": "Putting Green", "duracion_min": 25, "descripcion": "trabajo de putt relacionado con ${tema}", "objetivo_especifico": "qué mejoran en este bloque"}
     ],
@@ -252,13 +360,17 @@ function parseAI(raw: string): any {
 function normalizeDrill(d: any): any {
   return {
     ...d,
-    metrica_exito: d.metrica_exito ?? null,
+    metrica_exito:    d.metrica_exito    ?? null,
     variante_presion: d.variante_presion ?? null,
     conexion_tecnica: d.conexion_tecnica ?? null,
-    dificultad_birdies: d.dificultad_birdies ?? null,
-    dificultad_aguilas: d.dificultad_aguilas ?? null,
+    posicion_objetivo: d.posicion_objetivo ?? null,
+    error_comun:       d.error_comun       ?? null,
+    sensacion:         d.sensacion         ?? null,
+    repeticiones:      d.repeticiones      ?? null,
+    dificultad_birdies:  d.dificultad_birdies  ?? null,
+    dificultad_aguilas:  d.dificultad_aguilas  ?? null,
     dificultad_albatros: d.dificultad_albatros ?? null,
-    dificultad_mas14: d.dificultad_mas14 ?? null,
+    dificultad_mas14:    d.dificultad_mas14    ?? null,
   };
 }
 
@@ -267,13 +379,14 @@ function normalizeDrill(d: any): any {
 function normalizeSesion(s: any): any {
   return {
     ...s,
-    objetivo: s.objetivo ?? s.foco_principal ?? "",
+    objetivo: s.objetivo ?? s.foco_principal ?? s.objetivo_sesion ?? "",
     juego_competitivo: s.juego_competitivo ?? s.simulacion_torneo ?? null,
     opciones_actividad: s.opciones_actividad
       ? s.opciones_actividad.map((opt: any) => ({
           ...opt,
+          descripcion_corta: opt.descripcion_corta ?? opt.descripcion ?? "",
           justificacion: opt.justificacion ?? "",
-          es_recomendada: opt.es_recomendada ?? false,
+          es_recomendada: opt.es_recomendada ?? opt.recomendada ?? false,
           drills: (opt.drills ?? []).map(normalizeDrill),
         }))
       : null,
@@ -387,7 +500,7 @@ export async function POST(req: NextRequest) {
   }
 
   return Response.json({
-    descripcion_tema: parsed.descripcion_tema ?? "",
+    descripcion_tema: parsed.descripcion_tema ?? parsed.descripcion_plan ?? "",
     sesiones: parsed.sesiones.map(normalizeSesion),
   });
 }

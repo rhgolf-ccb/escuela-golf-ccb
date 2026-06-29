@@ -25,7 +25,7 @@ const DIA_LABEL: Record<string, string> = {
   viernes: "Viernes", sabado: "Sábado", domingo: "Domingo",
 };
 const LUGAR_LABEL: Record<string, string> = {
-  driving_range: "Driving Range / Campo de Práctica",
+  campo_practica: "Campo de práctica",
   putting_green: "Putting Green",
   campo_infantil: "Campo Infantil",
   campo_pacos_fabios: "Campo Pacos & Fabios",

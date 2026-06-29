@@ -37,7 +37,7 @@ const TIPO_SESION_LABEL: Record<string, string> = {
 };
 
 const LUGAR_LABEL: Record<string, string> = {
-  driving_range: "Driving Range", putting_green: "Putting Green",
+  campo_practica: "Campo de práctica", putting_green: "Putting Green",
   campo_infantil: "Campo Infantil", campo_pacos_fabios: "Pacos/Fabios",
   campo_completo: "Campo Completo",
 };
