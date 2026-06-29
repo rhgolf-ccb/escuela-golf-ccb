@@ -142,9 +142,10 @@ export default function DrillsModule() {
   const [showAIModal, setShowAIModal]       = useState(false);
   const [aiText, setAiText]                 = useState("");
   const [aiLoading, setAiLoading]           = useState(false);
-  const [aiPreview, setAiPreview]           = useState<Partial<DrillForm> | null>(null);
+  const [aiPreview, setAiPreview]           = useState<Drill | null>(null);
   const [aiError, setAiError]               = useState<string | null>(null);
 
+  const [generatingLibrary, setGeneratingLibrary] = useState(false);
   const [toast, setToast]                   = useState<string | null>(null);
 
   const showToast = (msg: string) => { setToast(msg); setTimeout(() => setToast(null), 3000); };
@@ -284,41 +285,32 @@ export default function DrillsModule() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Error de IA");
-      setAiPreview(data.drill as Partial<DrillForm>);
+      const saved = data.drill as Drill;
+      setDrills(prev => [saved, ...prev]);
+      setAiPreview(saved);
     } catch (err) {
       setAiError(err instanceof Error ? err.message : "Error desconocido");
     } finally { setAiLoading(false); }
   }
 
-  async function handleGuardarAI() {
-    if (!aiPreview) return;
-    setSaving(true);
+  function handleGuardarAI() {
+    setShowAIModal(false); setAiText(""); setAiPreview(null);
+    showToast("✨ Drill guardado — pendiente de aprobación");
+  }
+
+  // ── Generate library ──────────────────────────────────────────────────────────
+  async function handleGenerarBiblioteca() {
+    if (!confirm("¿Generar los 52 drills base? Este proceso puede tardar 30-60 segundos y no puede deshacerse.")) return;
+    setGeneratingLibrary(true);
     try {
-      const payload: DrillForm = {
-        titulo: aiPreview.titulo ?? "Drill sin título",
-        descripcion: aiPreview.descripcion ?? "",
-        categoria: (aiPreview.categoria ?? "tecnico") as Categoria,
-        subcategoria: aiPreview.subcategoria ?? null,
-        posicion_swing: aiPreview.posicion_swing ?? null,
-        nivel_recomendado: aiPreview.nivel_recomendado ?? null,
-        lugar: aiPreview.lugar ?? "campo_practica",
-        duracion_minutos: aiPreview.duracion_minutos ?? null,
-        repeticiones: aiPreview.repeticiones ?? null,
-        error_que_corrige: aiPreview.error_que_corrige ?? null,
-        sensacion_buscada: aiPreview.sensacion_buscada ?? null,
-        metrica_exito: aiPreview.metrica_exito ?? null,
-        variante_presion: aiPreview.variante_presion ?? null,
-        reglas_campo: aiPreview.reglas_campo ?? null,
-        rating: aiPreview.rating ?? 3,
-        favorito: false, aprobado: false, generado_por_ia: true,
-        notas_instructor: null,
-      };
-      const { data } = await supabase.from("drills").insert(payload).select().single();
-      if (data) setDrills(prev => [data as Drill, ...prev]);
-      setShowAIModal(false); setAiText(""); setAiPreview(null);
-      showToast("✨ Drill generado — pendiente de aprobación");
-    } catch { /* silencioso */ }
-    finally { setSaving(false); }
+      const res = await fetch("/api/generate-drill-library", { method: "POST" });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Error generando biblioteca");
+      showToast(`✨ ${data.insertados} drills generados exitosamente`);
+      await fetchDrills();
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : "Error desconocido");
+    } finally { setGeneratingLibrary(false); }
   }
 
   // ── Update form helpers ───────────────────────────────────────────────────────
@@ -439,6 +431,17 @@ export default function DrillsModule() {
           <p className="text-sm text-gray-400 mt-0.5">{total} drill{total !== 1 ? "s" : ""} en total</p>
         </div>
         <div className="flex gap-2">
+          {!loading && drills.length === 0 && (
+            <button
+              onClick={handleGenerarBiblioteca}
+              disabled={generatingLibrary}
+              className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-semibold border border-amber-300 text-amber-800 bg-amber-50 hover:bg-amber-100 shadow-sm transition-colors disabled:opacity-50"
+            >
+              {generatingLibrary
+                ? <><svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"/></svg>Generando 52 drills...</>
+                : "📚 Generar biblioteca base"}
+            </button>
+          )}
           <button
             onClick={openCreate}
             className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-semibold bg-white border border-gray-200 text-gray-700 hover:bg-gray-50 shadow-sm transition-colors"
@@ -846,15 +849,15 @@ export default function DrillsModule() {
                     <p className="text-xs text-blue-700"><strong>Métrica:</strong> {aiPreview.metrica_exito}</p>
                   )}
                   <div className="flex gap-2 pt-1">
-                    <button onClick={handleGuardarAI} disabled={saving}
-                      className="flex-1 py-2 rounded-xl text-sm font-semibold text-white disabled:opacity-50 hover:brightness-110 transition-all"
+                    <button onClick={handleGuardarAI}
+                      className="flex-1 py-2 rounded-xl text-sm font-semibold text-white hover:brightness-110 transition-all"
                       style={{ background: "#1B4D2E" }}>
-                      {saving ? "Guardando..." : "✓ Guardar drill"}
+                      ✓ Guardado como pendiente
                     </button>
                     <button
                       onClick={() => {
                         if (!aiPreview) return;
-                        const cat = (aiPreview.categoria ?? "tecnico") as Categoria;
+                        const cat = aiPreview.categoria;
                         setForm({
                           titulo: aiPreview.titulo ?? "",
                           descripcion: aiPreview.descripcion ?? "",
@@ -874,7 +877,7 @@ export default function DrillsModule() {
                           favorito: false, aprobado: false,
                           generado_por_ia: true, notas_instructor: null,
                         });
-                        setEditingId(null); setFormError(null);
+                        setEditingId(aiPreview.id); setFormError(null);
                         setShowAIModal(false);
                         setShowEditModal(true);
                       }}
