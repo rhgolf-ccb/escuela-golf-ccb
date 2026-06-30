@@ -172,7 +172,7 @@ const COMP_DIA_BADGE: Partial<Record<DiaSemana, { bg: string; text: string }>> =
 // Calendar grid constants
 const CAL_HOUR_START = 7;
 const CAL_HOUR_END   = 18;
-const CAL_FULL_H     = 72;  // px for occupied hour rows
+const CAL_FULL_H     = 80;  // px for occupied hour rows
 const CAL_THIN_H     = 14;  // px for collapsed empty-hour rows
 const CAL_HOURS      = Array.from({ length: CAL_HOUR_END - CAL_HOUR_START }, (_, i) => CAL_HOUR_START + i);
 // Event colors (dark/solid for contrast)
@@ -607,7 +607,9 @@ export default function ProgramacionModule() {
   const fetchCalSemana = useCallback(async () => {
     setCalLoading(true);
     const { data: plans } = await supabase
-      .from("planes_semanales").select("id, tipo_plan").eq("semana_inicio", toISODate(semana));
+      .from("planes_semanales").select("id, tipo_plan")
+      .eq("semana_inicio", toISODate(semana))
+      .eq("tipo_plan", activeTab);
     if (!plans?.length) { setCalSesiones([]); setCalLoading(false); return; }
     const planMap = Object.fromEntries(plans.map((p) => [p.id, p.tipo_plan as TipoPlan]));
     const { data: seses } = await supabase
@@ -619,14 +621,15 @@ export default function ProgramacionModule() {
       }).filter(Boolean) as CalSesion[]
     );
     setCalLoading(false);
-  }, [semana]);
+  }, [semana, activeTab]);
 
   const fetchCalMes = useCallback(async () => {
     setCalLoading(true);
     const { start, end } = getMesRange(mesCal);
     const { data: plans } = await supabase
       .from("planes_semanales").select("id, tipo_plan")
-      .gte("semana_inicio", toISODate(start)).lte("semana_inicio", toISODate(end));
+      .gte("semana_inicio", toISODate(start)).lte("semana_inicio", toISODate(end))
+      .eq("tipo_plan", activeTab);
     if (!plans?.length) { setCalSesiones([]); setCalLoading(false); return; }
     const planMap = Object.fromEntries(plans.map((p) => [p.id, p.tipo_plan as TipoPlan]));
     const { data: seses } = await supabase
@@ -640,7 +643,7 @@ export default function ProgramacionModule() {
       }).filter(Boolean) as CalSesion[]
     );
     setCalLoading(false);
-  }, [mesCal]);
+  }, [mesCal, activeTab]);
 
   useEffect(() => {
     if (viewMode === "semana") fetchCalSemana();
@@ -1197,7 +1200,7 @@ export default function ProgramacionModule() {
             <div style={{ minWidth: 520 }}>
 
               {/* ── Day headers ── */}
-              <div className="grid" style={{ gridTemplateColumns: "56px repeat(6, 1fr)", background: "#e8f0e6", borderBottom: "1px solid #d4e0d2" }}>
+              <div className="grid" style={{ gridTemplateColumns: "60px repeat(6, 1fr)", background: "#e8f0e6", borderBottom: "1px solid #d4e0d2" }}>
                 <div style={{ borderRight: "1px solid #d4e0d2" }} />
                 {CAL_DIAS.map((dia) => {
                   const fecha = getFechaForDia(semana, dia);
@@ -1219,9 +1222,9 @@ export default function ProgramacionModule() {
 
               {/* ── Grid body ── */}
               {calSesiones.length === 0 ? (
-                <div className="py-10 text-center text-sm" style={{ color: "#5a7a5a" }}>Sin sesiones registradas esta semana</div>
+                <div className="py-10 text-center text-sm" style={{ color: "#5a7a5a" }}>Sin sesiones de {TIPO_PLAN_LABEL[activeTab]} esta semana</div>
               ) : (
-                <div className="grid" style={{ gridTemplateColumns: "56px repeat(6, 1fr)" }}>
+                <div className="grid" style={{ gridTemplateColumns: "60px repeat(6, 1fr)" }}>
 
                   {/* Time-label column */}
                   <div style={{ background: "#e8f0e6", borderRight: "1px solid #d4e0d2" }}>
@@ -1232,13 +1235,13 @@ export default function ProgramacionModule() {
                           height: row.type === "full" ? CAL_FULL_H : CAL_THIN_H,
                           borderBottom: "1px solid #dde8db",
                           display: "flex", alignItems: "flex-start", justifyContent: "flex-end",
-                          paddingRight: 5, paddingTop: row.type === "full" ? 3 : 2,
+                          paddingRight: 6, paddingTop: row.type === "full" ? 4 : 2,
                         }}
                       >
                         {row.type === "full" ? (
-                          <span style={{ fontSize: 10, fontWeight: 600, color: "#3a5a3a" }}>{fmtCalHour(row.hour)}</span>
+                          <span style={{ fontSize: 13, fontWeight: 600, color: "#3a5a3a" }}>{fmtCalHour(row.hour)}</span>
                         ) : (
-                          <span style={{ fontSize: 9, color: "#8aaa8a" }}>{fmtCalHour(row.from)}–{fmtCalHour(row.to + 1)}</span>
+                          <span style={{ fontSize: 10, color: "#8aaa8a" }}>{fmtCalHour(row.from)}–{fmtCalHour(row.to + 1)}</span>
                         )}
                       </div>
                     ))}
@@ -1278,24 +1281,22 @@ export default function ProgramacionModule() {
                               key={ses.id}
                               style={{
                                 position: "absolute",
-                                top: top + 2, height: Math.max(height - 4, 22),
+                                top: top + 2, height: Math.max(height - 4, 26),
                                 left: `${3 + overlap * 5}px`, right: `${3 + overlap * 5}px`,
                                 background: c.bg, borderRadius: 5,
-                                padding: "3px 6px", overflow: "hidden",
+                                padding: "4px 7px", overflow: "hidden",
                                 cursor: "pointer", zIndex: 10 + si,
                               }}
                               onClick={(e) => { e.stopPropagation(); setCalEventDetail(ses); }}
                             >
-                              <p style={{ margin: 0, fontSize: 11, fontWeight: 700, color: c.text, lineHeight: 1.2 }}>
+                              <p style={{ margin: 0, fontSize: 14, fontWeight: 700, color: c.text, lineHeight: 1.2 }}>
                                 {TIPO_PLAN_LABEL[ses.tipo_plan]}
                               </p>
-                              {height > 28 && (
-                                <p style={{ margin: 0, fontSize: 10, color: c.text, opacity: 0.85 }}>
-                                  {ses.hora_inicio.slice(0, 5)} · {LUGAR_LABEL[ses.lugar]?.split(" ")[0] ?? ""}
-                                </p>
-                              )}
-                              {height > 48 && ses.objetivo && (
-                                <p style={{ margin: "2px 0 0", fontSize: 9, color: c.text, opacity: 0.75, overflow: "hidden", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical" }}>
+                              <p style={{ margin: "1px 0 0", fontSize: 12, color: c.text, opacity: 0.9 }}>
+                                {ses.hora_inicio.slice(0, 5)}{ses.hora_fin ? `–${ses.hora_fin.slice(0, 5)}` : ""} · {LUGAR_LABEL[ses.lugar]?.split(" ")[0] ?? ""}
+                              </p>
+                              {height > 56 && ses.objetivo && (
+                                <p style={{ margin: "2px 0 0", fontSize: 11, color: c.text, opacity: 0.8, overflow: "hidden", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical" }}>
                                   {ses.objetivo}
                                 </p>
                               )}
@@ -1329,35 +1330,41 @@ export default function ProgramacionModule() {
     const selectedDaySesiones = selectedCalDate ? calSesiones.filter((s) => s.fecha === selectedCalDate) : [];
 
     return (
-      <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+      <div className="rounded-xl overflow-hidden shadow-sm" style={{ background: "#f0f5f0" }}>
         {/* Month nav */}
-        <div className="flex items-center justify-between px-5 py-3 border-b border-gray-100">
-          <button onClick={prevMonth} className="p-1.5 rounded-lg hover:bg-gray-50 text-gray-500 transition-colors">
+        <div className="flex items-center justify-between px-5 py-3" style={{ background: "#e8f0e6", borderBottom: "1px solid #d4e0d2" }}>
+          <button onClick={prevMonth} className="p-1.5 rounded-lg transition-colors" style={{ color: "#3a5a3a" }}
+            onMouseEnter={(e) => (e.currentTarget.style.background = "#d4e8d0")}
+            onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}>
             <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path d="M15 18l-6-6 6-6"/></svg>
           </button>
-          <h3 className="font-bold text-gray-900 capitalize">
+          <h3 className="font-bold capitalize" style={{ color: "#1a3a2a" }}>
             {firstDay.toLocaleDateString("es-CO", { month: "long", year: "numeric" })}
           </h3>
-          <button onClick={nextMonth} className="p-1.5 rounded-lg hover:bg-gray-50 text-gray-500 transition-colors">
+          <button onClick={nextMonth} className="p-1.5 rounded-lg transition-colors" style={{ color: "#3a5a3a" }}
+            onMouseEnter={(e) => (e.currentTarget.style.background = "#d4e8d0")}
+            onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}>
             <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path d="M9 18l6-6-6-6"/></svg>
           </button>
         </div>
 
-        {calLoading && <div className="py-12 text-center text-gray-400 text-sm">Cargando...</div>}
+        {calLoading && <div className="py-12 text-center text-sm" style={{ color: "#5a7a5a" }}>Cargando...</div>}
 
         {!calLoading && (
           <>
             {/* Day headers */}
-            <div className="grid grid-cols-7 border-b border-gray-100">
+            <div className="grid grid-cols-7" style={{ background: "#e8f0e6", borderBottom: "1px solid #d4e0d2" }}>
               {HEADERS.map((h) => (
-                <div key={h} className="py-2 text-center text-[11px] font-bold text-gray-400 uppercase">{h}</div>
+                <div key={h} className="py-2 text-center text-[11px] font-bold uppercase" style={{ color: "#3a5a3a" }}>{h}</div>
               ))}
             </div>
 
             {/* Calendar grid */}
             <div className="grid grid-cols-7">
               {cells.map((date, i) => {
-                if (!date) return <div key={i} className="h-16 border-b border-r border-gray-50 bg-gray-50/30" />;
+                if (!date) return (
+                  <div key={i} style={{ minHeight: 100, background: "#f0f5f0", borderBottom: "1px solid #dde8db", borderRight: "1px solid #dde8db" }} />
+                );
                 const dateStr = toISODate(date);
                 const isToday = dateStr === todayStr;
                 const isCurrentMonth = date.getMonth() === month;
@@ -1368,16 +1375,48 @@ export default function ProgramacionModule() {
                   <div
                     key={i}
                     onClick={() => setSelectedCalDate(isSelected ? null : dateStr)}
-                    className={`h-16 border-b border-r border-gray-50 p-1.5 cursor-pointer transition-colors ${isSelected ? "bg-green-50 border-green-200" : "hover:bg-gray-50"} ${!isCurrentMonth ? "opacity-40" : ""}`}
+                    style={{
+                      minHeight: 100,
+                      background: isSelected ? "#dff0e0" : "#f7faf6",
+                      borderBottom: "1px solid #dde8db",
+                      borderRight: "1px solid #dde8db",
+                      padding: "6px",
+                      cursor: "pointer",
+                      opacity: !isCurrentMonth ? 0.4 : 1,
+                      transition: "background 0.1s",
+                    }}
+                    onMouseEnter={(e) => { if (!isSelected) (e.currentTarget as HTMLElement).style.background = "#eef5ec"; }}
+                    onMouseLeave={(e) => { if (!isSelected) (e.currentTarget as HTMLElement).style.background = "#f7faf6"; }}
                   >
-                    <div className={`w-5 h-5 flex items-center justify-center rounded-full text-[11px] font-bold mb-1 ${isToday ? "bg-green-700 text-white" : "text-gray-700"}`}>
+                    <div style={{
+                      width: 24, height: 24,
+                      display: "flex", alignItems: "center", justifyContent: "center",
+                      borderRadius: "50%",
+                      background: isToday ? "#1a3a2a" : "transparent",
+                      color: isToday ? "#ffffff" : "#1a3a1a",
+                      fontSize: 12, fontWeight: 700, marginBottom: 4,
+                    }}>
                       {date.getDate()}
                     </div>
-                    <div className="flex gap-0.5 flex-wrap">
-                      {daySes.slice(0, 5).map((s, j) => (
-                        <div key={j} className="w-1.5 h-1.5 rounded-full" style={{ background: CAL_COLOR[s.tipo_plan].dot }} title={TIPO_PLAN_LABEL[s.tipo_plan]} />
-                      ))}
-                      {daySes.length > 5 && <span className="text-[8px] text-gray-400">+{daySes.length - 5}</span>}
+                    <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+                      {daySes.slice(0, 3).map((s, j) => {
+                        const c = CAL_EVENT[s.tipo_plan] ?? { bg: "#334155", text: "#fff" };
+                        return (
+                          <div key={j} style={{
+                            background: c.bg, color: c.text,
+                            borderRadius: 3, padding: "2px 5px",
+                            fontSize: 11, fontWeight: 600, lineHeight: 1.35,
+                            overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+                          }}>
+                            {s.hora_inicio ? s.hora_inicio.slice(0, 5) + " " : ""}{TIPO_PLAN_LABEL[s.tipo_plan]}
+                          </div>
+                        );
+                      })}
+                      {daySes.length > 3 && (
+                        <div style={{ fontSize: 10, color: "#5a7a5a", paddingLeft: 2, fontWeight: 600 }}>
+                          +{daySes.length - 3} más
+                        </div>
+                      )}
                     </div>
                   </div>
                 );
@@ -1386,32 +1425,32 @@ export default function ProgramacionModule() {
 
             {/* Selected day detail */}
             {selectedCalDate && (
-              <div className="border-t border-gray-100 px-5 py-4">
+              <div style={{ borderTop: "1px solid #d4e0d2", padding: "16px 20px" }}>
                 <div className="flex items-center justify-between mb-3">
-                  <h4 className="text-sm font-bold text-gray-800 capitalize">
+                  <h4 className="text-sm font-bold capitalize" style={{ color: "#1a3a2a" }}>
                     {new Date(selectedCalDate + "T00:00:00").toLocaleDateString("es-CO", { weekday: "long", day: "numeric", month: "long" })}
                   </h4>
-                  <button onClick={() => setSelectedCalDate(null)} className="text-gray-400 hover:text-gray-600 text-xs">✕</button>
+                  <button onClick={() => setSelectedCalDate(null)} className="text-xs" style={{ color: "#5a7a5a" }}>✕</button>
                 </div>
                 {selectedDaySesiones.length === 0
-                  ? <p className="text-xs text-gray-400 italic">Sin sesiones programadas</p>
+                  ? <p className="text-xs italic" style={{ color: "#5a7a5a" }}>Sin sesiones de {TIPO_PLAN_LABEL[activeTab]} este día</p>
                   : (
                     <div className="space-y-2">
                       {selectedDaySesiones.map((ses) => {
-                        const c = CAL_COLOR[ses.tipo_plan];
+                        const c = CAL_EVENT[ses.tipo_plan] ?? { bg: "#334155", text: "#fff" };
                         const tc = TIPO_SESION_COLOR[ses.tipo_sesion];
                         return (
-                          <div key={ses.id} className="flex items-start gap-3 p-3 rounded-lg border" style={{ borderColor: c.border + "40", background: c.bg }}>
+                          <div key={ses.id} className="flex items-start gap-3 p-3 rounded-lg" style={{ background: c.bg + "18", border: `1px solid ${c.bg}30` }}>
                             <div className="flex-1 min-w-0">
                               <div className="flex items-center gap-2 flex-wrap mb-1">
-                                <span className="text-xs font-bold" style={{ color: c.border }}>{TIPO_PLAN_LABEL[ses.tipo_plan]}</span>
+                                <span className="text-xs font-bold" style={{ color: c.bg }}>{TIPO_PLAN_LABEL[ses.tipo_plan]}</span>
                                 <span className="px-1.5 py-0.5 rounded-full text-[10px] font-semibold" style={{ background: tc.bg, color: tc.text }}>{TIPO_SESION_LABEL[ses.tipo_sesion]}</span>
-                                <span className="text-[10px] text-gray-500">{LUGAR_LABEL[ses.lugar]}</span>
-                                {ses.hora_inicio && <span className="text-[10px] text-gray-500">{formatHora(ses.hora_inicio)}–{formatHora(ses.hora_fin)}</span>}
+                                <span className="text-[10px]" style={{ color: "#5a7a5a" }}>{LUGAR_LABEL[ses.lugar]}</span>
+                                {ses.hora_inicio && <span className="text-[10px]" style={{ color: "#5a7a5a" }}>{formatHora(ses.hora_inicio)}–{formatHora(ses.hora_fin)}</span>}
                               </div>
-                              {ses.objetivo && <p className="text-xs text-gray-700 line-clamp-2">{ses.objetivo}</p>}
+                              {ses.objetivo && <p className="text-xs line-clamp-2" style={{ color: "#2a4a2a" }}>{ses.objetivo}</p>}
                             </div>
-                            <button onClick={() => router.push(`/programacion/sesion/${ses.id}`)} className="text-[10px] font-semibold shrink-0" style={{ color: c.border }}>
+                            <button onClick={() => router.push(`/programacion/sesion/${ses.id}`)} className="text-[10px] font-semibold shrink-0" style={{ color: c.bg }}>
                               Asistencia →
                             </button>
                           </div>
@@ -1535,13 +1574,11 @@ export default function ProgramacionModule() {
       {viewMode === "semana" && (
         <div className="mb-5">
           <div className="flex items-center gap-2 mb-2">
-            {(["juvenil", "competencia", "damas"] as TipoPlan[]).map((tp) => (
-              <span key={tp} className="flex items-center gap-1.5 text-xs text-gray-500">
-                <span className="w-2.5 h-2.5 rounded-full inline-block" style={{ background: CAL_COLOR[tp].dot }} />
-                {TIPO_PLAN_LABEL[tp]}
-              </span>
-            ))}
-            <span className="text-xs text-gray-300 ml-1">· clic en celda vacía agrega sesión al plan {TIPO_PLAN_LABEL[activeTab]}</span>
+            <span className="flex items-center gap-1.5 text-xs font-semibold" style={{ color: "#1a3a2a" }}>
+              <span className="w-2.5 h-2.5 rounded-full inline-block" style={{ background: CAL_EVENT[activeTab]?.bg ?? "#334" }} />
+              {TIPO_PLAN_LABEL[activeTab]}
+            </span>
+            <span className="text-xs text-gray-400">· clic en celda vacía para agregar sesión</span>
           </div>
           {renderWeekCal()}
         </div>
@@ -1550,12 +1587,10 @@ export default function ProgramacionModule() {
       {viewMode === "mes" && (
         <div className="mb-5">
           <div className="flex items-center gap-2 mb-2">
-            {(["juvenil", "competencia", "damas"] as TipoPlan[]).map((tp) => (
-              <span key={tp} className="flex items-center gap-1.5 text-xs text-gray-500">
-                <span className="w-2.5 h-2.5 rounded-full inline-block" style={{ background: CAL_COLOR[tp].dot }} />
-                {TIPO_PLAN_LABEL[tp]}
-              </span>
-            ))}
+            <span className="flex items-center gap-1.5 text-xs font-semibold" style={{ color: "#1a3a2a" }}>
+              <span className="w-2.5 h-2.5 rounded-full inline-block" style={{ background: CAL_EVENT[activeTab]?.bg ?? "#334" }} />
+              {TIPO_PLAN_LABEL[activeTab]}
+            </span>
           </div>
           {renderMesCal()}
         </div>
