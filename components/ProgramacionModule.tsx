@@ -233,7 +233,7 @@ function defaultSesionForm(tipoPlan: TipoPlan): SesionForm {
   };
 }
 
-// ── Juvenil session detail (structured, with accordions) ─────────────────────
+// ── Juvenil session detail (nuevo formato con actividades) ───────────────────
 function JuvenilSessionDetail({
   sesion, jd, onEdit, onDelete, onPdf, onAsistencia, generatingPdf, accentColor,
 }: {
@@ -246,109 +246,86 @@ function JuvenilSessionDetail({
   generatingPdf: boolean;
   accentColor: string;
 }) {
-  const [expandedDrills, setExpandedDrills] = useState<Set<number>>(new Set());
-  const [expandedJuego, setExpandedJuego] = useState(false);
+  const GREEN = "#1B4D2E";
+  const [expandedActs, setExpandedActs] = useState<Set<number>>(new Set());
 
-  function toggleDrill(i: number) {
-    setExpandedDrills((prev) => { const n = new Set(prev); n.has(i) ? n.delete(i) : n.add(i); return n; });
+  function toggleAct(i: number) {
+    setExpandedActs((prev) => { const n = new Set(prev); n.has(i) ? n.delete(i) : n.add(i); return n; });
   }
 
   return (
     <div className="space-y-3">
-      {/* Calentamiento */}
-      <div className="border border-orange-100 bg-orange-50 rounded-lg p-3">
-        <p className="text-[10px] font-bold text-orange-700 uppercase tracking-wide mb-1">
-          🔥 Calentamiento · {jd.calentamiento.duracion_min} min
-        </p>
-        <p className="text-xs text-gray-700">{jd.calentamiento.descripcion}</p>
+      {/* Nombre y objetivo */}
+      <div className="bg-green-50 border border-green-200 rounded-lg p-3">
+        <p className="text-sm font-bold text-green-900">🎮 {jd.nombre_clase}</p>
+        <p className="text-xs text-gray-600 mt-1 italic">"{jd.objetivo_simple}"</p>
       </div>
 
-      {/* Drills */}
-      <div>
-        <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">
-          Drills ({sesion.drills.length})
-        </p>
-        <div className="space-y-2">
-          {sesion.drills.map((drill, i) => {
-            const isExp = expandedDrills.has(i);
-            const dur = jd.drill_durations?.[i];
-            return (
-              <div key={i} className="border border-gray-100 rounded-lg bg-gray-50 overflow-hidden">
-                <div className="flex items-center justify-between px-3 py-2.5">
-                  <div className="flex items-center gap-2 min-w-0">
-                    <span className="text-[10px] font-bold text-gray-400">{i + 1}.</span>
-                    <span className="text-sm font-semibold text-gray-900 truncate">{drill.titulo}</span>
-                    {dur && <span className="text-[10px] text-gray-400 shrink-0">· {dur} min</span>}
-                  </div>
-                  <button
-                    onClick={() => toggleDrill(i)}
-                    className="ml-2 shrink-0 text-gray-400 hover:text-gray-600"
+      {/* Actividades */}
+      <div className="space-y-2">
+        {jd.actividades.map((act, i) => {
+          const isExp = expandedActs.has(i);
+          return (
+            <div key={i} className="border border-gray-100 rounded-lg bg-gray-50 overflow-hidden">
+              <div className="flex items-center justify-between px-3 py-2.5">
+                <div className="flex items-center gap-2 min-w-0">
+                  <span
+                    className="text-[10px] font-bold text-white px-1.5 py-0.5 rounded shrink-0"
+                    style={{ background: GREEN }}
                   >
-                    <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5} className={`transition-transform ${isExp ? "rotate-180" : ""}`}><path d="M19 9l-7 7-7-7"/></svg>
-                  </button>
+                    {i + 1}
+                  </span>
+                  <span className="text-sm font-semibold text-gray-900 truncate">{act.nombre}</span>
+                  <span className="text-[10px] text-gray-400 shrink-0">· {act.duracion_min} min</span>
                 </div>
-                {isExp && (
-                  <div className="border-t border-gray-100 px-3 pb-3 pt-2 space-y-2">
-                    {drill.descripcion && (
-                      <p className="text-xs text-gray-600 mb-1">{drill.descripcion}</p>
-                    )}
-                    {[
-                      { key: "dificultad_birdies" as const, label: "Birdies", bg: "#dbeafe", tc: "#1e40af" },
-                      { key: "dificultad_aguilas" as const, label: "Águilas", bg: "#dcfce7", tc: "#166534" },
-                      { key: "dificultad_albatros" as const, label: "Albatros", bg: "#fef9c3", tc: "#854d0e" },
-                    ].filter((x) => drill[x.key]).map((x) => (
-                      <div key={x.key} className="rounded-md px-2 py-1.5" style={{ background: x.bg }}>
-                        <span className="text-[10px] font-bold mr-1" style={{ color: x.tc }}>{x.label}:</span>
-                        <span className="text-[11px] text-gray-700">{drill[x.key]}</span>
-                      </div>
-                    ))}
-                  </div>
-                )}
+                <button
+                  onClick={() => toggleAct(i)}
+                  className="ml-2 shrink-0 text-gray-400 hover:text-gray-600"
+                >
+                  <svg
+                    width="14" height="14" fill="none" viewBox="0 0 24 24"
+                    stroke="currentColor" strokeWidth={2.5}
+                    className={`transition-transform ${isExp ? "rotate-180" : ""}`}
+                  >
+                    <path d="M19 9l-7 7-7-7"/>
+                  </svg>
+                </button>
               </div>
-            );
-          })}
-        </div>
+              {isExp && (
+                <div className="border-t border-gray-100 px-3 pb-3 pt-2 space-y-2">
+                  <p className="text-xs text-gray-600">{act.como_se_juega}</p>
+                  {act.adaptacion_birdies && (
+                    <div className="rounded-md px-2 py-1.5 bg-blue-50">
+                      <span className="text-[10px] font-bold text-blue-700 mr-1">Birdies:</span>
+                      <span className="text-[11px] text-gray-700">{act.adaptacion_birdies}</span>
+                    </div>
+                  )}
+                  {act.adaptacion_albatros && (
+                    <div className="rounded-md px-2 py-1.5 bg-yellow-50">
+                      <span className="text-[10px] font-bold text-yellow-700 mr-1">Albatros:</span>
+                      <span className="text-[11px] text-gray-700">{act.adaptacion_albatros}</span>
+                    </div>
+                  )}
+                  {act.como_se_gana && (
+                    <div className="rounded-md px-2 py-1.5 bg-amber-50">
+                      <span className="text-[10px] font-bold text-amber-700 mr-1">🏆</span>
+                      <span className="text-[11px] text-gray-700">{act.como_se_gana}</span>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          );
+        })}
       </div>
 
-      {/* Juego competitivo */}
-      {jd.juego_competitivo_struct && (
-        <div className="border border-orange-200 bg-orange-50 rounded-lg overflow-hidden">
-          <button
-            onClick={() => setExpandedJuego((v) => !v)}
-            className="w-full flex items-center justify-between px-3 py-2.5 hover:bg-orange-100 transition-colors"
-          >
-            <span className="text-xs font-bold text-orange-700">
-              🏆 {jd.juego_competitivo_struct.titulo} · {jd.juego_competitivo_struct.duracion_min} min
-            </span>
-            <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5} className={`text-orange-500 transition-transform ${expandedJuego ? "rotate-180" : ""}`}><path d="M19 9l-7 7-7-7"/></svg>
-          </button>
-          {expandedJuego && (
-            <div className="border-t border-orange-100 px-3 pb-3 pt-2 space-y-2">
-              <p className="text-xs text-gray-700 mb-1">{jd.juego_competitivo_struct.descripcion}</p>
-              {[
-                { label: "Birdies", val: jd.juego_competitivo_struct.reglas_birdies, bg: "#dbeafe", tc: "#1e40af" },
-                { label: "Águilas", val: jd.juego_competitivo_struct.reglas_aguilas, bg: "#dcfce7", tc: "#166534" },
-                { label: "Albatros", val: jd.juego_competitivo_struct.reglas_albatros, bg: "#fef9c3", tc: "#854d0e" },
-              ].map(({ label, val, bg, tc }) => (
-                <div key={label} className="rounded-md px-2 py-1.5" style={{ background: bg }}>
-                  <span className="text-[10px] font-bold mr-1" style={{ color: tc }}>{label}:</span>
-                  <span className="text-[11px] text-gray-700">{val}</span>
-                </div>
-              ))}
-              <div className="bg-gray-100 rounded-md px-2 py-1.5">
-                <span className="text-[10px] font-bold text-gray-600 mr-1">¿Cómo se gana?</span>
-                <span className="text-[11px] text-gray-700">{jd.juego_competitivo_struct.como_se_gana}</span>
-              </div>
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* Materiales */}
-      {jd.materiales_totales?.length > 0 && (
-        <div className="bg-gray-50 border border-gray-100 rounded-lg px-3 py-2">
-          <span className="text-[10px] font-bold text-gray-500 uppercase mr-1">📦 Materiales:</span>
-          <span className="text-xs text-gray-600">{jd.materiales_totales.join(" · ")}</span>
+      {/* Actividad estrella */}
+      {jd.actividad_estrella && (
+        <div className="border border-yellow-200 bg-yellow-50 rounded-lg px-3 py-2 flex items-center gap-2">
+          <span className="text-sm">⭐</span>
+          <span className="text-xs font-semibold text-yellow-800">
+            Actividad estrella: {jd.actividad_estrella}
+          </span>
         </div>
       )}
 
@@ -387,7 +364,7 @@ function JuvenilSessionDetail({
   );
 }
 
-// ── Juvenil PDF hidden template ───────────────────────────────────────────────
+// ── Juvenil PDF hidden template (nuevo formato con actividades) ───────────────
 function JuvenilPDFHidden({ sesion }: { sesion: SesionSemana }) {
   const jd = sesion.sesion_juvenil!;
   const GREEN = "#1B4D2E";
@@ -401,49 +378,66 @@ function JuvenilPDFHidden({ sesion }: { sesion: SesionSemana }) {
   const lugar = LUGAR_LABEL_MAP[sesion.lugar] ?? sesion.lugar;
 
   return (
-    <div style={{ width: 794, padding: "48px 56px", fontFamily: "Georgia, serif", background: "#fff", color: "#1a1a1a" }}>
+    <div style={{ width: 794, padding: "48px 56px", fontFamily: "Arial, sans-serif", background: "#fff", color: "#1a1a1a" }}>
       <div style={{ textAlign: "center", marginBottom: 32 }}>
-        <div style={{ fontSize: 11, letterSpacing: 3, color: "#4b7c52", textTransform: "uppercase", marginBottom: 8 }}>Escuela de Golf CCB</div>
-        <div style={{ fontSize: 22, fontWeight: "bold", color: GREEN, marginBottom: 4 }}>Programación de clase</div>
+        <div style={{ fontSize: 11, letterSpacing: 3, color: "#4b7c52", textTransform: "uppercase", marginBottom: 8 }}>
+          Escuela de Golf CCB
+        </div>
+        <div style={{ fontSize: 28, fontWeight: "bold", color: GREEN, marginBottom: 6 }}>
+          {jd.nombre_clase}
+        </div>
         <div style={{ fontSize: 13, color: "#555" }}>Grupo Juvenil · Birdies · Águilas · Albatros</div>
-        <div style={{ marginTop: 12, fontSize: 13, color: "#333" }}>
+        <div style={{ marginTop: 10, fontSize: 13, color: "#333" }}>
           {fechaFmt} · {sesion.hora_inicio?.slice(0, 5)}–{sesion.hora_fin?.slice(0, 5)} · {lugar}
         </div>
         <div style={{ width: 60, height: 3, background: GREEN, margin: "16px auto 0" }} />
       </div>
-      <div style={{ background: "#f0faf2", border: `2px solid ${GREEN}`, borderRadius: 8, padding: "14px 18px", marginBottom: 24 }}>
-        <div style={{ fontSize: 10, fontWeight: "bold", color: GREEN, textTransform: "uppercase", letterSpacing: 1, marginBottom: 4 }}>🎯 Objetivo de hoy</div>
-        <div style={{ fontSize: 14, color: "#1a3a1a", lineHeight: 1.5 }}>{sesion.objetivo}</div>
+
+      <div style={{ background: "#f0faf2", border: `2px solid ${GREEN}`, borderRadius: 8, padding: "14px 18px", marginBottom: 28 }}>
+        <div style={{ fontSize: 11, fontWeight: "bold", color: GREEN, textTransform: "uppercase", letterSpacing: 1, marginBottom: 6 }}>
+          Hoy trabajamos:
+        </div>
+        <div style={{ fontSize: 15, color: "#1a3a1a", lineHeight: 1.5, fontStyle: "italic" }}>
+          "{jd.objetivo_simple}"
+        </div>
       </div>
-      {sesion.drills.map((drill, i) => (
-        <div key={i} style={{ marginBottom: 18 }}>
-          <div style={{ fontSize: 12, fontWeight: "bold", color: GREEN, marginBottom: 4 }}>
-            {i + 1}. {drill.titulo}
-            {jd.drill_durations?.[i] && <span style={{ fontWeight: "normal", color: "#666", fontSize: 11, marginLeft: 8 }}>· {jd.drill_durations[i]} min</span>}
+
+      {jd.actividades.map((act, i) => (
+        <div key={i} style={{ marginBottom: 22, borderLeft: "4px solid #a7d7b0", paddingLeft: 16 }}>
+          <div style={{ fontSize: 13, fontWeight: "bold", color: GREEN, marginBottom: 4 }}>
+            Actividad {i + 1} · {act.duracion_min} min — {act.nombre}
           </div>
-          <div style={{ fontSize: 12, color: "#333", lineHeight: 1.6, paddingLeft: 12, borderLeft: "3px solid #a7d7b0" }}>
-            {drill.descripcion}
+          <div style={{ fontSize: 12, color: "#333", lineHeight: 1.7, marginBottom: 8 }}>
+            {act.como_se_juega}
           </div>
+          {act.adaptacion_birdies && (
+            <div style={{ background: "#dbeafe", borderRadius: 6, padding: "4px 10px", fontSize: 11, color: "#1e40af", marginBottom: 4 }}>
+              <strong>Birdies (4-5a):</strong> {act.adaptacion_birdies}
+            </div>
+          )}
+          {act.adaptacion_albatros && (
+            <div style={{ background: "#fef9c3", borderRadius: 6, padding: "4px 10px", fontSize: 11, color: "#854d0e", marginBottom: 4 }}>
+              <strong>Albatros (9-12a):</strong> {act.adaptacion_albatros}
+            </div>
+          )}
+          {act.como_se_gana && (
+            <div style={{ fontSize: 11, color: "#555", marginTop: 4 }}>🏆 {act.como_se_gana}</div>
+          )}
         </div>
       ))}
-      {jd.juego_competitivo_struct && (
-        <div style={{ background: "#fff8ec", border: "2px solid #e6a817", borderRadius: 8, padding: "14px 18px", marginTop: 12, marginBottom: 24 }}>
-          <div style={{ fontSize: 10, fontWeight: "bold", color: "#b45309", textTransform: "uppercase", letterSpacing: 1, marginBottom: 4 }}>
-            🏆 Juego del día · {jd.juego_competitivo_struct.duracion_min} min
+
+      {jd.actividad_estrella && (
+        <div style={{ background: "#fff8ec", border: "2px solid #e6a817", borderRadius: 8, padding: "14px 18px", marginTop: 8, marginBottom: 24 }}>
+          <div style={{ fontSize: 11, fontWeight: "bold", color: "#b45309", textTransform: "uppercase", letterSpacing: 1, marginBottom: 4 }}>
+            ⭐ Actividad estrella del día
           </div>
-          <div style={{ fontSize: 13, fontWeight: "bold", color: "#7c2d12", marginBottom: 4 }}>{jd.juego_competitivo_struct.titulo}</div>
-          <div style={{ fontSize: 12, color: "#333", lineHeight: 1.6 }}>{jd.juego_competitivo_struct.descripcion}</div>
+          <div style={{ fontSize: 15, fontWeight: "bold", color: "#7c2d12" }}>{jd.actividad_estrella}</div>
         </div>
       )}
-      {jd.materiales_totales?.length > 0 && (
-        <div style={{ fontSize: 12, color: "#444", marginBottom: 24 }}>
-          <span style={{ fontWeight: "bold", color: GREEN }}>📦 Materiales: </span>
-          {jd.materiales_totales.join(" · ")}
-        </div>
-      )}
+
       <div style={{ marginTop: 32, paddingTop: 14, borderTop: "1px solid #ddd", textAlign: "center", fontSize: 10, color: "#888" }}>
         Escuela de Golf CCB · {fechaFmt}<br />
-        Con mucho entusiasmo y aprendizaje para todos nuestros jugadores ⛳
+        ¡Hoy aprendemos jugando! ⛳
       </div>
     </div>
   );
@@ -1584,8 +1578,8 @@ export default function ProgramacionModule() {
 
                                 {sesion.drills && sesion.drills.length > 0 && (
                                   <div>
-                                    {/* Structured Juvenil class view */}
-                                    {activeTab === "juvenil" && sesion.sesion_juvenil ? (
+                                    {/* Structured Juvenil class view (nuevo formato) */}
+                                    {activeTab === "juvenil" && sesion.sesion_juvenil?.actividades ? (
                                       <JuvenilSessionDetail
                                         sesion={sesion}
                                         jd={sesion.sesion_juvenil}
@@ -1634,7 +1628,7 @@ export default function ProgramacionModule() {
                                   </div>
                                 )}
 
-                                {!(activeTab === "juvenil" && sesion.sesion_juvenil) && (
+                                {!(activeTab === "juvenil" && sesion.sesion_juvenil?.actividades) && (
                                   <>
                                     {sesion.juego_competitivo && (
                                       <div className="bg-orange-50 border border-orange-100 rounded-lg p-3">
@@ -2558,7 +2552,7 @@ export default function ProgramacionModule() {
 
       {/* ── Hidden PDF sesión juvenil individual ─────────────────────────── */}
       <div ref={juvPdfRef} style={{ position: "absolute", left: "-9999px", top: 0, pointerEvents: "none" }}>
-        {juvPdfSesion?.sesion_juvenil && (
+        {juvPdfSesion?.sesion_juvenil?.actividades && (
           <JuvenilPDFHidden sesion={juvPdfSesion} />
         )}
       </div>
