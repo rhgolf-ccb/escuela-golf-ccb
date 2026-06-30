@@ -833,6 +833,12 @@ export default function ProgramacionModule() {
   async function handleCrearPlanComp() {
     setPlanError(null); setCreandoPlan(true);
     try {
+      const hdRows: HorarioDefecto[] = horariosDefecto.length > 0 ? horariosDefecto
+        : (((await supabase.from("horarios_defecto").select("tipo_plan,dia_semana,hora_inicio,hora_fin")).data) ?? []) as HorarioDefecto[];
+      const getHD = (tipo: TipoPlan, dia: DiaSemana) => {
+        const slots = hdRows.filter((h) => h.tipo_plan === tipo && h.dia_semana === dia).sort((a, b) => a.hora_inicio.localeCompare(b.hora_inicio));
+        return slots[0] ? { hi: slots[0].hora_inicio.slice(0, 5), hf: slots[0].hora_fin.slice(0, 5) } : null;
+      };
       const { data: newPlan, error: planErr } = await supabase.from("planes_semanales")
         .upsert(
           { semana_inicio: toISODate(semana), tipo_plan: "competencia", tema_semanal: "Semana de Competencia", descripcion_tema: "", objetivo_mensual: null, foco_mes: null },
@@ -842,7 +848,7 @@ export default function ProgramacionModule() {
       if (planErr || !newPlan) throw new Error(planErr?.message || "Error al crear plan");
       const { count } = await supabase.from("sesiones_semana").select("id", { count: "exact", head: true }).eq("plan_id", newPlan.id);
       if (!count) for (const dia of DIAS_POR_TIPO["competencia"]) {
-        const defaultH = getDefaultHoras("competencia", dia as DiaSemana, []);
+        const defaultH = getHD("competencia", dia as DiaSemana);
         await supabase.from("sesiones_semana").insert({
           plan_id: newPlan.id, dia_semana: dia, fecha: getFechaForDia(semana, dia as DiaSemana),
           tipo_sesion: "tiro_largo", lugar: "campo_practica", objetivo: "", drills: [],
@@ -907,10 +913,12 @@ export default function ProgramacionModule() {
         }
       } else {
         for (const s of aiPreview.sesiones) {
+          const defH = (!s.hora_inicio) ? getDefaultHoras(activeTab, s.dia_semana as DiaSemana, []) : null;
           await supabase.from("sesiones_semana").insert({
             plan_id: newPlan.id, dia_semana: s.dia_semana, fecha: s.fecha,
             tipo_sesion: s.tipo_sesion, lugar: s.lugar,
-            hora_inicio: s.hora_inicio || null, hora_fin: s.hora_fin || null,
+            hora_inicio: s.hora_inicio || defH?.hi || null,
+            hora_fin: s.hora_fin || defH?.hf || null,
             objetivo: s.objetivo || "", drills: s.drills || [],
             juego_competitivo: s.juego_competitivo || null,
             estaciones_damas: s.estaciones_damas || null, notas: s.notas || null,
@@ -930,6 +938,12 @@ export default function ProgramacionModule() {
     if (!tema) { setPlanError("Selecciona o escribe un tema."); return; }
     setPlanError(null); setCreandoPlan(true);
     try {
+      const hdRows: HorarioDefecto[] = horariosDefecto.length > 0 ? horariosDefecto
+        : (((await supabase.from("horarios_defecto").select("tipo_plan,dia_semana,hora_inicio,hora_fin")).data) ?? []) as HorarioDefecto[];
+      const getHD = (tipo: TipoPlan, dia: DiaSemana) => {
+        const slots = hdRows.filter((h) => h.tipo_plan === tipo && h.dia_semana === dia).sort((a, b) => a.hora_inicio.localeCompare(b.hora_inicio));
+        return slots[0] ? { hi: slots[0].hora_inicio.slice(0, 5), hf: slots[0].hora_fin.slice(0, 5) } : null;
+      };
       const focoMes = focoMesChip || focoMesCustom.trim() || null;
       const { data: newPlan, error: planErr } = await supabase.from("planes_semanales")
         .upsert(
@@ -941,7 +955,7 @@ export default function ProgramacionModule() {
       // Only insert placeholder sessions if none exist yet
       const { count } = await supabase.from("sesiones_semana").select("id", { count: "exact", head: true }).eq("plan_id", newPlan.id);
       if (!count) for (const dia of DIAS_POR_TIPO[activeTab]) {
-        const defaultH = getDefaultHoras(activeTab, dia, []);
+        const defaultH = getHD(activeTab, dia);
         await supabase.from("sesiones_semana").insert({
           plan_id: newPlan.id, dia_semana: dia, fecha: getFechaForDia(semana, dia),
           tipo_sesion: activeTab === "damas" ? "damas_estaciones" : "tiro_largo",
