@@ -6,12 +6,17 @@ interface Drill {
   descripcion: string;
 }
 interface EstacionDamas { nombre: string; lugar: string; duracion_min: number; descripcion: string; }
+interface JuegoJuvenil { nombre: string; como_se_juega: string; }
+interface EstacionJuvenil { categoria: string; juego: JuegoJuvenil; }
+interface SesionJuvenilEstaciones { tipo: "estaciones"; estaciones: EstacionJuvenil[]; }
+interface SesionJuvenilEspecial { tipo: "especial"; tipo_especial: string; }
 interface SesionSemana {
   id: string; plan_id: string; dia_semana: string; fecha: string;
   tipo_sesion: string; lugar: string;
   hora_inicio: string | null; hora_fin: string | null;
   objetivo: string; drills: Drill[];
   juego_competitivo: string | null; estaciones_damas: EstacionDamas[] | null;
+  sesion_juvenil?: unknown;
   notas: string | null; asistencia_registrada: boolean;
 }
 interface PlanSemanal {
@@ -83,10 +88,39 @@ interface Props {
   semana: Date;
 }
 
+const CAT_LABEL: Record<string, string> = {
+  juego_largo: "🏌️ Juego Largo",
+  juego_corto: "⛳ Juego Corto",
+  putt: "🎯 Putt",
+};
+const ESPECIAL_LABEL: Record<string, string> = {
+  test_tecnico: "Test Técnico P1-P10",
+  test_fisico: "Test Físico TPI",
+  campo_pacos: "Campo Pacos y Fabios",
+  campo_infantil: "Campo Infantil",
+};
+
 // ── Columna de un día ─────────────────────────────────────────────────────────
 function DayColumn({ sesion }: { sesion: SesionSemana }) {
   const drillsToShow = (sesion.drills ?? []).slice(0, 3);
   const lugarLabel = LUGAR_LABEL[sesion.lugar] ?? sesion.lugar ?? "—";
+
+  const jd = sesion.sesion_juvenil as (SesionJuvenilEstaciones | SesionJuvenilEspecial | null | undefined);
+  const jdTipo = jd && "tipo" in jd ? (jd as { tipo: string }).tipo : null;
+  const isJuvEstaciones = jdTipo === "estaciones";
+  const isJuvEspecial = jdTipo === "especial";
+  const estacionesJuv = isJuvEstaciones ? (jd as SesionJuvenilEstaciones).estaciones : [];
+  const especialTipo = isJuvEspecial ? (jd as SesionJuvenilEspecial).tipo_especial : null;
+
+  // Friendly objetivo text for estaciones
+  const objetivoText = isJuvEstaciones
+    ? (() => {
+        const names = estacionesJuv.map((e) => e.juego?.nombre).filter(Boolean);
+        return names.length > 0
+          ? `Hoy jugamos: ${names.join(" · ")}`
+          : "Sesión de 3 estaciones";
+      })()
+    : sesion.objetivo;
 
   return (
     <div style={{
@@ -126,13 +160,13 @@ function DayColumn({ sesion }: { sesion: SesionSemana }) {
         </p>
 
         {/* Foco */}
-        {sesion.objetivo && (
+        {(sesion.objetivo || isJuvEstaciones) && (
           <p style={{ margin: "0 0 10px", fontSize: 10.5, color: "#222", display: "flex", alignItems: "flex-start" }}>
             <IconTarget />
             <span>
               <span style={{ fontWeight: 700, textTransform: "uppercase", fontSize: 10, color: "#1a3a2a" }}>Foco de clase: </span>
               <span style={{ textTransform: "uppercase", fontSize: 10, color: "#1a3a2a", fontWeight: 600 }}>
-                {sesion.objetivo.slice(0, 80)}{sesion.objetivo.length > 80 ? "…" : ""}
+                {isJuvEstaciones ? "Sesión de 3 estaciones" : sesion.objetivo.slice(0, 80) + (sesion.objetivo.length > 80 ? "…" : "")}
               </span>
             </span>
           </p>
@@ -141,8 +175,50 @@ function DayColumn({ sesion }: { sesion: SesionSemana }) {
         {/* Separador */}
         <div style={{ height: 1, background: "#e0e0e0", margin: "2px 0 9px" }} />
 
-        {/* Drills */}
-        {drillsToShow.length > 0 && (
+        {/* Estaciones Juvenil */}
+        {isJuvEstaciones && estacionesJuv.length > 0 && (
+          <div style={{ marginBottom: 10 }}>
+            <p style={{ margin: "0 0 7px", color: "#c8a84b", fontWeight: 800, fontSize: 11, textTransform: "uppercase", letterSpacing: "0.05em" }}>
+              Estaciones:
+            </p>
+            {estacionesJuv.map((est, idx) => (
+              <div key={idx} style={{ display: "flex", gap: 8, marginBottom: 8, alignItems: "flex-start" }}>
+                <div style={{
+                  width: 18, height: 18, background: "#1a3a2a", borderRadius: "50%",
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                  flexShrink: 0, marginTop: 1, fontSize: 9,
+                }}>
+                  <span style={{ color: "#ffffff", fontWeight: 800, lineHeight: 1 }}>{idx + 1}</span>
+                </div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <p style={{ margin: "0 0 1px", fontWeight: 700, fontSize: 10, color: "#1a3a2a", lineHeight: 1.3 }}>
+                    {CAT_LABEL[est.categoria] ?? est.categoria}
+                  </p>
+                  <p style={{ margin: "0 0 1px", fontWeight: 700, fontSize: 10.5, color: "#1a1a1a", lineHeight: 1.3 }}>
+                    {est.juego?.nombre}
+                  </p>
+                  {est.juego?.como_se_juega && (
+                    <p style={{ margin: 0, fontSize: 9.5, color: "#555555", lineHeight: 1.35 }}>
+                      {est.juego.como_se_juega.slice(0, 90)}{est.juego.como_se_juega.length > 90 ? "…" : ""}
+                    </p>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Día especial Juvenil */}
+        {isJuvEspecial && especialTipo && (
+          <div style={{ marginBottom: 10, background: "#f3e8ff", border: "1px solid #d8b4fe", borderRadius: 7, padding: "10px 12px" }}>
+            <p style={{ margin: 0, fontWeight: 700, fontSize: 12, color: "#6b21a8" }}>
+              ⭐ {ESPECIAL_LABEL[especialTipo] ?? especialTipo}
+            </p>
+          </div>
+        )}
+
+        {/* Drills (legacy / competencia / especial con drills) */}
+        {!isJuvEstaciones && !isJuvEspecial && drillsToShow.length > 0 && (
           <div style={{ marginBottom: 10 }}>
             <p style={{ margin: "0 0 7px", color: "#c8a84b", fontWeight: 800, fontSize: 11, textTransform: "uppercase", letterSpacing: "0.05em" }}>
               Drills:
@@ -199,7 +275,7 @@ function DayColumn({ sesion }: { sesion: SesionSemana }) {
         )}
 
         {/* Objetivo box */}
-        {sesion.objetivo && (
+        {objetivoText && (
           <div style={{
             background: "#f5f5f5", border: "1px solid #e0e0e0",
             borderRadius: 7, padding: "8px 10px", marginTop: "auto",
@@ -208,7 +284,7 @@ function DayColumn({ sesion }: { sesion: SesionSemana }) {
               <IconBulb />OBJETIVO:
             </p>
             <p style={{ margin: 0, fontSize: 10, color: "#333333", lineHeight: 1.4 }}>
-              {sesion.objetivo.slice(0, 120)}{sesion.objetivo.length > 120 ? "…" : ""}
+              {objetivoText.slice(0, 140)}{objetivoText.length > 140 ? "…" : ""}
             </p>
           </div>
         )}
