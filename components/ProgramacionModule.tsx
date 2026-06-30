@@ -1180,6 +1180,33 @@ export default function ProgramacionModule() {
               })}
             </div>
 
+            {/* All-day band for sessions without a scheduled time */}
+            {calSesiones.some((s) => !s.hora_inicio) && (
+              <div className="grid" style={{ gridTemplateColumns: "60px repeat(6, 1fr)", background: "#f5f8f4", borderBottom: "1px solid #d4e0d2" }}>
+                <div style={{ borderRight: "1px solid #d4e0d2", display: "flex", alignItems: "center", justifyContent: "flex-end", paddingRight: 6, paddingBlock: 4 }}>
+                  <span style={{ fontSize: 10, fontWeight: 600, color: "#6a8a6a", writingMode: "vertical-rl", transform: "rotate(180deg)" }}>sin hora</span>
+                </div>
+                {CAL_DIAS.map((dia) => {
+                  const untimedSes = calSesiones.filter((s) => s.dia_semana === dia && !s.hora_inicio);
+                  return (
+                    <div key={dia} style={{ borderRight: "1px solid #d4e0d2", padding: "3px 4px", minHeight: 30, display: "flex", flexDirection: "column", gap: 2 }}>
+                      {untimedSes.map((ses) => {
+                        const c = CAL_EVENT[ses.tipo_plan] ?? { bg: "#334155", text: "#fff" };
+                        return (
+                          <div key={ses.id} style={{ background: c.bg, borderRadius: 4, padding: "2px 5px", cursor: "pointer", overflow: "hidden" }}
+                            onClick={() => setCalEventDetail(ses)}>
+                            <p style={{ margin: 0, fontSize: 11, fontWeight: 600, color: c.text, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                              {TIPO_SESION_LABEL[ses.tipo_sesion]}
+                            </p>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
             {/* Scrollable grid body */}
             <div style={{ overflowY: "auto", maxHeight: 520 }}>
               <div className="grid" style={{ gridTemplateColumns: "60px repeat(6, 1fr)", height: TOTAL_H }}>
