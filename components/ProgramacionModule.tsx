@@ -528,7 +528,16 @@ export default function ProgramacionModule() {
   const [juvClassCtx, setJuvClassCtx] = useState<{
     dia: DiaSemana; fecha: string; sesion: SesionSemana | null;
     horaInicio?: string; horaFin?: string;
+    actividadesYaUsadas: string[];
   } | null>(null);
+
+  function openJuvModal(dia: DiaSemana, fecha: string, sesion: SesionSemana | null, extra?: { hi?: string; hf?: string }) {
+    const actividadesYaUsadas = sesiones
+      .filter((s) => !sesion || s.id !== sesion.id)
+      .flatMap((s) => s.sesion_juvenil?.actividades?.map((a) => a.nombre) ?? [])
+      .filter((v): v is string => Boolean(v));
+    setJuvClassCtx({ dia, fecha, sesion, horaInicio: extra?.hi, horaFin: extra?.hf, actividadesYaUsadas });
+  }
 
   // PDF para sesión individual Juvenil
   const [juvPdfSesion, setJuvPdfSesion] = useState<SesionSemana | null>(null);
@@ -1012,7 +1021,7 @@ export default function ProgramacionModule() {
     if (activeTab === "juvenil") {
       const endHour = Math.min(hour + 1, 18);
       const endStr = `${endHour.toString().padStart(2, "0")}:00`;
-      setJuvClassCtx({ dia, fecha: getFechaForDia(semana, dia), sesion: null, horaInicio: hourStr, horaFin: endStr });
+      openJuvModal(dia, getFechaForDia(semana, dia), null, { hi: hourStr, hf: endStr });
     } else {
       openEditSesion(dia, null, hourStr);
     }
@@ -1529,14 +1538,14 @@ export default function ProgramacionModule() {
                           onClick={(e) => {
                             e.stopPropagation();
                             if (activeTab === "juvenil") {
-                              setJuvClassCtx({ dia, fecha, sesion: null });
+                              openJuvModal(dia, fecha, null);
                             } else {
                               openEditSesion(dia, null);
                             }
                           }}
                           className="px-2.5 py-1.5 rounded-lg text-xs font-medium border border-gray-200 text-gray-600 hover:bg-gray-50 transition-colors"
                         >
-                          + Agregar
+                          {activeTab === "juvenil" ? "+ Asignar" : "+ Agregar"}
                         </button>
                         {diaySesiones.length > 0 && (
                           <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} className={`text-gray-400 transition-transform ${isExpanded ? "rotate-180" : ""}`}><path d="M19 9l-7 7-7-7"/></svg>
@@ -1570,14 +1579,14 @@ export default function ProgramacionModule() {
                                           onClick={() => {
                                             setOpenMenuId(null);
                                             if (activeTab === "juvenil") {
-                                              setJuvClassCtx({ dia, fecha, sesion });
+                                              openJuvModal(dia, fecha, sesion);
                                             } else {
                                               openEditSesion(dia, sesion);
                                             }
                                           }}
                                           className="w-full text-left px-4 py-2.5 text-xs text-gray-700 hover:bg-gray-50 flex items-center gap-2"
                                         >
-                                          ✏️ Editar sesión
+                                          {activeTab === "juvenil" ? "🔄 Cambiar actividad" : "✏️ Editar sesión"}
                                         </button>
                                         <button
                                           onClick={() => { setOpenMenuId(null); setConfirmDeleteSesion(sesion); }}
@@ -1619,7 +1628,7 @@ export default function ProgramacionModule() {
                                       <JuvenilSessionDetail
                                         sesion={sesion}
                                         jd={sesion.sesion_juvenil}
-                                        onEdit={() => setJuvClassCtx({ dia, fecha, sesion })}
+                                        onEdit={() => openJuvModal(dia, fecha, sesion)}
                                         onDelete={() => setConfirmDeleteSesion(sesion)}
                                         onPdf={() => handleJuvPdf(sesion)}
                                         onAsistencia={() => router.push(`/programacion/sesion/${sesion.id}`)}
@@ -2580,7 +2589,7 @@ export default function ProgramacionModule() {
                   setActiveTab(calEventDetail.tipo_plan);
                   setViewMode("plan");
                   if (calEventDetail.tipo_plan === "juvenil") {
-                    setTimeout(() => setJuvClassCtx({ dia: calEventDetail.dia_semana, fecha: calEventDetail.fecha, sesion: calEventDetail }), 100);
+                    setTimeout(() => openJuvModal(calEventDetail.dia_semana, calEventDetail.fecha, calEventDetail as unknown as SesionSemana), 100);
                   } else {
                     setTimeout(() => openEditSesion(calEventDetail.dia_semana, calEventDetail), 100);
                   }
@@ -2684,13 +2693,13 @@ export default function ProgramacionModule() {
       {juvClassCtx && plan && (
         <JuvenileClassModal
           planId={plan.id}
-          planTema={plan.tema_semanal}
           dia={juvClassCtx.dia}
           diaLabel={DIA_LABEL[juvClassCtx.dia]}
           fecha={juvClassCtx.fecha}
           horaInicio={juvClassCtx.horaInicio}
           horaFin={juvClassCtx.horaFin}
           sesionExistente={juvClassCtx.sesion ?? undefined}
+          actividadesYaUsadas={juvClassCtx.actividadesYaUsadas}
           onClose={() => setJuvClassCtx(null)}
           onSaved={async () => {
             setJuvClassCtx(null);

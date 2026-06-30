@@ -11,21 +11,31 @@ function parseJSON(raw: string): unknown {
 
 export async function POST(req: NextRequest) {
   const body = await req.json();
-  const { tema, lugar, fecha, dia_semana } = body;
+  const {
+    tema, lugar, fecha, dia_semana,
+    actividades_ya_usadas_esta_semana = [] as string[],
+  } = body as {
+    tema: string; lugar: string; fecha: string; dia_semana: string;
+    actividades_ya_usadas_esta_semana?: string[];
+  };
+
+  const actividadesUsadasLine = actividades_ya_usadas_esta_semana.length > 0
+    ? `\n\nACTIVIDADES YA USADAS ESTA SEMANA: ${actividades_ya_usadas_esta_semana.join(", ")}\nIMPORTANTE: No repitas ninguna de estas actividades. Genera 3 opciones NUEVAS y diferentes para mantener la clase interesante.`
+    : "";
 
   const system = `Eres instructor de golf para niños de 4-12 años.
-Diseña una clase divertida y dinámica de 60 min para grupo Juvenil CCB.
+Diseña clases divertidas y dinámicas de 60 min para grupo Juvenil CCB.
 
 Grupos juntos:
 - Birdies 4-5a: atención máx 8 min por actividad, necesitan movimiento constante y mucho juego
 - Águilas 6-8a: pueden seguir instrucciones simples, les encantan los retos y competencias
 - Albatros 9-12a: pueden enfocarse más tiempo, quieren sentirse "buenos" en lo que hacen
 
-TEMA: ${tema}
-LUGAR: ${lugar}
+TEMA DEL DÍA: ${tema}
+LUGAR: ${lugar}${actividadesUsadasLine}
 
-La clase debe tener máximo 3 actividades.
-Cada actividad es un JUEGO que trabaja el objetivo sin que el niño lo note.
+Genera 3 opciones DISTINTAS de clase. Cada opción tiene un nombre diferente y un enfoque creativo único para el mismo tema.
+Cada clase tiene máximo 3 actividades. Cada actividad es un JUEGO que trabaja el objetivo sin que el niño lo note.
 
 Ejemplo: si el tema es "swing", en lugar de "drill de backswing" → "Juego del semáforo: el palo se detiene en verde (P3) antes de seguir a rojo (P4)".
 
@@ -38,21 +48,27 @@ Para cada actividad:
 
 Devuelve SOLO JSON válido, sin texto adicional ni backticks:
 {
-  "nombre_clase": "string (ej: 'Día del semáforo')",
-  "objetivo_simple": "string (para los padres, ej: 'Practicar el movimiento de subida del palo de forma divertida')",
-  "lugar": "${lugar}",
-  "actividades": [
+  "opciones": [
     {
-      "nombre": "string (divertido, no técnico)",
-      "duracion_min": 20,
-      "como_se_juega": "string (simple, 2-3 líneas)",
-      "adaptacion_birdies": "string",
-      "adaptacion_albatros": "string",
-      "como_se_gana": "string",
-      "materiales": "string"
-    }
-  ],
-  "actividad_estrella": "string (la más divertida — destacarla para los padres)"
+      "nombre_clase": "string (ej: 'Día del semáforo')",
+      "objetivo_simple": "string (para los padres, ej: 'Practicar el movimiento de subida del palo de forma divertida')",
+      "lugar": "${lugar}",
+      "actividades": [
+        {
+          "nombre": "string (divertido, no técnico)",
+          "duracion_min": 20,
+          "como_se_juega": "string (simple, 2-3 líneas)",
+          "adaptacion_birdies": "string",
+          "adaptacion_albatros": "string",
+          "como_se_gana": "string",
+          "materiales": "string"
+        }
+      ],
+      "actividad_estrella": "string (la más divertida — destacarla para los padres)"
+    },
+    { ... segunda opción diferente ... },
+    { ... tercera opción diferente ... }
+  ]
 }`;
 
   const res = await fetch("https://api.anthropic.com/v1/messages", {
@@ -64,11 +80,11 @@ Devuelve SOLO JSON válido, sin texto adicional ni backticks:
     },
     body: JSON.stringify({
       model: "claude-sonnet-4-6",
-      max_tokens: 3000,
+      max_tokens: 6000,
       system,
       messages: [{
         role: "user",
-        content: `Diseña la clase para ${dia_semana} ${fecha}. Tema: ${tema}. Lugar: ${lugar}.`,
+        content: `Diseña 3 opciones de clase para ${dia_semana} ${fecha}. Tema: ${tema}. Lugar: ${lugar}.`,
       }],
     }),
   });
@@ -79,7 +95,9 @@ Devuelve SOLO JSON válido, sin texto adicional ni backticks:
   }
 
   const raw: string = aiData.content?.[0]?.text ?? "";
-  const parsed = parseJSON(raw);
-  if (!parsed) return Response.json({ error: "JSON inválido", raw }, { status: 500 });
+  const parsed = parseJSON(raw) as { opciones?: unknown[] } | null;
+  if (!parsed || !Array.isArray(parsed.opciones) || parsed.opciones.length === 0) {
+    return Response.json({ error: "JSON inválido o sin opciones", raw }, { status: 500 });
+  }
   return Response.json(parsed);
 }
