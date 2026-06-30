@@ -173,7 +173,7 @@ const COMP_DIA_BADGE: Partial<Record<DiaSemana, { bg: string; text: string }>> =
 const CAL_HOUR_START = 7;
 const CAL_HOUR_END   = 18;
 const CAL_FULL_H     = 80;  // px for occupied hour rows
-const CAL_THIN_H     = 14;  // px for collapsed empty-hour rows
+const CAL_THIN_H     = 16;  // px for collapsed empty-hour rows
 const CAL_HOURS      = Array.from({ length: CAL_HOUR_END - CAL_HOUR_START }, (_, i) => CAL_HOUR_START + i);
 // Event colors (dark/solid for contrast)
 const CAL_EVENT: Record<string, { bg: string; text: string }> = {
@@ -605,6 +605,7 @@ export default function ProgramacionModule() {
 
   // ── Fetch calendar data ───────────────────────────────────────────────────
   const fetchCalSemana = useCallback(async () => {
+    setCalSesiones([]);
     setCalLoading(true);
     const { data: plans } = await supabase
       .from("planes_semanales").select("id, tipo_plan")
@@ -624,6 +625,7 @@ export default function ProgramacionModule() {
   }, [semana, activeTab]);
 
   const fetchCalMes = useCallback(async () => {
+    setCalSesiones([]);
     setCalLoading(true);
     const { start, end } = getMesRange(mesCal);
     const { data: plans } = await supabase
@@ -1196,7 +1198,7 @@ export default function ProgramacionModule() {
           </div>
         )}
         {!calLoading && (
-          <div className="overflow-x-auto">
+          <div className="overflow-x-auto" style={{ overflowY: "clip" }}>
             <div style={{ minWidth: 520 }}>
 
               {/* ── Day headers ── */}
@@ -1207,7 +1209,7 @@ export default function ProgramacionModule() {
                   const isToday = fecha === toISODate(new Date());
                   return (
                     <div key={dia} className="py-2.5 text-center" style={{ borderRight: "1px solid #d4e0d2" }}>
-                      <p className="text-xs font-bold" style={{ color: "#3a5a3a" }}>{DIA_LABEL_SHORT[dia]}</p>
+                      <p className="text-xs font-bold" style={{ color: "#1a3a1a" }}>{DIA_LABEL_SHORT[dia]}</p>
                       {isToday ? (
                         <span className="text-xs font-bold rounded-full px-1.5 inline-block mt-0.5" style={{ background: "#1a3a2a", color: "#ffffff" }}>
                           {formatDiaFecha(fecha)}
@@ -1241,7 +1243,7 @@ export default function ProgramacionModule() {
                         {row.type === "full" ? (
                           <span style={{ fontSize: 13, fontWeight: 600, color: "#3a5a3a" }}>{fmtCalHour(row.hour)}</span>
                         ) : (
-                          <span style={{ fontSize: 10, color: "#8aaa8a" }}>{fmtCalHour(row.from)}–{fmtCalHour(row.to + 1)}</span>
+                          <span style={{ fontSize: 10, color: "#5a7a5a" }}>{fmtCalHour(row.from)}–{fmtCalHour(row.to + 1)}</span>
                         )}
                       </div>
                     ))}
@@ -1355,7 +1357,7 @@ export default function ProgramacionModule() {
             {/* Day headers */}
             <div className="grid grid-cols-7" style={{ background: "#e8f0e6", borderBottom: "1px solid #d4e0d2" }}>
               {HEADERS.map((h) => (
-                <div key={h} className="py-2 text-center text-[11px] font-bold uppercase" style={{ color: "#3a5a3a" }}>{h}</div>
+                <div key={h} className="py-2 text-center text-[11px] font-bold uppercase" style={{ color: "#1a3a1a" }}>{h}</div>
               ))}
             </div>
 
