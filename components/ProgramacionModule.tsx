@@ -9,6 +9,7 @@ import JuvenileClassModal, {
   type SesionJuvenilLegacy,
   type SesionJuvenilEstaciones,
 } from "./JuvenileClassModal";
+import CompetenciaClassModal from "./CompetenciaClassModal";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 type TipoPlan   = "juvenil" | "competencia" | "damas";
@@ -167,18 +168,6 @@ const COMP_DIA_BADGE: Partial<Record<DiaSemana, { bg: string; text: string }>> =
   jueves:    { bg: "#ede9fe", text: "#6d28d9" },
   sabado:    { bg: "#fef3c7", text: "#92400e" },
 };
-
-// Competencia wizard paso 1 constants
-const COMP_POSICIONES = [
-  "P1 Setup", "P2 Takeaway", "P3 Media subida",
-  "P4 Top backswing", "P5 Inicio downswing", "P6 Impacto", "P7 Follow through",
-];
-const COMP_TORNEOS = [
-  { value: "sin_torneo",        label: "Sin torneo esta semana" },
-  { value: "torneo_este_finde", label: "Torneo este fin de semana" },
-  { value: "torneo_1_semana",   label: "Torneo en 1 semana" },
-  { value: "torneo_2_semanas",  label: "Torneo en 2 semanas" },
-];
 
 // Calendar grid constants
 const CAL_HOUR_START = 7;
@@ -532,11 +521,11 @@ export default function ProgramacionModule() {
     drills: { id: string; titulo: string; descripcion: string; posicion_swing: string[] | null; nivel_recomendado: string[] | null; lugar: string; duracion_minutos: number | null; repeticiones: string | null; error_que_corrige: string | null; sensacion_buscada: string | null; metrica_exito: string | null }[];
   } | null>(null);
 
-  // Competencia wizard paso 1
-  const [compModo, setCompModo]           = useState<"construccion" | "preparacion" | "">("");
-  const [compTorneo, setCompTorneo]       = useState<string>("sin_torneo");
-  const [compPosiciones, setCompPosiciones] = useState<string[]>([]);
-  const [compPrimerDia, setCompPrimerDia] = useState<"martes" | "miercoles">("martes");
+  // Competencia day-by-day modal
+  const [compClassCtx, setCompClassCtx] = useState<{
+    dia: DiaSemana; fecha: string; sesion: SesionSemana | null;
+    horaInicio?: string; horaFin?: string;
+  } | null>(null);
 
   // Delete plan
   const [confirmDeletePlan, setConfirmDeletePlan] = useState(false);
@@ -567,6 +556,10 @@ export default function ProgramacionModule() {
 
   function openJuvModal(dia: DiaSemana, fecha: string, sesion: SesionSemana | null, extra?: { hi?: string; hf?: string }) {
     setJuvClassCtx({ dia, fecha, sesion, horaInicio: extra?.hi, horaFin: extra?.hf });
+  }
+
+  function openCompModal(dia: DiaSemana, fecha: string, sesion: SesionSemana | null, extra?: { hi?: string; hf?: string }) {
+    setCompClassCtx({ dia, fecha, sesion, horaInicio: extra?.hi, horaFin: extra?.hf });
   }
 
   async function handleUpdateLugar(sesionId: string, newLugar: Lugar) {
@@ -684,7 +677,6 @@ export default function ProgramacionModule() {
     setSuggestedFocos([]); setSuggestingFocos(false);
     setSuggestedTemas([]); setSuggestingTemas(false);
     setSelectedOpcionIdx({});
-    setCompModo(""); setCompTorneo("sin_torneo"); setCompPosiciones([]); setCompPrimerDia("martes");
   }
 
   function updatePreviewSesion(i: number, updates: Partial<PreviewSesion>) {
@@ -781,19 +773,9 @@ export default function ProgramacionModule() {
   }
 
   async function handleGenerarIA() {
-    const isComp = activeTab === "competencia";
-
-    if (isComp) {
-      if (!compModo) { setPlanError("Selecciona el modo de la semana (sección A)."); return; }
-    } else {
-      const tema = temaChip || temaCustom.trim();
-      if (!tema) { setPlanError("Selecciona o escribe un tema."); return; }
-    }
-
-    const tema   = isComp
-      ? (compModo === "preparacion" ? "Preparación para competencia" : "Construcción de swing")
-      : (temaChip || temaCustom.trim());
-    const focoMes = isComp ? compModo : (focoMesChip || focoMesCustom.trim());
+    const tema = temaChip || temaCustom.trim();
+    if (!tema) { setPlanError("Selecciona o escribe un tema."); return; }
+    const focoMes = focoMesChip || focoMesCustom.trim();
 
     setPlanError(null); setGeneratingAI(true); setIaStep(3);
     try {
@@ -804,12 +786,6 @@ export default function ProgramacionModule() {
           .from("swing_evaluations").select("grupo, score_promedio, evaluation_date")
           .in("grupo", GRUPOS_EVAL[activeTab]).order("evaluation_date", { ascending: false }).limit(5);
         if (swingData?.length) contextoGrupo.evaluaciones_recientes = swingData;
-      }
-      if (isComp) {
-        contextoGrupo.modo       = compModo;
-        contextoGrupo.torneo     = compTorneo;
-        contextoGrupo.posiciones = compPosiciones;
-        contextoGrupo.primer_dia = compPrimerDia;
       }
       const res = await fetch("/api/weekly-plan", {
         method: "POST", headers: { "Content-Type": "application/json" },
@@ -843,8 +819,34 @@ export default function ProgramacionModule() {
       setAiPreview({ descripcion_tema: data.descripcion_tema ?? "", sesiones: sesionesConFecha, sesion_juvenil: data.sesion_juvenil ?? null });
     } catch (err) {
       setPlanError(err instanceof Error ? err.message : "Error desconocido");
-      setIaStep(isComp ? 1 : activeTab === "juvenil" ? 1 : 2);
+      setIaStep(activeTab === "juvenil" ? 1 : 2);
     } finally { setGeneratingAI(false); }
+  }
+
+  async function handleCrearPlanComp() {
+    setPlanError(null); setCreandoPlan(true);
+    try {
+      const { data: newPlan, error: planErr } = await supabase.from("planes_semanales")
+        .upsert(
+          { semana_inicio: toISODate(semana), tipo_plan: "competencia", tema_semanal: "Semana de Competencia", descripcion_tema: "", objetivo_mensual: null, foco_mes: null },
+          { onConflict: "semana_inicio,tipo_plan" }
+        )
+        .select().single();
+      if (planErr || !newPlan) throw new Error(planErr?.message || "Error al crear plan");
+      const { count } = await supabase.from("sesiones_semana").select("id", { count: "exact", head: true }).eq("plan_id", newPlan.id);
+      if (!count) for (const dia of DIAS_POR_TIPO["competencia"]) {
+        const defaultH = getDefaultHoras("competencia", dia as DiaSemana, []);
+        await supabase.from("sesiones_semana").insert({
+          plan_id: newPlan.id, dia_semana: dia, fecha: getFechaForDia(semana, dia as DiaSemana),
+          tipo_sesion: "tiro_largo", lugar: "campo_practica", objetivo: "", drills: [],
+          hora_inicio: defaultH?.hi || null, hora_fin: defaultH?.hf || null, estaciones_damas: null,
+        });
+      }
+      setShowCrearModal(false); resetCrearModal();
+      showToast("Plan Competencia creado ✓"); await fetchPlan();
+    } catch (err) {
+      setPlanError(err instanceof Error ? err.message : "Error al crear");
+    } finally { setCreandoPlan(false); }
   }
 
   async function handleGuardarPlanIA() {
@@ -1416,12 +1418,13 @@ export default function ProgramacionModule() {
         <div className="flex items-center justify-end mb-4 gap-2">
           {!plan ? (
             <button
-              onClick={() => { resetCrearModal(); setShowCrearModal(true); }}
-              className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold text-white shadow-sm hover:brightness-110 transition-all"
+              onClick={() => { if (activeTab === "competencia") { handleCrearPlanComp(); } else { resetCrearModal(); setShowCrearModal(true); } }}
+              disabled={creandoPlan}
+              className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold text-white shadow-sm hover:brightness-110 transition-all disabled:opacity-50"
               style={{ background: accentColor }}
             >
               <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
-              Planificar con IA
+              {activeTab === "competencia" ? "Crear plan" : "Planificar con IA"}
             </button>
           ) : (
             <>
@@ -1489,12 +1492,13 @@ export default function ProgramacionModule() {
             <p className="text-base font-semibold text-gray-700 mb-1">Sin plan para esta semana</p>
             <p className="text-sm text-gray-400 mb-6">No hay plan {TIPO_PLAN_LABEL[activeTab]} para la semana seleccionada.</p>
             <button
-              onClick={() => { resetCrearModal(); setShowCrearModal(true); }}
-              className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-semibold text-white shadow-sm hover:brightness-110 transition-all"
+              onClick={() => { if (activeTab === "competencia") { handleCrearPlanComp(); } else { resetCrearModal(); setShowCrearModal(true); } }}
+              disabled={creandoPlan}
+              className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-semibold text-white shadow-sm hover:brightness-110 transition-all disabled:opacity-50"
               style={{ background: accentColor }}
             >
               <svg width="15" height="15" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
-              Planificar con IA
+              {activeTab === "competencia" ? "Crear plan" : "Planificar con IA"}
             </button>
           </div>
         ) : (
@@ -1586,13 +1590,15 @@ export default function ProgramacionModule() {
                             e.stopPropagation();
                             if (activeTab === "juvenil") {
                               openJuvModal(dia, fecha, null);
+                            } else if (activeTab === "competencia") {
+                              openCompModal(dia, fecha, null);
                             } else {
                               openEditSesion(dia, null);
                             }
                           }}
                           className="px-2.5 py-1.5 rounded-lg text-xs font-medium border border-gray-200 text-gray-600 hover:bg-gray-50 transition-colors"
                         >
-                          {activeTab === "juvenil" ? "+ Asignar" : "+ Agregar"}
+                          {(activeTab === "juvenil" || activeTab === "competencia") ? "+ Asignar" : "+ Agregar"}
                         </button>
                         {diaySesiones.length > 0 && (
                           <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} className={`text-gray-400 transition-transform ${isExpanded ? "rotate-180" : ""}`}><path d="M19 9l-7 7-7-7"/></svg>
@@ -1653,13 +1659,15 @@ export default function ProgramacionModule() {
                                             setOpenMenuId(null);
                                             if (activeTab === "juvenil") {
                                               openJuvModal(dia, fecha, sesion);
+                                            } else if (activeTab === "competencia") {
+                                              openCompModal(dia, fecha, sesion);
                                             } else {
                                               openEditSesion(dia, sesion);
                                             }
                                           }}
                                           className="w-full text-left px-4 py-2.5 text-xs text-gray-700 hover:bg-gray-50 flex items-center gap-2"
                                         >
-                                          {activeTab === "juvenil" ? "🔄 Cambiar actividad" : "✏️ Editar sesión"}
+                                          {(activeTab === "juvenil" || activeTab === "competencia") ? "🔄 Cambiar actividad" : "✏️ Editar sesión"}
                                         </button>
                                         <button
                                           onClick={() => { setOpenMenuId(null); setConfirmDeleteSesion(sesion); }}
@@ -1801,157 +1809,24 @@ export default function ProgramacionModule() {
               </div>
               <div className="flex items-center gap-4">
                 <div className="flex items-center gap-1">
-                  {activeTab === "juvenil" ? (
-                    [1, 2].map((s) => {
-                      const isActive = s === 1 ? iaStep >= 1 : iaStep >= 3;
-                      const isDone   = s === 1 ? iaStep >= 3 : false;
-                      return (
-                        <div key={s} className="flex items-center">
-                          <div className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold transition-all ${isActive ? "text-white" : "bg-gray-100 text-gray-400"}`} style={isActive ? { background: accentColor } : {}}>
-                            {isDone ? <svg width="10" height="10" viewBox="0 0 20 20" fill="none" stroke="#fff" strokeWidth={3}><path d="M3 10l4 4 9-9"/></svg> : s}
-                          </div>
-                          {s < 2 && <div className={`w-5 h-0.5 mx-0.5 ${isDone ? "bg-current opacity-40" : "bg-gray-200"}`} style={isDone ? { color: accentColor } : {}} />}
-                        </div>
-                      );
-                    })
-                  ) : (
-                    ([1, 2, 3] as const).map((s) => (
+                  {[1, 2].map((s) => {
+                    const isActive = s === 1 ? iaStep >= 1 : iaStep >= 3;
+                    const isDone   = s === 1 ? iaStep >= 3 : false;
+                    return (
                       <div key={s} className="flex items-center">
-                        <div className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold transition-all ${iaStep >= s ? "text-white" : "bg-gray-100 text-gray-400"}`} style={iaStep >= s ? { background: accentColor } : {}}>
-                          {iaStep > s ? <svg width="10" height="10" viewBox="0 0 20 20" fill="none" stroke="#fff" strokeWidth={3}><path d="M3 10l4 4 9-9"/></svg> : s}
+                        <div className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold transition-all ${isActive ? "text-white" : "bg-gray-100 text-gray-400"}`} style={isActive ? { background: accentColor } : {}}>
+                          {isDone ? <svg width="10" height="10" viewBox="0 0 20 20" fill="none" stroke="#fff" strokeWidth={3}><path d="M3 10l4 4 9-9"/></svg> : s}
                         </div>
-                        {s < 3 && <div className={`w-5 h-0.5 mx-0.5 ${iaStep > s ? "bg-current opacity-40" : "bg-gray-200"}`} style={iaStep > s ? { color: accentColor } : {}} />}
+                        {s < 2 && <div className={`w-5 h-0.5 mx-0.5 ${isDone ? "bg-current opacity-40" : "bg-gray-200"}`} style={isDone ? { color: accentColor } : {}} />}
                       </div>
-                    ))
-                  )}
+                    );
+                  })}
                 </div>
                 <button onClick={() => { if (!busy) { setShowCrearModal(false); resetCrearModal(); } }} disabled={busy} className="text-gray-400 hover:text-gray-600 disabled:opacity-40">
                   <svg width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path d="M18 6L6 18M6 6l12 12"/></svg>
                 </button>
               </div>
             </div>
-
-            {/* ── PASO 1 (Competencia): Modo / Torneo / Posiciones / Primer día ── */}
-            {iaStep === 1 && activeTab === "competencia" && (
-              <>
-                <div className="px-6 py-6 space-y-6 max-h-[70vh] overflow-y-auto">
-                  <div>
-                    <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wide mb-0.5">Paso 1 de 2</p>
-                    <h3 className="text-base font-bold text-gray-900">Configura el plan de Competencia</h3>
-                  </div>
-
-                  {/* SECCIÓN A — Modo de la semana */}
-                  <div>
-                    <p className="text-[11px] font-bold text-gray-500 uppercase tracking-wide mb-2">A · Modo de la semana <span className="text-red-400">*</span></p>
-                    <div className="grid grid-cols-2 gap-3">
-                      {[
-                        { value: "construccion" as const, icon: "🏗️", label: "Construcción de swing", desc: "Foco en tiro largo y técnica. Un día reservado para putt o campo." },
-                        { value: "preparacion"  as const, icon: "🏆", label: "Preparación para competencia", desc: "Más juego corto, putt y campo. Menos trabajo técnico de swing." },
-                      ].map(({ value, icon, label, desc }) => (
-                        <button
-                          key={value}
-                          onClick={() => setCompModo(value)}
-                          className="text-left rounded-xl border-2 p-3 transition-all"
-                          style={compModo === value
-                            ? { borderColor: accentColor, background: accentColor + "10" }
-                            : { borderColor: "#e5e7eb", background: "#f9fafb" }}
-                        >
-                          <p className="text-base mb-1">{icon}</p>
-                          <p className="text-xs font-bold text-gray-900 mb-1">{label}</p>
-                          <p className="text-[10px] text-gray-500 leading-snug">{desc}</p>
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-
-                  {/* SECCIÓN B — Torneo próximo */}
-                  <div>
-                    <p className="text-[11px] font-bold text-gray-500 uppercase tracking-wide mb-2">B · Torneo próximo</p>
-                    <div className="flex flex-wrap gap-2">
-                      {COMP_TORNEOS.map(({ value, label }) => (
-                        <button
-                          key={value}
-                          onClick={() => setCompTorneo(value)}
-                          className="px-3 py-1.5 rounded-full text-xs font-semibold border transition-all"
-                          style={compTorneo === value
-                            ? { background: accentColor, color: "#fff", borderColor: accentColor }
-                            : { background: "#f9fafb", color: "#374151", borderColor: "#e5e7eb" }}
-                        >{label}</button>
-                      ))}
-                    </div>
-                  </div>
-
-                  {/* SECCIÓN C — Posiciones en trabajo (solo Construcción) */}
-                  {compModo === "construccion" && (
-                    <div>
-                      <p className="text-[11px] font-bold text-gray-500 uppercase tracking-wide mb-2">
-                        C · Posiciones en trabajo <span className="text-gray-400 normal-case font-normal">(opcional)</span>
-                      </p>
-                      <div className="flex flex-wrap gap-2 mb-2">
-                        {COMP_POSICIONES.map((p) => {
-                          const sel = compPosiciones.includes(p);
-                          return (
-                            <button
-                              key={p}
-                              onClick={() => setCompPosiciones((prev) => sel ? prev.filter((x) => x !== p) : [...prev, p])}
-                              className="px-3 py-1.5 rounded-full text-xs font-semibold border transition-all"
-                              style={sel
-                                ? { background: accentColor, color: "#fff", borderColor: accentColor }
-                                : { background: "#f9fafb", color: "#374151", borderColor: "#e5e7eb" }}
-                            >{p}</button>
-                          );
-                        })}
-                      </div>
-                      <p className="text-[10px] text-gray-400 italic">Si no hay tests realizados, trabajamos P1–P7 en orden progresivo</p>
-                    </div>
-                  )}
-
-                  {/* SECCIÓN D — Primer día hábil */}
-                  <div>
-                    <p className="text-[11px] font-bold text-gray-500 uppercase tracking-wide mb-2">D · Primer día hábil de la semana</p>
-                    <div className="flex gap-3">
-                      {([
-                        { value: "martes"    as const, label: "Martes",    desc: "Semana normal" },
-                        { value: "miercoles" as const, label: "Miércoles", desc: "Festivo el martes" },
-                      ]).map(({ value, label, desc }) => (
-                        <button
-                          key={value}
-                          onClick={() => setCompPrimerDia(value)}
-                          className="flex-1 rounded-xl border-2 p-3 text-left transition-all"
-                          style={compPrimerDia === value
-                            ? { borderColor: accentColor, background: accentColor + "10" }
-                            : { borderColor: "#e5e7eb", background: "#f9fafb" }}
-                        >
-                          <p className="text-xs font-bold text-gray-900">{label}</p>
-                          <p className="text-[10px] text-gray-400">{desc}</p>
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-
-                  {/* Considerar evaluaciones */}
-                  <label className="flex items-center gap-2.5 cursor-pointer select-none">
-                    <input type="checkbox" checked={incluirContexto} onChange={(e) => setIncluirContexto(e.target.checked)} className="w-4 h-4 rounded accent-green-700" />
-                    <span className="text-sm text-gray-700">Considerar evaluaciones recientes del grupo</span>
-                  </label>
-
-                  {planError && <p className="text-xs text-red-500 bg-red-50 px-3 py-2 rounded-lg">{planError}</p>}
-                </div>
-                <div className="px-6 pb-6">
-                  <button
-                    onClick={handleGenerarIA}
-                    disabled={generatingAI}
-                    className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-semibold text-white disabled:opacity-50 hover:brightness-110 transition-all"
-                    style={{ background: accentColor }}
-                  >
-                    {generatingAI
-                      ? <><svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"/></svg>Generando...</>
-                      : "⚡ Generar plan →"
-                    }
-                  </button>
-                </div>
-              </>
-            )}
 
             {/* ── PASO 1 (Juvenil): Tema del día ── */}
             {iaStep === 1 && activeTab === "juvenil" && (
@@ -2777,6 +2652,26 @@ export default function ProgramacionModule() {
           onSaved={async () => {
             setJuvClassCtx(null);
             showToast("Clase guardada ✓");
+            await fetchPlan();
+            if (viewMode === "semana") fetchCalSemana();
+          }}
+        />
+      )}
+
+      {/* ══ MODAL: Clase Competencia IA ══════════════════════════════════════ */}
+      {compClassCtx && plan && (
+        <CompetenciaClassModal
+          planId={plan.id}
+          dia={compClassCtx.dia}
+          diaLabel={DIA_LABEL[compClassCtx.dia]}
+          fecha={compClassCtx.fecha}
+          horaInicio={compClassCtx.horaInicio}
+          horaFin={compClassCtx.horaFin}
+          sesionExistente={compClassCtx.sesion ?? undefined}
+          onClose={() => setCompClassCtx(null)}
+          onSaved={async () => {
+            setCompClassCtx(null);
+            showToast("Sesión guardada ✓");
             await fetchPlan();
             if (viewMode === "semana") fetchCalSemana();
           }}
