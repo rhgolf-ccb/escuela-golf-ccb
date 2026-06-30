@@ -1136,57 +1136,17 @@ export default function ProgramacionModule() {
 
   // ── Calendar week view ────────────────────────────────────────────────────
   function renderWeekCal() {
-    // ── Build variable-height row layout ────────────────────────────────────
-    // Mark each hour as "occupied" if any session overlaps it
-    const occupied = new Set<number>();
-    for (const ses of calSesiones) {
-      if (!ses.hora_inicio || !ses.hora_fin) continue;
-      const sMin = (h: string) => { const [hh, mm] = h.split(":").map(Number); return hh * 60 + mm; };
-      const s = sMin(ses.hora_inicio);
-      const e = sMin(ses.hora_fin);
-      for (let h = CAL_HOUR_START; h < CAL_HOUR_END; h++) {
-        if (s < (h + 1) * 60 && e > h * 60) occupied.add(h);
-      }
-    }
+    const ROW_H  = 50;
+    const HOURS  = Array.from({ length: CAL_HOUR_END - CAL_HOUR_START }, (_, i) => CAL_HOUR_START + i);
+    const TOTAL_H = HOURS.length * ROW_H;
 
-    // Build rows and an hour→y offset map
-    type CalRow =
-      | { type: "full"; hour: number; top: number }
-      | { type: "thin"; from: number; to: number; top: number };
-    const rows: CalRow[] = [];
-    const hourTop: Record<number, number> = {};
-    let y = 0;
-    let idx = 0;
-    while (idx < CAL_HOURS.length) {
-      const h = CAL_HOURS[idx];
-      if (occupied.has(h)) {
-        hourTop[h] = y;
-        rows.push({ type: "full", hour: h, top: y });
-        y += CAL_FULL_H;
-        idx++;
-      } else {
-        const from = h;
-        const thinTop = y;
-        while (idx < CAL_HOURS.length && !occupied.has(CAL_HOURS[idx])) {
-          hourTop[CAL_HOURS[idx]] = y;
-          idx++;
-        }
-        const to = CAL_HOURS[idx - 1];
-        rows.push({ type: "thin", from, to, top: thinTop });
-        y += CAL_THIN_H;
-      }
-    }
-    hourTop[CAL_HOUR_END] = y; // sentinel for sessions ending at boundary
-    const totalHeight = Math.max(y, 520);
-
-    function getTop(hora: string): number {
+    function sesTop(hora: string): number {
       const [h, m] = hora.split(":").map(Number);
-      return (hourTop[h] ?? 0) + (m / 60) * CAL_FULL_H;
+      return (h - CAL_HOUR_START) * ROW_H + (m / 60) * ROW_H;
     }
-    function getHeight(hi: string, hf: string): number {
-      const [hfH, hfM] = hf.split(":").map(Number);
-      const endY = (hourTop[hfH] ?? totalHeight) + (hfM / 60) * CAL_FULL_H;
-      return Math.max(endY - getTop(hi), 22);
+    function sesH(hi: string, hf: string): number {
+      const toMin = (t: string) => { const [h, m] = t.split(":").map(Number); return h * 60 + m; };
+      return Math.max(((toMin(hf) - toMin(hi)) / 60) * ROW_H, 24);
     }
 
     return (
@@ -1198,120 +1158,97 @@ export default function ProgramacionModule() {
           </div>
         )}
         {!calLoading && (
-          <div className="overflow-x-auto" style={{ overflowY: "clip" }}>
-            <div style={{ minWidth: 520 }}>
+          <div>
+            {/* Day headers */}
+            <div className="grid" style={{ gridTemplateColumns: "60px repeat(6, 1fr)", background: "#e8f0e6", borderBottom: "1px solid #d4e0d2" }}>
+              <div style={{ borderRight: "1px solid #d4e0d2" }} />
+              {CAL_DIAS.map((dia) => {
+                const fecha = getFechaForDia(semana, dia);
+                const isToday = fecha === toISODate(new Date());
+                return (
+                  <div key={dia} className="py-2.5 text-center" style={{ borderRight: "1px solid #d4e0d2" }}>
+                    <p className="text-xs font-bold" style={{ color: "#1a3a1a" }}>{DIA_LABEL_SHORT[dia]}</p>
+                    {isToday ? (
+                      <span className="text-xs font-bold rounded-full px-1.5 inline-block mt-0.5" style={{ background: "#1a3a2a", color: "#ffffff" }}>
+                        {formatDiaFecha(fecha)}
+                      </span>
+                    ) : (
+                      <p className="text-xs mt-0.5" style={{ color: "#1a3a1a" }}>{formatDiaFecha(fecha)}</p>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
 
-              {/* ── Day headers ── */}
-              <div className="grid" style={{ gridTemplateColumns: "60px repeat(6, 1fr)", background: "#e8f0e6", borderBottom: "1px solid #d4e0d2" }}>
-                <div style={{ borderRight: "1px solid #d4e0d2" }} />
+            {/* Scrollable grid body */}
+            <div style={{ overflowY: "auto", maxHeight: 520 }}>
+              <div className="grid" style={{ gridTemplateColumns: "60px repeat(6, 1fr)", height: TOTAL_H }}>
+
+                {/* Hour column */}
+                <div style={{ position: "relative", height: TOTAL_H, background: "#e8f0e6", borderRight: "1px solid #d4e0d2" }}>
+                  {HOURS.map((h) => (
+                    <div key={h} style={{
+                      position: "absolute", top: (h - CAL_HOUR_START) * ROW_H, left: 0, right: 0, height: ROW_H,
+                      borderBottom: "1px solid #dde8db",
+                      display: "flex", alignItems: "flex-start", justifyContent: "flex-end",
+                      paddingRight: 6, paddingTop: 4,
+                    }}>
+                      <span style={{ fontSize: 11, fontWeight: 600, color: "#3a5a3a" }}>{fmtCalHour(h)}</span>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Day columns */}
                 {CAL_DIAS.map((dia) => {
-                  const fecha = getFechaForDia(semana, dia);
-                  const isToday = fecha === toISODate(new Date());
+                  const daySes = calSesiones.filter((s) => s.dia_semana === dia);
                   return (
-                    <div key={dia} className="py-2.5 text-center" style={{ borderRight: "1px solid #d4e0d2" }}>
-                      <p className="text-xs font-bold" style={{ color: "#1a3a1a" }}>{DIA_LABEL_SHORT[dia]}</p>
-                      {isToday ? (
-                        <span className="text-xs font-bold rounded-full px-1.5 inline-block mt-0.5" style={{ background: "#1a3a2a", color: "#ffffff" }}>
-                          {formatDiaFecha(fecha)}
-                        </span>
-                      ) : (
-                        <p className="text-xs mt-0.5" style={{ color: "#1a3a1a" }}>{formatDiaFecha(fecha)}</p>
-                      )}
+                    <div key={dia} style={{ position: "relative", height: TOTAL_H, borderLeft: "1px solid #dde8db", background: "#f7faf6" }}>
+                      {/* Hour grid lines */}
+                      {HOURS.map((h) => (
+                        <div
+                          key={h}
+                          style={{
+                            position: "absolute", top: (h - CAL_HOUR_START) * ROW_H, left: 0, right: 0, height: ROW_H,
+                            borderBottom: "1px solid #dde8db",
+                            cursor: "pointer", transition: "background 0.1s",
+                          }}
+                          onClick={() => handleCalCellClick(dia, h)}
+                          onMouseEnter={(e) => (e.currentTarget.style.background = "#eef5ec")}
+                          onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
+                        />
+                      ))}
+                      {/* Sessions */}
+                      {daySes.map((ses, si) => {
+                        if (!ses.hora_inicio) return null;
+                        const top    = sesTop(ses.hora_inicio);
+                        const height = ses.hora_fin ? sesH(ses.hora_inicio, ses.hora_fin) : ROW_H;
+                        const c      = CAL_EVENT[ses.tipo_plan] ?? { bg: "#334155", text: "#fff" };
+                        const overlap = daySes.filter((s2, j) => j < si && s2.hora_inicio === ses.hora_inicio).length;
+                        return (
+                          <div
+                            key={ses.id}
+                            style={{
+                              position: "absolute",
+                              top: top + 2, height: Math.max(height - 4, 24),
+                              left: `${3 + overlap * 5}px`, right: `${3 + overlap * 5}px`,
+                              background: c.bg, borderRadius: 5,
+                              padding: "3px 6px", overflow: "hidden",
+                              cursor: "pointer", zIndex: 10 + si,
+                            }}
+                            onClick={(e) => { e.stopPropagation(); setCalEventDetail(ses); }}
+                          >
+                            <p style={{ margin: 0, fontSize: 13, fontWeight: 700, color: c.text, lineHeight: 1.2 }}>
+                              {TIPO_PLAN_LABEL[ses.tipo_plan]}
+                            </p>
+                            <p style={{ margin: "1px 0 0", fontSize: 11, color: c.text, opacity: 0.85 }}>
+                              {ses.hora_inicio.slice(0, 5)}{ses.hora_fin ? `–${ses.hora_fin.slice(0, 5)}` : ""} · {LUGAR_LABEL[ses.lugar]?.split(" ")[0] ?? ""}
+                            </p>
+                          </div>
+                        );
+                      })}
                     </div>
                   );
                 })}
-              </div>
-
-              {/* ── Grid body ── */}
-              <div className="relative">
-                <div className="grid" style={{ gridTemplateColumns: "60px repeat(6, 1fr)" }}>
-
-                  {/* Time-label column */}
-                  <div style={{ background: "#e8f0e6", borderRight: "1px solid #d4e0d2", minHeight: totalHeight }}>
-                    {rows.map((row, ri) => (
-                      <div
-                        key={ri}
-                        style={{
-                          height: row.type === "full" ? CAL_FULL_H : CAL_THIN_H,
-                          borderBottom: "1px solid #dde8db",
-                          display: "flex", alignItems: "flex-start", justifyContent: "flex-end",
-                          paddingRight: 6, paddingTop: row.type === "full" ? 4 : 2,
-                        }}
-                      >
-                        {row.type === "full" ? (
-                          <span style={{ fontSize: 13, fontWeight: 600, color: "#3a5a3a" }}>{fmtCalHour(row.hour)}</span>
-                        ) : (
-                          <span style={{ fontSize: 10, color: "#5a7a5a" }}>{fmtCalHour(row.from)}–{fmtCalHour(row.to + 1)}</span>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-
-                  {/* Day columns */}
-                  {CAL_DIAS.map((dia) => {
-                    const daySesiones = calSesiones.filter((s) => s.dia_semana === dia);
-                    return (
-                      <div key={dia} className="relative" style={{ height: totalHeight, borderLeft: "1px solid #d4e0d2", background: "#f7faf6" }}>
-                        {/* Row backgrounds (full = clickable, thin = decorative) */}
-                        {rows.map((row, ri) => (
-                          <div
-                            key={ri}
-                            style={{
-                              position: "absolute", top: row.top, left: 0, right: 0,
-                              height: row.type === "full" ? CAL_FULL_H : CAL_THIN_H,
-                              background: row.type === "full" ? "#f7faf6" : "#f0f5f0",
-                              borderBottom: "1px solid #dde8db",
-                              cursor: row.type === "full" ? "pointer" : "default",
-                              transition: "background 0.1s",
-                            }}
-                            onClick={() => { if (row.type === "full") handleCalCellClick(dia, row.hour); }}
-                            onMouseEnter={(e) => { if (row.type === "full") (e.currentTarget as HTMLElement).style.background = "#eef5ec"; }}
-                            onMouseLeave={(e) => { if (row.type === "full") (e.currentTarget as HTMLElement).style.background = "#f7faf6"; }}
-                          />
-                        ))}
-                        {/* Events */}
-                        {daySesiones.map((ses, si) => {
-                          if (!ses.hora_inicio) return null;
-                          const top    = getTop(ses.hora_inicio);
-                          const height = ses.hora_fin ? getHeight(ses.hora_inicio, ses.hora_fin) : CAL_FULL_H;
-                          const c      = CAL_EVENT[ses.tipo_plan] ?? { bg: "#334155", text: "#fff" };
-                          const overlap = daySesiones.filter((s2, j) => j < si && s2.hora_inicio === ses.hora_inicio).length;
-                          return (
-                            <div
-                              key={ses.id}
-                              style={{
-                                position: "absolute",
-                                top: top + 2, height: Math.max(height - 4, 26),
-                                left: `${3 + overlap * 5}px`, right: `${3 + overlap * 5}px`,
-                                background: c.bg, borderRadius: 5,
-                                padding: "4px 7px", overflow: "hidden",
-                                cursor: "pointer", zIndex: 10 + si,
-                              }}
-                              onClick={(e) => { e.stopPropagation(); setCalEventDetail(ses); }}
-                            >
-                              <p style={{ margin: 0, fontSize: 14, fontWeight: 700, color: c.text, lineHeight: 1.2 }}>
-                                {TIPO_PLAN_LABEL[ses.tipo_plan]}
-                              </p>
-                              <p style={{ margin: "1px 0 0", fontSize: 12, color: c.text, opacity: 0.9 }}>
-                                {ses.hora_inicio.slice(0, 5)}{ses.hora_fin ? `–${ses.hora_fin.slice(0, 5)}` : ""} · {LUGAR_LABEL[ses.lugar]?.split(" ")[0] ?? ""}
-                              </p>
-                              {height > 56 && ses.objetivo && (
-                                <p style={{ margin: "2px 0 0", fontSize: 11, color: c.text, opacity: 0.8, overflow: "hidden", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical" }}>
-                                  {ses.objetivo}
-                                </p>
-                              )}
-                            </div>
-                          );
-                        })}
-                      </div>
-                    );
-                  })}
-                </div>
-                {calSesiones.length === 0 && (
-                  <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                    <p className="text-sm" style={{ color: "#5a7a5a" }}>Sin sesiones de {TIPO_PLAN_LABEL[activeTab]} esta semana</p>
-                  </div>
-                )}
               </div>
             </div>
           </div>
