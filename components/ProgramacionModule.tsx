@@ -846,9 +846,14 @@ export default function ProgramacionModule() {
     setSavingGenerado(true); setPlanError(null);
     try {
       const { data: newPlan, error: planErr } = await supabase.from("planes_semanales")
-        .insert({ semana_inicio: toISODate(semana), tipo_plan: activeTab, tema_semanal: tema, descripcion_tema: aiPreview.descripcion_tema, objetivo_mensual: focoMes, foco_mes: focoMes })
+        .upsert(
+          { semana_inicio: toISODate(semana), tipo_plan: activeTab, tema_semanal: tema, descripcion_tema: aiPreview.descripcion_tema, objetivo_mensual: focoMes, foco_mes: focoMes },
+          { onConflict: "semana_inicio,tipo_plan" }
+        )
         .select().single();
       if (planErr || !newPlan) throw new Error(planErr?.message || "Error al crear plan");
+      // Delete existing sessions so IA-generated ones replace them cleanly
+      await supabase.from("sesiones_semana").delete().eq("plan_id", newPlan.id);
       if (activeTab === "juvenil" && aiPreview.sesion_juvenil) {
         const JUVENIL_SLOTS: { dia: DiaSemana; hi: string; hf: string }[] = [
           { dia: "martes",    hi: "16:30", hf: "17:30" },
@@ -910,10 +915,15 @@ export default function ProgramacionModule() {
     try {
       const focoMes = focoMesChip || focoMesCustom.trim() || null;
       const { data: newPlan, error: planErr } = await supabase.from("planes_semanales")
-        .insert({ semana_inicio: toISODate(semana), tipo_plan: activeTab, tema_semanal: tema, descripcion_tema: "", objetivo_mensual: focoMes, foco_mes: focoMes })
+        .upsert(
+          { semana_inicio: toISODate(semana), tipo_plan: activeTab, tema_semanal: tema, descripcion_tema: "", objetivo_mensual: focoMes, foco_mes: focoMes },
+          { onConflict: "semana_inicio,tipo_plan" }
+        )
         .select().single();
       if (planErr || !newPlan) throw new Error(planErr?.message || "Error al crear plan");
-      for (const dia of DIAS_POR_TIPO[activeTab]) {
+      // Only insert placeholder sessions if none exist yet
+      const { count } = await supabase.from("sesiones_semana").select("id", { count: "exact", head: true }).eq("plan_id", newPlan.id);
+      if (!count) for (const dia of DIAS_POR_TIPO[activeTab]) {
         const defaultH = getDefaultHoras(activeTab, dia, []);
         await supabase.from("sesiones_semana").insert({
           plan_id: newPlan.id, dia_semana: dia, fecha: getFechaForDia(semana, dia),
