@@ -84,7 +84,7 @@ interface HorarioDefecto { tipo_plan: TipoPlan; dia_semana: DiaSemana; hora_inic
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 const DIAS_POR_TIPO: Record<TipoPlan, DiaSemana[]> = {
-  juvenil:     ["martes", "jueves", "sabado", "domingo"],
+  juvenil:     ["martes", "miercoles", "jueves", "sabado", "domingo"],
   competencia: ["martes", "miercoles", "jueves", "sabado"],
   damas:       ["viernes"],
 };
@@ -557,6 +557,7 @@ export default function ProgramacionModule() {
   const [confirmDeleteSesion, setConfirmDeleteSesion] = useState<SesionSemana | null>(null);
   const [deletingSesion, setDeletingSesion]           = useState(false);
   const [openMenuId, setOpenMenuId]                   = useState<string | null>(null);
+  const [lugarMenuId, setLugarMenuId]                 = useState<string | null>(null);
 
   // Juvenile class modal (3-estaciones o día especial)
   const [juvClassCtx, setJuvClassCtx] = useState<{
@@ -566,6 +567,13 @@ export default function ProgramacionModule() {
 
   function openJuvModal(dia: DiaSemana, fecha: string, sesion: SesionSemana | null, extra?: { hi?: string; hf?: string }) {
     setJuvClassCtx({ dia, fecha, sesion, horaInicio: extra?.hi, horaFin: extra?.hf });
+  }
+
+  async function handleUpdateLugar(sesionId: string, newLugar: Lugar) {
+    await supabase.from("sesiones_semana").update({ lugar: newLugar }).eq("id", sesionId);
+    setLugarMenuId(null);
+    await fetchPlan();
+    if (viewMode === "semana") fetchCalSemana();
   }
 
   // PDF para sesión individual Juvenil
@@ -1603,11 +1611,37 @@ export default function ProgramacionModule() {
                                 {/* Session meta */}
                                 <div className="flex items-center gap-2 flex-wrap">
                                   <span className="px-2 py-0.5 rounded-full text-xs font-semibold" style={{ background: tc.bg, color: tc.text }}>{TIPO_SESION_LABEL[sesion.tipo_sesion]}</span>
-                                  <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-600">{LUGAR_LABEL[sesion.lugar]}</span>
+                                  {activeTab === "juvenil" ? (
+                                    <div className="relative" onClick={(e) => e.stopPropagation()}>
+                                      <button
+                                        onClick={() => setLugarMenuId(lugarMenuId === sesion.id ? null : sesion.id)}
+                                        className="px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-600 hover:bg-gray-200 transition-colors flex items-center gap-1"
+                                      >
+                                        {LUGAR_LABEL[sesion.lugar]}
+                                        <svg width="9" height="9" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path d="M19 9l-7 7-7-7"/></svg>
+                                      </button>
+                                      {lugarMenuId === sesion.id && (
+                                        <div className="absolute left-0 top-full mt-1 z-20 bg-white border border-gray-200 rounded-xl shadow-lg py-1 min-w-[200px]">
+                                          {(["campo_practica", "putting_green", "campo_pacos_fabios", "campo_infantil"] as Lugar[]).map((l) => (
+                                            <button
+                                              key={l}
+                                              onClick={() => handleUpdateLugar(sesion.id, l)}
+                                              className={`w-full text-left px-4 py-2.5 text-xs hover:bg-gray-50 flex items-center gap-2 ${sesion.lugar === l ? "font-semibold text-green-700" : "text-gray-700"}`}
+                                            >
+                                              {sesion.lugar === l && <svg width="10" height="10" fill="none" viewBox="0 0 20 20" stroke="currentColor" strokeWidth={2.5}><path d="M3 10l4 4 9-9"/></svg>}
+                                              {LUGAR_LABEL[l]}
+                                            </button>
+                                          ))}
+                                        </div>
+                                      )}
+                                    </div>
+                                  ) : (
+                                    <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-600">{LUGAR_LABEL[sesion.lugar]}</span>
+                                  )}
                                   {sesion.hora_inicio && <span className="text-xs text-gray-400">{formatHora(sesion.hora_inicio)}–{formatHora(sesion.hora_fin)}</span>}
                                   <div className="relative ml-auto" onClick={(e) => e.stopPropagation()}>
                                     <button
-                                      onClick={() => setOpenMenuId(openMenuId === sesion.id ? null : sesion.id)}
+                                      onClick={() => { setLugarMenuId(null); setOpenMenuId(openMenuId === sesion.id ? null : sesion.id); }}
                                       className="flex items-center gap-1 text-xs font-medium text-gray-400 hover:text-gray-700 border border-gray-200 rounded px-2 py-1 hover:bg-gray-50 transition-colors"
                                     >
                                       Opciones <svg width="10" height="10" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path d="M19 9l-7 7-7-7"/></svg>

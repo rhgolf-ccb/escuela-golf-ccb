@@ -330,6 +330,8 @@ export default function JuvenileClassModal({
         const { error: e } = await supabase.from("sesiones_semana").update(payload).eq("id", sesionExistente.id);
         if (e) throw new Error(e.message);
       } else {
+        // Delete any existing session for this plan+fecha before inserting to prevent duplicates
+        await supabase.from("sesiones_semana").delete().eq("plan_id", planId).eq("fecha", fecha);
         const { error: e } = await supabase.from("sesiones_semana").insert(payload);
         if (e) throw new Error(e.message);
       }
