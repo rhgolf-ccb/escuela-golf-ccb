@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import WeeklyPlanPDFTemplate from "./WeeklyPlanPDFTemplate";
+import JuvenileClassModal, { type SesionJuvenilData } from "./JuvenileClassModal";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 type TipoPlan   = "juvenil" | "competencia" | "damas";
@@ -54,6 +55,7 @@ interface SesionSemana {
   objetivo: string; drills: Drill[];
   juego_competitivo: string | null; estaciones_damas: EstacionDamas[] | null;
   notas: string | null; asistencia_registrada: boolean;
+  sesion_juvenil?: SesionJuvenilData | null;
 }
 
 interface CalSesion extends SesionSemana { tipo_plan: TipoPlan; }
@@ -231,6 +233,222 @@ function defaultSesionForm(tipoPlan: TipoPlan): SesionForm {
   };
 }
 
+// ── Juvenil session detail (structured, with accordions) ─────────────────────
+function JuvenilSessionDetail({
+  sesion, jd, onEdit, onDelete, onPdf, onAsistencia, generatingPdf, accentColor,
+}: {
+  sesion: SesionSemana;
+  jd: SesionJuvenilData;
+  onEdit: () => void;
+  onDelete: () => void;
+  onPdf: () => void;
+  onAsistencia: () => void;
+  generatingPdf: boolean;
+  accentColor: string;
+}) {
+  const [expandedDrills, setExpandedDrills] = useState<Set<number>>(new Set());
+  const [expandedJuego, setExpandedJuego] = useState(false);
+
+  function toggleDrill(i: number) {
+    setExpandedDrills((prev) => { const n = new Set(prev); n.has(i) ? n.delete(i) : n.add(i); return n; });
+  }
+
+  return (
+    <div className="space-y-3">
+      {/* Calentamiento */}
+      <div className="border border-orange-100 bg-orange-50 rounded-lg p-3">
+        <p className="text-[10px] font-bold text-orange-700 uppercase tracking-wide mb-1">
+          🔥 Calentamiento · {jd.calentamiento.duracion_min} min
+        </p>
+        <p className="text-xs text-gray-700">{jd.calentamiento.descripcion}</p>
+      </div>
+
+      {/* Drills */}
+      <div>
+        <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">
+          Drills ({sesion.drills.length})
+        </p>
+        <div className="space-y-2">
+          {sesion.drills.map((drill, i) => {
+            const isExp = expandedDrills.has(i);
+            const dur = jd.drill_durations?.[i];
+            return (
+              <div key={i} className="border border-gray-100 rounded-lg bg-gray-50 overflow-hidden">
+                <div className="flex items-center justify-between px-3 py-2.5">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <span className="text-[10px] font-bold text-gray-400">{i + 1}.</span>
+                    <span className="text-sm font-semibold text-gray-900 truncate">{drill.titulo}</span>
+                    {dur && <span className="text-[10px] text-gray-400 shrink-0">· {dur} min</span>}
+                  </div>
+                  <button
+                    onClick={() => toggleDrill(i)}
+                    className="ml-2 shrink-0 text-gray-400 hover:text-gray-600"
+                  >
+                    <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5} className={`transition-transform ${isExp ? "rotate-180" : ""}`}><path d="M19 9l-7 7-7-7"/></svg>
+                  </button>
+                </div>
+                {isExp && (
+                  <div className="border-t border-gray-100 px-3 pb-3 pt-2 space-y-2">
+                    {drill.descripcion && (
+                      <p className="text-xs text-gray-600 mb-1">{drill.descripcion}</p>
+                    )}
+                    {[
+                      { key: "dificultad_birdies" as const, label: "Birdies", bg: "#dbeafe", tc: "#1e40af" },
+                      { key: "dificultad_aguilas" as const, label: "Águilas", bg: "#dcfce7", tc: "#166534" },
+                      { key: "dificultad_albatros" as const, label: "Albatros", bg: "#fef9c3", tc: "#854d0e" },
+                    ].filter((x) => drill[x.key]).map((x) => (
+                      <div key={x.key} className="rounded-md px-2 py-1.5" style={{ background: x.bg }}>
+                        <span className="text-[10px] font-bold mr-1" style={{ color: x.tc }}>{x.label}:</span>
+                        <span className="text-[11px] text-gray-700">{drill[x.key]}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Juego competitivo */}
+      {jd.juego_competitivo_struct && (
+        <div className="border border-orange-200 bg-orange-50 rounded-lg overflow-hidden">
+          <button
+            onClick={() => setExpandedJuego((v) => !v)}
+            className="w-full flex items-center justify-between px-3 py-2.5 hover:bg-orange-100 transition-colors"
+          >
+            <span className="text-xs font-bold text-orange-700">
+              🏆 {jd.juego_competitivo_struct.titulo} · {jd.juego_competitivo_struct.duracion_min} min
+            </span>
+            <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5} className={`text-orange-500 transition-transform ${expandedJuego ? "rotate-180" : ""}`}><path d="M19 9l-7 7-7-7"/></svg>
+          </button>
+          {expandedJuego && (
+            <div className="border-t border-orange-100 px-3 pb-3 pt-2 space-y-2">
+              <p className="text-xs text-gray-700 mb-1">{jd.juego_competitivo_struct.descripcion}</p>
+              {[
+                { label: "Birdies", val: jd.juego_competitivo_struct.reglas_birdies, bg: "#dbeafe", tc: "#1e40af" },
+                { label: "Águilas", val: jd.juego_competitivo_struct.reglas_aguilas, bg: "#dcfce7", tc: "#166534" },
+                { label: "Albatros", val: jd.juego_competitivo_struct.reglas_albatros, bg: "#fef9c3", tc: "#854d0e" },
+              ].map(({ label, val, bg, tc }) => (
+                <div key={label} className="rounded-md px-2 py-1.5" style={{ background: bg }}>
+                  <span className="text-[10px] font-bold mr-1" style={{ color: tc }}>{label}:</span>
+                  <span className="text-[11px] text-gray-700">{val}</span>
+                </div>
+              ))}
+              <div className="bg-gray-100 rounded-md px-2 py-1.5">
+                <span className="text-[10px] font-bold text-gray-600 mr-1">¿Cómo se gana?</span>
+                <span className="text-[11px] text-gray-700">{jd.juego_competitivo_struct.como_se_gana}</span>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Materiales */}
+      {jd.materiales_totales?.length > 0 && (
+        <div className="bg-gray-50 border border-gray-100 rounded-lg px-3 py-2">
+          <span className="text-[10px] font-bold text-gray-500 uppercase mr-1">📦 Materiales:</span>
+          <span className="text-xs text-gray-600">{jd.materiales_totales.join(" · ")}</span>
+        </div>
+      )}
+
+      {/* Action buttons */}
+      <div className="pt-2 border-t border-gray-100 flex flex-wrap gap-2">
+        <button
+          onClick={onAsistencia}
+          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${sesion.asistencia_registrada ? "bg-emerald-50 text-emerald-700 border border-emerald-200" : "text-white"}`}
+          style={sesion.asistencia_registrada ? {} : { background: accentColor }}
+        >
+          <svg width="12" height="12" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/></svg>
+          {sesion.asistencia_registrada ? "Ver asistencia" : "Pasar asistencia"}
+        </button>
+        <button
+          onClick={onEdit}
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border border-gray-200 text-gray-600 hover:bg-gray-50"
+        >
+          ✏️ Editar
+        </button>
+        <button
+          onClick={onPdf}
+          disabled={generatingPdf}
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border border-gray-200 text-gray-600 hover:bg-gray-50 disabled:opacity-50"
+        >
+          <svg width="11" height="11" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
+          {generatingPdf ? "..." : "PDF padres"}
+        </button>
+        <button
+          onClick={onDelete}
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-red-500 hover:bg-red-50"
+        >
+          🗑️ Eliminar
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ── Juvenil PDF hidden template ───────────────────────────────────────────────
+function JuvenilPDFHidden({ sesion }: { sesion: SesionSemana }) {
+  const jd = sesion.sesion_juvenil!;
+  const GREEN = "#1B4D2E";
+  const fechaFmt = new Date(sesion.fecha + "T00:00:00").toLocaleDateString("es-CO", {
+    weekday: "long", day: "numeric", month: "long", year: "numeric",
+  });
+  const LUGAR_LABEL_MAP: Record<string, string> = {
+    campo_practica: "Campo de práctica", putting_green: "Putting Green",
+    campo_infantil: "Campo Infantil", campo_pacos_fabios: "Pacos y Fabios", campo_completo: "Campo Completo",
+  };
+  const lugar = LUGAR_LABEL_MAP[sesion.lugar] ?? sesion.lugar;
+
+  return (
+    <div style={{ width: 794, padding: "48px 56px", fontFamily: "Georgia, serif", background: "#fff", color: "#1a1a1a" }}>
+      <div style={{ textAlign: "center", marginBottom: 32 }}>
+        <div style={{ fontSize: 11, letterSpacing: 3, color: "#4b7c52", textTransform: "uppercase", marginBottom: 8 }}>Escuela de Golf CCB</div>
+        <div style={{ fontSize: 22, fontWeight: "bold", color: GREEN, marginBottom: 4 }}>Programación de clase</div>
+        <div style={{ fontSize: 13, color: "#555" }}>Grupo Juvenil · Birdies · Águilas · Albatros</div>
+        <div style={{ marginTop: 12, fontSize: 13, color: "#333" }}>
+          {fechaFmt} · {sesion.hora_inicio?.slice(0, 5)}–{sesion.hora_fin?.slice(0, 5)} · {lugar}
+        </div>
+        <div style={{ width: 60, height: 3, background: GREEN, margin: "16px auto 0" }} />
+      </div>
+      <div style={{ background: "#f0faf2", border: `2px solid ${GREEN}`, borderRadius: 8, padding: "14px 18px", marginBottom: 24 }}>
+        <div style={{ fontSize: 10, fontWeight: "bold", color: GREEN, textTransform: "uppercase", letterSpacing: 1, marginBottom: 4 }}>🎯 Objetivo de hoy</div>
+        <div style={{ fontSize: 14, color: "#1a3a1a", lineHeight: 1.5 }}>{sesion.objetivo}</div>
+      </div>
+      {sesion.drills.map((drill, i) => (
+        <div key={i} style={{ marginBottom: 18 }}>
+          <div style={{ fontSize: 12, fontWeight: "bold", color: GREEN, marginBottom: 4 }}>
+            {i + 1}. {drill.titulo}
+            {jd.drill_durations?.[i] && <span style={{ fontWeight: "normal", color: "#666", fontSize: 11, marginLeft: 8 }}>· {jd.drill_durations[i]} min</span>}
+          </div>
+          <div style={{ fontSize: 12, color: "#333", lineHeight: 1.6, paddingLeft: 12, borderLeft: "3px solid #a7d7b0" }}>
+            {drill.descripcion}
+          </div>
+        </div>
+      ))}
+      {jd.juego_competitivo_struct && (
+        <div style={{ background: "#fff8ec", border: "2px solid #e6a817", borderRadius: 8, padding: "14px 18px", marginTop: 12, marginBottom: 24 }}>
+          <div style={{ fontSize: 10, fontWeight: "bold", color: "#b45309", textTransform: "uppercase", letterSpacing: 1, marginBottom: 4 }}>
+            🏆 Juego del día · {jd.juego_competitivo_struct.duracion_min} min
+          </div>
+          <div style={{ fontSize: 13, fontWeight: "bold", color: "#7c2d12", marginBottom: 4 }}>{jd.juego_competitivo_struct.titulo}</div>
+          <div style={{ fontSize: 12, color: "#333", lineHeight: 1.6 }}>{jd.juego_competitivo_struct.descripcion}</div>
+        </div>
+      )}
+      {jd.materiales_totales?.length > 0 && (
+        <div style={{ fontSize: 12, color: "#444", marginBottom: 24 }}>
+          <span style={{ fontWeight: "bold", color: GREEN }}>📦 Materiales: </span>
+          {jd.materiales_totales.join(" · ")}
+        </div>
+      )}
+      <div style={{ marginTop: 32, paddingTop: 14, borderTop: "1px solid #ddd", textAlign: "center", fontSize: 10, color: "#888" }}>
+        Escuela de Golf CCB · {fechaFmt}<br />
+        Con mucho entusiasmo y aprendizaje para todos nuestros jugadores ⛳
+      </div>
+    </div>
+  );
+}
+
 // ── Main component ────────────────────────────────────────────────────────────
 export default function ProgramacionModule() {
   const router = useRouter();
@@ -311,6 +529,17 @@ export default function ProgramacionModule() {
   const [confirmDeleteSesion, setConfirmDeleteSesion] = useState<SesionSemana | null>(null);
   const [deletingSesion, setDeletingSesion]           = useState(false);
   const [openMenuId, setOpenMenuId]                   = useState<string | null>(null);
+
+  // Juvenile class modal (IA wizard clase a clase)
+  const [juvClassCtx, setJuvClassCtx] = useState<{
+    dia: DiaSemana; fecha: string; sesion: SesionSemana | null;
+    horaInicio?: string; horaFin?: string;
+  } | null>(null);
+
+  // PDF para sesión individual Juvenil
+  const [juvPdfSesion, setJuvPdfSesion] = useState<SesionSemana | null>(null);
+  const juvPdfRef = useRef<HTMLDivElement>(null);
+  const [generatingJuvPdf, setGeneratingJuvPdf] = useState(false);
 
   // Toast
   const [toast, setToast] = useState<string | null>(null);
@@ -724,11 +953,39 @@ export default function ProgramacionModule() {
     setDeletingPlan(false);
   }
 
+  // ── Juvenile PDF ─────────────────────────────────────────────────────────
+  async function handleJuvPdf(sesion: SesionSemana) {
+    setJuvPdfSesion(sesion);
+    await new Promise((r) => setTimeout(r, 120));
+    if (!juvPdfRef.current) return;
+    setGeneratingJuvPdf(true);
+    try {
+      const [{ default: jsPDF }, { default: html2canvas }] = await Promise.all([import("jspdf"), import("html2canvas")]);
+      const canvas = await html2canvas(juvPdfRef.current, { scale: 2, backgroundColor: "#fff", useCORS: true, logging: false });
+      const pdf = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
+      const pdfW = pdf.internal.pageSize.getWidth();
+      const pdfH = (canvas.height * pdfW) / canvas.width;
+      const pageH = pdf.internal.pageSize.getHeight();
+      let y = 0;
+      while (y < pdfH) { if (y > 0) pdf.addPage(); pdf.addImage(canvas.toDataURL("image/jpeg", 0.92), "JPEG", 0, -y, pdfW, pdfH); y += pageH; }
+      pdf.save(`Clase_Juvenil_${sesion.fecha}.pdf`);
+    } finally {
+      setGeneratingJuvPdf(false);
+      setJuvPdfSesion(null);
+    }
+  }
+
   // ── Calendar cell click ───────────────────────────────────────────────────
   function handleCalCellClick(dia: DiaSemana, hour: number) {
     if (!plan) { showToast(`Sin plan ${TIPO_PLAN_LABEL[activeTab]} esta semana — créalo en Vista Plan`); return; }
     const hourStr = `${hour.toString().padStart(2, "0")}:00`;
-    openEditSesion(dia, null, hourStr);
+    if (activeTab === "juvenil") {
+      const endHour = Math.min(hour + 1, 18);
+      const endStr = `${endHour.toString().padStart(2, "0")}:00`;
+      setJuvClassCtx({ dia, fecha: getFechaForDia(semana, dia), sesion: null, horaInicio: hourStr, horaFin: endStr });
+    } else {
+      openEditSesion(dia, null, hourStr);
+    }
   }
 
   // ── PDF semanal ───────────────────────────────────────────────────────────
@@ -1239,7 +1496,14 @@ export default function ProgramacionModule() {
                       </div>
                       <div className="flex items-center gap-2 shrink-0">
                         <button
-                          onClick={(e) => { e.stopPropagation(); openEditSesion(dia, null); }}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (activeTab === "juvenil") {
+                              setJuvClassCtx({ dia, fecha, sesion: null });
+                            } else {
+                              openEditSesion(dia, null);
+                            }
+                          }}
                           className="px-2.5 py-1.5 rounded-lg text-xs font-medium border border-gray-200 text-gray-600 hover:bg-gray-50 transition-colors"
                         >
                           + Agregar
@@ -1273,7 +1537,14 @@ export default function ProgramacionModule() {
                                     {openMenuId === sesion.id && (
                                       <div className="absolute right-0 top-full mt-1 z-20 bg-white border border-gray-200 rounded-xl shadow-lg py-1 min-w-[160px]">
                                         <button
-                                          onClick={() => { setOpenMenuId(null); openEditSesion(dia, sesion); }}
+                                          onClick={() => {
+                                            setOpenMenuId(null);
+                                            if (activeTab === "juvenil") {
+                                              setJuvClassCtx({ dia, fecha, sesion });
+                                            } else {
+                                              openEditSesion(dia, sesion);
+                                            }
+                                          }}
                                           className="w-full text-left px-4 py-2.5 text-xs text-gray-700 hover:bg-gray-50 flex items-center gap-2"
                                         >
                                           ✏️ Editar sesión
@@ -1313,64 +1584,84 @@ export default function ProgramacionModule() {
 
                                 {sesion.drills && sesion.drills.length > 0 && (
                                   <div>
-                                    <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">Drills ({sesion.drills.length})</p>
-                                    <div className="space-y-3">
-                                      {sesion.drills.map((drill, i) => (
-                                        <div key={i} className="border border-gray-100 rounded-lg p-3 bg-gray-50">
-                                          <p className="text-sm font-semibold text-gray-900 mb-1">{i + 1}. {drill.titulo}</p>
-                                          <p className="text-xs text-gray-600 mb-2">{drill.descripcion}</p>
-                                          {activeTab === "juvenil" && (drill.dificultad_birdies || drill.dificultad_aguilas || drill.dificultad_albatros || drill.dificultad_mas14) && (
-                                            <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5">
-                                              {[
-                                                { label: "Birdies", val: drill.dificultad_birdies, color: "#dbeafe", tc: "#1e40af" },
-                                                { label: "Águilas", val: drill.dificultad_aguilas, color: "#dcfce7", tc: "#166534" },
-                                                { label: "Albatros", val: drill.dificultad_albatros, color: "#fef9c3", tc: "#854d0e" },
-                                                { label: "+14", val: drill.dificultad_mas14, color: "#ede9fe", tc: "#6d28d9" },
-                                              ].filter((x) => x.val).map((x) => (
-                                                <div key={x.label} className="rounded-md p-2" style={{ background: x.color }}>
-                                                  <p className="text-[10px] font-bold mb-0.5" style={{ color: x.tc }}>{x.label}</p>
-                                                  <p className="text-[11px] text-gray-700">{x.val}</p>
+                                    {/* Structured Juvenil class view */}
+                                    {activeTab === "juvenil" && sesion.sesion_juvenil ? (
+                                      <JuvenilSessionDetail
+                                        sesion={sesion}
+                                        jd={sesion.sesion_juvenil}
+                                        onEdit={() => setJuvClassCtx({ dia, fecha, sesion })}
+                                        onDelete={() => setConfirmDeleteSesion(sesion)}
+                                        onPdf={() => handleJuvPdf(sesion)}
+                                        onAsistencia={() => router.push(`/programacion/sesion/${sesion.id}`)}
+                                        generatingPdf={generatingJuvPdf && juvPdfSesion?.id === sesion.id}
+                                        accentColor={accentColor}
+                                      />
+                                    ) : (
+                                      <>
+                                        <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">Drills ({sesion.drills.length})</p>
+                                        <div className="space-y-3">
+                                          {sesion.drills.map((drill, i) => (
+                                            <div key={i} className="border border-gray-100 rounded-lg p-3 bg-gray-50">
+                                              <p className="text-sm font-semibold text-gray-900 mb-1">{i + 1}. {drill.titulo}</p>
+                                              <p className="text-xs text-gray-600 mb-2">{drill.descripcion}</p>
+                                              {activeTab === "juvenil" && (drill.dificultad_birdies || drill.dificultad_aguilas || drill.dificultad_albatros || drill.dificultad_mas14) && (
+                                                <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5">
+                                                  {[
+                                                    { label: "Birdies", val: drill.dificultad_birdies, color: "#dbeafe", tc: "#1e40af" },
+                                                    { label: "Águilas", val: drill.dificultad_aguilas, color: "#dcfce7", tc: "#166534" },
+                                                    { label: "Albatros", val: drill.dificultad_albatros, color: "#fef9c3", tc: "#854d0e" },
+                                                    { label: "+14", val: drill.dificultad_mas14, color: "#ede9fe", tc: "#6d28d9" },
+                                                  ].filter((x) => x.val).map((x) => (
+                                                    <div key={x.label} className="rounded-md p-2" style={{ background: x.color }}>
+                                                      <p className="text-[10px] font-bold mb-0.5" style={{ color: x.tc }}>{x.label}</p>
+                                                      <p className="text-[11px] text-gray-700">{x.val}</p>
+                                                    </div>
+                                                  ))}
                                                 </div>
-                                              ))}
+                                              )}
+                                              {activeTab === "competencia" && (drill.metrica_exito || drill.variante_presion || drill.conexion_tecnica) && (
+                                                <div className="space-y-1.5 mt-1">
+                                                  {drill.metrica_exito && <div className="flex items-start gap-2 bg-blue-50 rounded px-2 py-1.5"><span className="text-[10px] font-bold text-blue-700 shrink-0 mt-0.5">META</span><span className="text-[11px] text-blue-900">{drill.metrica_exito}</span></div>}
+                                                  {drill.variante_presion && <div className="flex items-start gap-2 bg-orange-50 rounded px-2 py-1.5"><span className="text-[10px] font-bold text-orange-700 shrink-0 mt-0.5">PRESIÓN</span><span className="text-[11px] text-orange-900">{drill.variante_presion}</span></div>}
+                                                  {drill.conexion_tecnica && <div className="flex items-start gap-2 bg-purple-50 rounded px-2 py-1.5"><span className="text-[10px] font-bold text-purple-700 shrink-0 mt-0.5">TÉCNICA</span><span className="text-[11px] text-purple-900">{drill.conexion_tecnica}</span></div>}
+                                                </div>
+                                              )}
                                             </div>
-                                          )}
-                                          {activeTab === "competencia" && (drill.metrica_exito || drill.variante_presion || drill.conexion_tecnica) && (
-                                            <div className="space-y-1.5 mt-1">
-                                              {drill.metrica_exito && <div className="flex items-start gap-2 bg-blue-50 rounded px-2 py-1.5"><span className="text-[10px] font-bold text-blue-700 shrink-0 mt-0.5">META</span><span className="text-[11px] text-blue-900">{drill.metrica_exito}</span></div>}
-                                              {drill.variante_presion && <div className="flex items-start gap-2 bg-orange-50 rounded px-2 py-1.5"><span className="text-[10px] font-bold text-orange-700 shrink-0 mt-0.5">PRESIÓN</span><span className="text-[11px] text-orange-900">{drill.variante_presion}</span></div>}
-                                              {drill.conexion_tecnica && <div className="flex items-start gap-2 bg-purple-50 rounded px-2 py-1.5"><span className="text-[10px] font-bold text-purple-700 shrink-0 mt-0.5">TÉCNICA</span><span className="text-[11px] text-purple-900">{drill.conexion_tecnica}</span></div>}
-                                            </div>
-                                          )}
+                                          ))}
                                         </div>
-                                      ))}
+                                      </>
+                                    )}
+                                  </div>
+                                )}
+
+                                {!(activeTab === "juvenil" && sesion.sesion_juvenil) && (
+                                  <>
+                                    {sesion.juego_competitivo && (
+                                      <div className="bg-orange-50 border border-orange-100 rounded-lg p-3">
+                                        <p className="text-xs font-semibold text-orange-700 mb-1">🏆 Juego competitivo</p>
+                                        <p className="text-xs text-gray-700">{sesion.juego_competitivo}</p>
+                                      </div>
+                                    )}
+
+                                    {sesion.notas && (
+                                      <div className="bg-yellow-50 border border-yellow-100 rounded-lg p-3">
+                                        <p className="text-xs font-semibold text-yellow-700 mb-1">📝 Notas</p>
+                                        <p className="text-xs text-gray-700">{sesion.notas}</p>
+                                      </div>
+                                    )}
+
+                                    <div className="pt-2 border-t border-gray-100">
+                                      <button
+                                        onClick={() => router.push(`/programacion/sesion/${sesion.id}`)}
+                                        className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-semibold transition-colors ${sesion.asistencia_registrada ? "bg-emerald-50 text-emerald-700 border border-emerald-200" : "text-white"}`}
+                                        style={sesion.asistencia_registrada ? {} : { background: accentColor }}
+                                      >
+                                        <svg width="13" height="13" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+                                        {sesion.asistencia_registrada ? "Ver asistencia" : "Pasar asistencia"}
+                                      </button>
                                     </div>
-                                  </div>
+                                  </>
                                 )}
-
-                                {sesion.juego_competitivo && (
-                                  <div className="bg-orange-50 border border-orange-100 rounded-lg p-3">
-                                    <p className="text-xs font-semibold text-orange-700 mb-1">🏆 Juego competitivo</p>
-                                    <p className="text-xs text-gray-700">{sesion.juego_competitivo}</p>
-                                  </div>
-                                )}
-
-                                {sesion.notas && (
-                                  <div className="bg-yellow-50 border border-yellow-100 rounded-lg p-3">
-                                    <p className="text-xs font-semibold text-yellow-700 mb-1">📝 Notas</p>
-                                    <p className="text-xs text-gray-700">{sesion.notas}</p>
-                                  </div>
-                                )}
-
-                                <div className="pt-2 border-t border-gray-100">
-                                  <button
-                                    onClick={() => router.push(`/programacion/sesion/${sesion.id}`)}
-                                    className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-semibold transition-colors ${sesion.asistencia_registrada ? "bg-emerald-50 text-emerald-700 border border-emerald-200" : "text-white"}`}
-                                    style={sesion.asistencia_registrada ? {} : { background: accentColor }}
-                                  >
-                                    <svg width="13" height="13" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg>
-                                    {sesion.asistencia_registrada ? "Ver asistencia" : "Pasar asistencia"}
-                                  </button>
-                                </div>
                               </div>
                             </div>
                           );
@@ -2171,7 +2462,11 @@ export default function ProgramacionModule() {
                   setCalEventDetail(null);
                   setActiveTab(calEventDetail.tipo_plan);
                   setViewMode("plan");
-                  setTimeout(() => openEditSesion(calEventDetail.dia_semana, calEventDetail), 100);
+                  if (calEventDetail.tipo_plan === "juvenil") {
+                    setTimeout(() => setJuvClassCtx({ dia: calEventDetail.dia_semana, fecha: calEventDetail.fecha, sesion: calEventDetail }), 100);
+                  } else {
+                    setTimeout(() => openEditSesion(calEventDetail.dia_semana, calEventDetail), 100);
+                  }
                 }}
                 className="px-3 py-2 rounded-xl text-xs font-medium border border-gray-200 text-gray-600 hover:bg-gray-50"
               >
@@ -2260,6 +2555,34 @@ export default function ProgramacionModule() {
           />
         )}
       </div>
+
+      {/* ── Hidden PDF sesión juvenil individual ─────────────────────────── */}
+      <div ref={juvPdfRef} style={{ position: "absolute", left: "-9999px", top: 0, pointerEvents: "none" }}>
+        {juvPdfSesion?.sesion_juvenil && (
+          <JuvenilPDFHidden sesion={juvPdfSesion} />
+        )}
+      </div>
+
+      {/* ══ MODAL: Clase Juvenil IA ══════════════════════════════════════════ */}
+      {juvClassCtx && plan && (
+        <JuvenileClassModal
+          planId={plan.id}
+          planTema={plan.tema_semanal}
+          dia={juvClassCtx.dia}
+          diaLabel={DIA_LABEL[juvClassCtx.dia]}
+          fecha={juvClassCtx.fecha}
+          horaInicio={juvClassCtx.horaInicio}
+          horaFin={juvClassCtx.horaFin}
+          sesionExistente={juvClassCtx.sesion ?? undefined}
+          onClose={() => setJuvClassCtx(null)}
+          onSaved={async () => {
+            setJuvClassCtx(null);
+            showToast("Clase guardada ✓");
+            await fetchPlan();
+            if (viewMode === "semana") fetchCalSemana();
+          }}
+        />
+      )}
     </div>
   );
 }
