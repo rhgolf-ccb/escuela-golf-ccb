@@ -1177,7 +1177,7 @@ export default function ProgramacionModule() {
       }
     }
     hourTop[CAL_HOUR_END] = y; // sentinel for sessions ending at boundary
-    const totalHeight = y;
+    const totalHeight = Math.max(y, 520);
 
     function getTop(hora: string): number {
       const [h, m] = hora.split(":").map(Number);
@@ -1223,13 +1223,11 @@ export default function ProgramacionModule() {
               </div>
 
               {/* ── Grid body ── */}
-              {calSesiones.length === 0 ? (
-                <div className="py-10 text-center text-sm" style={{ color: "#5a7a5a" }}>Sin sesiones de {TIPO_PLAN_LABEL[activeTab]} esta semana</div>
-              ) : (
+              <div className="relative">
                 <div className="grid" style={{ gridTemplateColumns: "60px repeat(6, 1fr)" }}>
 
                   {/* Time-label column */}
-                  <div style={{ background: "#e8f0e6", borderRight: "1px solid #d4e0d2" }}>
+                  <div style={{ background: "#e8f0e6", borderRight: "1px solid #d4e0d2", minHeight: totalHeight }}>
                     {rows.map((row, ri) => (
                       <div
                         key={ri}
@@ -1253,7 +1251,7 @@ export default function ProgramacionModule() {
                   {CAL_DIAS.map((dia) => {
                     const daySesiones = calSesiones.filter((s) => s.dia_semana === dia);
                     return (
-                      <div key={dia} className="relative" style={{ height: totalHeight, borderLeft: "1px solid #d4e0d2" }}>
+                      <div key={dia} className="relative" style={{ height: totalHeight, borderLeft: "1px solid #d4e0d2", background: "#f7faf6" }}>
                         {/* Row backgrounds (full = clickable, thin = decorative) */}
                         {rows.map((row, ri) => (
                           <div
@@ -1309,7 +1307,12 @@ export default function ProgramacionModule() {
                     );
                   })}
                 </div>
-              )}
+                {calSesiones.length === 0 && (
+                  <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                    <p className="text-sm" style={{ color: "#5a7a5a" }}>Sin sesiones de {TIPO_PLAN_LABEL[activeTab]} esta semana</p>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         )}
