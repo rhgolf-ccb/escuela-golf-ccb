@@ -144,7 +144,7 @@ const FOCOS_MES = [
 ];
 
 const TEMAS_CHIP: Record<TipoPlan, string[]> = {
-  juvenil:     ["Tiro largo", "Juego corto", "Putt", "Salida al campo", "Test técnico", "Test físico", "Competencia/Torneo"],
+  juvenil:     ["🏌️ Swing", "⛳ Juego corto", "🎯 Putt", "🌿 Campo", "🎮 Juego libre", "📋 Test técnico", "💪 Test físico"],
   competencia: ["Tiro largo", "Juego corto", "Putt", "Salida al campo", "Test técnico", "Test físico", "Competencia/Torneo"],
   damas:       ["Tiro largo", "Juego corto", "Putt", "Salida al campo", "Test técnico", "Test físico", "Competencia/Torneo"],
 };
@@ -475,7 +475,7 @@ export default function ProgramacionModule() {
   const [temaChip, setTemaChip]                 = useState("");
   const [temaCustom, setTemaCustom]             = useState("");
   const [incluirContexto, setIncluirContexto]   = useState(false);
-  const [aiPreview, setAiPreview]               = useState<{ descripcion_tema: string; sesiones: PreviewSesion[] } | null>(null);
+  const [aiPreview, setAiPreview]               = useState<{ descripcion_tema: string; sesiones: PreviewSesion[]; sesion_juvenil?: SesionJuvenilData | null } | null>(null);
   const [generatingAI, setGeneratingAI]         = useState(false);
   const [savingGenerado, setSavingGenerado]     = useState(false);
   const [creandoPlan, setCreandoPlan]           = useState(false);
@@ -794,10 +794,10 @@ export default function ProgramacionModule() {
         return sesion;
       });
       setSelectedOpcionIdx(initialOpcionIdx);
-      setAiPreview({ descripcion_tema: data.descripcion_tema ?? "", sesiones: sesionesConFecha });
+      setAiPreview({ descripcion_tema: data.descripcion_tema ?? "", sesiones: sesionesConFecha, sesion_juvenil: data.sesion_juvenil ?? null });
     } catch (err) {
       setPlanError(err instanceof Error ? err.message : "Error desconocido");
-      setIaStep(isComp ? 1 : 2);
+      setIaStep(isComp ? 1 : activeTab === "juvenil" ? 1 : 2);
     } finally { setGeneratingAI(false); }
   }
 
@@ -811,15 +811,51 @@ export default function ProgramacionModule() {
         .insert({ semana_inicio: toISODate(semana), tipo_plan: activeTab, tema_semanal: tema, descripcion_tema: aiPreview.descripcion_tema, objetivo_mensual: focoMes, foco_mes: focoMes })
         .select().single();
       if (planErr || !newPlan) throw new Error(planErr?.message || "Error al crear plan");
-      for (const s of aiPreview.sesiones) {
-        await supabase.from("sesiones_semana").insert({
-          plan_id: newPlan.id, dia_semana: s.dia_semana, fecha: s.fecha,
-          tipo_sesion: s.tipo_sesion, lugar: s.lugar,
-          hora_inicio: s.hora_inicio || null, hora_fin: s.hora_fin || null,
-          objetivo: s.objetivo || "", drills: s.drills || [],
-          juego_competitivo: s.juego_competitivo || null,
-          estaciones_damas: s.estaciones_damas || null, notas: s.notas || null,
-        });
+      if (activeTab === "juvenil" && aiPreview.sesion_juvenil) {
+        const JUVENIL_SLOTS: { dia: DiaSemana; hi: string; hf: string }[] = [
+          { dia: "martes",    hi: "16:30", hf: "17:30" },
+          { dia: "miercoles", hi: "16:30", hf: "17:30" },
+          { dia: "jueves",    hi: "16:30", hf: "17:30" },
+          { dia: "sabado",    hi: "09:15", hf: "10:00" },
+          { dia: "sabado",    hi: "10:00", hf: "11:00" },
+          { dia: "domingo",   hi: "09:15", hf: "10:00" },
+          { dia: "domingo",   hi: "10:00", hf: "11:00" },
+        ];
+        for (const slot of JUVENIL_SLOTS) {
+          await supabase.from("sesiones_semana").insert({
+            plan_id: newPlan.id,
+            dia_semana: slot.dia,
+            fecha: getFechaForDia(semana, slot.dia),
+            tipo_sesion: "campo",
+            lugar: "campo_practica",
+            hora_inicio: slot.hi,
+            hora_fin: slot.hf,
+            objetivo: aiPreview.sesion_juvenil.objetivo_simple ?? "",
+            drills: aiPreview.sesion_juvenil.actividades?.map((a) => ({
+              titulo: a.nombre,
+              descripcion: a.como_se_juega,
+              dificultad_birdies: a.adaptacion_birdies || null,
+              dificultad_aguilas: null,
+              dificultad_albatros: a.adaptacion_albatros || null,
+              dificultad_mas14: null,
+            })) ?? [],
+            juego_competitivo: aiPreview.sesion_juvenil.actividad_estrella || null,
+            estaciones_damas: null,
+            notas: null,
+            sesion_juvenil: aiPreview.sesion_juvenil,
+          });
+        }
+      } else {
+        for (const s of aiPreview.sesiones) {
+          await supabase.from("sesiones_semana").insert({
+            plan_id: newPlan.id, dia_semana: s.dia_semana, fecha: s.fecha,
+            tipo_sesion: s.tipo_sesion, lugar: s.lugar,
+            hora_inicio: s.hora_inicio || null, hora_fin: s.hora_fin || null,
+            objetivo: s.objetivo || "", drills: s.drills || [],
+            juego_competitivo: s.juego_competitivo || null,
+            estaciones_damas: s.estaciones_damas || null, notas: s.notas || null,
+          });
+        }
       }
       setShowCrearModal(false); resetCrearModal();
       showToast("Plan generado con IA ✓");
@@ -1683,14 +1719,29 @@ export default function ProgramacionModule() {
               </div>
               <div className="flex items-center gap-4">
                 <div className="flex items-center gap-1">
-                  {([1, 2, 3] as const).map((s) => (
-                    <div key={s} className="flex items-center">
-                      <div className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold transition-all ${iaStep >= s ? "text-white" : "bg-gray-100 text-gray-400"}`} style={iaStep >= s ? { background: accentColor } : {}}>
-                        {iaStep > s ? <svg width="10" height="10" viewBox="0 0 20 20" fill="none" stroke="#fff" strokeWidth={3}><path d="M3 10l4 4 9-9"/></svg> : s}
+                  {activeTab === "juvenil" ? (
+                    [1, 2].map((s) => {
+                      const isActive = s === 1 ? iaStep >= 1 : iaStep >= 3;
+                      const isDone   = s === 1 ? iaStep >= 3 : false;
+                      return (
+                        <div key={s} className="flex items-center">
+                          <div className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold transition-all ${isActive ? "text-white" : "bg-gray-100 text-gray-400"}`} style={isActive ? { background: accentColor } : {}}>
+                            {isDone ? <svg width="10" height="10" viewBox="0 0 20 20" fill="none" stroke="#fff" strokeWidth={3}><path d="M3 10l4 4 9-9"/></svg> : s}
+                          </div>
+                          {s < 2 && <div className={`w-5 h-0.5 mx-0.5 ${isDone ? "bg-current opacity-40" : "bg-gray-200"}`} style={isDone ? { color: accentColor } : {}} />}
+                        </div>
+                      );
+                    })
+                  ) : (
+                    ([1, 2, 3] as const).map((s) => (
+                      <div key={s} className="flex items-center">
+                        <div className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold transition-all ${iaStep >= s ? "text-white" : "bg-gray-100 text-gray-400"}`} style={iaStep >= s ? { background: accentColor } : {}}>
+                          {iaStep > s ? <svg width="10" height="10" viewBox="0 0 20 20" fill="none" stroke="#fff" strokeWidth={3}><path d="M3 10l4 4 9-9"/></svg> : s}
+                        </div>
+                        {s < 3 && <div className={`w-5 h-0.5 mx-0.5 ${iaStep > s ? "bg-current opacity-40" : "bg-gray-200"}`} style={iaStep > s ? { color: accentColor } : {}} />}
                       </div>
-                      {s < 3 && <div className={`w-5 h-0.5 mx-0.5 ${iaStep > s ? "bg-current opacity-40" : "bg-gray-200"}`} style={iaStep > s ? { color: accentColor } : {}} />}
-                    </div>
-                  ))}
+                    ))
+                  )}
                 </div>
                 <button onClick={() => { if (!busy) { setShowCrearModal(false); resetCrearModal(); } }} disabled={busy} className="text-gray-400 hover:text-gray-600 disabled:opacity-40">
                   <svg width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path d="M18 6L6 18M6 6l12 12"/></svg>
@@ -1820,8 +1871,46 @@ export default function ProgramacionModule() {
               </>
             )}
 
-            {/* ── PASO 1 (Juvenil / Damas): Foco del mes ── */}
-            {iaStep === 1 && activeTab !== "competencia" && (
+            {/* ── PASO 1 (Juvenil): Tema del día ── */}
+            {iaStep === 1 && activeTab === "juvenil" && (
+              <>
+                <div className="px-6 py-6 space-y-4">
+                  <div>
+                    <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wide mb-1">Paso 1 de 2</p>
+                    <h3 className="text-base font-bold text-gray-900">¿Cuál es el tema del día?</h3>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    {TEMAS_CHIP.juvenil.map((t) => (
+                      <button key={t}
+                        onClick={() => { setTemaChip(t === temaChip ? "" : t); setTemaCustom(""); }}
+                        className="px-3 py-2 rounded-full text-sm font-semibold border transition-all"
+                        style={temaChip === t ? { background: accentColor, color: "#fff", borderColor: accentColor } : { background: "#f9fafb", color: "#374151", borderColor: "#e5e7eb" }}
+                      >{t}</button>
+                    ))}
+                  </div>
+                  {planError && <p className="text-xs text-red-500 bg-red-50 px-3 py-2 rounded-lg">{planError}</p>}
+                </div>
+                <div className="px-6 pb-6 flex flex-col gap-2">
+                  <button
+                    onClick={handleGenerarIA}
+                    disabled={generatingAI}
+                    className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-semibold text-white disabled:opacity-50 hover:brightness-110 transition-all"
+                    style={{ background: accentColor }}
+                  >
+                    {generatingAI
+                      ? <><svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"/></svg>Generando...</>
+                      : "⚡ Generar clase →"
+                    }
+                  </button>
+                  <button onClick={handleCrearVacio} disabled={creandoPlan} className="text-xs text-gray-400 hover:text-gray-600 underline-offset-2 hover:underline disabled:opacity-50 transition-colors text-center">
+                    {creandoPlan ? "Creando..." : "o crear plan vacío sin IA"}
+                  </button>
+                </div>
+              </>
+            )}
+
+            {/* ── PASO 1 (Damas): Foco del mes ── */}
+            {iaStep === 1 && activeTab === "damas" && (
               <>
                 <div className="px-6 py-6 space-y-4">
                   <div>
@@ -2006,13 +2095,47 @@ export default function ProgramacionModule() {
                     <svg width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="#166534" strokeWidth={2.5}><path d="M3 10l4 4 9-9"/></svg>
                     <span className="text-xs font-semibold text-green-800">Plan generado — revisa y edita antes de guardar</span>
                   </div>
-                  <p className="text-[11px] text-green-700">{aiPreview.sesiones.length} sesiones</p>
+                  <p className="text-[11px] text-green-700">
+                    {activeTab === "juvenil"
+                      ? (aiPreview.sesion_juvenil?.nombre_clase ?? "1 clase")
+                      : `${aiPreview.sesiones.length} sesiones`}
+                  </p>
                 </div>
                 {aiPreview.descripcion_tema && (
                   <div className="px-6 py-3 bg-gray-50 border-b border-gray-100">
                     <p className="text-xs text-gray-500 italic">{aiPreview.descripcion_tema}</p>
                   </div>
                 )}
+                {/* ── Preview Juvenil: clase compacta ── */}
+                {activeTab === "juvenil" && aiPreview.sesion_juvenil && (
+                  <div className="px-4 py-4 max-h-[65vh] overflow-y-auto space-y-3">
+                    <div className="p-4 rounded-xl border border-green-200 bg-green-50">
+                      <p className="text-[10px] font-bold text-green-700 uppercase tracking-wide mb-1">Clase generada · todas las sesiones de la semana</p>
+                      <h4 className="text-sm font-bold text-gray-900">{aiPreview.sesion_juvenil.nombre_clase}</h4>
+                      <p className="text-xs text-gray-600 mt-1">{aiPreview.sesion_juvenil.objetivo_simple}</p>
+                    </div>
+                    {aiPreview.sesion_juvenil.actividades?.map((act, idx) => (
+                      <div key={idx} className="p-4 rounded-xl border border-gray-200 bg-white space-y-1.5">
+                        <div className="flex items-center gap-2">
+                          <span className="w-5 h-5 rounded-full bg-green-100 text-green-800 text-[10px] font-bold flex items-center justify-center flex-shrink-0">{idx + 1}</span>
+                          <p className="text-sm font-bold text-gray-900 flex-1">{act.nombre}</p>
+                          <span className="text-xs text-gray-400 flex-shrink-0">{act.duracion_min} min</span>
+                        </div>
+                        <p className="text-xs text-gray-600 pl-7">{act.como_se_juega}</p>
+                        {act.adaptacion_birdies && <p className="text-[11px] text-blue-600 pl-7">🐦 Birdies: {act.adaptacion_birdies}</p>}
+                        {act.adaptacion_albatros && <p className="text-[11px] text-purple-600 pl-7">🦅 Albatros: {act.adaptacion_albatros}</p>}
+                        {act.como_se_gana && <p className="text-[11px] text-amber-700 pl-7">🏆 {act.como_se_gana}</p>}
+                        {act.materiales && <p className="text-[11px] text-gray-500 pl-7">📦 {act.materiales}</p>}
+                      </div>
+                    ))}
+                    {aiPreview.sesion_juvenil.actividad_estrella && (
+                      <div className="p-3 rounded-xl border-2 border-amber-300 bg-amber-50">
+                        <p className="text-xs font-bold text-amber-700">⭐ Actividad estrella: {aiPreview.sesion_juvenil.actividad_estrella}</p>
+                      </div>
+                    )}
+                  </div>
+                )}
+                {/* ── Preview sesiones (Competencia / Damas) ── */}
                 <div className="px-4 py-4 max-h-[65vh] overflow-y-auto space-y-3">
                   {aiPreview.sesiones.map((s, i) => {
                     const tc = TIPO_SESION_COLOR[s.tipo_sesion];
@@ -2268,7 +2391,7 @@ export default function ProgramacionModule() {
                   {planError && <p className="text-xs text-red-500 bg-red-50 px-3 py-2 rounded-lg">{planError}</p>}
                   <div className="flex gap-2">
                     <button
-                      onClick={() => { setAiPreview(null); setIaStep(activeTab === "competencia" ? 1 : 2); }}
+                      onClick={() => { setAiPreview(null); setIaStep(activeTab === "competencia" ? 1 : activeTab === "juvenil" ? 1 : 2); }}
                       className="px-4 py-2.5 rounded-xl text-sm font-medium border border-gray-200 text-gray-600 hover:bg-gray-50 transition-colors"
                     >
                       ← Regenerar

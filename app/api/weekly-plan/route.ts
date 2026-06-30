@@ -36,64 +36,34 @@ function buildPrompt(tipoPlan: string, tema: string, contexto: Record<string, un
     : "";
 
   if (tipoPlan === "juvenil") {
-    const sesionSlots = dias.flatMap((d) => {
-      const slots = HORARIOS[tipoPlan]?.[d] ?? [{ hi: "16:30", hf: "17:30" }];
-      return slots.map((h) => ({ dia: d, ...h }));
-    });
+    const system = `Diseña una clase divertida de 60 min para niños de golf (Birdies 4-5a, Águilas 6-8a, Albatros 9-12a).
 
-    const diasSchema = sesionSlots.map(({ dia, hi, hf }) => `{
-      "dia_semana": "${dia}",
-      "hora_inicio": "${hi}",
-      "hora_fin": "${hf}",
-      "tipo_sesion": "<tiro_largo|juego_corto|putt|campo|test_tecnico|test_fisico>",
-      "lugar": "<campo_practica|putting_green|campo_infantil|campo_pacos_fabios|campo_completo>",
-      "objetivo": "foco concreto de la sesión — qué van a lograr al terminar",
-      "drills": [
-        {
-          "titulo": "nombre del drill",
-          "descripcion": "instrucción clara para el instructor",
-          "dificultad_birdies": "versión muy simple lúdica para 4-5 años",
-          "dificultad_aguilas": "versión con referencia visual para 6-8 años",
-          "dificultad_albatros": "versión técnica completa para 9-12 años",
-          "dificultad_mas14": "versión con mayor exigencia para 13-17 años"
-        }
-      ],
-      "juego_competitivo": "actividad final con puntos que los niños disfruten",
-      "estaciones_damas": null,
-      "notas": null
-    }`);
+TEMA: ${tema}
+LUGAR: campo de prácticas
 
-    const system = `Eres experto en pedagogía de golf junior TPI y LTAD.
-Diseña el plan semanal para grupo Juvenil CCB (Birdies 4-5 años, Águilas 6-8, Albatros 9-12, +14 13-17).
+Genera exactamente 3 actividades tipo JUEGO.
+Nombres creativos y divertidos, no técnicos.
+Descripciones muy cortas (máx 2 líneas).
 
-Días y horarios:
-- Martes, miércoles, jueves 4:30-5:30pm campo de prácticas
-- Sábado 9:15-10:00am y 10:00-11:00am (DOS sesiones con grupos diferentes o énfasis distinto)
-- Domingo 9:15-10:00am y 10:00-11:00am (DOS sesiones)
-
-Tema de la semana: ${tema}${focoMesLine}${evCtx}
-
-REGLAS PEDAGÓGICAS:
-- Máximo 3 drills por sesión — calidad sobre cantidad
-- Cada drill tiene una descripción general más adaptación diferenciada por grupo (Birdies/Águilas/Albatros/+14)
-- Birdies: versión lúdica, muy simple, con juego o historia
-- Águilas: versión con referencia visual clara (palos en el piso, targets, colores)
-- Albatros: versión técnica completa con puntos clave de ejecución
-- +14: versión con mayor exigencia, métricas y autocorrección
-- OBLIGATORIO: UN juego competitivo por sesión que entusiasme a los niños
-- Lenguaje motivador en español colombiano
-
-Devuelve SOLO JSON válido comenzando con { sin backticks ni texto adicional.`;
-
-    const user = `Genera el plan semanal JUVENIL para la semana del ${semanaInicio}.
-Tema: ${tema}
-
-Devuelve este JSON exacto:
+Devuelve SOLO este JSON sin texto extra:
 {
-  "descripcion_tema": "descripción pedagógica del tema (2-3 oraciones) con enfoque por edades",
-  "sesiones": [${diasSchema.join(",\n  ")}]
+  "nombre_clase": "string",
+  "objetivo_simple": "string",
+  "lugar": "string",
+  "actividades": [
+    {
+      "nombre": "string",
+      "duracion_min": 20,
+      "como_se_juega": "string",
+      "adaptacion_birdies": "string",
+      "adaptacion_albatros": "string",
+      "como_se_gana": "string",
+      "materiales": "string"
+    }
+  ],
+  "actividad_estrella": "string"
 }`;
-
+    const user = `Genera la clase para el tema: ${tema}`;
     return { system, user };
   }
 
@@ -429,7 +399,7 @@ export async function POST(req: NextRequest) {
   const { system, user } = buildPrompt(tipo_plan, tema_semanal, contexto);
 
   // Competencia genera mucho más contenido (4 opciones × 2 drills × 4 días)
-  const maxTokens = tipo_plan === "competencia" ? 16000 : 8000;
+  const maxTokens = tipo_plan === "competencia" ? 16000 : tipo_plan === "juvenil" ? 2000 : 8000;
 
   console.log("[weekly-plan] API key existe:", !!apiKey);
   console.log("[weekly-plan] max_tokens:", maxTokens, "| prompt user length:", user.length, "chars");
@@ -480,6 +450,29 @@ export async function POST(req: NextRequest) {
   } catch (err) {
     console.error("[weekly-plan] Error en parseAI:", err);
     parsed = null;
+  }
+
+  if (tipo_plan === "juvenil") {
+    console.log("[weekly-plan] JSON Juvenil — tiene actividades:", !!parsed?.actividades, "| count:", parsed?.actividades?.length ?? 0);
+    if (!parsed?.actividades) {
+      console.error("[weekly-plan] Respuesta Juvenil inválida. Raw completo:", rawText);
+      return Response.json(
+        {
+          error: stopReason === "max_tokens"
+            ? `Respuesta truncada por límite de tokens (${usage?.output_tokens} usados / ${maxTokens} máx)`
+            : "Respuesta IA inválida — no se encontró campo 'actividades' en el JSON",
+          stop_reason: stopReason,
+          output_tokens: usage?.output_tokens,
+          raw: rawText.slice(0, 2000),
+        },
+        { status: 500 }
+      );
+    }
+    return Response.json({
+      descripcion_tema: parsed.nombre_clase ?? "",
+      sesion_juvenil: parsed,
+      sesiones: [],
+    });
   }
 
   console.log("[weekly-plan] JSON parseado — tiene sesiones:", !!parsed?.sesiones, "| count:", parsed?.sesiones?.length ?? 0);
