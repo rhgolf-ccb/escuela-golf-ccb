@@ -61,27 +61,11 @@ export async function POST(req: NextRequest) {
     ? `\nJUEGOS YA USADOS ESTA SEMANA EN ESTA ESTACIÓN: ${nombresUsados.join(", ")}\nREGLA: No repitas ninguno. Los 3 nuevos deben tener nombres completamente diferentes.`
     : "";
 
-  const system = `Diseña juegos de golf para niños de 4-12 años (Birdies 4-5a, Águilas 6-8a, Albatros 9-12a).
-
+  const system = `Juegos de golf para niños 4-12 años (Birdies 4-5a, Albatros 9-12a).
 ESTACIÓN: ${categoriaLabel}${usadosLine}
-
-Sugiere 3 juegos DISTINTOS para esta estación. Cada juego:
-- Nombre creativo y corto (no términos técnicos de golf)
-- Cómo se juega: 2-3 líneas simples
-- Adaptación fácil para los Birdies (más pequeños)
-- Adaptación retadora para los Albatros (más grandes)
-
-Devuelve SOLO JSON válido sin texto extra:
-{
-  "opciones": [
-    {
-      "nombre": "string",
-      "como_se_juega": "string",
-      "adaptacion_facil": "string",
-      "adaptacion_retadora": "string"
-    }
-  ]
-}`;
+Sugiere 3 juegos distintos. Cada uno: nombre creativo corto, cómo se juega (2 líneas), adaptación fácil (Birdies), adaptación retadora (Albatros).
+Devuelve SOLO JSON:
+{"opciones":[{"nombre":"","como_se_juega":"","adaptacion_facil":"","adaptacion_retadora":""}]}`;
 
   const nonce = Math.random().toString(36).slice(2, 8);
   const aiRes = await fetch("https://api.anthropic.com/v1/messages", {
@@ -94,7 +78,7 @@ Devuelve SOLO JSON válido sin texto extra:
     },
     body: JSON.stringify({
       model: "claude-sonnet-4-6",
-      max_tokens: 1000,
+      max_tokens: 800,
       system,
       messages: [{ role: "user", content: `Sugiere 3 juegos para: ${categoriaLabel}. [${nonce}]` }],
     }),

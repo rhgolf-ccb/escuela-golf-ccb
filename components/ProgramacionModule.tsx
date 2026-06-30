@@ -2164,8 +2164,8 @@ export default function ProgramacionModule() {
                 <div className="w-16 h-16 rounded-2xl flex items-center justify-center mb-5" style={{ background: accentColor + "15" }}>
                   <svg className="animate-spin h-7 w-7" fill="none" viewBox="0 0 24 24" style={{ color: accentColor }}><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"/></svg>
                 </div>
-                <p className="text-base font-semibold text-gray-800 mb-1">El agente está diseñando el plan pedagógico...</p>
-                <p className="text-sm text-gray-400">Esto puede tardar 15–30 segundos</p>
+                <p className="text-base font-semibold text-gray-800 mb-1">Generando plan pedagógico...</p>
+                <p className="text-sm text-gray-400">Esto toma 5–15 segundos</p>
               </div>
             )}
 

@@ -199,49 +199,14 @@ Devuelve SOLO este JSON sin texto extra:
     }`;
     });
 
-    const system = `Eres el asistente pedagógico de la Escuela de Golf del Country Club de Bogotá para el grupo Competencia (13-17 años, nivel intermedio-avanzado en construcción).
+    const system = `Asistente pedagógico Escuela Golf CCB — grupo Competencia (13-17 años, construcción de swing).
+Instalaciones: campo_practica (tiro largo/corto), putting_green (Fundadores, solo putt), campo_pacos_fabios (campo real). SÁBADOS solo campo_practica. Nunca "Driving Range".
 
-CONTEXTO IMPORTANTE:
-- Son niños que practican 2-3 veces por semana
-- El foco principal es CONSTRUIR SWING correctamente
-- No asumir nivel competitivo alto
-- Instalaciones: Campo de práctica (tiro largo Y corto), Putting green Fundadores (solo putt), Campo Pacos y Fabios (juego en campo real)
-- Los SÁBADOS NUNCA se va al campo real — siempre campo_practica
-- NUNCA usar el término 'Driving Range' — siempre 'Campo de práctica'
+MODO: ${modo === "construccion" ? "Construcción de swing" : "Preparación para competencia"}
+TORNEO: ${torneoStr} | POSICIONES: ${posicionesStr} | PRIMER DÍA: ${primerDia}${focoMesLine}${evCtx}
 
-MODO DE LA SEMANA: ${modo === "construccion" ? "Construcción de swing" : "Preparación para competencia"}
-TORNEO PRÓXIMO: ${torneoStr}
-POSICIONES EN TRABAJO: ${posicionesStr}
-PRIMER DÍA HÁBIL: ${primerDia}${focoMesLine}${evCtx}
-
-REGLAS MODO CONSTRUCCIÓN DE SWING:
-- Día 1 (tiro largo): Siempre campo_practica
-  Incluir 3 opciones en opciones_actividad. Elegir UNA como recomendada (es_recomendada: true):
-  * id:1 Toma de datos — Trackman o filmación (recomendada si no hay datos recientes)
-  * id:2 Drills técnicos para posiciones ${posicionesStr} — 2-3 drills progresivos con posicion_objetivo
-  * id:3 Trabajo de potencia y velocidad con medición de club speed
-  Cada drill DEBE incluir: posicion_objetivo, descripcion, error_comun, sensacion, repeticiones, metrica_exito
-- Día 2: Alternar entre putting_green (Fundadores) y campo_pacos_fabios${hayTorneo ? " — priorizar campo real por torneo" : ""}
-- Día 3: campo_practica — continuar tiro largo o introducir juego corto como complemento
-- Sábado: campo_practica — tiro largo O juego corto (NUNCA campo real)
-
-REGLAS MODO PREPARACIÓN COMPETENCIA:
-- Día 1: campo_practica — juego corto con opciones variadas (approach, chipping, bunker)
-  Incluir 4 opciones en opciones_actividad, elegir UNA como recomendada
-- Día 2: campo_pacos_fabios — juego real con hoyos y objetivos
-- Día 3: putting_green — putting con presión y distancias 1-5 metros
-- Sábado: campo_practica — repaso general juego corto y largo
-
-OPCIONES JUEGO CORTO (para modo preparación):
-1. Control de distancia en chipping (10m, 20m, 30m)
-2. Juego de bunker — salida y control
-3. Approach shots 50-100 yds diferentes palos
-4. Up & down challenge (chip + putt)
-
-OPCIONES PUTTING:
-1. Putts de control de distancia 3-6-9 metros
-2. Gate drill — precisión de dirección
-3. Putting bajo presión: primero en hacer 10 seguidos
+${modo === "construccion" ? `CONSTRUCCIÓN: Día1=campo_practica tiro largo, 3 opciones (id1 Trackman/filmación, id2 drills ${posicionesStr}, id3 potencia/velocidad). Día2=putting_green o campo_pacos_fabios${hayTorneo ? " (prioriza campo)" : ""}. Día3=campo_practica tiro largo o juego corto. Sáb=campo_practica.
+Drills DEBEN incluir: posicion_objetivo, descripcion, error_comun, sensacion, repeticiones, metrica_exito.` : `PREPARACIÓN: Día1=campo_practica juego corto 4 opciones. Día2=campo_pacos_fabios juego real. Día3=putting_green presión. Sáb=campo_practica repaso.`}
 
 Devuelve SOLO JSON válido comenzando con { sin backticks ni texto adicional.`;
 
@@ -398,8 +363,7 @@ export async function POST(req: NextRequest) {
   const contexto = { ...contexto_grupo, semana_inicio, foco_mes: foco_mes ?? null };
   const { system, user } = buildPrompt(tipo_plan, tema_semanal, contexto);
 
-  // Competencia genera mucho más contenido (4 opciones × 2 drills × 4 días)
-  const maxTokens = tipo_plan === "competencia" ? 16000 : tipo_plan === "juvenil" ? 2000 : 8000;
+  const maxTokens = tipo_plan === "competencia" ? 3000 : tipo_plan === "juvenil" ? 2000 : 2000;
 
   console.log("[weekly-plan] API key existe:", !!apiKey);
   console.log("[weekly-plan] max_tokens:", maxTokens, "| prompt user length:", user.length, "chars");

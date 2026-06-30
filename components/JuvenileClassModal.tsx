@@ -483,7 +483,7 @@ export default function JuvenileClassModal({
                                 <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
                               </svg>
                             ) : "🎲"}
-                            {st.generando ? "Generando ideas..." : "Sugerir más con IA"}
+                            {st.generando ? "Generando... (5–10 seg)" : "Sugerir más con IA"}
                           </button>
                         </div>
                       </div>

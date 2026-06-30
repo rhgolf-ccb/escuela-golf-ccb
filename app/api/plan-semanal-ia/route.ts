@@ -91,7 +91,7 @@ Elige tipo_sesion y lugar coherentes con el dia y el tema. Opciones tipo_sesion:
     headers: { "Content-Type": "application/json", "x-api-key": apiKey, "anthropic-version": "2023-06-01" },
     body: JSON.stringify({
       model: "claude-sonnet-4-6",
-      max_tokens: 4000,
+      max_tokens: 1500,
       system: systemPrompt,
       messages: [{ role: "user", content: userMsg }],
     }),

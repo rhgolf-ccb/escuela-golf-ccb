@@ -74,7 +74,7 @@ Devuelve SOLO JSON válido, sin texto adicional:
     },
     body: JSON.stringify({
       model: "claude-haiku-4-5-20251001",
-      max_tokens: 4000,
+      max_tokens: 600,
       system,
       messages: [{ role: "user", content: `Fecha de la clase: ${fecha} (${dia_semana}). Sugiere 3 temas.` }],
     }),
