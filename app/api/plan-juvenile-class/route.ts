@@ -1,5 +1,7 @@
 import type { NextRequest } from "next/server";
+import { createClient } from "@supabase/supabase-js";
 
+// ── Helpers ───────────────────────────────────────────────────────────────────
 function parseJSON(raw: string): unknown {
   try { return JSON.parse(raw); } catch { /* */ }
   const cleaned = raw.replace(/^```json\n?/, "").replace(/\n?```$/, "").trim();
@@ -9,18 +11,58 @@ function parseJSON(raw: string): unknown {
   return null;
 }
 
+// ── Route ─────────────────────────────────────────────────────────────────────
 export async function POST(req: NextRequest) {
-  const body = await req.json();
-  const {
-    tema, lugar, fecha, dia_semana,
-    actividades_ya_usadas_esta_semana = [] as string[],
-  } = body as {
+  const body = await req.json() as {
+    plan_id?: string;
     tema: string; lugar: string; fecha: string; dia_semana: string;
     actividades_ya_usadas_esta_semana?: string[];
   };
+  const {
+    plan_id,
+    tema, lugar, fecha, dia_semana,
+    actividades_ya_usadas_esta_semana: actividadesFrontend = [],
+  } = body;
 
-  const actividadesUsadasLine = actividades_ya_usadas_esta_semana.length > 0
-    ? `\n\nACTIVIDADES YA USADAS ESTA SEMANA: ${actividades_ya_usadas_esta_semana.join(", ")}\nIMPORTANTE: No repitas ninguna de estas actividades. Genera 3 opciones NUEVAS y diferentes para mantener la clase interesante.`
+  // ── 1. Query Supabase for activities already used this week ──────────────
+  let nombresUsados: string[] = [];
+
+  if (plan_id) {
+    try {
+      const supabase = createClient(
+        process.env.NEXT_PUBLIC_SUPABASE_URL!,
+        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+      );
+      const { data: sesiones, error } = await supabase
+        .from("sesiones_semana")
+        .select("sesion_juvenil")
+        .eq("plan_id", plan_id)
+        .not("sesion_juvenil", "is", null);
+
+      if (error) {
+        console.error("[plan-juvenile-class] Supabase error:", error.message);
+      } else {
+        nombresUsados = (sesiones ?? [])
+          .flatMap((s: { sesion_juvenil?: { actividades?: { nombre: string }[] } | null }) =>
+            s.sesion_juvenil?.actividades?.map((a) => a.nombre) ?? []
+          )
+          .filter((n): n is string => Boolean(n));
+        console.log("[plan-juvenile-class] Actividades ya usadas (DB):", nombresUsados);
+      }
+    } catch (err) {
+      console.error("[plan-juvenile-class] Error querying Supabase:", err);
+    }
+  }
+
+  // Merge with frontend list as fallback
+  const todasUsadas = Array.from(new Set([...nombresUsados, ...actividadesFrontend]));
+  console.log("[plan-juvenile-class] Total actividades a evitar:", todasUsadas);
+
+  // ── 2. Build system prompt ────────────────────────────────────────────────
+  const actividadesUsadasLine = todasUsadas.length > 0
+    ? `\n\nACTIVIDADES YA USADAS ESTA SEMANA: ${todasUsadas.join(", ")}
+
+REGLA OBLIGATORIA: Ninguna de las 3 opciones puede usar ningún nombre de esta lista, ni variaciones mínimas de esos nombres. Deben ser actividades conceptualmente diferentes, con nombres completamente nuevos.`
     : "";
 
   const system = `Eres instructor de golf para niños de 4-12 años.
@@ -34,45 +76,42 @@ Grupos juntos:
 TEMA DEL DÍA: ${tema}
 LUGAR: ${lugar}${actividadesUsadasLine}
 
-Genera 3 opciones DISTINTAS de clase. Cada opción tiene un nombre diferente y un enfoque creativo único para el mismo tema.
-Cada clase tiene máximo 3 actividades. Cada actividad es un JUEGO que trabaja el objetivo sin que el niño lo note.
-
-Ejemplo: si el tema es "swing", en lugar de "drill de backswing" → "Juego del semáforo: el palo se detiene en verde (P3) antes de seguir a rojo (P4)".
-
-Para cada actividad:
-- Nombre divertido (no técnico)
-- Cómo se juega (muy simple, 2-3 líneas)
-- Adaptación Birdies (más fácil/más corto)
-- Adaptación Albatros (más retador)
-- Cómo se gana o cuál es el reto
+Genera 3 opciones DISTINTAS de clase. Cada opción tiene un nombre diferente y un enfoque creativo único.
+Cada clase tiene exactamente 3 actividades. Cada actividad es un JUEGO que trabaja el objetivo sin que el niño lo note.
+Las 3 opciones deben tener nombres de actividades completamente distintos entre sí.
 
 Devuelve SOLO JSON válido, sin texto adicional ni backticks:
 {
   "opciones": [
     {
-      "nombre_clase": "string (ej: 'Día del semáforo')",
-      "objetivo_simple": "string (para los padres, ej: 'Practicar el movimiento de subida del palo de forma divertida')",
+      "nombre_clase": "string",
+      "objetivo_simple": "string (para los padres, 1 línea)",
       "lugar": "${lugar}",
       "actividades": [
         {
-          "nombre": "string (divertido, no técnico)",
+          "nombre": "string (nombre divertido, corto)",
           "duracion_min": 20,
-          "como_se_juega": "string (simple, 2-3 líneas)",
-          "adaptacion_birdies": "string",
-          "adaptacion_albatros": "string",
-          "como_se_gana": "string",
-          "materiales": "string"
+          "como_se_juega": "string (2-3 líneas)",
+          "adaptacion_birdies": "string (1 línea)",
+          "adaptacion_albatros": "string (1 línea)",
+          "como_se_gana": "string (1 línea)",
+          "materiales": "string (1 línea)"
         }
       ],
-      "actividad_estrella": "string (la más divertida — destacarla para los padres)"
+      "actividad_estrella": "string (nombre de la actividad más divertida)"
     },
-    { ... segunda opción diferente ... },
-    { ... tercera opción diferente ... }
+    { },
+    { }
   ]
 }`;
 
-  const res = await fetch("https://api.anthropic.com/v1/messages", {
+  console.log("[plan-juvenile-class] System prompt length:", system.length);
+
+  // ── 3. Call Anthropic ─────────────────────────────────────────────────────
+  const nonce = Math.random().toString(36).slice(2, 8);
+  const aiRes = await fetch("https://api.anthropic.com/v1/messages", {
     method: "POST",
+    cache: "no-store",
     headers: {
       "x-api-key": process.env.ANTHROPIC_API_KEY!,
       "anthropic-version": "2023-06-01",
@@ -80,24 +119,32 @@ Devuelve SOLO JSON válido, sin texto adicional ni backticks:
     },
     body: JSON.stringify({
       model: "claude-sonnet-4-6",
-      max_tokens: 6000,
+      max_tokens: 1500,
       system,
       messages: [{
         role: "user",
-        content: `Diseña 3 opciones de clase para ${dia_semana} ${fecha}. Tema: ${tema}. Lugar: ${lugar}.`,
+        content: `Genera 3 opciones para ${dia_semana} ${fecha}. Tema: ${tema}. [${nonce}]`,
       }],
     }),
   });
 
-  const aiData = await res.json();
-  if (!res.ok) {
+  const aiData = await aiRes.json() as {
+    content?: { text: string }[];
+    error?: { message: string };
+  };
+  if (!aiRes.ok) {
+    console.error("[plan-juvenile-class] Anthropic error:", aiData.error?.message);
     return Response.json({ error: aiData.error?.message ?? "Error IA" }, { status: 500 });
   }
 
   const raw: string = aiData.content?.[0]?.text ?? "";
+  console.log("[plan-juvenile-class] Raw response length:", raw.length);
+
   const parsed = parseJSON(raw) as { opciones?: unknown[] } | null;
   if (!parsed || !Array.isArray(parsed.opciones) || parsed.opciones.length === 0) {
+    console.error("[plan-juvenile-class] JSON parse failed. Raw:", raw.slice(0, 300));
     return Response.json({ error: "JSON inválido o sin opciones", raw }, { status: 500 });
   }
+
   return Response.json(parsed);
 }

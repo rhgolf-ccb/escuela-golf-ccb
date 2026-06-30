@@ -3,41 +3,168 @@
 import { useState } from "react";
 import { supabase } from "@/lib/supabase";
 
-// ── Types ─────────────────────────────────────────────────────────────────────
-type TemaChip = "swing" | "juego_corto" | "putt" | "campo" | "juego_libre" | "test_tecnico" | "test_fisico";
-type Lugar = "campo_practica" | "putting_green" | "campo_infantil" | "campo_pacos_fabios" | "campo_completo";
-
+// ── Types (exported — used in ProgramacionModule) ─────────────────────────────
 export interface Actividad {
-  nombre: string;
-  duracion_min: number;
-  como_se_juega: string;
-  adaptacion_birdies: string;
-  adaptacion_albatros: string;
-  como_se_gana: string;
-  materiales: string;
+  nombre: string; duracion_min: number; como_se_juega: string;
+  adaptacion_birdies: string; adaptacion_albatros: string;
+  como_se_gana: string; materiales: string;
 }
 
-export interface SesionJuvenilData {
+export interface JuegoJuvenil {
+  nombre: string;
+  como_se_juega: string;
+  adaptacion_facil: string;
+  adaptacion_retadora: string;
+}
+
+export type CategoriaEstacion = "juego_largo" | "juego_corto" | "putt";
+export type TipoEspecial = "test_tecnico" | "test_fisico" | "campo_pacos" | "campo_infantil";
+
+export interface SesionJuvenilEstaciones {
+  tipo: "estaciones";
+  estaciones: Array<{ categoria: CategoriaEstacion; juego: JuegoJuvenil }>;
+}
+
+export interface SesionJuvenilEspecial {
+  tipo: "especial";
+  tipo_especial: TipoEspecial;
+}
+
+// Legacy format (backward compat — weekly plan AI still generates this)
+export interface SesionJuvenilLegacy {
   nombre_clase: string;
   objetivo_simple: string;
   actividades: Actividad[];
   actividad_estrella: string;
 }
 
+export type SesionJuvenilData = SesionJuvenilEstaciones | SesionJuvenilEspecial | SesionJuvenilLegacy;
+
+// ── Game library ───────────────────────────────────────────────────────────────
+const JUEGOS_BIBLIOTECA: Record<CategoriaEstacion, JuegoJuvenil[]> = {
+  juego_largo: [
+    {
+      nombre: "El Lanzamisiles",
+      como_se_juega: "5 pelotas a zonas marcadas a 10, 20, 30, 40 y 50m. Zona más lejana = más puntos. Gana mayor suma en 5 turnos.",
+      adaptacion_facil: "Birdies: tee elevado, solo 3 zonas, contar los 3 mejores de 5 tiros.",
+      adaptacion_retadora: "Albatros: puntos solo si cae dentro de la zona exacta.",
+    },
+    {
+      nombre: "El Rey del Fairway",
+      como_se_juega: "Quien llega más lejos dentro del fairway (zona delimitada) gana la ronda. 5 rondas, el que gana 3 primero es Rey.",
+      adaptacion_facil: "Birdies: zona más ancha, cualquier tiro dentro del área cuenta.",
+      adaptacion_retadora: "Albatros: fairway más estrecho, los tiros fuera restan 1 punto.",
+    },
+    {
+      nombre: "La Catapulta",
+      como_se_juega: "Carrera de 2 min: ¿cuántas pelotas llegas al aro a 30m? Cada pelota dentro suma 2 pts. Rebotes que quedan en el aro suman 1.",
+      adaptacion_facil: "Birdies: aro más grande y más cerca, tiempo 3 min.",
+      adaptacion_retadora: "Albatros: solo vuelo directo al aro (no rebotes).",
+    },
+    {
+      nombre: "Semáforo de Swing",
+      como_se_juega: "El instructor grita colores: Verde = swing completo, Rojo = parar en P5 foto, Amarillo = girar pie trasero. 10 instrucciones. Fallo = -1 pto.",
+      adaptacion_facil: "Birdies: solo Verde y Rojo, sin penalización.",
+      adaptacion_retadora: "Albatros: secuencias más rápidas, deben nombrar el siguiente color.",
+    },
+  ],
+  juego_corto: [
+    {
+      nombre: "El Malabarista",
+      como_se_juega: "Chip desde 15m a 3 aros: rojo (más lejos, 3 pts), azul (medio, 2 pts), blanco (más cerca, 1 pt). 8 chips por persona.",
+      adaptacion_facil: "Birdies: aros más grandes, posición más cerca.",
+      adaptacion_retadora: "Albatros: los aros cambian de posición entre turno y turno.",
+    },
+    {
+      nombre: "El Francotirador",
+      como_se_juega: "Pitch a banderitas de colores a 8, 12 y 18m. Cada banderita vale pts según distancia. 3 rondas, suma total.",
+      adaptacion_facil: "Birdies: banderitas grandes, solo 2 distancias.",
+      adaptacion_retadora: "Albatros: penalización si la pelota rebota antes de llegar a la banderita.",
+    },
+    {
+      nombre: "La Pelota Caliente",
+      como_se_juega: "Turno de 60 seg: todos chipean a la zona marcada en equipo. El equipo suma puntos de las pelotas dentro. Se compite contra el tiempo.",
+      adaptacion_facil: "Birdies: chipean al mismo tiempo (no turnos individuales).",
+      adaptacion_retadora: "Albatros: solo 2 pelotas por jugador, deben escoger el momento.",
+    },
+    {
+      nombre: "El Castillo",
+      como_se_juega: "3 conos a 10m. Derríbalos con chips. Cono derribado = 1 pt. Derribar los 3 en un turno = 5 pts bono.",
+      adaptacion_facil: "Birdies: conos más cerca, 3 intentos por cono.",
+      adaptacion_retadora: "Albatros: solo chip de vuelo limpio derriba los conos.",
+    },
+  ],
+  putt: [
+    {
+      nombre: "La Batalla de Putts",
+      como_se_juega: "Duelos 1 vs 1: quien emboca o queda más cerca gana el duelo. Torneo de eliminación. Distancia varía por ronda (1-5m).",
+      adaptacion_facil: "Birdies: distancias cortas (1-2m), quedar cerca cuenta como ganar.",
+      adaptacion_retadora: "Albatros: solo embocar gana el duelo (quedar cerca no suma).",
+    },
+    {
+      nombre: "El Caracol",
+      como_se_juega: "Recorrido de 6 hoyos en espiral. Si embocan avanzan 2 extra. Si fallan 2 seguidos, vuelven 1. Gana quien termina primero.",
+      adaptacion_facil: "Birdies: distancias de 0.5-1m, máximo 3 intentos por hoyo.",
+      adaptacion_retadora: "Albatros: 1 sola oportunidad por hoyo, fallo = volver al anterior.",
+    },
+    {
+      nombre: "La Caja de Sorpresas",
+      como_se_juega: "El instructor saca un papel: distancia + regla especial (mano contraria, ojos cerrados, rodillas…). Todos puttean con esa regla. Emboca = 2 pts, más cerca = 1 pt.",
+      adaptacion_facil: "Birdies: reglas especiales solo en último turno.",
+      adaptacion_retadora: "Albatros: deben cumplir regla Y embocar para sumar.",
+    },
+    {
+      nombre: "El Rompecabezas",
+      como_se_juega: "5 hoyos numerados, el jugador elige el orden. Se acumulan golpes. Al final se revela el 'hoyo doble' que multiplica ese resultado ×2.",
+      adaptacion_facil: "Birdies: máximo 3 golpes por hoyo antes de avanzar (gipper).",
+      adaptacion_retadora: "Albatros: completar todos en cierto total de golpes para ganar.",
+    },
+  ],
+};
+
+// ── Constants ──────────────────────────────────────────────────────────────────
+const GREEN = "#1B4D2E";
+
+const CATEGORIAS: { value: CategoriaEstacion; emoji: string; label: string }[] = [
+  { value: "juego_largo", emoji: "🏌️", label: "Juego Largo" },
+  { value: "juego_corto", emoji: "⛳",  label: "Juego Corto" },
+  { value: "putt",        emoji: "🎯",  label: "Putt" },
+];
+
+const ESPECIALES: { value: TipoEspecial; emoji: string; label: string; desc: string }[] = [
+  { value: "test_tecnico",   emoji: "📋", label: "Test técnico",       desc: "Evaluación P1-P10" },
+  { value: "test_fisico",    emoji: "💪", label: "Test físico",        desc: "Evaluación TPI" },
+  { value: "campo_pacos",    emoji: "🌿", label: "Campo Pacos/Fabios", desc: "Juego en campo real" },
+  { value: "campo_infantil", emoji: "👶", label: "Campo Infantil",     desc: "Día lúdico diferente" },
+];
+
+const ESPECIAL_TIPO_SESION: Record<TipoEspecial, string> = {
+  test_tecnico:   "test_tecnico",
+  test_fisico:    "test_fisico",
+  campo_pacos:    "campo",
+  campo_infantil: "campo",
+};
+
+const ESPECIAL_LUGAR: Record<TipoEspecial, string> = {
+  test_tecnico:   "campo_practica",
+  test_fisico:    "campo_practica",
+  campo_pacos:    "campo_pacos_fabios",
+  campo_infantil: "campo_infantil",
+};
+
+const ESPECIAL_OBJETIVO: Record<TipoEspecial, string> = {
+  test_tecnico:   "Evaluación técnica P1-P10",
+  test_fisico:    "Evaluación física TPI",
+  campo_pacos:    "Juego en Campo Pacos y Fabios",
+  campo_infantil: "Día lúdico en Campo Infantil",
+};
+
+// ── Props ──────────────────────────────────────────────────────────────────────
 interface ExistingSesion {
   id: string;
-  objetivo: string;
-  tipo_sesion: string;
-  lugar: Lugar;
+  sesion_juvenil?: SesionJuvenilData | null;
   hora_inicio: string | null;
   hora_fin: string | null;
-  drills: Array<{
-    titulo: string;
-    descripcion: string;
-    dificultad_birdies?: string | null;
-    dificultad_albatros?: string | null;
-  }>;
-  sesion_juvenil?: SesionJuvenilData | null;
 }
 
 interface Props {
@@ -48,159 +175,163 @@ interface Props {
   horaInicio?: string;
   horaFin?: string;
   sesionExistente?: ExistingSesion | null;
-  actividadesYaUsadas?: string[];
   onClose: () => void;
   onSaved: () => void;
 }
 
-// ── Constants ─────────────────────────────────────────────────────────────────
-const GREEN = "#1B4D2E";
-
-const CHIPS: { value: TemaChip; emoji: string; label: string }[] = [
-  { value: "swing",        emoji: "🏌️", label: "Swing" },
-  { value: "juego_corto",  emoji: "⛳",  label: "Juego corto" },
-  { value: "putt",         emoji: "🎯",  label: "Putt" },
-  { value: "campo",        emoji: "🌿",  label: "Campo" },
-  { value: "juego_libre",  emoji: "🎮",  label: "Juego libre" },
-  { value: "test_tecnico", emoji: "📋",  label: "Test técnico" },
-  { value: "test_fisico",  emoji: "💪",  label: "Test físico" },
-];
-
-const CHIP_TIPO: Record<TemaChip, string> = {
-  swing:        "tiro_largo",
-  juego_corto:  "juego_corto",
-  putt:         "putt",
-  campo:        "campo",
-  juego_libre:  "campo",
-  test_tecnico: "test_tecnico",
-  test_fisico:  "test_fisico",
-};
-
-const CHIP_TEMA: Record<TemaChip, string> = {
-  swing:        "Swing",
-  juego_corto:  "Juego corto",
-  putt:         "Putt",
-  campo:        "Salida al campo",
-  juego_libre:  "Juego libre",
-  test_tecnico: "Test técnico",
-  test_fisico:  "Test físico",
-};
-
-function mapAILugar(str: string): Lugar {
-  const s = str.toLowerCase();
-  if (s.includes("infantil"))                              return "campo_infantil";
-  if (s.includes("pacos") || s.includes("fabios"))        return "campo_pacos_fabios";
-  if (s.includes("putt") || s.includes("green") || s.includes("fundador")) return "putting_green";
-  if (s.includes("completo"))                              return "campo_completo";
-  return "campo_practica";
+// ── Station state ──────────────────────────────────────────────────────────────
+interface StationState {
+  categoria: CategoriaEstacion;
+  juegoIdx: number | null;
+  extras: JuegoJuvenil[];
+  generando: boolean;
+  open: boolean;
 }
 
-function formatFecha(fecha: string): string {
+function initStations(sesion?: ExistingSesion | null): StationState[] {
+  const base: StationState[] = CATEGORIAS.map((c) => ({
+    categoria: c.value, juegoIdx: null, extras: [], generando: false, open: false,
+  }));
+  if (sesion?.sesion_juvenil && 'tipo' in sesion.sesion_juvenil && sesion.sesion_juvenil.tipo === "estaciones") {
+    const est = sesion.sesion_juvenil.estaciones;
+    base.forEach((s, i) => {
+      const existing = est.find((e) => e.categoria === s.categoria);
+      if (!existing) return;
+      const lib = JUEGOS_BIBLIOTECA[s.categoria];
+      const libIdx = lib.findIndex((g) => g.nombre === existing.juego.nombre);
+      if (libIdx >= 0) {
+        base[i].juegoIdx = libIdx;
+      } else {
+        base[i].extras = [existing.juego];
+        base[i].juegoIdx = lib.length; // extras start at lib.length
+      }
+    });
+  }
+  return base;
+}
+
+function initMode(sesion?: ExistingSesion | null): "tipo" | "estaciones" | "especial" {
+  if (!sesion?.sesion_juvenil || !('tipo' in sesion.sesion_juvenil)) return "tipo";
+  return sesion.sesion_juvenil.tipo === "estaciones" ? "estaciones" : "especial";
+}
+
+function initEspecial(sesion?: ExistingSesion | null): TipoEspecial | null {
+  if (!sesion?.sesion_juvenil || !('tipo' in sesion.sesion_juvenil)) return null;
+  if (sesion.sesion_juvenil.tipo !== "especial") return null;
+  return sesion.sesion_juvenil.tipo_especial;
+}
+
+function formatFecha(fecha: string) {
   return new Date(fecha + "T00:00:00").toLocaleDateString("es-CO", { day: "numeric", month: "short" });
 }
 
-type Step = "categoria" | "generando" | "opciones";
-
-// ── Component ─────────────────────────────────────────────────────────────────
+// ── Component ──────────────────────────────────────────────────────────────────
 export default function JuvenileClassModal({
   planId, dia, diaLabel, fecha,
   horaInicio, horaFin, sesionExistente,
-  actividadesYaUsadas = [],
   onClose, onSaved,
 }: Props) {
-  const [step, setStep] = useState<Step>("categoria");
-  const [selectedChip, setSelectedChip] = useState<TemaChip | null>(null);
-  const [opciones, setOpciones] = useState<SesionJuvenilData[]>([]);
-  const [opcionIdx, setOpcionIdx] = useState<number | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [mode, setMode] = useState<"tipo" | "estaciones" | "especial">(() => initMode(sesionExistente));
+  const [stations, setStations] = useState<StationState[]>(() => initStations(sesionExistente));
+  const [tipoEspecial, setTipoEspecial] = useState<TipoEspecial | null>(() => initEspecial(sesionExistente));
   const [saving, setSaving] = useState(false);
-  const [testHoraInicio, setTestHoraInicio] = useState(horaInicio ?? "16:30");
-  const [testHoraFin, setTestHoraFin] = useState(horaFin ?? "17:30");
+  const [error, setError] = useState<string | null>(null);
 
-  const isTest = selectedChip === "test_tecnico" || selectedChip === "test_fisico";
-  const busy = saving || step === "generando";
-  const stepNum = step === "categoria" ? 1 : 2;
+  const busy = saving || stations.some((s) => s.generando);
+  const allStationsFilled = stations.every((s) => s.juegoIdx !== null);
 
-  async function handleChipSelect(chip: TemaChip) {
-    setSelectedChip(chip);
+  // ── Resolve selected game for a station ──────────────────────────────────
+  function getJuego(s: StationState): JuegoJuvenil | null {
+    if (s.juegoIdx === null) return null;
+    const lib = JUEGOS_BIBLIOTECA[s.categoria];
+    if (s.juegoIdx < lib.length) return lib[s.juegoIdx];
+    return s.extras[s.juegoIdx - lib.length] ?? null;
+  }
+
+  function allGames(s: StationState): JuegoJuvenil[] {
+    return [...JUEGOS_BIBLIOTECA[s.categoria], ...s.extras];
+  }
+
+  // ── Toggle station open/closed ───────────────────────────────────────────
+  function toggleStation(idx: number) {
+    setStations((prev) => prev.map((s, i) => i === idx ? { ...s, open: !s.open } : s));
+  }
+
+  function selectGame(stIdx: number, gameIdx: number) {
+    setStations((prev) => prev.map((s, i) => i === stIdx ? { ...s, juegoIdx: gameIdx, open: false } : s));
+  }
+
+  // ── AI: suggest more games for a station ────────────────────────────────
+  async function handleSuggestMore(stIdx: number) {
+    const st = stations[stIdx];
+    setStations((prev) => prev.map((s, i) => i === stIdx ? { ...s, generando: true } : s));
     setError(null);
-    if (chip === "test_tecnico" || chip === "test_fisico") return;
-
-    setStep("generando");
-    setOpciones([]);
-    setOpcionIdx(null);
     try {
-      const res = await fetch("/api/plan-juvenile-class", {
+      const juegosYaUsados = allGames(st).map((g) => g.nombre);
+      const res = await fetch("/api/suggest-station-game", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          tema: CHIP_TEMA[chip],
-          lugar: "campo de prácticas",
-          fecha,
-          dia_semana: dia,
-          actividades_ya_usadas_esta_semana: actividadesYaUsadas,
+          plan_id: planId,
+          categoria: st.categoria,
+          juegos_ya_usados: juegosYaUsados,
         }),
       });
-      const data = await res.json() as { opciones?: SesionJuvenilData[]; error?: string };
-      if (!res.ok) throw new Error(data.error ?? "Error al generar opciones");
-      const opts = data.opciones ?? [];
-      if (opts.length === 0) throw new Error("No se generaron opciones");
-      setOpciones(opts);
-      setStep("opciones");
+      const data = await res.json() as { opciones?: JuegoJuvenil[]; error?: string };
+      if (!res.ok) throw new Error(data.error ?? "Error al generar");
+      const nuevos = data.opciones ?? [];
+      if (nuevos.length === 0) throw new Error("Sin opciones nuevas");
+      setStations((prev) => prev.map((s, i) =>
+        i === stIdx ? { ...s, extras: [...s.extras, ...nuevos], generando: false, open: true } : s
+      ));
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Error desconocido");
-      setStep("categoria");
+      setError(err instanceof Error ? err.message : "Error");
+      setStations((prev) => prev.map((s, i) => i === stIdx ? { ...s, generando: false } : s));
     }
   }
 
+  // ── Save ─────────────────────────────────────────────────────────────────
   async function handleSave() {
-    if (!selectedChip) return;
     setSaving(true);
     setError(null);
     try {
-      const tipoSesion = CHIP_TIPO[selectedChip];
       type Payload = Record<string, unknown>;
       let payload: Payload;
 
-      if (isTest) {
+      if (mode === "especial") {
+        if (!tipoEspecial) return;
         payload = {
           plan_id: planId, dia_semana: dia, fecha,
-          tipo_sesion: tipoSesion, lugar: "campo_practica",
-          hora_inicio: testHoraInicio || null, hora_fin: testHoraFin || null,
-          objetivo: selectedChip === "test_tecnico"
-            ? "Sesión de evaluación técnica P1-P10"
-            : "Sesión de evaluación física TPI",
-          drills: [], juego_competitivo: null,
-          estaciones_damas: null, notas: null, sesion_juvenil: null,
+          tipo_sesion: ESPECIAL_TIPO_SESION[tipoEspecial],
+          lugar: ESPECIAL_LUGAR[tipoEspecial],
+          hora_inicio: horaInicio || null, hora_fin: horaFin || null,
+          objetivo: ESPECIAL_OBJETIVO[tipoEspecial],
+          drills: [], juego_competitivo: null, estaciones_damas: null, notas: null,
+          sesion_juvenil: { tipo: "especial", tipo_especial: tipoEspecial },
         };
       } else {
-        if (opcionIdx === null) return;
-        const clasePlan = opciones[opcionIdx];
-        if (!clasePlan) return;
+        const estaciones = stations.map((s) => {
+          const juego = getJuego(s);
+          if (!juego) throw new Error(`Falta juego en ${s.categoria}`);
+          return { categoria: s.categoria, juego };
+        });
         payload = {
           plan_id: planId, dia_semana: dia, fecha,
-          tipo_sesion: tipoSesion,
-          lugar: mapAILugar((clasePlan as unknown as { lugar?: string }).lugar ?? ""),
+          tipo_sesion: "juvenil_estaciones",
+          lugar: "campo_practica",
           hora_inicio: horaInicio || null, hora_fin: horaFin || null,
-          objetivo: clasePlan.objetivo_simple,
-          drills: clasePlan.actividades.map((a) => ({
-            titulo: a.nombre, descripcion: a.como_se_juega,
-            dificultad_birdies: a.adaptacion_birdies || null,
-            dificultad_aguilas: null,
-            dificultad_albatros: a.adaptacion_albatros || null,
-            dificultad_mas14: null,
-          })),
-          juego_competitivo: null, estaciones_damas: null, notas: null,
-          sesion_juvenil: clasePlan,
+          objetivo: "Sesión 3 estaciones: Juego Largo · Juego Corto · Putt",
+          drills: [], juego_competitivo: null, estaciones_damas: null, notas: null,
+          sesion_juvenil: { tipo: "estaciones", estaciones },
         };
       }
 
       if (sesionExistente) {
-        const { error: supaError } = await supabase.from("sesiones_semana").update(payload).eq("id", sesionExistente.id);
-        if (supaError) throw new Error(supaError.message);
+        const { error: e } = await supabase.from("sesiones_semana").update(payload).eq("id", sesionExistente.id);
+        if (e) throw new Error(e.message);
       } else {
-        const { error: supaError } = await supabase.from("sesiones_semana").insert(payload);
-        if (supaError) throw new Error(supaError.message);
+        const { error: e } = await supabase.from("sesiones_semana").insert(payload);
+        if (e) throw new Error(e.message);
       }
       onSaved();
     } catch (err) {
@@ -210,252 +341,220 @@ export default function JuvenileClassModal({
     }
   }
 
+  // ── Render ────────────────────────────────────────────────────────────────
   return (
-    <div
-      className="fixed inset-0 bg-black/60 z-50 flex items-start justify-center p-4 overflow-y-auto"
-      onClick={() => { if (!busy) onClose(); }}
-    >
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl my-6" onClick={(e) => e.stopPropagation()}>
+    <div className="fixed inset-0 bg-black/60 z-50 flex items-start justify-center p-4 overflow-y-auto"
+      onClick={() => { if (!busy) onClose(); }}>
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-xl my-6"
+        onClick={(e) => e.stopPropagation()}>
 
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 sticky top-0 bg-white rounded-t-2xl z-10">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 sticky top-0 bg-white rounded-t-2xl z-10">
           <div>
-            <h2 className="font-bold text-gray-900">
-              {sesionExistente ? "Cambiar clase" : "Asignar clase"} — {diaLabel}
+            <h2 className="font-bold text-gray-900 text-sm">
+              {sesionExistente ? "Cambiar sesión" : "Asignar sesión"} — {diaLabel}
             </h2>
             <p className="text-xs text-gray-400 mt-0.5">{diaLabel} {formatFecha(fecha)}</p>
           </div>
-          <div className="flex items-center gap-4">
-            <div className="flex items-center gap-1">
-              {[1, 2].map((s) => (
-                <div key={s} className="flex items-center">
-                  <div
-                    className="w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold transition-all"
-                    style={stepNum >= s
-                      ? { background: GREEN, color: "#fff" }
-                      : { background: "#f3f4f6", color: "#9ca3af" }}
-                  >
-                    {stepNum > s
-                      ? <svg width="10" height="10" viewBox="0 0 20 20" fill="none" stroke="#fff" strokeWidth={3}><path d="M3 10l4 4 9-9" /></svg>
-                      : s}
-                  </div>
-                  {s < 2 && (
-                    <div
-                      className="w-5 h-0.5 mx-0.5 transition-all"
-                      style={stepNum > s ? { background: GREEN, opacity: 0.4 } : { background: "#e5e7eb" }}
-                    />
-                  )}
-                </div>
-              ))}
-            </div>
-            <button
-              onClick={() => { if (!busy) onClose(); }}
-              disabled={busy}
-              className="text-gray-400 hover:text-gray-600 disabled:opacity-40"
-            >
-              <svg width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path d="M18 6L6 18M6 6l12 12" />
-              </svg>
-            </button>
-          </div>
+          <button onClick={() => { if (!busy) onClose(); }} disabled={busy}
+            className="text-gray-400 hover:text-gray-600 disabled:opacity-40">
+            <svg width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path d="M18 6L6 18M6 6l12 12" />
+            </svg>
+          </button>
         </div>
 
-        {/* ── Paso 1: Elige categoría ── */}
-        {step === "categoria" && (
-          <>
-            <div className="px-6 py-6 space-y-5">
-              <h3 className="text-sm font-bold text-gray-700 uppercase tracking-wide">¿Qué trabajamos hoy?</h3>
-              <div className="grid grid-cols-2 gap-2">
-                {CHIPS.map((chip) => {
-                  const isSelected = selectedChip === chip.value;
-                  const testChip = chip.value === "test_tecnico" || chip.value === "test_fisico";
-                  const sel = testChip
-                    ? { border: "#7c3aed", bg: "#ede9fe", text: "#7c3aed" }
-                    : { border: GREEN, bg: "#f0faf2", text: GREEN };
-                  return (
-                    <button
-                      key={chip.value}
-                      onClick={() => handleChipSelect(chip.value)}
-                      disabled={busy}
-                      className="flex items-center gap-3 px-4 py-3 rounded-xl border-2 text-sm font-semibold transition-all text-left disabled:opacity-50"
-                      style={isSelected
-                        ? { borderColor: sel.border, background: sel.bg, color: sel.text }
-                        : { borderColor: "#e5e7eb", background: "#f9fafb", color: "#374151" }}
-                    >
-                      <span className="text-xl">{chip.emoji}</span>
-                      <span>{chip.label}</span>
-                    </button>
-                  );
-                })}
+        {/* ── Elegir tipo ── */}
+        {mode === "tipo" && (
+          <div className="p-5 space-y-3">
+            <p className="text-xs font-bold text-gray-500 uppercase tracking-wide">¿Qué tipo de sesión?</p>
+            <button
+              onClick={() => setMode("estaciones")}
+              className="w-full flex items-center gap-4 p-4 rounded-xl border-2 border-gray-200 hover:border-green-400 hover:bg-green-50 text-left transition-all group"
+            >
+              <span className="text-3xl">🎯</span>
+              <div>
+                <p className="font-bold text-gray-900 group-hover:text-green-900">Día de 3 estaciones</p>
+                <p className="text-xs text-gray-500">Juego Largo · Juego Corto · Putt — elige un juego para cada una</p>
               </div>
-
-              {isTest && (
-                <div className="space-y-3 pt-1">
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <label className="block text-xs font-semibold text-gray-700 mb-1.5">Hora inicio</label>
-                      <input
-                        type="time"
-                        value={testHoraInicio}
-                        onChange={(e) => setTestHoraInicio(e.target.value)}
-                        className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-xs font-semibold text-gray-700 mb-1.5">Hora fin</label>
-                      <input
-                        type="time"
-                        value={testHoraFin}
-                        onChange={(e) => setTestHoraFin(e.target.value)}
-                        className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500"
-                      />
-                    </div>
-                  </div>
-                  <div
-                    className="rounded-xl border-2 p-4"
-                    style={selectedChip === "test_tecnico"
-                      ? { borderColor: "#be185d", background: "#fdf2f8" }
-                      : { borderColor: "#7c3aed", background: "#f5f3ff" }}
-                  >
-                    <p className="text-sm font-bold" style={{ color: selectedChip === "test_tecnico" ? "#be185d" : "#7c3aed" }}>
-                      {selectedChip === "test_tecnico" ? "📋 Evaluación técnica P1-P10" : "💪 Evaluación física TPI"}
-                    </p>
-                    <p className="text-xs text-gray-500 mt-1">El protocolo de test está disponible en el módulo Tests.</p>
-                  </div>
-                </div>
-              )}
-
-              {error && (
-                <div className="bg-red-50 border border-red-100 rounded-lg px-4 py-3 text-sm text-red-700">
-                  {error}
-                </div>
-              )}
-            </div>
-
-            {isTest && (
-              <div className="px-6 pb-6 flex gap-2 border-t border-gray-100 pt-4">
-                <button
-                  onClick={handleSave}
-                  disabled={saving}
-                  className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-semibold text-white disabled:opacity-40 transition-all"
-                  style={{ background: selectedChip === "test_tecnico" ? "#be185d" : "#7c3aed" }}
-                >
-                  {saving ? "Guardando..." : "Guardar sesión de test"}
-                </button>
-                <button onClick={onClose} className="px-5 py-2.5 rounded-xl text-sm font-medium border border-gray-200 text-gray-600 hover:bg-gray-50">
-                  Cancelar
-                </button>
+            </button>
+            <button
+              onClick={() => setMode("especial")}
+              className="w-full flex items-center gap-4 p-4 rounded-xl border-2 border-gray-200 hover:border-purple-400 hover:bg-purple-50 text-left transition-all group"
+            >
+              <span className="text-3xl">⭐</span>
+              <div>
+                <p className="font-bold text-gray-900 group-hover:text-purple-900">Día especial</p>
+                <p className="text-xs text-gray-500">Test técnico, test físico, campo real u otro</p>
               </div>
-            )}
-          </>
-        )}
-
-        {/* ── Generando ── */}
-        {step === "generando" && (
-          <div className="flex flex-col items-center gap-4 py-20 px-6">
-            <div className="w-14 h-14 rounded-2xl flex items-center justify-center" style={{ background: GREEN + "18" }}>
-              <svg className="animate-spin h-6 w-6" fill="none" viewBox="0 0 24 24" style={{ color: GREEN }}>
-                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
-              </svg>
-            </div>
-            <div className="text-center">
-              <p className="text-base font-semibold text-gray-800">Generando 3 opciones de clase...</p>
-              <p className="text-sm text-gray-400 mt-1">El agente está diseñando ideas únicas para hoy</p>
-            </div>
+            </button>
           </div>
         )}
 
-        {/* ── Paso 2: Elige opción ── */}
-        {step === "opciones" && (
+        {/* ── Estaciones ── */}
+        {mode === "estaciones" && (
           <>
-            <div className="px-4 py-4 space-y-3 max-h-[70vh] overflow-y-auto">
-              <p className="px-2 text-xs text-gray-400 font-medium uppercase tracking-wide">
-                Elige una clase para {diaLabel}
-              </p>
-
-              {actividadesYaUsadas.length > 0 && (
-                <div className="mx-2 px-3 py-2 bg-amber-50 border border-amber-200 rounded-lg">
-                  <p className="text-[11px] text-amber-700">
-                    <span className="font-semibold">Ya usadas esta semana:</span>{" "}
-                    {actividadesYaUsadas.join(" · ")}
-                  </p>
-                </div>
-              )}
-
-              {opciones.map((opcion, idx) => (
-                <button
-                  key={idx}
-                  onClick={() => setOpcionIdx(idx)}
-                  className="w-full text-left p-4 rounded-xl border-2 transition-all"
-                  style={opcionIdx === idx
-                    ? { borderColor: GREEN, background: "#f0faf2" }
-                    : { borderColor: "#e5e7eb", background: "#ffffff" }}
-                >
-                  <div className="flex items-start justify-between gap-2 mb-3">
-                    <div className="flex-1">
-                      <p className="text-sm font-bold text-gray-900">{opcion.nombre_clase}</p>
-                      <p className="text-[11px] text-gray-500 italic mt-0.5 leading-relaxed">{opcion.objetivo_simple}</p>
-                    </div>
-                    {opcionIdx === idx && (
-                      <div className="w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5" style={{ background: GREEN }}>
-                        <svg width="10" height="10" viewBox="0 0 20 20" fill="none" stroke="#fff" strokeWidth={3}>
-                          <path d="M3 10l4 4 9-9" />
+            <div className="p-4 space-y-3 max-h-[70vh] overflow-y-auto">
+              {stations.map((st, stIdx) => {
+                const cat = CATEGORIAS[stIdx];
+                const games = allGames(st);
+                const selectedJuego = getJuego(st);
+                return (
+                  <div key={st.categoria} className="border rounded-xl overflow-hidden"
+                    style={{ borderColor: st.juegoIdx !== null ? GREEN : "#e5e7eb" }}>
+                    {/* Station header */}
+                    <button
+                      onClick={() => toggleStation(stIdx)}
+                      className="w-full flex items-center justify-between px-4 py-3 text-left"
+                      style={{ background: st.juegoIdx !== null ? "#f0faf2" : "#f9fafb" }}
+                    >
+                      <div className="flex items-center gap-2 min-w-0">
+                        <span className="text-lg flex-shrink-0">{cat.emoji}</span>
+                        <div className="min-w-0">
+                          <p className="text-[11px] font-bold uppercase tracking-wide" style={{ color: GREEN }}>
+                            Estación {stIdx + 1} — {cat.label}
+                          </p>
+                          <p className="text-sm font-semibold text-gray-800 truncate">
+                            {selectedJuego ? selectedJuego.nombre : <span className="text-gray-400 font-normal">Elige un juego →</span>}
+                          </p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2 flex-shrink-0">
+                        {st.juegoIdx !== null && (
+                          <div className="w-5 h-5 rounded-full flex items-center justify-center" style={{ background: GREEN }}>
+                            <svg width="10" height="10" viewBox="0 0 20 20" fill="none" stroke="#fff" strokeWidth={3}><path d="M3 10l4 4 9-9" /></svg>
+                          </div>
+                        )}
+                        <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="#9ca3af" strokeWidth={2}
+                          className={`transition-transform ${st.open ? "rotate-180" : ""}`}>
+                          <path d="M19 9l-7 7-7-7" />
                         </svg>
+                      </div>
+                    </button>
+
+                    {/* Game list */}
+                    {st.open && (
+                      <div className="border-t border-gray-100 divide-y divide-gray-50">
+                        {games.map((juego, gIdx) => {
+                          const isSelected = st.juegoIdx === gIdx;
+                          return (
+                            <button
+                              key={gIdx}
+                              onClick={() => selectGame(stIdx, gIdx)}
+                              className="w-full text-left px-4 py-3 transition-colors hover:bg-gray-50"
+                              style={isSelected ? { background: "#f0faf2" } : {}}
+                            >
+                              <div className="flex items-start gap-2">
+                                <div className={`w-4 h-4 rounded-full border-2 flex-shrink-0 mt-0.5 flex items-center justify-center transition-all`}
+                                  style={isSelected ? { borderColor: GREEN, background: GREEN } : { borderColor: "#d1d5db" }}>
+                                  {isSelected && <div className="w-1.5 h-1.5 rounded-full bg-white" />}
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                  <p className="text-sm font-semibold text-gray-900">{juego.nombre}</p>
+                                  <p className="text-xs text-gray-500 mt-0.5 leading-relaxed">{juego.como_se_juega}</p>
+                                  {isSelected && (
+                                    <div className="mt-2 space-y-1">
+                                      <p className="text-[11px] text-blue-700 bg-blue-50 rounded px-2 py-1">
+                                        🐦 <strong>Fácil:</strong> {juego.adaptacion_facil}
+                                      </p>
+                                      <p className="text-[11px] text-amber-700 bg-amber-50 rounded px-2 py-1">
+                                        🦅 <strong>Retador:</strong> {juego.adaptacion_retadora}
+                                      </p>
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                            </button>
+                          );
+                        })}
+
+                        {/* Suggest more */}
+                        <div className="px-4 py-2.5">
+                          <button
+                            onClick={() => handleSuggestMore(stIdx)}
+                            disabled={st.generando}
+                            className="flex items-center gap-2 text-xs font-medium text-purple-700 hover:text-purple-900 disabled:opacity-50"
+                          >
+                            {st.generando ? (
+                              <svg className="animate-spin h-3.5 w-3.5" fill="none" viewBox="0 0 24 24">
+                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
+                              </svg>
+                            ) : "🎲"}
+                            {st.generando ? "Generando ideas..." : "Sugerir más con IA"}
+                          </button>
+                        </div>
                       </div>
                     )}
                   </div>
+                );
+              })}
 
-                  <div className="space-y-1.5">
-                    {opcion.actividades.map((act, ai) => (
-                      <div key={ai} className="flex items-center gap-2">
-                        <span className="w-4 h-4 rounded-full bg-gray-100 text-gray-500 text-[9px] font-bold flex items-center justify-center flex-shrink-0">
-                          {ai + 1}
-                        </span>
-                        <span className="text-xs font-medium text-gray-700">{act.nombre}</span>
-                        <span className="text-[10px] text-gray-400 ml-auto flex-shrink-0">{act.duracion_min} min</span>
-                      </div>
-                    ))}
+              {error && (
+                <div className="bg-red-50 border border-red-100 rounded-lg px-4 py-3 text-sm text-red-700">{error}</div>
+              )}
+            </div>
+
+            <div className="px-5 pb-5 pt-3 flex gap-2 border-t border-gray-100">
+              <button onClick={() => setMode("tipo")}
+                className="px-4 py-2.5 rounded-xl text-sm font-medium border border-gray-200 text-gray-600 hover:bg-gray-50">
+                ← Volver
+              </button>
+              <button
+                onClick={handleSave}
+                disabled={!allStationsFilled || saving}
+                className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-semibold text-white disabled:opacity-40 transition-all hover:brightness-110"
+                style={{ background: GREEN }}
+              >
+                {saving ? "Guardando..." : allStationsFilled ? "✓ Guardar sesión" : `Elige los 3 juegos (${stations.filter(s => s.juegoIdx !== null).length}/3)`}
+              </button>
+            </div>
+          </>
+        )}
+
+        {/* ── Especial ── */}
+        {mode === "especial" && (
+          <>
+            <div className="p-5 space-y-2">
+              <p className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-3">Tipo de día especial</p>
+              {ESPECIALES.map((esp) => (
+                <button
+                  key={esp.value}
+                  onClick={() => setTipoEspecial(esp.value)}
+                  className="w-full flex items-center gap-3 px-4 py-3 rounded-xl border-2 text-left transition-all"
+                  style={tipoEspecial === esp.value
+                    ? { borderColor: "#7c3aed", background: "#f5f3ff" }
+                    : { borderColor: "#e5e7eb", background: "#f9fafb" }}
+                >
+                  <span className="text-xl">{esp.emoji}</span>
+                  <div>
+                    <p className="text-sm font-semibold text-gray-900">{esp.label}</p>
+                    <p className="text-xs text-gray-500">{esp.desc}</p>
                   </div>
-
-                  {opcion.actividad_estrella && (
-                    <div className="mt-2.5 flex items-center gap-1.5 text-[11px] text-amber-700 font-medium">
-                      <span>⭐</span>
-                      <span>{opcion.actividad_estrella}</span>
+                  {tipoEspecial === esp.value && (
+                    <div className="ml-auto w-5 h-5 rounded-full flex items-center justify-center" style={{ background: "#7c3aed" }}>
+                      <svg width="10" height="10" viewBox="0 0 20 20" fill="none" stroke="#fff" strokeWidth={3}><path d="M3 10l4 4 9-9" /></svg>
                     </div>
                   )}
                 </button>
               ))}
-
               {error && (
-                <div className="bg-red-50 border border-red-100 rounded-lg px-4 py-3 text-sm text-red-700">
-                  {error}
-                </div>
+                <div className="bg-red-50 border border-red-100 rounded-lg px-4 py-3 text-sm text-red-700">{error}</div>
               )}
             </div>
 
-            <div className="px-6 pb-6 flex gap-2 border-t border-gray-100 pt-4">
-              <button
-                onClick={() => { setStep("categoria"); setSelectedChip(null); setOpciones([]); setOpcionIdx(null); setError(null); }}
-                className="px-4 py-2.5 rounded-xl text-sm font-medium border border-gray-200 text-gray-600 hover:bg-gray-50 transition-colors"
-              >
-                ← Cambiar tipo
+            <div className="px-5 pb-5 pt-3 flex gap-2 border-t border-gray-100">
+              <button onClick={() => setMode("tipo")}
+                className="px-4 py-2.5 rounded-xl text-sm font-medium border border-gray-200 text-gray-600 hover:bg-gray-50">
+                ← Volver
               </button>
               <button
                 onClick={handleSave}
-                disabled={opcionIdx === null || saving}
-                className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-semibold text-white disabled:opacity-40 hover:brightness-110 transition-all"
-                style={{ background: GREEN }}
+                disabled={!tipoEspecial || saving}
+                className="flex-1 py-2.5 rounded-xl text-sm font-semibold text-white disabled:opacity-40 transition-all"
+                style={{ background: "#7c3aed" }}
               >
-                {saving ? (
-                  <>
-                    <svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
-                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
-                    </svg>
-                    Guardando...
-                  </>
-                ) : "✓ Guardar clase seleccionada"}
+                {saving ? "Guardando..." : "✓ Guardar día especial"}
               </button>
             </div>
           </>

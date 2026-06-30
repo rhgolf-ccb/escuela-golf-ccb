@@ -4,12 +4,16 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import WeeklyPlanPDFTemplate from "./WeeklyPlanPDFTemplate";
-import JuvenileClassModal, { type SesionJuvenilData } from "./JuvenileClassModal";
+import JuvenileClassModal, {
+  type SesionJuvenilData,
+  type SesionJuvenilLegacy,
+  type SesionJuvenilEstaciones,
+} from "./JuvenileClassModal";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 type TipoPlan   = "juvenil" | "competencia" | "damas";
 type DiaSemana  = "martes" | "miercoles" | "jueves" | "viernes" | "sabado" | "domingo";
-type TipoSesion = "tiro_largo" | "juego_corto" | "putt" | "campo" | "test_tecnico" | "test_fisico" | "competencia" | "damas_estaciones";
+type TipoSesion = "tiro_largo" | "juego_corto" | "putt" | "campo" | "test_tecnico" | "test_fisico" | "competencia" | "damas_estaciones" | "juvenil_estaciones";
 type Lugar      = "campo_practica" | "putting_green" | "campo_infantil" | "campo_pacos_fabios" | "campo_completo";
 type ViewMode   = "plan" | "semana" | "mes";
 
@@ -80,7 +84,7 @@ interface HorarioDefecto { tipo_plan: TipoPlan; dia_semana: DiaSemana; hora_inic
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 const DIAS_POR_TIPO: Record<TipoPlan, DiaSemana[]> = {
-  juvenil:     ["martes", "miercoles", "jueves", "sabado", "domingo"],
+  juvenil:     ["martes", "jueves", "sabado", "domingo"],
   competencia: ["martes", "miercoles", "jueves", "sabado"],
   damas:       ["viernes"],
 };
@@ -103,7 +107,7 @@ const DIA_OFFSET: Record<DiaSemana, number> = {
 const TIPO_SESION_LABEL: Record<TipoSesion, string> = {
   tiro_largo: "Tiro Largo", juego_corto: "Juego Corto", putt: "Putt",
   campo: "Campo", test_tecnico: "Test Técnico", test_fisico: "Test Físico",
-  competencia: "Competencia", damas_estaciones: "Estaciones",
+  competencia: "Competencia", damas_estaciones: "Estaciones", juvenil_estaciones: "3 Estaciones",
 };
 
 const TIPO_SESION_COLOR: Record<TipoSesion, { bg: string; text: string }> = {
@@ -114,7 +118,8 @@ const TIPO_SESION_COLOR: Record<TipoSesion, { bg: string; text: string }> = {
   test_tecnico:    { bg: "#fce7f3", text: "#9d174d" },
   test_fisico:     { bg: "#ede9fe", text: "#6d28d9" },
   competencia:     { bg: "#fff7ed", text: "#9a3412" },
-  damas_estaciones:{ bg: "#fdf2f8", text: "#86198f" },
+  damas_estaciones:    { bg: "#fdf2f8", text: "#86198f" },
+  juvenil_estaciones:  { bg: "#f0faf2", text: "#1B4D2E" },
 };
 
 const LUGAR_LABEL: Record<Lugar, string> = {
@@ -234,6 +239,20 @@ function defaultSesionForm(tipoPlan: TipoPlan): SesionForm {
 }
 
 // ── Juvenil session detail (nuevo formato con actividades) ───────────────────
+const CATEGORIA_EMOJI: Record<string, string> = {
+  juego_largo: "🏌️", juego_corto: "⛳", putt: "🎯",
+};
+const CATEGORIA_LABEL_MAP: Record<string, string> = {
+  juego_largo: "Juego Largo", juego_corto: "Juego Corto", putt: "Putt",
+};
+const ESPECIAL_LABEL_MAP: Record<string, string> = {
+  test_tecnico: "Test Técnico P1-P10", test_fisico: "Test Físico TPI",
+  campo_pacos: "Campo Pacos y Fabios", campo_infantil: "Campo Infantil",
+};
+const ESPECIAL_EMOJI_MAP: Record<string, string> = {
+  test_tecnico: "📋", test_fisico: "💪", campo_pacos: "🌿", campo_infantil: "👶",
+};
+
 function JuvenilSessionDetail({
   sesion, jd, onEdit, onDelete, onPdf, onAsistencia, generatingPdf, accentColor,
 }: {
@@ -247,197 +266,212 @@ function JuvenilSessionDetail({
   accentColor: string;
 }) {
   const GREEN = "#1B4D2E";
-  const [expandedActs, setExpandedActs] = useState<Set<number>>(new Set());
+  const [expandedSt, setExpandedSt] = useState<Set<number>>(new Set());
+  const jdAny = jd as unknown as { tipo?: string };
 
-  function toggleAct(i: number) {
-    setExpandedActs((prev) => { const n = new Set(prev); n.has(i) ? n.delete(i) : n.add(i); return n; });
+  // Legacy format (old AI-generated sessions)
+  if (!jdAny.tipo) {
+    const leg = jd as SesionJuvenilLegacy;
+    return (
+      <div className="space-y-3">
+        <div className="bg-green-50 border border-green-200 rounded-lg p-3">
+          <p className="text-sm font-bold text-green-900">🎮 {leg.nombre_clase}</p>
+          <p className="text-xs text-gray-600 mt-1 italic">"{leg.objetivo_simple}"</p>
+        </div>
+        <div className="space-y-1.5">
+          {leg.actividades?.map((act, i) => (
+            <div key={i} className="flex items-center gap-2 border border-gray-100 rounded-lg px-3 py-2 bg-gray-50">
+              <span className="text-[10px] font-bold text-white px-1.5 py-0.5 rounded shrink-0" style={{ background: GREEN }}>{i + 1}</span>
+              <span className="text-sm font-medium text-gray-800 truncate">{act.nombre}</span>
+              <span className="text-[10px] text-gray-400 shrink-0 ml-auto">· {act.duracion_min} min</span>
+            </div>
+          ))}
+        </div>
+        <ActionButtons sesion={sesion} onAsistencia={onAsistencia} onEdit={onEdit} onPdf={onPdf} generatingPdf={generatingPdf} onDelete={onDelete} accentColor={accentColor} />
+      </div>
+    );
   }
 
-  return (
-    <div className="space-y-3">
-      {/* Nombre y objetivo */}
-      <div className="bg-green-50 border border-green-200 rounded-lg p-3">
-        <p className="text-sm font-bold text-green-900">🎮 {jd.nombre_clase}</p>
-        <p className="text-xs text-gray-600 mt-1 italic">"{jd.objetivo_simple}"</p>
-      </div>
-
-      {/* Actividades */}
-      <div className="space-y-2">
-        {jd.actividades.map((act, i) => {
-          const isExp = expandedActs.has(i);
-          return (
-            <div key={i} className="border border-gray-100 rounded-lg bg-gray-50 overflow-hidden">
-              <div className="flex items-center justify-between px-3 py-2.5">
-                <div className="flex items-center gap-2 min-w-0">
-                  <span
-                    className="text-[10px] font-bold text-white px-1.5 py-0.5 rounded shrink-0"
-                    style={{ background: GREEN }}
-                  >
-                    {i + 1}
-                  </span>
-                  <span className="text-sm font-semibold text-gray-900 truncate">{act.nombre}</span>
-                  <span className="text-[10px] text-gray-400 shrink-0">· {act.duracion_min} min</span>
-                </div>
-                <button
-                  onClick={() => toggleAct(i)}
-                  className="ml-2 shrink-0 text-gray-400 hover:text-gray-600"
-                >
-                  <svg
-                    width="14" height="14" fill="none" viewBox="0 0 24 24"
-                    stroke="currentColor" strokeWidth={2.5}
-                    className={`transition-transform ${isExp ? "rotate-180" : ""}`}
-                  >
-                    <path d="M19 9l-7 7-7-7"/>
-                  </svg>
-                </button>
-              </div>
-              {isExp && (
-                <div className="border-t border-gray-100 px-3 pb-3 pt-2 space-y-2">
-                  <p className="text-xs text-gray-600">{act.como_se_juega}</p>
-                  {act.adaptacion_birdies && (
-                    <div className="rounded-md px-2 py-1.5 bg-blue-50">
-                      <span className="text-[10px] font-bold text-blue-700 mr-1">Birdies:</span>
-                      <span className="text-[11px] text-gray-700">{act.adaptacion_birdies}</span>
-                    </div>
-                  )}
-                  {act.adaptacion_albatros && (
-                    <div className="rounded-md px-2 py-1.5 bg-yellow-50">
-                      <span className="text-[10px] font-bold text-yellow-700 mr-1">Albatros:</span>
-                      <span className="text-[11px] text-gray-700">{act.adaptacion_albatros}</span>
-                    </div>
-                  )}
-                  {act.como_se_gana && (
-                    <div className="rounded-md px-2 py-1.5 bg-amber-50">
-                      <span className="text-[10px] font-bold text-amber-700 mr-1">🏆</span>
-                      <span className="text-[11px] text-gray-700">{act.como_se_gana}</span>
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
-          );
-        })}
-      </div>
-
-      {/* Actividad estrella */}
-      {jd.actividad_estrella && (
-        <div className="border border-yellow-200 bg-yellow-50 rounded-lg px-3 py-2 flex items-center gap-2">
-          <span className="text-sm">⭐</span>
-          <span className="text-xs font-semibold text-yellow-800">
-            Actividad estrella: {jd.actividad_estrella}
-          </span>
+  // New especial format
+  if (jdAny.tipo === "especial") {
+    const esp = jd as { tipo: "especial"; tipo_especial: string };
+    return (
+      <div className="space-y-3">
+        <div className="rounded-xl border-2 p-4 flex items-center gap-3" style={{ borderColor: "#7c3aed", background: "#f5f3ff" }}>
+          <span className="text-3xl">{ESPECIAL_EMOJI_MAP[esp.tipo_especial] ?? "⭐"}</span>
+          <div>
+            <p className="text-sm font-bold" style={{ color: "#7c3aed" }}>{ESPECIAL_LABEL_MAP[esp.tipo_especial] ?? esp.tipo_especial}</p>
+            <p className="text-xs text-gray-500 mt-0.5">Día especial Juvenil</p>
+          </div>
         </div>
-      )}
-
-      {/* Action buttons */}
-      <div className="pt-2 border-t border-gray-100 flex flex-wrap gap-2">
-        <button
-          onClick={onAsistencia}
-          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${sesion.asistencia_registrada ? "bg-emerald-50 text-emerald-700 border border-emerald-200" : "text-white"}`}
-          style={sesion.asistencia_registrada ? {} : { background: accentColor }}
-        >
-          <svg width="12" height="12" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/></svg>
-          {sesion.asistencia_registrada ? "Ver asistencia" : "Pasar asistencia"}
-        </button>
-        <button
-          onClick={onEdit}
-          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border border-gray-200 text-gray-600 hover:bg-gray-50"
-        >
-          ✏️ Editar
-        </button>
-        <button
-          onClick={onPdf}
-          disabled={generatingPdf}
-          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border border-gray-200 text-gray-600 hover:bg-gray-50 disabled:opacity-50"
-        >
-          <svg width="11" height="11" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
-          {generatingPdf ? "..." : "PDF padres"}
-        </button>
-        <button
-          onClick={onDelete}
-          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-red-500 hover:bg-red-50"
-        >
-          🗑️ Eliminar
-        </button>
+        <ActionButtons sesion={sesion} onAsistencia={onAsistencia} onEdit={onEdit} onPdf={onPdf} generatingPdf={generatingPdf} onDelete={onDelete} accentColor={accentColor} />
       </div>
+    );
+  }
+
+  // New estaciones format
+  const est = jd as SesionJuvenilEstaciones;
+  return (
+    <div className="space-y-2">
+      <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wide px-1">3 Estaciones</p>
+      {est.estaciones.map((e, i) => {
+        const isOpen = expandedSt.has(i);
+        return (
+          <div key={i} className="border border-gray-200 rounded-xl overflow-hidden">
+            <button
+              onClick={() => setExpandedSt((prev) => { const n = new Set(prev); n.has(i) ? n.delete(i) : n.add(i); return n; })}
+              className="w-full flex items-center gap-3 px-3 py-2.5 text-left bg-gray-50 hover:bg-gray-100 transition-colors"
+            >
+              <span className="text-base flex-shrink-0">{CATEGORIA_EMOJI[e.categoria]}</span>
+              <div className="flex-1 min-w-0">
+                <p className="text-[10px] font-bold text-gray-400 uppercase">{CATEGORIA_LABEL_MAP[e.categoria]}</p>
+                <p className="text-sm font-semibold text-gray-900 truncate">{e.juego.nombre}</p>
+              </div>
+              <svg width="12" height="12" fill="none" viewBox="0 0 24 24" stroke="#9ca3af" strokeWidth={2}
+                className={`flex-shrink-0 transition-transform ${isOpen ? "rotate-180" : ""}`}>
+                <path d="M19 9l-7 7-7-7" />
+              </svg>
+            </button>
+            {isOpen && (
+              <div className="px-3 pb-3 pt-2 space-y-2 border-t border-gray-100">
+                <p className="text-xs text-gray-600">{e.juego.como_se_juega}</p>
+                <p className="text-[11px] text-blue-700 bg-blue-50 rounded px-2 py-1">
+                  🐦 <strong>Fácil:</strong> {e.juego.adaptacion_facil}
+                </p>
+                <p className="text-[11px] text-amber-700 bg-amber-50 rounded px-2 py-1">
+                  🦅 <strong>Retador:</strong> {e.juego.adaptacion_retadora}
+                </p>
+              </div>
+            )}
+          </div>
+        );
+      })}
+      <ActionButtons sesion={sesion} onAsistencia={onAsistencia} onEdit={onEdit} onPdf={onPdf} generatingPdf={generatingPdf} onDelete={onDelete} accentColor={accentColor} />
     </div>
   );
 }
 
-// ── Juvenil PDF hidden template (nuevo formato con actividades) ───────────────
+function ActionButtons({ sesion, onAsistencia, onEdit, onPdf, generatingPdf, onDelete, accentColor }: {
+  sesion: SesionSemana; onAsistencia: () => void; onEdit: () => void;
+  onPdf: () => void; generatingPdf: boolean; onDelete: () => void; accentColor: string;
+}) {
+  return (
+    <div className="pt-2 border-t border-gray-100 flex flex-wrap gap-2">
+      <button onClick={onAsistencia}
+        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${sesion.asistencia_registrada ? "bg-emerald-50 text-emerald-700 border border-emerald-200" : "text-white"}`}
+        style={sesion.asistencia_registrada ? {} : { background: accentColor }}>
+        <svg width="12" height="12" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/></svg>
+        {sesion.asistencia_registrada ? "Ver asistencia" : "Pasar asistencia"}
+      </button>
+      <button onClick={onEdit} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border border-gray-200 text-gray-600 hover:bg-gray-50">
+        ✏️ Cambiar
+      </button>
+      <button onClick={onPdf} disabled={generatingPdf}
+        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border border-gray-200 text-gray-600 hover:bg-gray-50 disabled:opacity-50">
+        <svg width="11" height="11" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
+        {generatingPdf ? "..." : "PDF padres"}
+      </button>
+      <button onClick={onDelete} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-red-500 hover:bg-red-50">
+        🗑️ Eliminar
+      </button>
+    </div>
+  );
+}
+
+// ── Juvenil PDF hidden template ────────────────────────────────────────────────
 function JuvenilPDFHidden({ sesion }: { sesion: SesionSemana }) {
   const jd = sesion.sesion_juvenil!;
   const GREEN = "#1B4D2E";
   const fechaFmt = new Date(sesion.fecha + "T00:00:00").toLocaleDateString("es-CO", {
     weekday: "long", day: "numeric", month: "long", year: "numeric",
   });
-  const LUGAR_LABEL_MAP: Record<string, string> = {
+  const LUGAR_PDF: Record<string, string> = {
     campo_practica: "Campo de práctica", putting_green: "Putting Green",
     campo_infantil: "Campo Infantil", campo_pacos_fabios: "Pacos y Fabios", campo_completo: "Campo Completo",
   };
-  const lugar = LUGAR_LABEL_MAP[sesion.lugar] ?? sesion.lugar;
+  const lugar = LUGAR_PDF[sesion.lugar] ?? sesion.lugar;
+  const jdAny = jd as unknown as { tipo?: string };
 
+  // ── Legacy format ──────────────────────────────────────────────────────
+  if (!jdAny.tipo) {
+    const leg = jd as SesionJuvenilLegacy;
+    return (
+      <div style={{ width: 794, padding: "48px 56px", fontFamily: "Arial, sans-serif", background: "#fff", color: "#1a1a1a" }}>
+        <div style={{ textAlign: "center", marginBottom: 32 }}>
+          <div style={{ fontSize: 11, letterSpacing: 3, color: "#4b7c52", textTransform: "uppercase", marginBottom: 8 }}>Escuela de Golf CCB</div>
+          <div style={{ fontSize: 28, fontWeight: "bold", color: GREEN, marginBottom: 6 }}>{leg.nombre_clase}</div>
+          <div style={{ fontSize: 13, color: "#555" }}>Grupo Juvenil · Birdies · Águilas · Albatros</div>
+          <div style={{ marginTop: 10, fontSize: 13, color: "#333" }}>{fechaFmt} · {sesion.hora_inicio?.slice(0, 5)}–{sesion.hora_fin?.slice(0, 5)} · {lugar}</div>
+          <div style={{ width: 60, height: 3, background: GREEN, margin: "16px auto 0" }} />
+        </div>
+        <div style={{ background: "#f0faf2", border: `2px solid ${GREEN}`, borderRadius: 8, padding: "14px 18px", marginBottom: 28 }}>
+          <div style={{ fontSize: 11, fontWeight: "bold", color: GREEN, textTransform: "uppercase", letterSpacing: 1, marginBottom: 6 }}>Hoy trabajamos:</div>
+          <div style={{ fontSize: 15, color: "#1a3a1a", lineHeight: 1.5, fontStyle: "italic" }}>"{leg.objetivo_simple}"</div>
+        </div>
+        {leg.actividades?.map((act, i) => (
+          <div key={i} style={{ marginBottom: 20, borderLeft: "4px solid #a7d7b0", paddingLeft: 16 }}>
+            <div style={{ fontSize: 13, fontWeight: "bold", color: GREEN, marginBottom: 4 }}>Actividad {i + 1} · {act.duracion_min} min — {act.nombre}</div>
+            <div style={{ fontSize: 12, color: "#333", lineHeight: 1.7, marginBottom: 8 }}>{act.como_se_juega}</div>
+            {act.adaptacion_birdies && <div style={{ background: "#dbeafe", borderRadius: 6, padding: "4px 10px", fontSize: 11, color: "#1e40af", marginBottom: 4 }}><strong>Birdies (4-5a):</strong> {act.adaptacion_birdies}</div>}
+            {act.adaptacion_albatros && <div style={{ background: "#fef9c3", borderRadius: 6, padding: "4px 10px", fontSize: 11, color: "#854d0e" }}><strong>Albatros (9-12a):</strong> {act.adaptacion_albatros}</div>}
+          </div>
+        ))}
+        <div style={{ marginTop: 32, paddingTop: 14, borderTop: "1px solid #ddd", textAlign: "center", fontSize: 10, color: "#888" }}>Escuela de Golf CCB · {fechaFmt}<br />¡Hoy aprendemos jugando! ⛳</div>
+      </div>
+    );
+  }
+
+  // ── New especial format ────────────────────────────────────────────────
+  if (jdAny.tipo === "especial") {
+    const esp = jd as { tipo: "especial"; tipo_especial: string };
+    const espLabel: Record<string, string> = {
+      test_tecnico: "Test Técnico P1-P10", test_fisico: "Test Físico TPI",
+      campo_pacos: "Campo Pacos y Fabios", campo_infantil: "Campo Infantil",
+    };
+    return (
+      <div style={{ width: 794, padding: "48px 56px", fontFamily: "Arial, sans-serif", background: "#fff", color: "#1a1a1a" }}>
+        <div style={{ textAlign: "center", marginBottom: 32 }}>
+          <div style={{ fontSize: 11, letterSpacing: 3, color: "#4b7c52", textTransform: "uppercase", marginBottom: 8 }}>Escuela de Golf CCB</div>
+          <div style={{ fontSize: 28, fontWeight: "bold", color: GREEN, marginBottom: 6 }}>Día Especial — {espLabel[esp.tipo_especial] ?? esp.tipo_especial}</div>
+          <div style={{ fontSize: 13, color: "#555" }}>Grupo Juvenil · {fechaFmt}</div>
+          <div style={{ width: 60, height: 3, background: GREEN, margin: "16px auto 0" }} />
+        </div>
+        <div style={{ marginTop: 32, paddingTop: 14, borderTop: "1px solid #ddd", textAlign: "center", fontSize: 10, color: "#888" }}>Escuela de Golf CCB · ¡Hoy aprendemos jugando! ⛳</div>
+      </div>
+    );
+  }
+
+  // ── New estaciones format ──────────────────────────────────────────────
+  const est = jd as SesionJuvenilEstaciones;
+  const catLabel: Record<string, string> = { juego_largo: "Juego Largo 🏌️", juego_corto: "Juego Corto ⛳", putt: "Putt 🎯" };
   return (
     <div style={{ width: 794, padding: "48px 56px", fontFamily: "Arial, sans-serif", background: "#fff", color: "#1a1a1a" }}>
       <div style={{ textAlign: "center", marginBottom: 32 }}>
-        <div style={{ fontSize: 11, letterSpacing: 3, color: "#4b7c52", textTransform: "uppercase", marginBottom: 8 }}>
-          Escuela de Golf CCB
-        </div>
-        <div style={{ fontSize: 28, fontWeight: "bold", color: GREEN, marginBottom: 6 }}>
-          {jd.nombre_clase}
-        </div>
-        <div style={{ fontSize: 13, color: "#555" }}>Grupo Juvenil · Birdies · Águilas · Albatros</div>
-        <div style={{ marginTop: 10, fontSize: 13, color: "#333" }}>
-          {fechaFmt} · {sesion.hora_inicio?.slice(0, 5)}–{sesion.hora_fin?.slice(0, 5)} · {lugar}
-        </div>
+        <div style={{ fontSize: 11, letterSpacing: 3, color: "#4b7c52", textTransform: "uppercase", marginBottom: 8 }}>Escuela de Golf CCB</div>
+        <div style={{ fontSize: 28, fontWeight: "bold", color: GREEN, marginBottom: 6 }}>Clase Juvenil — 3 Estaciones</div>
+        <div style={{ fontSize: 13, color: "#555" }}>Birdies · Águilas · Albatros</div>
+        <div style={{ marginTop: 10, fontSize: 13, color: "#333" }}>{fechaFmt} · {sesion.hora_inicio?.slice(0, 5)}–{sesion.hora_fin?.slice(0, 5)} · {lugar}</div>
         <div style={{ width: 60, height: 3, background: GREEN, margin: "16px auto 0" }} />
       </div>
-
-      <div style={{ background: "#f0faf2", border: `2px solid ${GREEN}`, borderRadius: 8, padding: "14px 18px", marginBottom: 28 }}>
-        <div style={{ fontSize: 11, fontWeight: "bold", color: GREEN, textTransform: "uppercase", letterSpacing: 1, marginBottom: 6 }}>
-          Hoy trabajamos:
-        </div>
-        <div style={{ fontSize: 15, color: "#1a3a1a", lineHeight: 1.5, fontStyle: "italic" }}>
-          "{jd.objetivo_simple}"
-        </div>
-      </div>
-
-      {jd.actividades.map((act, i) => (
-        <div key={i} style={{ marginBottom: 22, borderLeft: "4px solid #a7d7b0", paddingLeft: 16 }}>
-          <div style={{ fontSize: 13, fontWeight: "bold", color: GREEN, marginBottom: 4 }}>
-            Actividad {i + 1} · {act.duracion_min} min — {act.nombre}
+      {est.estaciones.map((e, i) => (
+        <div key={i} style={{ marginBottom: 24, borderLeft: "4px solid #a7d7b0", paddingLeft: 16 }}>
+          <div style={{ fontSize: 11, fontWeight: "bold", color: "#4b7c52", textTransform: "uppercase", letterSpacing: 1, marginBottom: 4 }}>
+            Estación {i + 1} — {catLabel[e.categoria] ?? e.categoria}
           </div>
-          <div style={{ fontSize: 12, color: "#333", lineHeight: 1.7, marginBottom: 8 }}>
-            {act.como_se_juega}
+          <div style={{ fontSize: 16, fontWeight: "bold", color: GREEN, marginBottom: 8 }}>{e.juego.nombre}</div>
+          <div style={{ fontSize: 12, color: "#333", lineHeight: 1.7, marginBottom: 8 }}>{e.juego.como_se_juega}</div>
+          <div style={{ display: "flex", gap: 8 }}>
+            <div style={{ flex: 1, background: "#dbeafe", borderRadius: 6, padding: "6px 10px", fontSize: 11, color: "#1e40af" }}>
+              <strong>Birdies (fácil):</strong> {e.juego.adaptacion_facil}
+            </div>
+            <div style={{ flex: 1, background: "#fef9c3", borderRadius: 6, padding: "6px 10px", fontSize: 11, color: "#854d0e" }}>
+              <strong>Albatros (retador):</strong> {e.juego.adaptacion_retadora}
+            </div>
           </div>
-          {act.adaptacion_birdies && (
-            <div style={{ background: "#dbeafe", borderRadius: 6, padding: "4px 10px", fontSize: 11, color: "#1e40af", marginBottom: 4 }}>
-              <strong>Birdies (4-5a):</strong> {act.adaptacion_birdies}
-            </div>
-          )}
-          {act.adaptacion_albatros && (
-            <div style={{ background: "#fef9c3", borderRadius: 6, padding: "4px 10px", fontSize: 11, color: "#854d0e", marginBottom: 4 }}>
-              <strong>Albatros (9-12a):</strong> {act.adaptacion_albatros}
-            </div>
-          )}
-          {act.como_se_gana && (
-            <div style={{ fontSize: 11, color: "#555", marginTop: 4 }}>🏆 {act.como_se_gana}</div>
-          )}
         </div>
       ))}
-
-      {jd.actividad_estrella && (
-        <div style={{ background: "#fff8ec", border: "2px solid #e6a817", borderRadius: 8, padding: "14px 18px", marginTop: 8, marginBottom: 24 }}>
-          <div style={{ fontSize: 11, fontWeight: "bold", color: "#b45309", textTransform: "uppercase", letterSpacing: 1, marginBottom: 4 }}>
-            ⭐ Actividad estrella del día
-          </div>
-          <div style={{ fontSize: 15, fontWeight: "bold", color: "#7c2d12" }}>{jd.actividad_estrella}</div>
-        </div>
-      )}
-
       <div style={{ marginTop: 32, paddingTop: 14, borderTop: "1px solid #ddd", textAlign: "center", fontSize: 10, color: "#888" }}>
-        Escuela de Golf CCB · {fechaFmt}<br />
-        ¡Hoy aprendemos jugando! ⛳
+        Escuela de Golf CCB · {fechaFmt}<br />¡Hoy aprendemos jugando! ⛳
       </div>
     </div>
   );
@@ -524,19 +558,14 @@ export default function ProgramacionModule() {
   const [deletingSesion, setDeletingSesion]           = useState(false);
   const [openMenuId, setOpenMenuId]                   = useState<string | null>(null);
 
-  // Juvenile class modal (IA wizard clase a clase)
+  // Juvenile class modal (3-estaciones o día especial)
   const [juvClassCtx, setJuvClassCtx] = useState<{
     dia: DiaSemana; fecha: string; sesion: SesionSemana | null;
     horaInicio?: string; horaFin?: string;
-    actividadesYaUsadas: string[];
   } | null>(null);
 
   function openJuvModal(dia: DiaSemana, fecha: string, sesion: SesionSemana | null, extra?: { hi?: string; hf?: string }) {
-    const actividadesYaUsadas = sesiones
-      .filter((s) => !sesion || s.id !== sesion.id)
-      .flatMap((s) => s.sesion_juvenil?.actividades?.map((a) => a.nombre) ?? [])
-      .filter((v): v is string => Boolean(v));
-    setJuvClassCtx({ dia, fecha, sesion, horaInicio: extra?.hi, horaFin: extra?.hf, actividadesYaUsadas });
+    setJuvClassCtx({ dia, fecha, sesion, horaInicio: extra?.hi, horaFin: extra?.hf });
   }
 
   // PDF para sesión individual Juvenil
@@ -839,8 +868,8 @@ export default function ProgramacionModule() {
             lugar: "campo_practica",
             hora_inicio: slot.hi,
             hora_fin: slot.hf,
-            objetivo: aiPreview.sesion_juvenil.objetivo_simple ?? "",
-            drills: aiPreview.sesion_juvenil.actividades?.map((a) => ({
+            objetivo: (aiPreview.sesion_juvenil as SesionJuvenilLegacy).objetivo_simple ?? "",
+            drills: (aiPreview.sesion_juvenil as SesionJuvenilLegacy).actividades?.map((a) => ({
               titulo: a.nombre,
               descripcion: a.como_se_juega,
               dificultad_birdies: a.adaptacion_birdies || null,
@@ -848,7 +877,7 @@ export default function ProgramacionModule() {
               dificultad_albatros: a.adaptacion_albatros || null,
               dificultad_mas14: null,
             })) ?? [],
-            juego_competitivo: aiPreview.sesion_juvenil.actividad_estrella || null,
+            juego_competitivo: (aiPreview.sesion_juvenil as SesionJuvenilLegacy).actividad_estrella || null,
             estaciones_damas: null,
             notas: null,
             sesion_juvenil: aiPreview.sesion_juvenil,
@@ -1621,23 +1650,24 @@ export default function ProgramacionModule() {
                                   </div>
                                 )}
 
-                                {sesion.drills && sesion.drills.length > 0 && (
+                                {activeTab === "juvenil" && sesion.sesion_juvenil ? (
+                                  <JuvenilSessionDetail
+                                    sesion={sesion}
+                                    jd={sesion.sesion_juvenil}
+                                    onEdit={() => openJuvModal(dia, fecha, sesion)}
+                                    onDelete={() => setConfirmDeleteSesion(sesion)}
+                                    onPdf={() => handleJuvPdf(sesion)}
+                                    onAsistencia={() => router.push(`/programacion/sesion/${sesion.id}`)}
+                                    generatingPdf={generatingJuvPdf && juvPdfSesion?.id === sesion.id}
+                                    accentColor={accentColor}
+                                  />
+                                ) : null}
+
+                                {!(activeTab === "juvenil" && sesion.sesion_juvenil) && sesion.drills && sesion.drills.length > 0 && (
                                   <div>
-                                    {/* Structured Juvenil class view (nuevo formato) */}
-                                    {activeTab === "juvenil" && sesion.sesion_juvenil?.actividades ? (
-                                      <JuvenilSessionDetail
-                                        sesion={sesion}
-                                        jd={sesion.sesion_juvenil}
-                                        onEdit={() => openJuvModal(dia, fecha, sesion)}
-                                        onDelete={() => setConfirmDeleteSesion(sesion)}
-                                        onPdf={() => handleJuvPdf(sesion)}
-                                        onAsistencia={() => router.push(`/programacion/sesion/${sesion.id}`)}
-                                        generatingPdf={generatingJuvPdf && juvPdfSesion?.id === sesion.id}
-                                        accentColor={accentColor}
-                                      />
-                                    ) : (
-                                      <>
-                                        <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">Drills ({sesion.drills.length})</p>
+                                    {/* Generic drills (Competencia / Damas legacy) */}
+                                    <>
+                                      <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">Drills ({sesion.drills.length})</p>
                                         <div className="space-y-3">
                                           {sesion.drills.map((drill, i) => (
                                             <div key={i} className="border border-gray-100 rounded-lg p-3 bg-gray-50">
@@ -1669,11 +1699,10 @@ export default function ProgramacionModule() {
                                           ))}
                                         </div>
                                       </>
-                                    )}
                                   </div>
                                 )}
 
-                                {!(activeTab === "juvenil" && sesion.sesion_juvenil?.actividades) && (
+                                {!(activeTab === "juvenil" && sesion.sesion_juvenil) && (
                                   <>
                                     {sesion.juego_competitivo && (
                                       <div className="bg-orange-50 border border-orange-100 rounded-lg p-3">
@@ -2106,7 +2135,7 @@ export default function ProgramacionModule() {
                   </div>
                   <p className="text-[11px] text-green-700">
                     {activeTab === "juvenil"
-                      ? (aiPreview.sesion_juvenil?.nombre_clase ?? "1 clase")
+                      ? ((aiPreview.sesion_juvenil as SesionJuvenilLegacy | null)?.nombre_clase ?? "1 clase")
                       : `${aiPreview.sesiones.length} sesiones`}
                   </p>
                 </div>
@@ -2116,34 +2145,35 @@ export default function ProgramacionModule() {
                   </div>
                 )}
                 {/* ── Preview Juvenil: clase compacta ── */}
-                {activeTab === "juvenil" && aiPreview.sesion_juvenil && (
-                  <div className="px-4 py-4 max-h-[65vh] overflow-y-auto space-y-3">
-                    <div className="p-4 rounded-xl border border-green-200 bg-green-50">
-                      <p className="text-[10px] font-bold text-green-700 uppercase tracking-wide mb-1">Clase generada · todas las sesiones de la semana</p>
-                      <h4 className="text-sm font-bold text-gray-900">{aiPreview.sesion_juvenil.nombre_clase}</h4>
-                      <p className="text-xs text-gray-600 mt-1">{aiPreview.sesion_juvenil.objetivo_simple}</p>
-                    </div>
-                    {aiPreview.sesion_juvenil.actividades?.map((act, idx) => (
-                      <div key={idx} className="p-4 rounded-xl border border-gray-200 bg-white space-y-1.5">
-                        <div className="flex items-center gap-2">
-                          <span className="w-5 h-5 rounded-full bg-green-100 text-green-800 text-[10px] font-bold flex items-center justify-center flex-shrink-0">{idx + 1}</span>
-                          <p className="text-sm font-bold text-gray-900 flex-1">{act.nombre}</p>
-                          <span className="text-xs text-gray-400 flex-shrink-0">{act.duracion_min} min</span>
+                {activeTab === "juvenil" && aiPreview.sesion_juvenil && (() => {
+                  const leg = aiPreview.sesion_juvenil as SesionJuvenilLegacy;
+                  return (
+                    <div className="px-4 py-4 max-h-[65vh] overflow-y-auto space-y-3">
+                      <div className="p-4 rounded-xl border border-green-200 bg-green-50">
+                        <p className="text-[10px] font-bold text-green-700 uppercase tracking-wide mb-1">Clase generada · todas las sesiones de la semana</p>
+                        <h4 className="text-sm font-bold text-gray-900">{leg.nombre_clase}</h4>
+                        <p className="text-xs text-gray-600 mt-1">{leg.objetivo_simple}</p>
+                      </div>
+                      {leg.actividades?.map((act, idx) => (
+                        <div key={idx} className="p-4 rounded-xl border border-gray-200 bg-white space-y-1.5">
+                          <div className="flex items-center gap-2">
+                            <span className="w-5 h-5 rounded-full bg-green-100 text-green-800 text-[10px] font-bold flex items-center justify-center flex-shrink-0">{idx + 1}</span>
+                            <p className="text-sm font-bold text-gray-900 flex-1">{act.nombre}</p>
+                            <span className="text-xs text-gray-400 flex-shrink-0">{act.duracion_min} min</span>
+                          </div>
+                          <p className="text-xs text-gray-600 pl-7">{act.como_se_juega}</p>
+                          {act.adaptacion_birdies && <p className="text-[11px] text-blue-600 pl-7">🐦 Birdies: {act.adaptacion_birdies}</p>}
+                          {act.adaptacion_albatros && <p className="text-[11px] text-purple-600 pl-7">🦅 Albatros: {act.adaptacion_albatros}</p>}
                         </div>
-                        <p className="text-xs text-gray-600 pl-7">{act.como_se_juega}</p>
-                        {act.adaptacion_birdies && <p className="text-[11px] text-blue-600 pl-7">🐦 Birdies: {act.adaptacion_birdies}</p>}
-                        {act.adaptacion_albatros && <p className="text-[11px] text-purple-600 pl-7">🦅 Albatros: {act.adaptacion_albatros}</p>}
-                        {act.como_se_gana && <p className="text-[11px] text-amber-700 pl-7">🏆 {act.como_se_gana}</p>}
-                        {act.materiales && <p className="text-[11px] text-gray-500 pl-7">📦 {act.materiales}</p>}
-                      </div>
-                    ))}
-                    {aiPreview.sesion_juvenil.actividad_estrella && (
-                      <div className="p-3 rounded-xl border-2 border-amber-300 bg-amber-50">
-                        <p className="text-xs font-bold text-amber-700">⭐ Actividad estrella: {aiPreview.sesion_juvenil.actividad_estrella}</p>
-                      </div>
-                    )}
-                  </div>
-                )}
+                      ))}
+                      {leg.actividad_estrella && (
+                        <div className="p-3 rounded-xl border-2 border-amber-300 bg-amber-50">
+                          <p className="text-xs font-bold text-amber-700">⭐ Actividad estrella: {leg.actividad_estrella}</p>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })()}
                 {/* ── Preview sesiones (Competencia / Damas) ── */}
                 <div className="px-4 py-4 max-h-[65vh] overflow-y-auto space-y-3">
                   {aiPreview.sesiones.map((s, i) => {
@@ -2684,7 +2714,7 @@ export default function ProgramacionModule() {
 
       {/* ── Hidden PDF sesión juvenil individual ─────────────────────────── */}
       <div ref={juvPdfRef} style={{ position: "absolute", left: "-9999px", top: 0, pointerEvents: "none" }}>
-        {juvPdfSesion?.sesion_juvenil?.actividades && (
+        {juvPdfSesion?.sesion_juvenil && (
           <JuvenilPDFHidden sesion={juvPdfSesion} />
         )}
       </div>
@@ -2699,7 +2729,6 @@ export default function ProgramacionModule() {
           horaInicio={juvClassCtx.horaInicio}
           horaFin={juvClassCtx.horaFin}
           sesionExistente={juvClassCtx.sesion ?? undefined}
-          actividadesYaUsadas={juvClassCtx.actividadesYaUsadas}
           onClose={() => setJuvClassCtx(null)}
           onSaved={async () => {
             setJuvClassCtx(null);
