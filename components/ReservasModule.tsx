@@ -88,7 +88,7 @@ function getInitials(name: string): string {
   return parts.length >= 2 ? (parts[0][0] + parts[1][0]).toUpperCase() : name.slice(0, 2).toUpperCase();
 }
 function esDelGrupo(grupoActivo: string | null, tipoPlan: TipoPlan): boolean {
-  if (!grupoActivo) return false;
+  if (!grupoActivo) return true; // sin grupo asignado → permitir con advertencia visual
   if (tipoPlan === "juvenil") return JUVENIL_GRUPOS.includes(grupoActivo);
   if (tipoPlan === "competencia") return grupoActivo === "Competencia";
   if (tipoPlan === "damas") return grupoActivo === "Damas";
@@ -640,6 +640,11 @@ export default function ReservasModule() {
                               {!perteneceGrupo && !yaInscrito && (
                                 <span className="text-[10px] font-semibold text-gray-500 bg-gray-100 px-1.5 py-0.5 rounded-full flex-shrink-0">
                                   Grupo distinto
+                                </span>
+                              )}
+                              {!st.grupo_activo && !yaInscrito && (
+                                <span className="text-[10px] font-semibold text-orange-600 bg-orange-50 px-1.5 py-0.5 rounded-full flex-shrink-0">
+                                  Sin grupo
                                 </span>
                               )}
                             </button>

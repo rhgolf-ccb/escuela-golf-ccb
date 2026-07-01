@@ -1490,7 +1490,20 @@ posPayload[`${key}_score`] = rawScore !== null ? Math.round(rawScore) : null;
           <div className="flex-1">
             <div className="flex items-center gap-3 flex-wrap">
               <h1 className="text-xl font-bold text-gray-900">{student.full_name}</h1>
-              {student.grupo_activo && <span className="px-2.5 py-1 rounded-full text-xs font-medium" style={{ backgroundColor:"#1B4D2E15", color:"#1B4D2E", border:"1px solid #1B4D2E25" }}>{student.grupo_activo}</span>}
+              {student.grupo_activo ? (
+                <span className="px-2.5 py-1 rounded-full text-xs font-semibold" style={
+                  ["Birdies","Águilas","Albatros","+14"].includes(student.grupo_activo)
+                    ? { backgroundColor:"#1a3a2a18", color:"#1a3a2a", border:"1px solid #1a3a2a25" }
+                    : student.grupo_activo === "Competencia"
+                    ? { backgroundColor:"#7d5a0018", color:"#7d5a00", border:"1px solid #7d5a0025" }
+                    : { backgroundColor:"#4a107018", color:"#4a1070", border:"1px solid #4a107025" }
+                }>{student.grupo_activo}</span>
+              ) : (
+                <span className="px-2.5 py-1 rounded-full text-xs font-medium text-gray-400 bg-gray-100 border border-gray-200 flex items-center gap-1">
+                  <svg width="11" height="11" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path d="M12 9v4m0 4h.01M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/></svg>
+                  Sin grupo
+                </span>
+              )}
               <span className={`px-2.5 py-1 rounded-full text-xs font-semibold ${student.status==="activo"?"bg-emerald-50 text-emerald-700 border border-emerald-200":"bg-gray-100 text-gray-500 border border-gray-200"}`}>{student.status}</span>
             </div>
             <p className="text-sm text-gray-500 mt-1">{calcularEdad(student.birth_date)}{student.enrollment_date && <span className="ml-3 text-gray-400">· Ingresó {formatFecha(student.enrollment_date)}</span>}</p>
@@ -1573,7 +1586,23 @@ posPayload[`${key}_score`] = rawScore !== null ? Math.round(rawScore) : null;
             <Field label="Nombre completo" value={student.full_name}/>
             <Field label="Fecha de nacimiento" value={formatFecha(student.birth_date)}/>
             <Field label="Edad" value={calcularEdad(student.birth_date)}/>
-            <Field label="Grupo" value={student.grupo_activo}/>
+            <div>
+              <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-1">Grupo activo</p>
+              {student.grupo_activo ? (
+                <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold" style={
+                  ["Birdies","Águilas","Albatros","+14"].includes(student.grupo_activo)
+                    ? { backgroundColor:"#1a3a2a18", color:"#1a3a2a" }
+                    : student.grupo_activo === "Competencia"
+                    ? { backgroundColor:"#7d5a0018", color:"#7d5a00" }
+                    : { backgroundColor:"#4a107018", color:"#4a1070" }
+                }>{student.grupo_activo}</span>
+              ) : (
+                <span className="inline-flex items-center gap-1 text-sm text-gray-400">
+                  <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path d="M12 9v4m0 4h.01M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/></svg>
+                  Sin grupo asignado
+                </span>
+              )}
+            </div>
             <Field label="Estado" value={student.status}/>
             <Field label="Fecha de ingreso" value={formatFecha(student.enrollment_date)}/>
             <div className="sm:col-span-2 border-t border-gray-100 pt-4 mt-2">
@@ -2625,7 +2654,7 @@ posPayload[`${key}_score`] = rawScore !== null ? Math.round(rawScore) : null;
                 <FormField label="Fecha de nacimiento"><input type="date" value={form.birth_date} onChange={(e) => setField("birth_date", e.target.value)} className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm focus:outline-none focus:border-[#1B4D2E]"/></FormField>
                 <FormField label="Estado"><select value={form.status} onChange={(e) => setField("status", e.target.value as "activo"|"inactivo")} className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm focus:outline-none focus:border-[#1B4D2E] bg-white"><option value="activo">Activo</option><option value="inactivo">Inactivo</option></select></FormField>
               </div>
-              <FormField label="Grupo" hint="Selecciona solo para Damas o Competencia"><select value={form.grupo_activo} onChange={(e) => setField("grupo_activo", e.target.value)} className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm focus:outline-none focus:border-[#1B4D2E] bg-white"><option value="">Automático (según edad)</option><option value="Damas">Damas</option><option value="Competencia">Competencia</option></select></FormField>
+              <FormField label="Grupo activo" hint="Los grupos juveniles se calculan normalmente por edad. Asigna manualmente solo cuando sea necesario."><select value={form.grupo_activo} onChange={(e) => setField("grupo_activo", e.target.value)} className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm focus:outline-none focus:border-[#1B4D2E] bg-white"><option value="">Sin grupo / automático por edad</option><option value="Birdies">Birdies</option><option value="Águilas">Águilas</option><option value="Albatros">Albatros</option><option value="+14">+14</option><option value="Competencia">Competencia</option><option value="Damas">Damas</option></select></FormField>
               <div className="border-t border-gray-100 pt-4">
                 <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">Acudiente</p>
                 <div className="space-y-4">
