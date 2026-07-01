@@ -52,9 +52,6 @@ export default function StudentsModule() {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("todos");
   const [groupFilter, setGroupFilter] = useState<GroupFilter>("todos");
-  const [swingIds, setSwingIds] = useState<Set<string>>(new Set());
-  const [physicalIds, setPhysicalIds] = useState<Set<string>>(new Set());
-  const [trackmanIds, setTrackmanIds] = useState<Set<string>>(new Set());
   const router = useRouter();
 
   useEffect(() => {
@@ -62,22 +59,16 @@ export default function StudentsModule() {
       setLoading(true);
       setError(null);
 
-      const [studentsRes, swingRes, physRes, tmRes] = await Promise.all([
-        supabase.from("students").select("id, full_name, birth_date, status, grupo_activo, gender").order("full_name", { ascending: true }),
-        supabase.from("swing_evaluations").select("student_id"),
-        supabase.from("physical_evaluations").select("student_id"),
-        supabase.from("trackman_sessions").select("alumno_id"),
-      ]);
+      const { data, error } = await supabase
+        .from("students")
+        .select("id, full_name, birth_date, status, grupo_activo, gender")
+        .order("full_name", { ascending: true });
 
-      if (studentsRes.error) {
-        setError(studentsRes.error.message);
+      if (error) {
+        setError(error.message);
       } else {
-        setStudents(studentsRes.data ?? []);
+        setStudents(data ?? []);
       }
-
-      setSwingIds(new Set((swingRes.data ?? []).map((r) => String(r.student_id))));
-      setPhysicalIds(new Set((physRes.data ?? []).map((r) => String(r.student_id))));
-      setTrackmanIds(new Set((tmRes.data ?? []).map((r) => String(r.alumno_id))));
 
       setLoading(false);
     }
@@ -226,9 +217,6 @@ export default function StudentsModule() {
                     <th className="text-left px-5 py-3.5 font-semibold tracking-wide text-xs uppercase opacity-90">Nombre</th>
                     <th className="text-left px-5 py-3.5 font-semibold tracking-wide text-xs uppercase opacity-90">Fecha de nacimiento</th>
                     <th className="text-left px-5 py-3.5 font-semibold tracking-wide text-xs uppercase opacity-90">Grupo</th>
-                    <th className="px-5 py-3.5 font-semibold tracking-wide text-xs uppercase opacity-90 text-center">Técnico</th>
-                    <th className="px-5 py-3.5 font-semibold tracking-wide text-xs uppercase opacity-90 text-center">Físico</th>
-                    <th className="px-5 py-3.5 font-semibold tracking-wide text-xs uppercase opacity-90 text-center">Trackman</th>
                     <th className="text-left px-5 py-3.5 font-semibold tracking-wide text-xs uppercase opacity-90">Estado</th>
                   </tr>
                 </thead>
@@ -273,17 +261,6 @@ export default function StudentsModule() {
                           <td className="px-5 py-3.5">
                             {grupoMostrar ? <GroupBadge grupo={grupoMostrar} /> : <span className="text-gray-300">��</span>}
                           </td>
-                          <td className="px-5 py-3.5 text-center">
-                            <TestIndicator has={swingIds.has(String(student.id))} />
-                          </td>
-                          <td className="px-5 py-3.5 text-center">
-                            <TestIndicator has={physicalIds.has(String(student.id))} />
-                          </td>
-                          <td className="px-5 py-3.5 text-center">
-                            {isCompetencia
-                              ? <TestIndicator has={trackmanIds.has(String(student.id))} />
-                              : <span className="text-gray-300 text-xs">—</span>}
-                          </td>
                           <td className="px-5 py-3.5">
                             <StatusBadge status={student.status} />
                           </td>
@@ -309,24 +286,6 @@ export default function StudentsModule() {
   );
 }
 
-function TestIndicator({ has }: { has: boolean }) {
-  if (has) {
-    return (
-      <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-emerald-50 border border-emerald-200">
-        <svg width="11" height="11" fill="none" viewBox="0 0 24 24" stroke="#059669" strokeWidth={3}>
-          <path d="M20 6L9 17l-5-5" />
-        </svg>
-      </span>
-    );
-  }
-  return (
-    <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-red-50 border border-red-200">
-      <svg width="10" height="10" fill="none" viewBox="0 0 24 24" stroke="#dc2626" strokeWidth={3}>
-        <path d="M18 6L6 18M6 6l12 12" />
-      </svg>
-    </span>
-  );
-}
 
 function GroupBadge({ grupo }: { grupo: string }) {
   return (
