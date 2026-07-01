@@ -1061,8 +1061,16 @@ export default function ProgramacionModule() {
         estaciones_damas: activeTab === "damas" ? sesionForm.estaciones_damas : null,
         notas: sesionForm.notas.trim() || null,
       };
-      if (editSesionCtx.sesion) await supabase.from("sesiones_semana").update(payload).eq("id", editSesionCtx.sesion.id);
-      else await supabase.from("sesiones_semana").insert(payload);
+      if (editSesionCtx.sesion) {
+        const { error } = await supabase.from("sesiones_semana").update(payload).eq("id", editSesionCtx.sesion.id);
+        if (error) throw new Error(error.message);
+      } else {
+        const { error } = await supabase.from("sesiones_semana").insert(payload);
+        if (error) {
+          if (error.code === "23505") throw new Error("Ya existe una sesión en ese día y hora. Edita la sesión existente en lugar de crear una nueva.");
+          throw new Error(error.message);
+        }
+      }
       setEditSesionCtx(null); setSesionForm(null);
       showToast("Sesión guardada ✓");
       await fetchPlan();
