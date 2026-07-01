@@ -63,7 +63,13 @@ interface SesionSemana {
   sesion_juvenil?: SesionJuvenilData | null;
 }
 
-interface CalSesion extends SesionSemana { tipo_plan: TipoPlan; }
+interface CalSesion extends SesionSemana { tipo_plan: TipoPlan; cupo_maximo?: number; }
+
+interface CalEventReserva {
+  id: string;
+  estado: string;
+  students: { full_name: string };
+}
 
 interface PreviewSesion {
   dia_semana: DiaSemana; fecha: string;
@@ -491,6 +497,10 @@ export default function ProgramacionModule() {
   const [mesCal, setMesCal]                   = useState<Date>(() => new Date());
   const [calEventDetail, setCalEventDetail]   = useState<CalSesion | null>(null);
   const [selectedCalDate, setSelectedCalDate] = useState<string | null>(null);
+  const [calEventReservas, setCalEventReservas] = useState<{
+    loading: boolean; cupoMaximo: number;
+    confirmados: CalEventReserva[]; enEspera: number;
+  } | null>(null);
 
   // Create plan modal (3-step IA wizard)
   const [showCrearModal, setShowCrearModal]     = useState(false);
@@ -651,6 +661,29 @@ export default function ProgramacionModule() {
     if (viewMode === "semana") fetchCalSemana();
     else if (viewMode === "mes") fetchCalMes();
   }, [viewMode, fetchCalSemana, fetchCalMes]);
+
+  // ── Fetch reservas for calendar event detail ──────────────────────────────
+  useEffect(() => {
+    if (!calEventDetail) { setCalEventReservas(null); return; }
+    setCalEventReservas({ loading: true, cupoMaximo: 15, confirmados: [], enEspera: 0 });
+    (async () => {
+      const [{ data: sesData }, { data: resData }] = await Promise.all([
+        supabase.from("sesiones_semana").select("cupo_maximo").eq("id", calEventDetail.id).single(),
+        supabase.from("reservas").select("id, estado, students(full_name)").eq("sesion_id", calEventDetail.id)
+          .order("estado").order("posicion_espera", { ascending: true, nullsFirst: false }).order("created_at"),
+      ]);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const rows = (resData ?? []) as any[];
+      const normalized: CalEventReserva[] = rows.map((r) => ({
+        id: r.id,
+        estado: r.estado,
+        students: Array.isArray(r.students) ? r.students[0] : r.students,
+      }));
+      const confs = normalized.filter((r) => r.estado === "confirmado");
+      const espCount = normalized.filter((r) => r.estado === "en_espera").length;
+      setCalEventReservas({ loading: false, cupoMaximo: (sesData as { cupo_maximo: number } | null)?.cupo_maximo ?? 15, confirmados: confs, enEspera: espCount });
+    })();
+  }, [calEventDetail]);
 
   // ── Week / month nav ──────────────────────────────────────────────────────
   const prevWeek  = () => setSemana((s) => addDays(s, -7));
@@ -2606,7 +2639,8 @@ export default function ProgramacionModule() {
       {/* ══ MODAL: Detalle evento calendario ════════════════════════════════ */}
       {calEventDetail && (
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={() => setCalEventDetail(null)}>
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm" onClick={(e) => e.stopPropagation()}>
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden" onClick={(e) => e.stopPropagation()}>
+            {/* Header */}
             <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100" style={{ borderLeft: `4px solid ${CAL_COLOR[calEventDetail.tipo_plan].border}` }}>
               <div>
                 <div className="flex items-center gap-2 mb-0.5">
@@ -2617,38 +2651,110 @@ export default function ProgramacionModule() {
               </div>
               <button onClick={() => setCalEventDetail(null)} className="text-gray-400 hover:text-gray-600"><svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path d="M18 6L6 18M6 6l12 12"/></svg></button>
             </div>
-            <div className="px-5 py-4 space-y-3">
+
+            {/* Session info */}
+            <div className="px-5 py-3 space-y-2 border-b border-gray-100">
               <div className="flex gap-3 text-xs text-gray-500">
                 <span>{LUGAR_LABEL[calEventDetail.lugar]}</span>
                 {calEventDetail.hora_inicio && <><span>·</span><span>{formatHora(calEventDetail.hora_inicio)}–{formatHora(calEventDetail.hora_fin)}</span></>}
               </div>
               {calEventDetail.objetivo && <p className="text-sm text-gray-700">{calEventDetail.objetivo}</p>}
-              {calEventDetail.drills?.length > 0 && <p className="text-xs text-gray-400">{calEventDetail.drills.length} drills: {calEventDetail.drills.map((d) => d.titulo).join(" · ")}</p>}
-              {calEventDetail.juego_competitivo && <div className="bg-orange-50 rounded-lg px-3 py-2"><p className="text-xs font-semibold text-orange-700 mb-0.5">🏆 Juego competitivo</p><p className="text-xs text-gray-700">{calEventDetail.juego_competitivo}</p></div>}
             </div>
-            <div className="px-5 pb-4 flex gap-2">
-              <button
-                onClick={() => { router.push(`/programacion/sesion/${calEventDetail.id}`); setCalEventDetail(null); }}
-                className="flex-1 py-2 rounded-xl text-xs font-semibold text-white"
-                style={{ background: CAL_COLOR[calEventDetail.tipo_plan].border }}
-              >
-                Pasar asistencia →
-              </button>
-              <button
-                onClick={() => {
-                  setCalEventDetail(null);
-                  setActiveTab(calEventDetail.tipo_plan);
-                  setViewMode("plan");
-                  if (calEventDetail.tipo_plan === "juvenil") {
-                    setTimeout(() => openJuvModal(calEventDetail.dia_semana, calEventDetail.fecha, calEventDetail as unknown as SesionSemana), 100);
-                  } else {
-                    setTimeout(() => openEditSesion(calEventDetail.dia_semana, calEventDetail), 100);
-                  }
-                }}
-                className="px-3 py-2 rounded-xl text-xs font-medium border border-gray-200 text-gray-600 hover:bg-gray-50"
-              >
-                Editar
-              </button>
+
+            {/* Reservas section */}
+            <div className="px-5 py-3 border-b border-gray-100">
+              {calEventReservas?.loading ? (
+                <div className="flex items-center gap-2 text-xs text-gray-400 py-1">
+                  <svg className="animate-spin h-3 w-3" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"/></svg>
+                  Cargando inscritos...
+                </div>
+              ) : calEventReservas ? (
+                <>
+                  {/* Cupo badge + bar */}
+                  <div className="flex items-center gap-3 mb-2">
+                    <span className="text-xs font-bold text-gray-700">
+                      {calEventReservas.confirmados.length}/{calEventReservas.cupoMaximo} cupos
+                    </span>
+                    <div className="flex-1 h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                      <div
+                        className="h-full rounded-full"
+                        style={{
+                          width: `${Math.min((calEventReservas.confirmados.length / calEventReservas.cupoMaximo) * 100, 100)}%`,
+                          background: calEventReservas.confirmados.length >= calEventReservas.cupoMaximo ? "#dc2626" : calEventReservas.confirmados.length / calEventReservas.cupoMaximo >= 0.8 ? "#92400e" : "#1a3a2a",
+                        }}
+                      />
+                    </div>
+                  </div>
+
+                  {calEventReservas.confirmados.length === 0 ? (
+                    <p className="text-xs text-gray-400 italic">Sin inscritos todavía</p>
+                  ) : (
+                    <>
+                      <div className="space-y-1 mb-1">
+                        {calEventReservas.confirmados.slice(0, 5).map((r) => (
+                          <div key={r.id} className="flex items-center gap-2">
+                            <div
+                              className="w-5 h-5 rounded-full flex items-center justify-center text-[9px] font-bold text-white flex-shrink-0"
+                              style={{ background: CAL_COLOR[calEventDetail.tipo_plan].border }}
+                            >
+                              {r.students.full_name.trim().split(" ").slice(0, 2).map((n) => n[0]).join("").toUpperCase()}
+                            </div>
+                            <span className="text-xs text-gray-700 truncate">{r.students.full_name}</span>
+                          </div>
+                        ))}
+                      </div>
+                      {calEventReservas.confirmados.length > 5 && (
+                        <p className="text-xs text-gray-400">+ {calEventReservas.confirmados.length - 5} más</p>
+                      )}
+                      {calEventReservas.enEspera > 0 && (
+                        <p className="text-xs text-amber-600 font-semibold mt-1">En espera: {calEventReservas.enEspera}</p>
+                      )}
+                    </>
+                  )}
+                </>
+              ) : null}
+            </div>
+
+            {/* Actions */}
+            <div className="px-5 py-3 space-y-2">
+              <div className="flex gap-2">
+                <button
+                  onClick={() => { router.push(`/reservas?sesion=${calEventDetail.id}`); setCalEventDetail(null); }}
+                  className="flex-1 py-2 rounded-xl text-xs font-semibold text-white flex items-center justify-center gap-1"
+                  style={{ background: CAL_COLOR[calEventDetail.tipo_plan].border }}
+                >
+                  Ver en Reservas →
+                </button>
+                <button
+                  onClick={() => { router.push(`/reservas?sesion=${calEventDetail.id}`); setCalEventDetail(null); }}
+                  className="flex-1 py-2 rounded-xl text-xs font-semibold border border-gray-200 text-gray-700 hover:bg-gray-50 flex items-center justify-center gap-1"
+                >
+                  + Inscribir alumno
+                </button>
+              </div>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => { router.push(`/programacion/sesion/${calEventDetail.id}`); setCalEventDetail(null); }}
+                  className="flex-1 py-1.5 rounded-xl text-xs font-medium text-gray-500 hover:bg-gray-50 border border-gray-100"
+                >
+                  Pasar asistencia
+                </button>
+                <button
+                  onClick={() => {
+                    setCalEventDetail(null);
+                    setActiveTab(calEventDetail.tipo_plan);
+                    setViewMode("plan");
+                    if (calEventDetail.tipo_plan === "juvenil") {
+                      setTimeout(() => openJuvModal(calEventDetail.dia_semana, calEventDetail.fecha, calEventDetail as unknown as SesionSemana), 100);
+                    } else {
+                      setTimeout(() => openEditSesion(calEventDetail.dia_semana, calEventDetail), 100);
+                    }
+                  }}
+                  className="flex-1 py-1.5 rounded-xl text-xs font-medium text-gray-500 hover:bg-gray-50 border border-gray-100"
+                >
+                  Editar sesión
+                </button>
+              </div>
             </div>
           </div>
         </div>
