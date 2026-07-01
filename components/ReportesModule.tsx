@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, type ReactNode } from "react";
 import { createClient } from "@supabase/supabase-js";
 import * as XLSX from "xlsx";
 
@@ -94,6 +94,32 @@ function pct(n: number, d: number): number {
   return Math.round((n / d) * 100);
 }
 
+function fmtRango(from: Date, to: Date): string {
+  const mf = MESES_ES[from.getMonth()].slice(0, 3);
+  const mt = MESES_ES[to.getMonth()].slice(0, 3);
+  if (from.getFullYear() === to.getFullYear() && from.getMonth() === to.getMonth()) {
+    return `${from.getDate()}–${to.getDate()} ${mt} ${to.getFullYear()}`;
+  }
+  if (from.getFullYear() === to.getFullYear()) {
+    return `${from.getDate()} ${mf} – ${to.getDate()} ${mt} ${to.getFullYear()}`;
+  }
+  return `${from.getDate()} ${mf} ${from.getFullYear()} – ${to.getDate()} ${mt} ${to.getFullYear()}`;
+}
+
+function periodoSubtitle(from: Date, to: Date): string {
+  return `Periodo: ${fmtRango(from, to)}`;
+}
+
+function weeksInRange(from: Date, to: Date): { inicio: Date; fin: Date }[] {
+  const weeks: { inicio: Date; fin: Date }[] = [];
+  let cur = getMondayOf(from);
+  while (cur <= to) {
+    weeks.push({ inicio: new Date(cur), fin: addDays(cur, 6) });
+    cur = addDays(cur, 7);
+  }
+  return weeks;
+}
+
 // ── Shared UI components ─────────────────────────────────────────────────────
 
 function Badge({ label, color }: { label: string; color: "green" | "yellow" | "red" | "gray" | "blue" }) {
@@ -136,6 +162,61 @@ function WeekNav({ monday, onChange }: { monday: Date; onChange: (d: Date) => vo
       <button onClick={() => onChange(addDays(monday, 7))} className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-500">
         <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path d="M9 18l6-6-6-6"/></svg>
       </button>
+    </div>
+  );
+}
+
+type PeriodMode = "semana" | "periodo";
+
+function PeriodSelector({
+  mode, onModeChange, from, to, onApply, weekSlot,
+}: {
+  mode: PeriodMode;
+  onModeChange: (m: PeriodMode) => void;
+  from: string;
+  to: string;
+  onApply: (from: string, to: string) => void;
+  weekSlot: ReactNode;
+}) {
+  const [draftFrom, setDraftFrom] = useState(from);
+  const [draftTo, setDraftTo] = useState(to);
+
+  function shortcut(kind: "semana" | "mes" | "mesAnterior" | "3meses") {
+    const hoy = new Date();
+    let f: Date, t: Date;
+    if (kind === "semana") { f = getMondayOf(hoy); t = addDays(f, 6); }
+    else if (kind === "mes") { f = new Date(hoy.getFullYear(), hoy.getMonth(), 1); t = new Date(hoy.getFullYear(), hoy.getMonth() + 1, 0); }
+    else if (kind === "mesAnterior") { f = new Date(hoy.getFullYear(), hoy.getMonth() - 1, 1); t = new Date(hoy.getFullYear(), hoy.getMonth(), 0); }
+    else { f = new Date(hoy.getFullYear(), hoy.getMonth() - 2, 1); t = new Date(hoy.getFullYear(), hoy.getMonth() + 1, 0); }
+    const fi = toISO(f), ti = toISO(t);
+    setDraftFrom(fi); setDraftTo(ti);
+    onApply(fi, ti);
+  }
+
+  return (
+    <div className="flex flex-col gap-2">
+      <div className="flex items-center gap-3 flex-wrap">
+        <div className="flex gap-1 bg-gray-100 rounded-lg p-1">
+          <button onClick={() => onModeChange("semana")} className={`px-3 py-1 rounded-md text-xs font-semibold transition-colors ${mode === "semana" ? "bg-white text-gray-800 shadow-sm" : "text-gray-500"}`}>Semana</button>
+          <button onClick={() => onModeChange("periodo")} className={`px-3 py-1 rounded-md text-xs font-semibold transition-colors ${mode === "periodo" ? "bg-white text-gray-800 shadow-sm" : "text-gray-500"}`}>Periodo</button>
+        </div>
+        {mode === "semana" ? weekSlot : (
+          <div className="flex items-center gap-2 flex-wrap">
+            <input type="date" value={draftFrom} onChange={(e) => setDraftFrom(e.target.value)} className="text-sm border border-gray-200 rounded-lg px-2 py-1.5" />
+            <span className="text-gray-400 text-sm">→</span>
+            <input type="date" value={draftTo} onChange={(e) => setDraftTo(e.target.value)} className="text-sm border border-gray-200 rounded-lg px-2 py-1.5" />
+            <button onClick={() => onApply(draftFrom, draftTo)} className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-[#1B4D2E] text-white">Aplicar</button>
+          </div>
+        )}
+      </div>
+      {mode === "periodo" && (
+        <div className="flex gap-1.5 flex-wrap">
+          <button onClick={() => shortcut("semana")} className="px-2.5 py-1 rounded-lg text-[11px] font-medium bg-white border border-gray-200 text-gray-600 hover:bg-gray-50">Esta semana</button>
+          <button onClick={() => shortcut("mes")} className="px-2.5 py-1 rounded-lg text-[11px] font-medium bg-white border border-gray-200 text-gray-600 hover:bg-gray-50">Este mes</button>
+          <button onClick={() => shortcut("mesAnterior")} className="px-2.5 py-1 rounded-lg text-[11px] font-medium bg-white border border-gray-200 text-gray-600 hover:bg-gray-50">Último mes</button>
+          <button onClick={() => shortcut("3meses")} className="px-2.5 py-1 rounded-lg text-[11px] font-medium bg-white border border-gray-200 text-gray-600 hover:bg-gray-50">Últimos 3 meses</button>
+        </div>
+      )}
     </div>
   );
 }
@@ -203,13 +284,13 @@ function AsistioCell({ value, reservaId, onSaved }: { value: boolean | null; res
     setSaving(false);
   }
   if (value === true) return (
-    <button onClick={toggle} disabled={saving} title="Asistió — clic para cambiar" className="w-3.5 h-3.5 rounded-full mx-auto block transition-transform hover:scale-110" style={{ backgroundColor: "#1a3a2a" }} />
+    <button onClick={toggle} disabled={saving} title="Asistió — clic para cambiar" className="w-2 h-2 rounded-full mx-auto block transition-transform hover:scale-110" style={{ backgroundColor: "#1a3a2a" }} />
   );
   if (value === false) return (
-    <button onClick={toggle} disabled={saving} title="Ausente — clic para cambiar" className="w-3.5 h-3.5 rounded-full mx-auto block transition-transform hover:scale-110" style={{ backgroundColor: "#e24b4a" }} />
+    <button onClick={toggle} disabled={saving} title="Ausente — clic para cambiar" className="w-2 h-2 rounded-full mx-auto block transition-transform hover:scale-110" style={{ backgroundColor: "#e24b4a" }} />
   );
   return (
-    <button onClick={toggle} disabled={saving} title="Sin marcar — clic para marcar asistencia" className="w-3.5 h-3.5 rounded-full mx-auto block border-2 border-gray-300 hover:border-gray-500 transition-colors" />
+    <button onClick={toggle} disabled={saving} title="Sin marcar — clic para marcar asistencia" className="w-2 h-2 rounded-full mx-auto block border border-gray-300 hover:border-gray-500 transition-colors" />
   );
 }
 
@@ -277,8 +358,9 @@ async function exportPDF(title: string, headers: string[], rows: string[][], sub
   doc.save(`${title.replace(/\s+/g, "_")}_${toISO(new Date())}.pdf`);
 }
 
-function exportExcel(title: string, headers: string[], rows: (string | number)[][]) {
-  const ws = XLSX.utils.aoa_to_sheet([headers, ...rows]);
+function exportExcel(title: string, headers: string[], rows: (string | number)[][], subtitle?: string) {
+  const aoa: (string | number)[][] = subtitle ? [[title], [subtitle], [], headers, ...rows] : [headers, ...rows];
+  const ws = XLSX.utils.aoa_to_sheet(aoa);
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, title.slice(0, 31));
   XLSX.writeFile(wb, `${title.replace(/\s+/g, "_")}_${toISO(new Date())}.xlsx`);
@@ -293,6 +375,9 @@ function exportWhatsApp(title: string, lines: string[]) {
 
 function TabAsistencia() {
   const [monday, setMonday] = useState<Date>(() => getMondayOf(new Date()));
+  const [periodMode, setPeriodMode] = useState<PeriodMode>("semana");
+  const [rangeFrom, setRangeFrom] = useState<string>(() => toISO(getMondayOf(new Date())));
+  const [rangeTo, setRangeTo] = useState<string>(() => toISO(addDays(getMondayOf(new Date()), 6)));
   const [grupo, setGrupo] = useState<GrupoFilter>("todos");
   const [sesiones, setSesiones] = useState<Sesion[]>([]);
   const [reservas, setReservas] = useState<Reserva[]>([]);
@@ -300,18 +385,21 @@ function TabAsistencia() {
   const [loading, setLoading] = useState(false);
 
   const sunday = addDays(monday, 6);
-  const semanaLabel = `${fmtFecha(toISO(monday))} – ${fmtFecha(toISO(sunday))}`;
+  const effFrom = periodMode === "semana" ? monday : new Date(rangeFrom + "T12:00:00");
+  const effTo = periodMode === "semana" ? sunday : new Date(rangeTo + "T12:00:00");
+  const effFromISO = toISO(effFrom);
+  const effToISO = toISO(effTo);
+  const rangeDays = Math.round((effTo.getTime() - effFrom.getTime()) / 86400000) + 1;
+  const groupByWeek = periodMode === "periodo" && rangeDays > 14;
+  const periodoLabel = periodoSubtitle(effFrom, effTo);
 
   useEffect(() => {
     async function load() {
       setLoading(true);
-      const [{ data: ses }, { data: res }, { data: sts }] = await Promise.all([
+      const [{ data: ses }, { data: sts }] = await Promise.all([
         supabase.from("sesiones_semana")
           .select("id,dia_semana,fecha,hora_inicio,hora_fin,tipo_sesion,lugar,objetivo,cupo_maximo,planes_semanales(tipo_plan)")
-          .gte("fecha", toISO(monday)).lte("fecha", toISO(sunday)).order("fecha").order("hora_inicio"),
-        supabase.from("reservas")
-          .select("id,sesion_id,estudiante_id,estado,posicion_espera,created_at,asistio,students!reservas_estudiante_id_fkey(id,full_name,grupo_activo,tiene_talega)")
-          .in("sesion_id", ([] as string[])),
+          .gte("fecha", effFromISO).lte("fecha", effToISO).order("fecha").order("hora_inicio"),
         supabase.from("students").select("id,full_name,birth_date,grupo_activo,status,tiene_talega").eq("status", "activo").order("full_name"),
       ]);
       setSesiones((ses ?? []) as unknown as Sesion[]);
@@ -328,7 +416,7 @@ function TabAsistencia() {
       setLoading(false);
     }
     load();
-  }, [monday]);
+  }, [periodMode, monday, rangeFrom, rangeTo]);
 
   function handleAsistioSaved(reservaId: string, val: boolean | null) {
     setReservas((prev) => prev.map((r) => r.id === reservaId ? { ...r, asistio: val } : r));
@@ -355,14 +443,35 @@ function TabAsistencia() {
   const totalAsistieron = reservas.filter((r) => r.asistio === true && sesionesFiltradas.some((s) => s.id === r.sesion_id)).length;
   const totalAusentes = reservas.filter((r) => r.asistio === false && sesionesFiltradas.some((s) => s.id === r.sesion_id)).length;
 
-  const headers = ["Nombre", "Grupo", ...sesionesFiltradas.map((s) => `${DIAS_ES[new Date(s.fecha + "T12:00:00").getDay()]} ${s.fecha.slice(5)}`), "Total", "% Asist."];
+  // Rango corto: una columna por sesión (editable). Rango largo en modo periodo: una columna por semana (% agregado).
+  const columnas: { key: string; label: string; sesionIds: string[] }[] = groupByWeek
+    ? weeksInRange(effFrom, effTo).map((w) => {
+        const wIni = toISO(w.inicio), wFin = toISO(w.fin);
+        return {
+          key: wIni,
+          label: `${w.inicio.getDate()}/${w.inicio.getMonth() + 1}–${w.fin.getDate()}/${w.fin.getMonth() + 1}`,
+          sesionIds: sesionesFiltradas.filter((s) => s.fecha >= wIni && s.fecha <= wFin).map((s) => s.id),
+        };
+      })
+    : sesionesFiltradas.map((s) => {
+        const d = new Date(s.fecha + "T12:00:00");
+        return { key: s.id, label: `${d.getDate()}/${d.getMonth() + 1}`, sesionIds: [s.id] };
+      });
+
+  const headers = ["Nombre", "Grupo", ...columnas.map((c) => c.label), "Total", "% Asist."];
 
   function doExportPDF() {
     const rows = studentsConReserva.map((st) => {
       const reservasAlumno = reservas.filter((r) => r.estudiante_id === st.id && sesionesFiltradas.some((s) => s.id === r.sesion_id));
       const asistio = reservasAlumno.filter((r) => r.asistio === true).length;
-      const cells = sesionesFiltradas.map((ses) => {
-        const r = reservas.find((rv) => rv.estudiante_id === st.id && rv.sesion_id === ses.id);
+      const cells = columnas.map((col) => {
+        const rCol = reservas.filter((rv) => rv.estudiante_id === st.id && col.sesionIds.includes(rv.sesion_id));
+        if (groupByWeek) {
+          const marcado = rCol.filter((r) => r.asistio !== null).length;
+          const asis = rCol.filter((r) => r.asistio === true).length;
+          return marcado > 0 ? `${pct(asis, marcado)}%` : "—";
+        }
+        const r = rCol[0];
         if (!r) return "·";
         if (r.asistio === true) return "✓";
         if (r.asistio === false) return "✗";
@@ -370,15 +479,21 @@ function TabAsistencia() {
       });
       return [st.full_name, st.grupo_activo ?? "—", ...cells, String(reservasAlumno.length), `${pct(asistio, reservasAlumno.length)}%`];
     });
-    exportPDF("Asistencia", headers, rows, semanaLabel);
+    exportPDF("Asistencia", headers, rows, periodoLabel);
   }
 
   function doExportExcel() {
     const rows = studentsConReserva.map((st) => {
       const reservasAlumno = reservas.filter((r) => r.estudiante_id === st.id && sesionesFiltradas.some((s) => s.id === r.sesion_id));
       const asistio = reservasAlumno.filter((r) => r.asistio === true).length;
-      const cells = sesionesFiltradas.map((ses) => {
-        const r = reservas.find((rv) => rv.estudiante_id === st.id && rv.sesion_id === ses.id);
+      const cells = columnas.map((col) => {
+        const rCol = reservas.filter((rv) => rv.estudiante_id === st.id && col.sesionIds.includes(rv.sesion_id));
+        if (groupByWeek) {
+          const marcado = rCol.filter((r) => r.asistio !== null).length;
+          const asis = rCol.filter((r) => r.asistio === true).length;
+          return marcado > 0 ? `${pct(asis, marcado)}%` : "—";
+        }
+        const r = rCol[0];
         if (!r) return "·";
         if (r.asistio === true) return "Asistió";
         if (r.asistio === false) return "Ausente";
@@ -386,23 +501,30 @@ function TabAsistencia() {
       });
       return [st.full_name, st.grupo_activo ?? "—", ...cells, reservasAlumno.length, pct(asistio, reservasAlumno.length)];
     });
-    exportExcel("Asistencia", headers, rows);
+    exportExcel("Asistencia", headers, rows, periodoLabel);
   }
 
   function doExportWhatsApp() {
-    const lines = [`Semana: ${semanaLabel}`, `Inscritos: ${totalInscritos} | Asistieron: ${totalAsistieron} | Ausentes: ${totalAusentes}`,
+    const lines = [periodoLabel, `Inscritos: ${totalInscritos} | Asistieron: ${totalAsistieron} | Ausentes: ${totalAusentes}`,
       "", ...studentsConReserva.slice(0, 30).map((st) => {
         const rv = reservas.filter((r) => r.estudiante_id === st.id && sesionesFiltradas.some((s) => s.id === r.sesion_id));
         const a = rv.filter((r) => r.asistio === true).length;
         return `• ${st.full_name}: ${a}/${rv.length} (${pct(a, rv.length)}%)`;
       })];
-    exportWhatsApp(`Asistencia – ${semanaLabel}`, lines);
+    exportWhatsApp(`Asistencia – ${fmtRango(effFrom, effTo)}`, lines);
   }
 
   return (
     <div>
-      <div className="flex flex-wrap items-center gap-3 mb-5">
-        <WeekNav monday={monday} onChange={setMonday} />
+      <div className="flex flex-wrap items-start gap-3 mb-5">
+        <PeriodSelector
+          mode={periodMode}
+          onModeChange={setPeriodMode}
+          from={rangeFrom}
+          to={rangeTo}
+          onApply={(f, t) => { setRangeFrom(f); setRangeTo(t); }}
+          weekSlot={<WeekNav monday={monday} onChange={setMonday} />}
+        />
         <GrupoTabs value={grupo} onChange={setGrupo} />
         <div className="ml-auto flex gap-2">
           <ExportBtn label="PDF" onClick={doExportPDF} />
@@ -412,53 +534,66 @@ function TabAsistencia() {
       </div>
 
       <div className="grid grid-cols-4 gap-3 mb-5">
-        <MetricCard label="Inscritos semana" value={totalInscritos} />
+        <MetricCard label="Inscritos" value={totalInscritos} />
         <MetricCard label="Asistieron" value={totalAsistieron} />
         <MetricCard label="Ausencias" value={totalAusentes} />
-        <MetricCard label="Sesiones" value={sesionesFiltradas.length} />
+        <MetricCard label={groupByWeek ? "Semanas" : "Sesiones"} value={groupByWeek ? columnas.length : sesionesFiltradas.length} />
       </div>
 
       {loading ? <Loading /> : sesionesFiltradas.length === 0 ? (
-        <EmptyState msg="No hay sesiones esta semana para el grupo seleccionado." />
+        <EmptyState msg="No hay sesiones en el periodo para el grupo seleccionado." />
       ) : (
         <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-x-auto">
-          <table className="w-full text-sm">
+          <table className="w-full text-sm" style={{ tableLayout: "fixed" }}>
             <thead>
               <tr className="border-b border-gray-100">
-                <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 bg-gray-50 min-w-[160px]">Nombre</th>
-                <th className="text-left px-3 py-3 text-xs font-semibold text-gray-500 bg-gray-50">Grupo</th>
-                {sesionesFiltradas.map((s) => (
-                  <th key={s.id} className="text-center px-3 py-3 text-xs font-semibold text-gray-500 bg-gray-50 whitespace-nowrap">
-                    {DIAS_ES[new Date(s.fecha + "T12:00:00").getDay()]} {s.fecha.slice(5)}<br />
-                    <span className="font-normal text-gray-400">{fmtHora(s.hora_inicio)}</span>
-                  </th>
-                ))}
-                <th className="text-center px-3 py-3 text-xs font-semibold text-gray-500 bg-gray-50">Total</th>
-                <th className="text-center px-3 py-3 text-xs font-semibold text-gray-500 bg-gray-50">% Asist.</th>
+                <th className="text-left px-1.5 py-1.5 text-[11px] font-semibold text-gray-500 bg-gray-50 w-[160px]">Nombre</th>
+                <th className="text-left px-1.5 py-1.5 text-[11px] font-semibold text-gray-500 bg-gray-50 w-20">Grupo</th>
+                {columnas.map((c) => {
+                  const ses = !groupByWeek ? sesionesFiltradas.find((s) => s.id === c.key) : undefined;
+                  return (
+                    <th key={c.key} className="text-center px-1 py-1.5 text-[11px] font-semibold text-gray-500 bg-gray-50 w-8">
+                      {c.label}
+                      {ses && <><br /><span className="font-normal text-gray-400 text-[9px]">{fmtHora(ses.hora_inicio)}</span></>}
+                    </th>
+                  );
+                })}
+                <th className="text-center px-1.5 py-1.5 text-[11px] font-semibold text-gray-500 bg-gray-50 w-12">Total</th>
+                <th className="text-center px-1.5 py-1.5 text-[11px] font-semibold text-gray-500 bg-gray-50 w-12">%</th>
               </tr>
             </thead>
             <tbody>
               {studentsConReserva.length === 0 ? (
-                <tr><td colSpan={sesionesFiltradas.length + 4} className="text-center py-8 text-sm text-gray-400">Sin inscritos esta semana</td></tr>
+                <tr><td colSpan={columnas.length + 4} className="text-center py-8 text-sm text-gray-400">Sin inscritos en el periodo</td></tr>
               ) : studentsConReserva.map((st, i) => {
                 const reservasAlumno = reservas.filter((r) => r.estudiante_id === st.id && sesionesFiltradas.some((s) => s.id === r.sesion_id));
                 const asistio = reservasAlumno.filter((r) => r.asistio === true).length;
                 const p = pct(asistio, reservasAlumno.length);
                 return (
-                  <tr key={st.id} className={i % 2 === 0 ? "bg-white" : "bg-gray-50/50"}>
-                    <td className="px-4 py-2.5 font-medium text-gray-800">{st.full_name}</td>
-                    <td className="px-3 py-2.5">
+                  <tr key={st.id} className={`h-8 ${i % 2 === 0 ? "bg-white" : "bg-gray-50/50"}`}>
+                    <td className="px-1.5 py-1 text-[11px] font-medium text-gray-800 w-[160px] truncate" title={st.full_name}>{st.full_name}</td>
+                    <td className="px-1.5 py-1 w-20 truncate">
                       {st.grupo_activo && (
-                        <span className="text-xs px-1.5 py-0.5 rounded-full font-medium" style={(() => { const t = grupoTipo(st.grupo_activo); return t ? { backgroundColor: GROUP_COLOR[t].bg, color: GROUP_COLOR[t].text } : {}; })()}>{st.grupo_activo}</span>
+                        <span className="text-[10px] px-1.5 py-0.5 rounded-full font-medium" style={(() => { const t = grupoTipo(st.grupo_activo); return t ? { backgroundColor: GROUP_COLOR[t].bg, color: GROUP_COLOR[t].text } : {}; })()}>{st.grupo_activo}</span>
                       )}
                     </td>
-                    {sesionesFiltradas.map((ses) => {
-                      const r = reservas.find((rv) => rv.estudiante_id === st.id && rv.sesion_id === ses.id);
-                      if (!r) return <td key={ses.id} className="text-center px-3 py-2.5"><span className="w-3.5 h-3.5 rounded-full bg-gray-200 block mx-auto" /></td>;
-                      return <td key={ses.id} className="text-center px-3 py-2.5"><AsistioCell value={r.asistio} reservaId={r.id} onSaved={handleAsistioSaved} /></td>;
+                    {columnas.map((col) => {
+                      const rCol = reservas.filter((rv) => rv.estudiante_id === st.id && col.sesionIds.includes(rv.sesion_id));
+                      if (groupByWeek) {
+                        const marcado = rCol.filter((r) => r.asistio !== null).length;
+                        const asis = rCol.filter((r) => r.asistio === true).length;
+                        return (
+                          <td key={col.key} className="text-center px-1 py-1 w-8">
+                            {marcado > 0 ? <PctBadge value={pct(asis, marcado)} /> : <span className="text-[10px] text-gray-300">—</span>}
+                          </td>
+                        );
+                      }
+                      const r = rCol[0];
+                      if (!r) return <td key={col.key} className="text-center px-1 py-1 w-8"><span className="w-2 h-2 rounded-full bg-gray-200 block mx-auto" /></td>;
+                      return <td key={col.key} className="text-center px-1 py-1 w-8"><AsistioCell value={r.asistio} reservaId={r.id} onSaved={handleAsistioSaved} /></td>;
                     })}
-                    <td className="text-center px-3 py-2.5 text-xs text-gray-600">{reservasAlumno.length}</td>
-                    <td className="text-center px-3 py-2.5"><PctBadge value={p} /></td>
+                    <td className="text-center px-1.5 py-1 text-[11px] text-gray-600 w-12">{reservasAlumno.length}</td>
+                    <td className="text-center px-1.5 py-1 w-12"><PctBadge value={p} /></td>
                   </tr>
                 );
               })}
@@ -466,19 +601,20 @@ function TabAsistencia() {
             {studentsConReserva.length > 0 && (
               <tfoot>
                 <tr className="border-t-2 border-gray-200 bg-gray-50 font-semibold">
-                  <td className="px-4 py-2.5 text-xs text-gray-600">Totales</td>
+                  <td className="px-1.5 py-1.5 text-[11px] text-gray-600">Totales</td>
                   <td />
-                  {sesionesFiltradas.map((ses) => {
-                    const total = reservas.filter((r) => r.sesion_id === ses.id).length;
-                    const asist = reservas.filter((r) => r.sesion_id === ses.id && r.asistio === true).length;
+                  {columnas.map((col) => {
+                    const rCol = reservas.filter((r) => col.sesionIds.includes(r.sesion_id));
+                    const total = rCol.length;
+                    const asist = rCol.filter((r) => r.asistio === true).length;
                     return (
-                      <td key={ses.id} className="text-center px-3 py-2.5">
-                        <span className="text-xs text-gray-600">{asist}/{total}</span>
+                      <td key={col.key} className="text-center px-1 py-1.5 w-8">
+                        <span className="text-[10px] text-gray-600">{asist}/{total}</span>
                       </td>
                     );
                   })}
                   <td />
-                  <td className="text-center px-3 py-2.5"><PctBadge value={pct(totalAsistieron, reservas.filter((r) => sesionesFiltradas.some((s) => s.id === r.sesion_id) && (r.asistio === true || r.asistio === false)).length)} /></td>
+                  <td className="text-center px-1.5 py-1.5 w-12"><PctBadge value={pct(totalAsistieron, reservas.filter((r) => sesionesFiltradas.some((s) => s.id === r.sesion_id) && (r.asistio === true || r.asistio === false)).length)} /></td>
                 </tr>
               </tfoot>
             )}
@@ -493,37 +629,46 @@ function TabAsistencia() {
 
 function TabCobros() {
   const [monday, setMonday] = useState<Date>(() => getMondayOf(new Date()));
+  const [periodMode, setPeriodMode] = useState<PeriodMode>("semana");
+  const [rangeFrom, setRangeFrom] = useState<string>(() => toISO(getMondayOf(new Date())));
+  const [rangeTo, setRangeTo] = useState<string>(() => toISO(addDays(getMondayOf(new Date()), 6)));
   const [grupo, setGrupo] = useState<GrupoFilter>("todos");
   const [cobros, setCobros] = useState<Cobro[]>([]);
   const [students, setStudents] = useState<Student[]>([]);
   const [reservas, setReservas] = useState<{ estudiante_id: string; sesion_id: string; asistio: boolean | null }[]>([]);
-  const [sesiones, setSesiones] = useState<{ id: string }[]>([]);
+  const [sesiones, setSesiones] = useState<{ id: string; fecha: string }[]>([]);
   const [loading, setLoading] = useState(false);
   const [editingCobro, setEditingCobro] = useState<{ id: string; field: "estado" | "observacion" } | null>(null);
 
   const sunday = addDays(monday, 6);
+  const effFrom = periodMode === "semana" ? monday : new Date(rangeFrom + "T12:00:00");
+  const effTo = periodMode === "semana" ? sunday : new Date(rangeTo + "T12:00:00");
+  const effFromISO = toISO(effFrom);
+  const effToISO = toISO(effTo);
+  const periodoLabel = periodoSubtitle(effFrom, effTo);
 
   useEffect(() => {
     async function load() {
       setLoading(true);
-      const semanaInicio = toISO(monday);
       const [{ data: sts }, { data: ses }] = await Promise.all([
         supabase.from("students").select("id,full_name,birth_date,grupo_activo,status,tiene_talega").eq("status", "activo").order("full_name"),
-        supabase.from("sesiones_semana").select("id").gte("fecha", semanaInicio).lte("fecha", toISO(sunday)),
+        supabase.from("sesiones_semana").select("id,fecha").gte("fecha", effFromISO).lte("fecha", effToISO),
       ]);
       setStudents((sts ?? []) as Student[]);
       setSesiones(ses ?? []);
       const sesIds = (ses ?? []).map((s: { id: string }) => s.id);
       const [{ data: rv }, { data: cb }] = await Promise.all([
         sesIds.length > 0 ? supabase.from("reservas").select("estudiante_id,sesion_id,asistio").in("sesion_id", sesIds) : Promise.resolve({ data: [] }),
-        supabase.from("cobros").select("*").eq("semana_inicio", semanaInicio),
+        periodMode === "semana"
+          ? supabase.from("cobros").select("*").eq("semana_inicio", effFromISO)
+          : supabase.from("cobros").select("*").gte("semana_inicio", effFromISO).lte("semana_inicio", effToISO),
       ]);
       setReservas(rv ?? []);
       setCobros((cb ?? []) as Cobro[]);
       setLoading(false);
     }
     load();
-  }, [monday]);
+  }, [periodMode, monday, rangeFrom, rangeTo]);
 
   async function updateCobro(estudianteId: string, patch: Partial<Cobro>) {
     const semanaInicio = toISO(monday);
@@ -555,40 +700,77 @@ function TabCobros() {
   const pendientes = cobros.filter((c) => c.estado === "pendiente" || !c.estado).length;
   const exonerados = cobros.filter((c) => c.estado === "exonerado").length;
 
+  // Vista por semana: fila editable por alumno. Vista por periodo: solo lectura, una fila por (semana, alumno) — evita ambigüedad de a qué semana pertenece una edición.
+  const filasPeriodo = periodMode === "periodo" ? weeksInRange(effFrom, effTo).flatMap((w) => {
+    const wIni = toISO(w.inicio), wFin = toISO(w.fin);
+    const sesIdsSemana = sesiones.filter((s) => s.fecha >= wIni && s.fecha <= wFin).map((s) => s.id);
+    return studentsFiltrados
+      .filter((st) => reservas.some((r) => r.estudiante_id === st.id && sesIdsSemana.includes(r.sesion_id)))
+      .map((st) => {
+        const rvSemana = reservas.filter((r) => r.estudiante_id === st.id && sesIdsSemana.includes(r.sesion_id));
+        const cobro = cobros.find((c) => c.estudiante_id === st.id && c.semana_inicio === wIni);
+        return {
+          semanaInicio: wIni,
+          semanaLabel: fmtRango(w.inicio, w.fin),
+          student: st,
+          inscritas: rvSemana.length,
+          asistidas: rvSemana.filter((r) => r.asistio === true).length,
+          estado: cobro?.estado ?? "pendiente",
+          observacion: cobro?.observacion ?? null,
+        };
+      });
+  }) : [];
+
   function doExportPDF() {
+    if (periodMode === "periodo") {
+      const rows = filasPeriodo.map((f) => [f.semanaLabel, f.student.full_name, f.student.grupo_activo ?? "—", String(f.inscritas), String(f.asistidas), f.estado, f.observacion ?? ""]);
+      exportPDF("Cobros", ["Semana","Nombre","Grupo","Inscritas","Asistidas","Estado","Observación"], rows, periodoLabel);
+      return;
+    }
     const rows = studentsFiltrados.map((st) => {
       const inscritas = reservas.filter((r) => r.estudiante_id === st.id).length;
       const asistidas = reservas.filter((r) => r.estudiante_id === st.id && r.asistio === true).length;
       const cobro = cobros.find((c) => c.estudiante_id === st.id);
       return [st.full_name, st.grupo_activo ?? "—", String(inscritas), String(asistidas), cobro?.estado ?? "pendiente", cobro?.observacion ?? ""];
     });
-    exportPDF("Cobros", ["Nombre","Grupo","Inscritas","Asistidas","Estado","Observación"], rows, `Semana ${toISO(monday)}`);
+    exportPDF("Cobros", ["Nombre","Grupo","Inscritas","Asistidas","Estado","Observación"], rows, periodoLabel);
   }
 
   function doExportExcel() {
+    if (periodMode === "periodo") {
+      const rows = filasPeriodo.map((f) => [f.semanaLabel, f.student.full_name, f.student.grupo_activo ?? "—", f.inscritas, f.asistidas, f.estado, f.observacion ?? ""]);
+      exportExcel("Cobros", ["Semana","Nombre","Grupo","Inscritas","Asistidas","Estado","Observación"], rows, periodoLabel);
+      return;
+    }
     const rows = studentsFiltrados.map((st) => {
       const inscritas = reservas.filter((r) => r.estudiante_id === st.id).length;
       const asistidas = reservas.filter((r) => r.estudiante_id === st.id && r.asistio === true).length;
       const cobro = cobros.find((c) => c.estudiante_id === st.id);
       return [st.full_name, st.grupo_activo ?? "—", inscritas, asistidas, cobro?.estado ?? "pendiente", cobro?.observacion ?? ""];
     });
-    exportExcel("Cobros", ["Nombre","Grupo","Inscritas","Asistidas","Estado","Observación"], rows);
+    exportExcel("Cobros", ["Nombre","Grupo","Inscritas","Asistidas","Estado","Observación"], rows, periodoLabel);
   }
 
   function doExportWhatsApp() {
-    const semLabel = `${toISO(monday)} – ${toISO(sunday)}`;
-    const lines = [`Semana: ${semLabel}`, `Pagados: ${pagados} | Pendientes: ${pendientes} | Exonerados: ${exonerados}`, "",
+    const lines = [periodoLabel, `Pagados: ${pagados} | Pendientes: ${pendientes} | Exonerados: ${exonerados}`, "",
       ...studentsFiltrados.slice(0, 30).map((st) => {
         const cobro = cobros.find((c) => c.estudiante_id === st.id);
         return `• ${st.full_name}: ${cobro?.estado ?? "pendiente"}`;
       })];
-    exportWhatsApp(`Cobros – ${semLabel}`, lines);
+    exportWhatsApp(`Cobros – ${fmtRango(effFrom, effTo)}`, lines);
   }
 
   return (
     <div>
-      <div className="flex flex-wrap items-center gap-3 mb-5">
-        <WeekNav monday={monday} onChange={setMonday} />
+      <div className="flex flex-wrap items-start gap-3 mb-5">
+        <PeriodSelector
+          mode={periodMode}
+          onModeChange={setPeriodMode}
+          from={rangeFrom}
+          to={rangeTo}
+          onApply={(f, t) => { setRangeFrom(f); setRangeTo(t); }}
+          weekSlot={<WeekNav monday={monday} onChange={setMonday} />}
+        />
         <GrupoTabs value={grupo} onChange={setGrupo} />
         <div className="ml-auto flex gap-2">
           <ExportBtn label="PDF" onClick={doExportPDF} />
@@ -602,7 +784,40 @@ function TabCobros() {
         <MetricCard label="Exonerados" value={exonerados} />
         <MetricCard label="Total alumnos" value={studentsFiltrados.length} />
       </div>
-      {loading ? <Loading /> : studentsFiltrados.length === 0 ? (
+      {loading ? <Loading /> : periodMode === "periodo" ? (
+        filasPeriodo.length === 0 ? <EmptyState msg="No hay alumnos inscritos en el periodo." /> : (
+          <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-gray-100 bg-gray-50">
+                  <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500">Semana</th>
+                  <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500">Nombre</th>
+                  <th className="text-left px-3 py-3 text-xs font-semibold text-gray-500">Grupo</th>
+                  <th className="text-center px-3 py-3 text-xs font-semibold text-gray-500">Inscritas</th>
+                  <th className="text-center px-3 py-3 text-xs font-semibold text-gray-500">Asistidas</th>
+                  <th className="text-center px-3 py-3 text-xs font-semibold text-gray-500">Estado pago</th>
+                  <th className="text-left px-3 py-3 text-xs font-semibold text-gray-500">Observación</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filasPeriodo.map((f, i) => (
+                  <tr key={`${f.semanaInicio}-${f.student.id}`} className={i % 2 === 0 ? "bg-white" : "bg-gray-50/50"}>
+                    <td className="px-4 py-2.5 text-xs text-gray-500 whitespace-nowrap">{f.semanaLabel}</td>
+                    <td className="px-4 py-2.5 font-medium text-gray-800">{f.student.full_name}</td>
+                    <td className="px-3 py-2.5">
+                      {f.student.grupo_activo && <span className="text-xs px-1.5 py-0.5 rounded-full font-medium" style={(() => { const t = grupoTipo(f.student.grupo_activo); return t ? { backgroundColor: GROUP_COLOR[t].bg, color: GROUP_COLOR[t].text } : {}; })()}>{f.student.grupo_activo}</span>}
+                    </td>
+                    <td className="text-center px-3 py-2.5 text-gray-600">{f.inscritas}</td>
+                    <td className="text-center px-3 py-2.5 text-gray-600">{f.asistidas}</td>
+                    <td className="text-center px-3 py-2.5"><Badge label={f.estado} color={f.estado === "pagado" ? "green" : f.estado === "exonerado" ? "gray" : "yellow"} /></td>
+                    <td className="px-3 py-2.5 text-xs text-gray-500 max-w-[200px] truncate">{f.observacion ?? <span className="text-gray-300 italic">—</span>}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )
+      ) : studentsFiltrados.length === 0 ? (
         <EmptyState msg="No hay alumnos inscritos esta semana." />
       ) : (
         <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-x-auto">
@@ -852,6 +1067,9 @@ function MiniBar({ values }: { values: number[] }) {
 function TabProgreso() {
   const [grupo, setGrupo] = useState<GrupoFilter>("todos");
   const [rango, setRango] = useState<4 | 8 | 12>(4);
+  const [periodMode, setPeriodMode] = useState<PeriodMode>("semana");
+  const [rangeFrom, setRangeFrom] = useState<string>(() => toISO(addDays(getMondayOf(new Date()), -21)));
+  const [rangeTo, setRangeTo] = useState<string>(() => toISO(addDays(getMondayOf(new Date()), 6)));
   const [students, setStudents] = useState<Student[]>([]);
   const [semanas, setSemanas] = useState<{ inicio: string; pct: Record<string, number> }[]>([]);
   const [swingMap, setSwingMap] = useState<Record<string, number>>({});
@@ -862,17 +1080,19 @@ function TabProgreso() {
   useEffect(() => {
     async function load() {
       setLoading(true);
-      const hoy = new Date();
-      const lunes = getMondayOf(hoy);
-      const semanasList: string[] = [];
-      for (let i = rango - 1; i >= 0; i--) semanasList.push(toISO(addDays(lunes, -i * 7)));
+      const lunesHoy = getMondayOf(new Date());
+      const semanasList: string[] = periodMode === "periodo"
+        ? weeksInRange(new Date(rangeFrom + "T12:00:00"), new Date(rangeTo + "T12:00:00")).map((w) => toISO(w.inicio)).slice(-12)
+        : (() => { const arr: string[] = []; for (let i = rango - 1; i >= 0; i--) arr.push(toISO(addDays(lunesHoy, -i * 7))); return arr; })();
+      const primeraSemana = new Date(semanasList[0] + "T12:00:00");
+      const ultimaSemanaFin = addDays(new Date(semanasList[semanasList.length - 1] + "T12:00:00"), 6);
 
       const [{ data: sts }, { data: sw }, { data: ph }, { data: nt }, { data: ses }] = await Promise.all([
         supabase.from("students").select("id,full_name,birth_date,grupo_activo,status,tiene_talega").eq("status", "activo").order("full_name"),
         supabase.from("swing_evaluations").select("student_id,score_promedio").order("created_at", { ascending: false }),
         supabase.from("physical_tests").select("student_id,tpi_summary").order("created_at", { ascending: false }),
         supabase.from("notas_profesor").select("alumno_id,contenido,fecha,created_at").order("created_at", { ascending: false }),
-        supabase.from("sesiones_semana").select("id,fecha").gte("fecha", semanasList[0]).lte("fecha", toISO(addDays(lunes, 6))),
+        supabase.from("sesiones_semana").select("id,fecha").gte("fecha", toISO(primeraSemana)).lte("fecha", toISO(ultimaSemanaFin)),
       ]);
 
       setStudents((sts ?? []) as Student[]);
@@ -910,12 +1130,16 @@ function TabProgreso() {
       setLoading(false);
     }
     load();
-  }, [rango]);
+  }, [rango, periodMode, rangeFrom, rangeTo]);
 
   const studentsFiltrados = students.filter((s) => {
     if (grupo === "todos") return true;
     return grupoTipo(s.grupo_activo) === grupo;
   });
+
+  const periodoLabel = semanas.length > 0
+    ? periodoSubtitle(new Date(semanas[0].inicio + "T12:00:00"), addDays(new Date(semanas[semanas.length - 1].inicio + "T12:00:00"), 6))
+    : "";
 
   function getTestFraction(id: string, grp: string | null): string {
     let total = 2; let done = 0;
@@ -934,20 +1158,29 @@ function TabProgreso() {
       return [st.full_name, st.grupo_activo ?? "—", ...vals.map((v) => `${v}%`), `${acum}%`, getTestFraction(st.id, st.grupo_activo), nota ? nota.contenido.slice(0, 60) : "—"];
     });
     const headers = ["Nombre","Grupo",...semanas.map((s) => s.inicio),"Asist. acum.","Tests","Última nota"];
-    exportExcel("Progreso", headers, rows);
+    exportExcel("Progreso", headers, rows, periodoLabel);
   }
 
   return (
     <div>
-      <div className="flex flex-wrap items-center gap-3 mb-5">
+      <div className="flex flex-wrap items-start gap-3 mb-5">
+        <PeriodSelector
+          mode={periodMode}
+          onModeChange={setPeriodMode}
+          from={rangeFrom}
+          to={rangeTo}
+          onApply={(f, t) => { setRangeFrom(f); setRangeTo(t); }}
+          weekSlot={
+            <div className="flex gap-1.5">
+              {([4,8,12] as const).map((r) => (
+                <button key={r} onClick={() => setRango(r)} className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition-colors ${rango===r ? "bg-[#1B4D2E] text-white border-[#1B4D2E]" : "bg-white text-gray-600 border-gray-200"}`}>
+                  {r === 4 ? "4 semanas" : r === 8 ? "8 semanas" : "3 meses"}
+                </button>
+              ))}
+            </div>
+          }
+        />
         <GrupoTabs value={grupo} onChange={setGrupo} />
-        <div className="flex gap-1.5">
-          {([4,8,12] as const).map((r) => (
-            <button key={r} onClick={() => setRango(r)} className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition-colors ${rango===r ? "bg-[#1B4D2E] text-white border-[#1B4D2E]" : "bg-white text-gray-600 border-gray-200"}`}>
-              {r === 4 ? "4 semanas" : r === 8 ? "8 semanas" : "3 meses"}
-            </button>
-          ))}
-        </div>
         <div className="ml-auto flex gap-2">
           <ExportBtn label="Excel" onClick={doExportExcel} />
         </div>
