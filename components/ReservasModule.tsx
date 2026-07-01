@@ -206,14 +206,23 @@ export default function ReservasModule() {
   // ── Fetch reservas for selected session ───────────────────────────────────
   const fetchReservas = useCallback(async (sesionId: string) => {
     setLoadingReservas(true);
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from("reservas")
-      .select("*, students(id, full_name, grupo_activo, foto_url)")
+      .select("id, sesion_id, estudiante_id, estado, posicion_espera, created_at, students!reservas_estudiante_id_fkey(id, full_name, grupo_activo, foto_url)")
       .eq("sesion_id", sesionId)
       .order("estado")
       .order("posicion_espera", { ascending: true, nullsFirst: false })
       .order("created_at");
-    setReservas((data as ReservaConEstudiante[]) ?? []);
+    if (error) {
+      console.error("[ReservasModule] fetchReservas error:", error);
+      setLoadingReservas(false);
+      return;
+    }
+    const normalized = (data ?? []).map((r) => ({
+      ...r,
+      students: Array.isArray(r.students) ? r.students[0] : r.students,
+    }));
+    setReservas(normalized as ReservaConEstudiante[]);
     setLoadingReservas(false);
   }, []);
 
@@ -260,7 +269,7 @@ export default function ReservasModule() {
       estudiante_id: alumnoSel.id,
       estado,
       posicion_espera: posicion,
-    });
+    }).select("id");
 
     if (error) {
       showToast(error.code === "23505"
