@@ -262,12 +262,13 @@ type Student = {
   status: "activo" | "inactivo"; grupo_activo: string | null; gender: string | null;
   parent_name: string | null; parent_phone: string | null; parent_email: string | null;
   observations: string | null; enrollment_date: string | null; foto_url: string | null;
+  tiene_talega: string | null;
 };
 
 type EditForm = {
   full_name: string; birth_date: string; status: "activo" | "inactivo";
   grupo_activo: string; parent_name: string; parent_phone: string;
-  parent_email: string; observations: string;
+  parent_email: string; observations: string; tiene_talega: string;
 };
 
 type PosState = { na: boolean; criterios: CritValue[]; obsOpen: boolean; obs: string; };
@@ -702,7 +703,7 @@ export default function StudentProfile({ studentId }: { studentId: string }) {
   useEffect(() => {
     async function fetchStudent() {
       const { data, error } = await supabase.from("students")
-        .select("id,full_name,birth_date,status,grupo_activo,gender,parent_name,parent_phone,parent_email,observations,enrollment_date,foto_url")
+        .select("id,full_name,birth_date,status,grupo_activo,gender,parent_name,parent_phone,parent_email,observations,enrollment_date,foto_url,tiene_talega")
         .eq("id", studentId).single();
       if (!error) setStudent(data);
       setLoading(false);
@@ -808,7 +809,7 @@ export default function StudentProfile({ studentId }: { studentId: string }) {
 
   function openEdit() {
     if (!student) return;
-    setForm({ full_name: student.full_name, birth_date: student.birth_date ?? "", status: student.status, grupo_activo: student.grupo_activo ?? "", parent_name: student.parent_name ?? "", parent_phone: student.parent_phone ?? "", parent_email: student.parent_email ?? "", observations: student.observations ?? "" });
+    setForm({ full_name: student.full_name, birth_date: student.birth_date ?? "", status: student.status, grupo_activo: student.grupo_activo ?? "", parent_name: student.parent_name ?? "", parent_phone: student.parent_phone ?? "", parent_email: student.parent_email ?? "", observations: student.observations ?? "", tiene_talega: student.tiene_talega ?? "" });
     setSaveError(null); setIsEditing(true);
   }
   function closeEdit() { setIsEditing(false); setForm(null); setSaveError(null); }
@@ -817,7 +818,7 @@ export default function StudentProfile({ studentId }: { studentId: string }) {
   async function handleSave() {
     if (!form || !student) return;
     setSaving(true); setSaveError(null);
-    const payload = { full_name: form.full_name.trim(), birth_date: form.birth_date||null, status: form.status, grupo_activo: form.grupo_activo||null, parent_name: form.parent_name.trim()||null, parent_phone: form.parent_phone.trim()||null, parent_email: form.parent_email.trim()||null, observations: form.observations.trim()||null };
+    const payload = { full_name: form.full_name.trim(), birth_date: form.birth_date||null, status: form.status, grupo_activo: form.grupo_activo||null, tiene_talega: form.tiene_talega||null, parent_name: form.parent_name.trim()||null, parent_phone: form.parent_phone.trim()||null, parent_email: form.parent_email.trim()||null, observations: form.observations.trim()||null };
     const { error } = await supabase.from("students").update(payload).eq("id", student.id);
     if (error) { setSaveError(error.message); setSaving(false); return; }
     setStudent((prev) => prev ? { ...prev, ...payload } : prev);
@@ -1602,6 +1603,10 @@ posPayload[`${key}_score`] = rawScore !== null ? Math.round(rawScore) : null;
                   Sin grupo asignado
                 </span>
               )}
+            </div>
+            <div>
+              <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-1">Talega</p>
+              <span className="text-sm text-gray-700">{student.tiene_talega ?? "—"}</span>
             </div>
             <Field label="Estado" value={student.status}/>
             <Field label="Fecha de ingreso" value={formatFecha(student.enrollment_date)}/>
@@ -2655,6 +2660,7 @@ posPayload[`${key}_score`] = rawScore !== null ? Math.round(rawScore) : null;
                 <FormField label="Estado"><select value={form.status} onChange={(e) => setField("status", e.target.value as "activo"|"inactivo")} className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm focus:outline-none focus:border-[#1B4D2E] bg-white"><option value="activo">Activo</option><option value="inactivo">Inactivo</option></select></FormField>
               </div>
               <FormField label="Grupo activo" hint="Los grupos juveniles se calculan normalmente por edad. Asigna manualmente solo cuando sea necesario."><select value={form.grupo_activo} onChange={(e) => setField("grupo_activo", e.target.value)} className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm focus:outline-none focus:border-[#1B4D2E] bg-white"><option value="">Sin grupo / automático por edad</option><option value="Birdies">Birdies</option><option value="Águilas">Águilas</option><option value="Albatros">Albatros</option><option value="+14">+14</option><option value="Competencia">Competencia</option><option value="Damas">Damas</option></select></FormField>
+              <FormField label="Talega"><select value={form.tiene_talega} onChange={(e) => setField("tiene_talega", e.target.value)} className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm focus:outline-none focus:border-[#1B4D2E] bg-white"><option value="">— (no especificado)</option><option value="Sí">Sí</option><option value="No">No</option></select></FormField>
               <div className="border-t border-gray-100 pt-4">
                 <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">Acudiente</p>
                 <div className="space-y-4">
