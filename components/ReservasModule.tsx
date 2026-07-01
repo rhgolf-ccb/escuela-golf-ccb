@@ -64,7 +64,6 @@ const TIPO_PLAN_LABEL: Record<TipoPlan, string> = {
 const GROUP_COLOR: Record<TipoPlan, string> = {
   juvenil: "#1a3a2a", competencia: "#7d5a00", damas: "#4a1070",
 };
-const JUVENIL_GRUPOS = ["Birdies", "Águilas", "Albatros", "+14"];
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 function getMonday(d: Date): Date {
@@ -86,13 +85,6 @@ function formatHora(t: string | null): string { return t ? t.slice(0, 5) : ""; }
 function getInitials(name: string): string {
   const parts = name.trim().split(" ");
   return parts.length >= 2 ? (parts[0][0] + parts[1][0]).toUpperCase() : name.slice(0, 2).toUpperCase();
-}
-function esDelGrupo(grupoActivo: string | null, tipoPlan: TipoPlan): boolean {
-  if (!grupoActivo) return true; // sin grupo asignado → permitir con advertencia visual
-  if (tipoPlan === "juvenil") return JUVENIL_GRUPOS.includes(grupoActivo);
-  if (tipoPlan === "competencia") return grupoActivo === "Competencia";
-  if (tipoPlan === "damas") return grupoActivo === "Damas";
-  return false;
 }
 function cupoBarColor(confirmados: number, cupoMax: number): string {
   const pct = cupoMax > 0 ? confirmados / cupoMax : 0;
@@ -234,25 +226,35 @@ export default function ReservasModule() {
   // ── Student search with 300ms debounce ───────────────────────────────────
   useEffect(() => {
     if (debounceRef.current) clearTimeout(debounceRef.current);
-    if (searchQuery.length < 2) {
+    if (searchQuery.length < 2 || !sesionSel) {
       setSearchResults([]);
       setShowDropdown(false);
       return;
     }
     debounceRef.current = setTimeout(async () => {
       setSearchLoading(true);
-      const { data } = await supabase
+      const tipoPlan = sesionSel.tipo_plan;
+      let q = supabase
         .from("students")
-        .select("id, full_name, grupo_activo, status")
+        .select("id, full_name, grupo_activo")
         .ilike("full_name", `%${searchQuery}%`)
         .eq("status", "activo")
-        .limit(8);
+        .order("full_name")
+        .limit(10);
+      if (tipoPlan === "competencia") {
+        q = q.eq("grupo_activo", "Competencia");
+      } else if (tipoPlan === "juvenil") {
+        q = q.in("grupo_activo", ["Birdies", "Águilas", "Albatros", "+14"]);
+      } else if (tipoPlan === "damas") {
+        q = q.in("grupo_activo", ["Damas", "Damas Senior"]);
+      }
+      const { data } = await q;
       setSearchResults((data as StudentSearch[]) ?? []);
       setShowDropdown(true);
       setSearchLoading(false);
     }, 300);
     return () => { if (debounceRef.current) clearTimeout(debounceRef.current); };
-  }, [searchQuery]);
+  }, [searchQuery, sesionSel]);
 
   // ── Inscribir ─────────────────────────────────────────────────────────────
   async function handleInscribir() {
@@ -617,43 +619,35 @@ export default function ReservasModule() {
                     )}
 
                     {/* Search dropdown */}
-                    {showDropdown && searchResults.length > 0 && !alumnoSel && (
+                    {showDropdown && !alumnoSel && (
                       <div className="absolute left-0 right-0 top-full mt-1 z-30 bg-white border border-gray-200 rounded-xl shadow-lg overflow-hidden">
-                        {searchResults.map((st) => {
-                          const perteneceGrupo = esDelGrupo(st.grupo_activo, sesionSel.tipo_plan);
+                        {searchResults.length === 0 ? (
+                          <p className="px-4 py-3 text-xs text-gray-400 text-center italic">
+                            No se encontraron alumnos de este grupo
+                          </p>
+                        ) : searchResults.map((st) => {
                           const yaInscrito = reservas.some((r) => r.estudiante_id === st.id);
-                          const disabled = !perteneceGrupo || yaInscrito;
                           return (
                             <button
                               key={st.id}
                               onMouseDown={() => {
-                                if (disabled) return;
+                                if (yaInscrito) return;
                                 setAlumnoSel(st);
                                 setSearchQuery(st.full_name);
                                 setShowDropdown(false);
                               }}
-                              disabled={disabled}
+                              disabled={yaInscrito}
                               className="w-full text-left px-4 py-2.5 flex items-center gap-3 hover:bg-gray-50 transition-colors border-b border-gray-50 last:border-0"
-                              style={disabled ? { opacity: 0.4 } : undefined}
+                              style={yaInscrito ? { opacity: 0.4 } : undefined}
                             >
                               <Avatar name={st.full_name} color={GROUP_COLOR[sesionSel.tipo_plan]} size={8} />
                               <div className="flex-1 min-w-0">
                                 <p className="text-sm font-medium text-gray-900 truncate">{st.full_name}</p>
-                                <p className="text-xs text-gray-400">{st.grupo_activo ?? "Sin grupo"}</p>
+                                <p className="text-xs text-gray-400">{st.grupo_activo}</p>
                               </div>
                               {yaInscrito && (
                                 <span className="text-[10px] font-semibold text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded-full flex-shrink-0">
                                   Ya inscrito
-                                </span>
-                              )}
-                              {!perteneceGrupo && !yaInscrito && (
-                                <span className="text-[10px] font-semibold text-gray-500 bg-gray-100 px-1.5 py-0.5 rounded-full flex-shrink-0">
-                                  Grupo distinto
-                                </span>
-                              )}
-                              {!st.grupo_activo && !yaInscrito && (
-                                <span className="text-[10px] font-semibold text-orange-600 bg-orange-50 px-1.5 py-0.5 rounded-full flex-shrink-0">
-                                  Sin grupo
                                 </span>
                               )}
                             </button>
