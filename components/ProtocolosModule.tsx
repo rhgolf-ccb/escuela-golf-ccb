@@ -147,19 +147,12 @@ export default function ProtocolosModule() {
     try {
       const ext = file.name.split(".").pop()?.toLowerCase() ?? "jpg";
       const path = `${activeNav.tipo}/${sanitizePath(primaryGrupo)}/${codigo}.${ext}`;
-      const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-      const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
-      const uploadRes = await fetch(`${supabaseUrl}/storage/v1/object/protocolos-fotos/${path}`, {
-        method: "POST",
-        headers: { Authorization: `Bearer ${anonKey}`, "Content-Type": file.type, "x-upsert": "true" },
-        body: file,
-      });
-      if (!uploadRes.ok) {
-        const err = await uploadRes.json().catch(() => ({}));
-        throw new Error(err.message || `Error al subir (${uploadRes.status})`);
-      }
-      const publicUrl = `${supabaseUrl}/storage/v1/object/public/protocolos-fotos/${path}`;
-      updateTest(codigo, { foto_url: publicUrl });
+      const { error: uploadError } = await supabase.storage
+        .from("protocolos-fotos")
+        .upload(path, file, { upsert: true, contentType: file.type });
+      if (uploadError) throw new Error(uploadError.message);
+      const { data: urlData } = supabase.storage.from("protocolos-fotos").getPublicUrl(path);
+      updateTest(codigo, { foto_url: urlData.publicUrl });
     } catch (err) {
       alert(err instanceof Error ? err.message : "Error al subir la foto");
     } finally {
