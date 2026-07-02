@@ -30,7 +30,9 @@ function LoginNotice() {
 }
 
 export default function LoginPage() {
+  const [staffMode, setStaffMode] = useState(false);
   const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [sending, setSending] = useState(false);
   const [sent, setSent] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -48,6 +50,15 @@ export default function LoginPage() {
     setSending(true);
     setError(null);
     try {
+      if (staffMode) {
+        const { error } = await supabase.auth.signInWithPassword({
+          email: email.trim(),
+          password,
+        });
+        if (error) throw new Error(error.message);
+        window.location.href = "/auth/callback";
+        return;
+      }
       const { error } = await supabase.auth.signInWithOtp({
         email: email.trim(),
         options: { emailRedirectTo: `${window.location.origin}/auth/callback` },
@@ -55,7 +66,7 @@ export default function LoginPage() {
       if (error) throw new Error(error.message);
       setSent(true);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "No pudimos enviar el link. Intenta de nuevo.");
+      setError(err instanceof Error ? err.message : staffMode ? "Email o contraseña incorrectos." : "No pudimos enviar el link. Intenta de nuevo.");
     } finally {
       setSending(false);
     }
@@ -86,11 +97,23 @@ export default function LoginPage() {
             <input
               type="email"
               required
+              autoComplete="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               placeholder="tu@email.com"
               className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2"
             />
+            {staffMode && (
+              <input
+                type="password"
+                required
+                autoComplete="current-password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="Contraseña"
+                className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2"
+              />
+            )}
             {error && <p className="text-xs text-red-600">{error}</p>}
             <button
               type="submit"
@@ -98,9 +121,16 @@ export default function LoginPage() {
               className="w-full px-4 py-2 rounded-lg text-sm font-medium text-white disabled:opacity-50"
               style={{ backgroundColor: "#1a3a2a" }}
             >
-              {sending ? "Enviando..." : "Enviar link de acceso"}
+              {sending ? "Ingresando..." : staffMode ? "Ingresar" : "Enviar link de acceso"}
             </button>
-            <p className="text-[11px] text-gray-400 text-center">{sessionDaysNote(sessionDays)}</p>
+            {!staffMode && <p className="text-[11px] text-gray-400 text-center">{sessionDaysNote(sessionDays)}</p>}
+            <button
+              type="button"
+              onClick={() => { setStaffMode((v) => !v); setError(null); setPassword(""); }}
+              className="w-full text-[11px] text-gray-400 text-center underline"
+            >
+              {staffMode ? "Ingresar con link por email" : "¿Eres staff? Ingresa con contraseña"}
+            </button>
           </form>
         )}
       </div>
