@@ -8,41 +8,33 @@ import ParentReportModal from "./ParentReportModal";
 type Tab = "datos" | "tecnicos" | "fisicos" | "hitos" | "notas";
 type CritValue = "cumple" | "progreso" | "no" | null;
 
-const CRITERIOS_POR_POSICION: Record<string, string[]> = {
-  P1: ["Grip — posición documentada (neutro/fuerte/débil)", "Postura — rodillas, inclinación, columna", "Posición de la bola — específica por palo", "Alineación — cara al objetivo, cuerpo paralelo", "Distancia al palo — correcta por longitud"],
-  P2: ["Posición de la vara — sobre la línea de juego", "Cara del palo — paralela a la columna", "Triángulo — brazos y hombros unidos", "Carga de muñecas — iniciando sin quiebre", "Peso — transferencia al pie derecho"],
-  P3: ["Brazo izquierdo — paralelo al piso y línea de juego", "Plano del palo — apuntando a la línea de juego", "Carga de muñecas — completada al 90%", "Rotación de hombros — iniciando, hombro derecho atrás", "Peso — cargando al pie derecho"],
-  P4: ["Rotación de hombros — 90°, se ve profundidad", "Rotación de caderas — 45°, full carga", "Posición del palo — paralelo al piso y línea de juego", "Brazo izquierdo — perpendicular a la columna", "Peso — 80% pie derecho"],
-  P5: ["Secuencia — caderas lideran antes que hombros", "Codo derecho — baja pegado al costado", "Plano del palo — ligeramente más interno", "Lag — ángulo de muñecas mantenido", "Peso — transferencia al pie izquierdo"],
-  P6: ["Plano del palo — apuntando a la línea de juego", "Cara del palo — perpendicular al piso (toe up)", "Lag — ángulo de muñecas al máximo", "Caderas — 20-25° apertura al objetivo", "Peso — mayoría al pie izquierdo"],
-  P7: ["Manos — adelante de la cabeza del palo (shaft lean)", "Cara del palo — perpendicular a la línea de juego", "Caderas — 30-45° al objetivo", "Cabeza — detrás de la bola, ojos en la bola", "Peso — 70% pie izquierdo"],
-  P8: ["Extensión de brazos — completa hacia el objetivo", "Cara del palo — a 45° (toe up)", "Plano del palo — apuntando a la línea de juego", "Rotación de antebrazos — completada", "Peso — 90% pie izquierdo"],
-  P9: ["Extensión completa — brazo derecho al objetivo", "Plano del palo — apuntando a la línea de juego", "Rotación de antebrazos — completada", "Cadera izquierda — abierta sin bloqueo", "Peso — 95% pie izquierdo"],
-  P10: ["Balance — equilibrio total, puede sostener", "Peso — 100% pie izquierdo, talón derecho levantado", "Cadera y hombros — de frente al objetivo", "Palo — detrás del cuello/hombro izquierdo", "Columna — vertical, postura erguida"],
+// Los criterios/benchmarks técnicos y físicos viven en Supabase (protocolo_tests +
+// protocolo_benchmarks) — ver ProtocoloTestRow/normalizeGrupoKey/getCriteriosGrupo/
+// getPhysicalCategorias más abajo. POSICIONES_NOMBRES y POSICIONES_FASES son taxonomía
+// fija P1-P10 independiente del grupo, no varían y no se migraron.
+
+// "Grupo +14" es el valor que calcularGrupoEfectivo()/calcularGrupoFisico() devuelven
+// en runtime, pero en Supabase el grupo se guarda como "+14" (igual que en las
+// evaluaciones ya existentes). Normalizar antes de cualquier lookup/query.
+function normalizeGrupoKey(grupo: string): string {
+  return grupo === "Grupo +14" ? "+14" : grupo;
+}
+
+type ProtocoloBenchmark = {
+  criterio: string;
+  descripcion_ok: string | null;
+  descripcion_progreso: string | null;
+  descripcion_no: string | null;
+  orden: number | null;
 };
 
-const CRITERIOS_BIRDIES: Record<string, string[]> = {
-  P1: ["Agarra el palo con las dos manos", "Se para derecho frente a la bola", "Dobla un poquito las rodillas"],
-  P4: ["Lleva el palo hacia atrás", "Gira el cuerpo (se le ve la espalda)", "El peso va hacia atrás"],
-  P7: ["Mira la bola hasta golpearla", "Toca la bola con la cara del palo", "El cuerpo acompaña el golpe"],
-  P10: ["Termina el swing completo", "Queda parado en balance", "La barriga queda mirando al objetivo"],
-};
-
-const CRITERIOS_AGUILAS: Record<string, string[]> = {
-  P1: ["Grip — las dos manos bien puestas", "Postura — dobla rodillas, inclínate desde la cadera", "Posición de la bola — al centro para hierros", "Alineación — cara al objetivo, cuerpo paralelo", "Distancia — un puño entre grip y muslo"],
-  P2: ["Posición de la vara — sobre la línea de juego", "Cara del palo — paralela a la columna", "Triángulo — brazos y hombros se mueven juntos", "Carga de muñecas — iniciando", "Peso — comenzando a ir hacia atrás"],
-  P4: ["Rotación de hombros — se ve la espalda", "Rotación de caderas — gira con los hombros", "Posición del palo — arriba y controlado", "Cara del palo — perpendicular a la columna", "Peso — cargado hacia atrás"],
-  P7: ["Manos adelante de la bola", "Cara del palo cuadrada", "Cabeza abajo, ojos en la bola", "Caderas girando al objetivo", "Peso pasando al pie izquierdo"],
-  P10: ["Termina el swing completo", "Balance total — puede quedarse quieto", "Barriga de frente al objetivo", "Peso en pie izquierdo", "Palo detrás del hombro"],
-};
-
-const POSICIONES_GRUPO: Record<string, string[]> = {
-  Birdies: ["P1", "P4", "P7", "P10"],
-  "Águilas": ["P1", "P2", "P4", "P7", "P10"],
-  Albatros: ["P1","P2","P3","P4","P5","P6","P7","P8","P9","P10"],
-  "Grupo +14": ["P1","P2","P3","P4","P5","P6","P7","P8","P9","P10"],
-  Competencia: ["P1","P2","P3","P4","P5","P6","P7","P8","P9","P10"],
-  Damas: ["P1","P2","P3","P4","P5","P6","P7","P8","P9","P10"],
+type ProtocoloTestRow = {
+  codigo: string;
+  nombre: string;
+  categoria: string | null;
+  instrucciones: string | null;
+  orden: number | null;
+  protocolo_benchmarks: ProtocoloBenchmark[];
 };
 
 const POSICIONES_NOMBRES: Record<string, string> = {
@@ -72,161 +64,34 @@ type PhysicalCategoriaDef = {
   tests: PhysicalTestDef[];
 };
 
-const TPI_CATEGORIAS_POR_GRUPO: Record<string, PhysicalCategoriaDef[]> = {
-  Birdies: [
-    { label: "Desarrollo Motor", tipo: "desarrollo_motor", tests: [
-      { id: "DM1", nombre: "Lanzar una pelota", rangos: { cumple: "Gira el cuerpo coordinado", progreso: "Sin rotación", bajo: "Solo brazo" }, swing: "P4–P7" },
-      { id: "DM2", nombre: "Atrapar una pelota", rangos: { cumple: "Atrapa consistentemente", progreso: "Ocasionalmente", bajo: "No logra" } },
-      { id: "DM3", nombre: "Saltar en un pie", rangos: { cumple: "5 saltos en balance", progreso: "3–4 saltos", bajo: "Menos de 3" }, swing: "P5, P10" },
-      { id: "DM4", nombre: "Skipping", rangos: { cumple: "Coordinado y rítmico", progreso: "Sin coordinación", bajo: "No puede" } },
-      { id: "DM5", nombre: "Equilibrio en movimiento", rangos: { cumple: "Sin salirse", progreso: "Se sale 1–2 veces", bajo: "No puede" }, swing: "P10" },
-    ]},
-    { label: "Movilidad Básica", tipo: "screen", tests: [
-      { id: "MB1", nombre: "Overhead Deep Squat", rangos: { cumple: "Sin compensaciones", progreso: "1–2 compensaciones", bajo: "3+ compensaciones" }, swing: "P1, P10" },
-      { id: "MB2", nombre: "Single Leg Balance 3 seg", rangos: { cumple: "Mantiene 3 seg", progreso: "2–3 seg", bajo: "Menos de 2 seg" }, swing: "P5, P10" },
-      { id: "MB3", nombre: "Torso Rotation", rangos: { cumple: "Rango completo", progreso: "Rango parcial", bajo: "Muy limitado" }, swing: "P4, P7" },
-    ]},
-  ],
-  "Águilas": [
-    { label: "Desarrollo Motor", tipo: "desarrollo_motor", tests: [
-      { id: "DM1", nombre: "Lanzar con rotación", rangos: { cumple: "Rotación completa coordinada", progreso: "Rotación parcial", bajo: "Sin rotación" }, swing: "P4–P7" },
-      { id: "DM2", nombre: "Atrapar en movimiento", rangos: { cumple: "Consistentemente", progreso: "Ocasionalmente", bajo: "No logra" } },
-      { id: "DM3", nombre: "Saltar y caer en equilibrio", rangos: { cumple: "Aterrizaje estable", progreso: "Inestable", bajo: "No puede" }, swing: "P10" },
-    ]},
-    { label: "Screens TPI", tipo: "screen", tests: [
-      { id: "S1", nombre: "Overhead Deep Squat", rangos: { cumple: "Sin compensaciones", progreso: "1–2 compensaciones", bajo: "3+ compensaciones" }, swing: "P1, P10" },
-      { id: "S2", nombre: "Toe Touch", rangos: { cumple: "Menos de 8 cm del piso", progreso: "8–18 cm", bajo: "Más de 18 cm" }, swing: "P1" },
-      { id: "S3", nombre: "Single Leg Balance 7 seg", rangos: { cumple: "7 seg", progreso: "5–7 seg", bajo: "Menos de 5 seg" }, swing: "P5, P10" },
-      { id: "S4", nombre: "Torso Rotation", rangos: { cumple: "40°+", progreso: "25–40°", bajo: "Menos de 25°" }, swing: "P4, P7" },
-      { id: "S5", nombre: "Pelvic Tilt", rangos: { cumple: "Ant. y post. controlado", progreso: "Solo un sentido", bajo: "Sin control" }, swing: "P1, P4" },
-      { id: "S6", nombre: "Ankle Mobility", rangos: { cumple: "10 cm+", progreso: "6–10 cm", bajo: "Menos de 6 cm" }, swing: "P1, P10" },
-      { id: "S7", nombre: "Hip Sway Test", rangos: { cumple: "Sin sway", progreso: "Menos de 5 cm", bajo: "Más de 5 cm" }, swing: "P4, P7" },
-      { id: "S8", nombre: "Hip Rotation Awareness", rangos: { cumple: "Rotación interna y externa controlada", progreso: "Parcial", bajo: "Sin conciencia" }, swing: "P5, P7" },
-    ]},
-    { label: "Potencia (opcional)", tipo: "potencia", tests: [
-      { id: "PO1", nombre: "Salto Vertical", rangos: { cumple: "20 cm+", progreso: "12–20 cm", bajo: "Menos de 12 cm" } },
-      { id: "PO2", nombre: "Lanzamiento Rotacional 0.5 kg", rangos: { cumple: "4 m+", progreso: "2.5–4 m", bajo: "Menos de 2.5 m" }, swing: "P4–P7" },
-      { id: "PO3", nombre: "Fuerza de Agarre", rangos: { cumple: "10 kg+", progreso: "6–10 kg", bajo: "Menos de 6 kg" }, swing: "P1" },
-    ]},
-  ],
-  Albatros: [
-    { label: "Screens TPI", tipo: "screen", tests: [
-      { id: "S1", nombre: "Overhead Deep Squat", rangos: { cumple: "Sin compensaciones", progreso: "1–2 compensaciones", bajo: "3+ compensaciones" }, swing: "P1, P10" },
-      { id: "S2", nombre: "Toe Touch", rangos: { cumple: "Menos de 5 cm del piso", progreso: "5–15 cm", bajo: "Más de 15 cm" }, swing: "P1" },
-      { id: "S3", nombre: "90/90 Stretch", rangos: { cumple: "Torso paralelo al piso", progreso: "45°", bajo: "Menos de 45°" }, swing: "P4, P5" },
-      { id: "S4", nombre: "Pelvic Tilt", rangos: { cumple: "Ant. y post. completo", progreso: "Solo un sentido", bajo: "Sin control" }, swing: "P1, P4" },
-      { id: "S5", nombre: "Torso Rotation", rangos: { cumple: "45°+", progreso: "30–45°", bajo: "Menos de 30°" }, swing: "P4, P7" },
-      { id: "S6", nombre: "Cervical Rotation", rangos: { cumple: "60°+", progreso: "45–60°", bajo: "Menos de 45°" }, swing: "P7" },
-      { id: "S7", nombre: "Shoulder Horizontal Abduction", rangos: { cumple: "Menos de 10° restricción", progreso: "10–30°", bajo: "Más de 30°" }, swing: "P3, P8, P9" },
-      { id: "S8", nombre: "Wrist Flexion/Extension", rangos: { cumple: "70° flex / 60° ext", progreso: "45–70°", bajo: "Menos de 45°" }, swing: "P2, P3, P6" },
-      { id: "S9", nombre: "Ankle Mobility", rangos: { cumple: "12 cm+", progreso: "7–12 cm", bajo: "Menos de 7 cm" }, swing: "P1, P10" },
-      { id: "S10", nombre: "Single Leg Balance 10 seg", rangos: { cumple: "10 seg", progreso: "5–10 seg", bajo: "Menos de 5 seg" }, swing: "P5, P10" },
-      { id: "S11", nombre: "Hip Internal Rotation", rangos: { cumple: "35°+", progreso: "20–35°", bajo: "Menos de 20°" }, swing: "P4, P7" },
-      { id: "S12", nombre: "Hip External Rotation", rangos: { cumple: "40°+", progreso: "25–40°", bajo: "Menos de 25°" }, swing: "P5, P7" },
-      { id: "S13", nombre: "Lower Quarter Rotation", rangos: { cumple: "50°+", progreso: "35–50°", bajo: "Menos de 35°" }, swing: "P5, P7" },
-      { id: "S14", nombre: "Seated Trunk Rotation", rangos: { cumple: "45°+", progreso: "30–45°", bajo: "Menos de 30°" }, swing: "P4, P5" },
-      { id: "S15", nombre: "Lat Length", rangos: { cumple: "Menos de 5 cm restricción", progreso: "5–15 cm", bajo: "Más de 15 cm" }, swing: "P3, P8, P9" },
-      { id: "S16", nombre: "Bridge with Leg Extension", rangos: { cumple: "Piernas niveladas", progreso: "Bajan levemente", bajo: "No puede" }, swing: "P5, P6" },
-    ]},
-    { label: "Potencia", tipo: "potencia", tests: [
-      { id: "PB1", nombre: "Salto Vertical", rangos: { cumple: "30 cm+", progreso: "20–30 cm", bajo: "Menos de 20 cm" } },
-      { id: "PB2", nombre: "Lanzamiento Rotacional 1 kg", rangos: { cumple: "4 m+", progreso: "2.5–4 m", bajo: "Menos de 2.5 m" }, swing: "P4–P7" },
-      { id: "PB3", nombre: "Sit Up and Throw 1 kg", rangos: { cumple: "3 m+", progreso: "2–3 m", bajo: "Menos de 2 m" } },
-      { id: "PB4", nombre: "Fuerza de Agarre", rangos: { cumple: "Niños 20 kg+ / Niñas 15 kg+", progreso: "75–90% del referente", bajo: "Menos de 75%" }, swing: "P1" },
-    ]},
-  ],
-  "Grupo +14": [
-    { label: "Screens TPI", tipo: "screen", tests: [
-      { id: "S1", nombre: "Overhead Deep Squat", rangos: { cumple: "Sin compensaciones", progreso: "1–2 compensaciones", bajo: "3+ compensaciones" }, swing: "P1, P10" },
-      { id: "S2", nombre: "Toe Touch", rangos: { cumple: "Menos de 5 cm del piso", progreso: "5–15 cm", bajo: "Más de 15 cm" }, swing: "P1" },
-      { id: "S3", nombre: "90/90 Stretch", rangos: { cumple: "Torso paralelo al piso", progreso: "45°", bajo: "Menos de 45°" }, swing: "P4, P5" },
-      { id: "S4", nombre: "Pelvic Tilt", rangos: { cumple: "Ant. y post. completo", progreso: "Solo un sentido", bajo: "Sin control" }, swing: "P1, P4" },
-      { id: "S5", nombre: "Torso Rotation", rangos: { cumple: "45°+", progreso: "30–45°", bajo: "Menos de 30°" }, swing: "P4, P7" },
-      { id: "S6", nombre: "Cervical Rotation", rangos: { cumple: "60°+", progreso: "45–60°", bajo: "Menos de 45°" }, swing: "P7" },
-      { id: "S7", nombre: "Shoulder Horizontal Abduction", rangos: { cumple: "Menos de 10° restricción", progreso: "10–30°", bajo: "Más de 30°" }, swing: "P3, P8, P9" },
-      { id: "S8", nombre: "Wrist Flexion/Extension", rangos: { cumple: "70° flex / 60° ext", progreso: "45–70°", bajo: "Menos de 45°" }, swing: "P2, P3, P6" },
-      { id: "S9", nombre: "Ankle Mobility", rangos: { cumple: "12 cm+", progreso: "7–12 cm", bajo: "Menos de 7 cm" }, swing: "P1, P10" },
-      { id: "S10", nombre: "Single Leg Balance 10 seg", rangos: { cumple: "10 seg", progreso: "5–10 seg", bajo: "Menos de 5 seg" }, swing: "P5, P10" },
-      { id: "S11", nombre: "Hip Internal Rotation", rangos: { cumple: "35°+", progreso: "20–35°", bajo: "Menos de 20°" }, swing: "P4, P7" },
-      { id: "S12", nombre: "Hip External Rotation", rangos: { cumple: "40°+", progreso: "25–40°", bajo: "Menos de 25°" }, swing: "P5, P7" },
-      { id: "S13", nombre: "Lower Quarter Rotation", rangos: { cumple: "50°+", progreso: "35–50°", bajo: "Menos de 35°" }, swing: "P5, P7" },
-      { id: "S14", nombre: "Seated Trunk Rotation", rangos: { cumple: "45°+", progreso: "30–45°", bajo: "Menos de 30°" }, swing: "P4, P5" },
-      { id: "S15", nombre: "Lat Length", rangos: { cumple: "Menos de 5 cm restricción", progreso: "5–15 cm", bajo: "Más de 15 cm" }, swing: "P3, P8, P9" },
-      { id: "S16", nombre: "Bridge with Leg Extension", rangos: { cumple: "Piernas niveladas", progreso: "Bajan levemente", bajo: "No puede" }, swing: "P5, P6" },
-    ]},
-    { label: "Potencia", tipo: "potencia", tests: [
-      { id: "PB1", nombre: "Salto Vertical", rangos: { cumple: "30 cm+", progreso: "20–30 cm", bajo: "Menos de 20 cm" } },
-      { id: "PB2", nombre: "Lanzamiento Rotacional 1 kg", rangos: { cumple: "4 m+", progreso: "2.5–4 m", bajo: "Menos de 2.5 m" }, swing: "P4–P7" },
-      { id: "PB3", nombre: "Sit Up and Throw 1 kg", rangos: { cumple: "3 m+", progreso: "2–3 m", bajo: "Menos de 2 m" } },
-      { id: "PB4", nombre: "Fuerza de Agarre", rangos: { cumple: "Niños 20 kg+ / Niñas 15 kg+", progreso: "75–90% del referente", bajo: "Menos de 75%" }, swing: "P1" },
-    ]},
-  ],
-  Competencia: [
-    { label: "Screens TPI", tipo: "screen", tests: [
-      { id: "S1", nombre: "Overhead Deep Squat", rangos: { cumple: "Sin ninguna compensación", progreso: "1 compensación", bajo: "2+ compensaciones" }, swing: "P1, P10" },
-      { id: "S2", nombre: "Toe Touch", rangos: { cumple: "Menos de 3 cm del piso", progreso: "3–10 cm", bajo: "Más de 10 cm" }, swing: "P1" },
-      { id: "S3", nombre: "90/90 Stretch", rangos: { cumple: "Torso paralelo al piso", progreso: "45°", bajo: "Menos de 45°" }, swing: "P4, P5" },
-      { id: "S4", nombre: "Pelvic Tilt", rangos: { cumple: "Control completo ant. y post.", progreso: "Parcial", bajo: "Sin control" }, swing: "P1, P4" },
-      { id: "S5", nombre: "Torso Rotation", rangos: { cumple: "50°+", progreso: "35–50°", bajo: "Menos de 35°" }, swing: "P4, P7" },
-      { id: "S6", nombre: "Cervical Rotation", rangos: { cumple: "60°+", progreso: "45–60°", bajo: "Menos de 45°" }, swing: "P7" },
-      { id: "S7", nombre: "Shoulder Horizontal Abduction", rangos: { cumple: "Menos de 10°", progreso: "10–20°", bajo: "Más de 20°" }, swing: "P3, P8, P9" },
-      { id: "S8", nombre: "Wrist Flexion/Extension", rangos: { cumple: "70° flex / 60° ext", progreso: "50–70°", bajo: "Menos de 50°" }, swing: "P2, P3, P6" },
-      { id: "S9", nombre: "Ankle Mobility", rangos: { cumple: "12 cm+", progreso: "7–12 cm", bajo: "Menos de 7 cm" }, swing: "P1, P10" },
-      { id: "S10", nombre: "Single Leg Balance 10 seg", rangos: { cumple: "10 seg estable", progreso: "7–10 seg", bajo: "Menos de 7 seg" }, swing: "P5, P10" },
-      { id: "S11", nombre: "Hip Internal Rotation", rangos: { cumple: "40°+", progreso: "25–40°", bajo: "Menos de 25°" }, swing: "P4, P7" },
-      { id: "S12", nombre: "Hip External Rotation", rangos: { cumple: "40°+", progreso: "25–40°", bajo: "Menos de 25°" }, swing: "P5, P7" },
-      { id: "S13", nombre: "Lower Quarter Rotation", rangos: { cumple: "50°+", progreso: "35–50°", bajo: "Menos de 35°" }, swing: "P5, P7" },
-      { id: "S14", nombre: "Seated Trunk Rotation", rangos: { cumple: "50°+", progreso: "35–50°", bajo: "Menos de 35°" }, swing: "P4, P5" },
-      { id: "S15", nombre: "Lat Length", rangos: { cumple: "Menos de 3 cm", progreso: "3–10 cm", bajo: "Más de 10 cm" }, swing: "P3, P8, P9" },
-      { id: "S16", nombre: "Bridge with Leg Extension", rangos: { cumple: "Perfecto, niveladas", progreso: "Bajan levemente", bajo: "No puede" }, swing: "P5, P6" },
-    ]},
-    { label: "Potencia", tipo: "potencia", tests: [
-      { id: "P1", nombre: "Salto Vertical", rangos: { cumple: "Hombres 50 cm+ / Mujeres 35 cm+", progreso: "75–90% del referente", bajo: "Menos de 75%" } },
-      { id: "P2", nombre: "Sit Up and Throw 2 kg", rangos: { cumple: "4 m+", progreso: "3–4 m", bajo: "Menos de 3 m" } },
-      { id: "P3", nombre: "Lanzamiento Rotacional 2 kg", rangos: { cumple: "5 m+", progreso: "3.5–5 m", bajo: "Menos de 3.5 m" }, swing: "P4–P7" },
-      { id: "P4", nombre: "Fuerza de Agarre", rangos: { cumple: "Hombres 40 kg+ / Mujeres 25 kg+", progreso: "75–90%", bajo: "Menos de 75%" }, swing: "P1" },
-      { id: "P5", nombre: "Velocidad de Swing (Driver)", rangos: { cumple: "Hombres 85 mph+ / Mujeres 70 mph+", progreso: "70–90% del referente", bajo: "Menos de 70%" }, swing: "P4–P10" },
-    ]},
-  ],
-  Damas: [
-    { label: "Screens TPI", tipo: "screen", tests: [
-      { id: "D1", nombre: "Overhead Deep Squat", rangos: { cumple: "Sin compensaciones (notar valgo rodilla)", progreso: "1–2 compensaciones", bajo: "3+ compensaciones" }, swing: "P1, P10" },
-      { id: "D2", nombre: "Toe Touch", rangos: { cumple: "Toca el piso", progreso: "Menos de 8 cm del piso", bajo: "Más de 8 cm" }, swing: "P1" },
-      { id: "D3", nombre: "90/90 Stretch", rangos: { cumple: "Torso paralelo al piso", progreso: "45°", bajo: "Menos de 45°" }, swing: "P4, P5" },
-      { id: "D4", nombre: "Torso Rotation", rangos: { cumple: "45°+", progreso: "30–45°", bajo: "Menos de 30°" }, swing: "P4, P7" },
-      { id: "D5", nombre: "Shoulder Horizontal Abduction", rangos: { cumple: "Menos de 10° (doc. hiperlaxitud)", progreso: "10–30°", bajo: "Más de 30°" }, swing: "P3, P8, P9" },
-      { id: "D6", nombre: "Ankle Mobility", rangos: { cumple: "12 cm+", progreso: "7–12 cm", bajo: "Menos de 7 cm" }, swing: "P1, P10" },
-      { id: "D7", nombre: "Single Leg Balance 12 seg", rangos: { cumple: "12 seg", progreso: "7–12 seg", bajo: "Menos de 7 seg" }, swing: "P5, P10" },
-      { id: "D8", nombre: "Hip Sway Test", rangos: { cumple: "Sin sway", progreso: "Menos de 5 cm", bajo: "Más de 5 cm" }, swing: "P4, P7" },
-      { id: "D9", nombre: "Bridge with Leg Extension", rangos: { cumple: "Piernas niveladas", progreso: "Bajan levemente", bajo: "No puede" }, swing: "P5, P6" },
-      { id: "D10", nombre: "Pelvic Tilt", rangos: { cumple: "Control completo ant. y post.", progreso: "Solo un sentido", bajo: "Sin control" }, swing: "P1, P4" },
-    ]},
-    { label: "Potencia", tipo: "potencia", tests: [
-      { id: "DP1", nombre: "Salto Vertical", rangos: { cumple: "35 cm+", progreso: "25–35 cm", bajo: "Menos de 25 cm" } },
-      { id: "DP2", nombre: "Sit Up and Throw 1.5 kg", rangos: { cumple: "3 m+", progreso: "2–3 m", bajo: "Menos de 2 m" } },
-      { id: "DP3", nombre: "Lanzamiento Rotacional 1.5 kg", rangos: { cumple: "4 m+", progreso: "2.5–4 m", bajo: "Menos de 2.5 m" }, swing: "P4–P7" },
-      { id: "DP4", nombre: "Fuerza de Agarre", rangos: { cumple: "25 kg+", progreso: "18–25 kg", bajo: "Menos de 18 kg" }, swing: "P1" },
-      { id: "DP5", nombre: "Velocidad de Swing", rangos: { cumple: "70 mph+", progreso: "60–70 mph", bajo: "Menos de 60 mph" }, swing: "P4–P10" },
-    ]},
-  ],
-  "Damas Senior": [
-    { label: "Screens TPI", tipo: "screen", tests: [
-      { id: "DS1", nombre: "Overhead Deep Squat (modificado)", rangos: { cumple: "Con apoyo si necesario, sin dolor", progreso: "Compensaciones leves", bajo: "No puede o dolor" }, swing: "P1, P10" },
-      { id: "DS2", nombre: "Toe Touch", rangos: { cumple: "Menos de 15 cm del piso", progreso: "15–25 cm", bajo: "Más de 25 cm" }, swing: "P1" },
-      { id: "DS3", nombre: "Torso Rotation", rangos: { cumple: "35°+", progreso: "20–35°", bajo: "Menos de 20°" }, swing: "P4, P7" },
-      { id: "DS4", nombre: "90/90 Stretch", rangos: { cumple: "45°+", progreso: "30–45°", bajo: "Menos de 30°" }, swing: "P4, P5" },
-      { id: "DS5", nombre: "Pelvic Tilt", rangos: { cumple: "Control ant. y post.", progreso: "Parcial", bajo: "Sin control" }, swing: "P1, P4" },
-      { id: "DS6", nombre: "Single Leg Balance (caídas)", rangos: { cumple: "8 seg", progreso: "4–8 seg", bajo: "Menos de 4 seg" }, swing: "P5, P10" },
-      { id: "DS7", nombre: "Hip Sway Test", rangos: { cumple: "Sin sway", progreso: "Menos de 5 cm", bajo: "Más de 5 cm" }, swing: "P4, P7" },
-      { id: "DS8", nombre: "Bridge with Leg Extension (mod.)", rangos: { cumple: "Niveladas o levemente bajas", progreso: "Bajan claramente", bajo: "No puede" }, swing: "P5, P6" },
-      { id: "DS9", nombre: "Fuerza de Agarre", rangos: { cumple: "18 kg+", progreso: "12–18 kg", bajo: "Menos de 12 kg" }, swing: "P1" },
-      { id: "DS10", nombre: "Salto Vertical en Puntillas", rangos: { cumple: "15 cm+", progreso: "8–15 cm", bajo: "Menos de 8 cm" } },
-    ]},
-  ],
-};
+function categoriaTipo(label: string): "desarrollo_motor" | "screen" | "potencia" {
+  if (label.startsWith("Desarrollo Motor")) return "desarrollo_motor";
+  if (label.startsWith("Potencia")) return "potencia";
+  return "screen";
+}
 
-function getPhysicalCategorias(grupo: string): PhysicalCategoriaDef[] {
-  return TPI_CATEGORIAS_POR_GRUPO[grupo] || TPI_CATEGORIAS_POR_GRUPO["Albatros"];
+function posicionesDeGrupo(protocolosTecnico: Record<string, ProtocoloTestRow[]>, grupo: string): string[] {
+  const tests = protocolosTecnico[normalizeGrupoKey(grupo)] ?? [];
+  return tests.slice().sort((a, b) => (a.orden ?? 0) - (b.orden ?? 0)).map((t) => t.codigo);
+}
+
+function getPhysicalCategorias(protocolosFisico: Record<string, ProtocoloTestRow[]>, grupo: string): PhysicalCategoriaDef[] {
+  const tests = (protocolosFisico[normalizeGrupoKey(grupo)] ?? []).slice().sort((a, b) => (a.orden ?? 0) - (b.orden ?? 0));
+  const order: string[] = [];
+  const byLabel = new Map<string, PhysicalTestDef[]>();
+  tests.forEach((t) => {
+    const label = t.categoria ?? "General";
+    if (!byLabel.has(label)) { byLabel.set(label, []); order.push(label); }
+    const b = t.protocolo_benchmarks[0];
+    const swingMatch = t.instrucciones?.match(/^Posición de swing relacionada: (.+)$/);
+    byLabel.get(label)!.push({
+      id: t.codigo,
+      nombre: t.nombre,
+      rangos: { cumple: b?.descripcion_ok ?? "", progreso: b?.descripcion_progreso ?? "", bajo: b?.descripcion_no ?? "" },
+      swing: swingMatch ? swingMatch[1] : undefined,
+    });
+  });
+  return order.map((label) => ({ label, tipo: categoriaTipo(label), tests: byLabel.get(label)! }));
 }
 
 function calcularGrupoEfectivo(student: { birth_date: string | null; grupo_activo: string | null; gender: string | null }): string {
@@ -457,17 +322,16 @@ function calcPhysPromedio(tests: Record<string, PhysicalTestState>): number | nu
   return Math.round(scores.reduce((a, b) => a + b, 0) / scores.length * 100) / 100;
 }
 
-function defaultPhysicalForm(grupo: string): PhysicalForm {
-  const categorias = getPhysicalCategorias(grupo);
+function defaultPhysicalForm(protocolosFisico: Record<string, ProtocoloTestRow[]>, grupo: string): PhysicalForm {
+  const categorias = getPhysicalCategorias(protocolosFisico, grupo);
   const tests: Record<string, PhysicalTestState> = {};
   categorias.forEach((cat) => cat.tests.forEach((t) => { tests[t.id] = { result: null, obs: "", na: false, obsOpen: false }; }));
   return { evaluation_type: "inicial", evaluation_date: new Date().toISOString().split("T")[0], tests, professor_comment: "" };
 }
 
-function getCriteriosGrupo(grupo: string, posicion: string): string[] {
-  if (grupo === "Birdies") return CRITERIOS_BIRDIES[posicion] || [];
-  if (grupo === "Águilas") return CRITERIOS_AGUILAS[posicion] || [];
-  return CRITERIOS_POR_POSICION[posicion] || [];
+function getCriteriosGrupo(protocolosTecnico: Record<string, ProtocoloTestRow[]>, grupo: string, posicion: string): string[] {
+  const test = (protocolosTecnico[normalizeGrupoKey(grupo)] ?? []).find((t) => t.codigo === posicion);
+  return (test?.protocolo_benchmarks ?? []).slice().sort((a, b) => (a.orden ?? 0) - (b.orden ?? 0)).map((b) => b.criterio);
 }
 
 function critScore(val: CritValue): number|null {
@@ -585,11 +449,11 @@ function initiales(name: string): string {
   return name.split(" ").slice(0,2).map((n) => n[0]).join("").toUpperCase();
 }
 
-function defaultSwingForm(grupo: string): SwingForm {
-  const posiciones = POSICIONES_GRUPO[grupo] || POSICIONES_GRUPO["Albatros"];
+function defaultSwingForm(protocolosTecnico: Record<string, ProtocoloTestRow[]>, grupo: string): SwingForm {
+  const posiciones = posicionesDeGrupo(protocolosTecnico, grupo);
   const positions: Record<string, PosState> = {};
   posiciones.forEach((p) => {
-    const criterios = getCriteriosGrupo(grupo, p);
+    const criterios = getCriteriosGrupo(protocolosTecnico, grupo, p);
     positions[p] = { na: false, criterios: criterios.map(() => null), obsOpen: false, obs: "" };
   });
   return { evaluation_type: "inicial", evaluation_date: new Date().toISOString().split("T")[0], positions, professor_comment: "" };
@@ -638,6 +502,8 @@ export default function StudentProfile({ studentId }: { studentId: string }) {
   const [trackmanLatest, setTrackmanLatest] = useState<TrackmanSession | null>(null);
   const [showTrackmanHistory, setShowTrackmanHistory] = useState(false);
   const [trackmanError, setTrackmanError] = useState<string | null>(null);
+  const [protocolosTecnico, setProtocolosTecnico] = useState<Record<string, ProtocoloTestRow[]>>({});
+  const [protocolosFisico, setProtocolosFisico] = useState<Record<string, ProtocoloTestRow[]>>({});
   // Análisis integrado del perfil (independiente de evaluación específica)
   const [hasSwingEvals, setHasSwingEvals] = useState(false);
   const [hasTrackmanData, setHasTrackmanData] = useState(false);
@@ -807,6 +673,44 @@ export default function StudentProfile({ studentId }: { studentId: string }) {
     fetchPhysical();
   }, [activeTab, studentId]);
 
+  useEffect(() => {
+    if (activeTab !== "tecnicos" || !student) return;
+    const grupos = new Set<string>([normalizeGrupoKey(calcularGrupoEfectivo(student))]);
+    swingEvals.forEach((e) => grupos.add(normalizeGrupoKey(e.grupo)));
+    const missing = [...grupos].filter((g) => !(g in protocolosTecnico));
+    if (missing.length === 0) return;
+    supabase.from("protocolo_tests").select("*, protocolo_benchmarks(*)")
+      .in("grupo", missing).eq("tipo", "tecnico").eq("activo", true).order("orden")
+      .then(({ data }) => {
+        const byGrupo: Record<string, ProtocoloTestRow[]> = {};
+        missing.forEach((g) => { byGrupo[g] = []; });
+        (data ?? []).forEach((row: ProtocoloTestRow & { grupo: string }) => {
+          const benchmarks = (row.protocolo_benchmarks ?? []).slice().sort((a, b) => (a.orden ?? 0) - (b.orden ?? 0));
+          (byGrupo[row.grupo] ??= []).push({ ...row, protocolo_benchmarks: benchmarks });
+        });
+        setProtocolosTecnico((prev) => ({ ...prev, ...byGrupo }));
+      });
+  }, [activeTab, student, swingEvals, protocolosTecnico]);
+
+  useEffect(() => {
+    if (activeTab !== "fisicos" || !student) return;
+    const grupos = new Set<string>([normalizeGrupoKey(calcularGrupoFisico(student))]);
+    physicalEvals.forEach((e) => grupos.add(normalizeGrupoKey(e.grupo)));
+    const missing = [...grupos].filter((g) => !(g in protocolosFisico));
+    if (missing.length === 0) return;
+    supabase.from("protocolo_tests").select("*, protocolo_benchmarks(*)")
+      .in("grupo", missing).eq("tipo", "fisico").eq("activo", true).order("orden")
+      .then(({ data }) => {
+        const byGrupo: Record<string, ProtocoloTestRow[]> = {};
+        missing.forEach((g) => { byGrupo[g] = []; });
+        (data ?? []).forEach((row: ProtocoloTestRow & { grupo: string }) => {
+          const benchmarks = (row.protocolo_benchmarks ?? []).slice().sort((a, b) => (a.orden ?? 0) - (b.orden ?? 0));
+          (byGrupo[row.grupo] ??= []).push({ ...row, protocolo_benchmarks: benchmarks });
+        });
+        setProtocolosFisico((prev) => ({ ...prev, ...byGrupo }));
+      });
+  }, [activeTab, student, physicalEvals, protocolosFisico]);
+
   function openEdit() {
     if (!student) return;
     setForm({ full_name: student.full_name, birth_date: student.birth_date ?? "", status: student.status, grupo_activo: student.grupo_activo ?? "", parent_name: student.parent_name ?? "", parent_phone: student.parent_phone ?? "", parent_email: student.parent_email ?? "", observations: student.observations ?? "", tiene_talega: student.tiene_talega ?? "" });
@@ -827,7 +731,7 @@ export default function StudentProfile({ studentId }: { studentId: string }) {
 
   function openSwingForm() {
     const grupo = calcularGrupoEfectivo(student!);
-    setSwingForm(defaultSwingForm(grupo));
+    setSwingForm(defaultSwingForm(protocolosTecnico, grupo));
     setSwingSaveError(null); setShowSwingForm(true);
   }
   function closeSwingForm() { setShowSwingForm(false); setSwingForm(null); setSwingSaveError(null); }
@@ -892,7 +796,7 @@ posPayload[`${key}_score`] = rawScore !== null ? Math.round(rawScore) : null;
 
   function openPhysicalForm() {
     const g = calcularGrupoFisico(student!);
-    setPhysicalForm(defaultPhysicalForm(g));
+    setPhysicalForm(defaultPhysicalForm(protocolosFisico, g));
     setPhysicalSaveError(null); setShowPhysicalForm(true);
   }
   function closePhysicalForm() { setShowPhysicalForm(false); setPhysicalForm(null); setPhysicalSaveError(null); }
@@ -1448,7 +1352,9 @@ posPayload[`${key}_score`] = rawScore !== null ? Math.round(rawScore) : null;
 
   const grupo = calcularGrupoEfectivo(student);
   const grupoFisico = calcularGrupoFisico(student);
-  const posicionesActivas = POSICIONES_GRUPO[grupo] || POSICIONES_GRUPO["Albatros"];
+  const posicionesActivas = posicionesDeGrupo(protocolosTecnico, grupo);
+  const protocolosTecnicoReady = normalizeGrupoKey(grupo) in protocolosTecnico;
+  const protocolosFisicoReady = normalizeGrupoKey(grupoFisico) in protocolosFisico;
   const TABS: { key: Tab; label: string }[] = [{ key:"datos", label:"Datos personales" }, { key:"tecnicos", label:"Tests técnicos" }, { key:"fisicos", label:"Tests físicos" }, { key:"notas", label:"Notas del profesor" }, { key:"hitos", label:"Hitos" }];
 
   // Unwrap double-encoded integrated result for the profile card
@@ -1635,7 +1541,7 @@ posPayload[`${key}_score`] = rawScore !== null ? Math.round(rawScore) : null;
               </button>
             </div>
 
-            {swingLoading ? (
+            {(swingLoading || !protocolosTecnicoReady) ? (
               <div className="flex items-center justify-center py-16 text-gray-400">
                 <svg className="animate-spin mr-3 h-5 w-5" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"/></svg>
                 Cargando...
@@ -1670,7 +1576,7 @@ posPayload[`${key}_score`] = rawScore !== null ? Math.round(rawScore) : null;
                   })() : null;
                   const isAnalyzing = analyzingId === ev.id;
                   const isAnalyzingIntegrated = analyzingIntegratedId === ev.id;
-                  const posActivas = POSICIONES_GRUPO[ev.grupo] || POSICIONES_GRUPO["Albatros"];
+                  const posActivas = posicionesDeGrupo(protocolosTecnico, ev.grupo);
                   return (
                     <div key={ev.id} className="border border-gray-100 rounded-xl overflow-hidden">
                       <button onClick={() => setExpandedEval(isOpen ? null : ev.id)} className="w-full flex items-center justify-between px-5 py-4 hover:bg-gray-50 transition-colors text-left">
@@ -1718,7 +1624,7 @@ posPayload[`${key}_score`] = rawScore !== null ? Math.round(rawScore) : null;
                                             <p className="text-xl font-bold" style={{ color:c.text }}>{score?.toFixed(1) ?? "—"}</p>
                                             <div className="h-1 rounded-full mt-1.5" style={{ backgroundColor:"#E5E7EB" }}><div className="h-1 rounded-full" style={{ width:score?`${score*10}%`:"0%", backgroundColor:c.bar }}/></div>
                                             <p className="mt-1" style={{ color:c.text, fontSize:"10px" }}>{scoreLabel(score)}</p>
-                                            {criterios && <div className="mt-2 space-y-0.5">{criterios.map((crit, i) => <div key={i} className="flex items-center gap-1"><span style={{ fontSize:"10px" }}>{crit==="cumple"?"✅":crit==="progreso"?"⚠️":crit==="no"?"❌":"○"}</span><span style={{ fontSize:"9px", color:"#6B7280", lineHeight:"1.3" }}>{getCriteriosGrupo(ev.grupo, p)[i]?.split("—")[0]?.trim()}</span></div>)}</div>}
+                                            {criterios && <div className="mt-2 space-y-0.5">{criterios.map((crit, i) => <div key={i} className="flex items-center gap-1"><span style={{ fontSize:"10px" }}>{crit==="cumple"?"✅":crit==="progreso"?"⚠️":crit==="no"?"❌":"○"}</span><span style={{ fontSize:"9px", color:"#6B7280", lineHeight:"1.3" }}>{getCriteriosGrupo(protocolosTecnico, ev.grupo, p)[i]?.split("—")[0]?.trim()}</span></div>)}</div>}
                                             {obs && <p className="text-gray-500 mt-2 italic border-t border-gray-100 pt-1" style={{ fontSize:"10px" }}>{obs}</p>}
                                           </>}
                                         </div>
@@ -2017,7 +1923,7 @@ posPayload[`${key}_score`] = rawScore !== null ? Math.round(rawScore) : null;
             <div className="flex items-center justify-between mb-5">
               <div>
                 <h2 className="text-base font-semibold text-gray-900">Evaluación física TPI</h2>
-                <p className="text-xs text-gray-400 mt-0.5">{grupoFisico} · {getPhysicalCategorias(grupoFisico).reduce((acc, c) => acc + c.tests.length, 0)} tests</p>
+                <p className="text-xs text-gray-400 mt-0.5">{grupoFisico} · {getPhysicalCategorias(protocolosFisico, grupoFisico).reduce((acc, c) => acc + c.tests.length, 0)} tests</p>
               </div>
               <button onClick={openPhysicalForm} className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium text-white" style={{ backgroundColor:"#1B4D2E" }}>
                 <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path d="M12 5v14M5 12h14"/></svg>
@@ -2025,7 +1931,7 @@ posPayload[`${key}_score`] = rawScore !== null ? Math.round(rawScore) : null;
               </button>
             </div>
 
-            {physicalLoading ? (
+            {(physicalLoading || !protocolosFisicoReady) ? (
               <div className="flex items-center justify-center py-16 text-gray-400">
                 <svg className="animate-spin mr-3 h-5 w-5" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"/></svg>
                 Cargando...
@@ -2042,7 +1948,7 @@ posPayload[`${key}_score`] = rawScore !== null ? Math.round(rawScore) : null;
                   const isOpen = expandedPhysical === ev.id;
                   const ai = physicalAiResults[ev.id];
                   const isAnalyzing = analyzingPhysicalId === ev.id;
-                  const categorias = getPhysicalCategorias(ev.grupo);
+                  const categorias = getPhysicalCategorias(protocolosFisico, ev.grupo);
                   const testsData = ev.tests_data || {};
                   return (
                     <div key={ev.id} className="border border-gray-100 rounded-xl overflow-hidden">
@@ -2705,7 +2611,7 @@ posPayload[`${key}_score`] = rawScore !== null ? Math.round(rawScore) : null;
               </div>
 
               {Object.entries(swingForm.positions).map(([pid, ps]) => {
-                const criterios = getCriteriosGrupo(grupo, pid);
+                const criterios = getCriteriosGrupo(protocolosTecnico, grupo, pid);
                 const posScore = calcPosScore(ps.criterios);
                 return (
                   <div key={pid} className="border border-gray-100 rounded-xl overflow-hidden">
@@ -2799,7 +2705,7 @@ posPayload[`${key}_score`] = rawScore !== null ? Math.round(rawScore) : null;
                 </FormField>
               </div>
 
-              {getPhysicalCategorias(grupoFisico).map((cat) => {
+              {getPhysicalCategorias(protocolosFisico, grupoFisico).map((cat) => {
                 const tipoBadge = cat.tipo === "desarrollo_motor" ? { bg:"#FEF3C7", color:"#92400E" } : cat.tipo === "potencia" ? { bg:"#FEE2E2", color:"#991B1B" } : { bg:"#EFF6FF", color:"#1D4ED8" };
                 return (
                   <div key={cat.label}>
