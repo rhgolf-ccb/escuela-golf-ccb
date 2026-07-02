@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Geist } from "next/font/google";
 import "./globals.css";
 import Navbar from "@/components/Navbar";
+import AsesorGolfChat from "@/components/AsesorGolfChat";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -20,9 +21,13 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="es" className={`${geistSans.variable} h-full`}>
+      <head>
+        <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/dist/tabler-icons.min.css" />
+      </head>
       <body className="min-h-full flex flex-col bg-gray-50 antialiased">
         <Navbar />
         <main className="flex-1 flex flex-col">{children}</main>
+        <AsesorGolfChat />
       </body>
     </html>
   );

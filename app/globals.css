@@ -16,3 +16,17 @@ body {
   color: var(--color-foreground);
   font-family: Arial, Helvetica, sans-serif;
 }
+
+:root {
+  --surface-1: #ffffff;
+  --surface-2: #fdfdfc;
+  --border-strong: #d1d5db;
+}
+
+@keyframes asesor-golf-panel-in {
+  from { opacity: 0; transform: translateY(12px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.asesor-golf-panel-enter {
+  animation: asesor-golf-panel-in 0.18s ease-out;
+}
