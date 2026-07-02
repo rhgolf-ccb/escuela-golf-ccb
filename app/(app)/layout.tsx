@@ -1,7 +1,7 @@
 import Navbar from "@/components/Navbar";
 import AsesorGolfChat from "@/components/AsesorGolfChat";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
-import type { Rol } from "@/lib/roles";
+import { isStaffRole, type Rol } from "@/lib/roles";
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const supabase = await createSupabaseServerClient();
@@ -17,7 +17,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     <div className="min-h-full flex flex-col">
       <Navbar role={role} />
       <main className="flex-1 flex flex-col">{children}</main>
-      <AsesorGolfChat />
+      {role && isStaffRole(role) && <AsesorGolfChat />}
     </div>
   );
 }
