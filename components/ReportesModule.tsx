@@ -408,7 +408,8 @@ function TabAsistencia() {
         const ids = (ses as unknown as Sesion[]).map((s) => s.id);
         const { data: rv } = await supabase.from("reservas")
           .select("id,sesion_id,estudiante_id,estado,posicion_espera,created_at,asistio,students!reservas_estudiante_id_fkey(id,full_name,grupo_activo,tiene_talega)")
-          .in("sesion_id", ids);
+          .in("sesion_id", ids)
+          .eq("estado", "confirmado");
         setReservas(((rv ?? []) as unknown as Reserva[]).map((r) => ({ ...r, students: Array.isArray(r.students) ? r.students[0] : r.students })));
       } else {
         setReservas([]);

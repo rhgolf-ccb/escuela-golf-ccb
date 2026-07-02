@@ -26,6 +26,7 @@ interface StudentRow {
   id: string;
   full_name: string;
   grupo_activo: string | null;
+  reserva_id: string;
 }
 
 type Asistencia = boolean | null; // true=presente, false=ausente, null=sin marcar
@@ -43,12 +44,6 @@ const LUGAR_LABEL: Record<string, string> = {
 };
 
 const SUBGRUPOS_JUVENIL = ["Birdies", "Águilas", "Albatros", "+14"];
-
-const GRUPOS_POR_TIPO: Record<string, string[]> = {
-  juvenil: ["Birdies", "Águilas", "Albatros", "+14"],
-  competencia: ["Competencia"],
-  damas: ["Damas"],
-};
 
 const GRUPO_COLOR: Record<string, { bg: string; text: string }> = {
   Birdies: { bg: "#dbeafe", text: "#1e40af" },
@@ -111,29 +106,33 @@ export default function AsistenciaView({ sesionId }: { sesionId: string }) {
     const p = planData as PlanInfo;
     setPlan(p);
 
-    // 3. Load students for this group
-    const grupos = GRUPOS_POR_TIPO[p.tipo_plan] ?? [];
-    const { data: alumnosData } = await supabase
-      .from("students")
-      .select("id, full_name, grupo_activo")
-      .in("grupo_activo", grupos)
-      .eq("status", "activo")
-      .order("full_name");
+    // 3. Load students with a confirmed reservation for this session (+ their asistio)
+    type ReservaRow = {
+      id: string;
+      asistio: boolean | null;
+      students: { id: string; full_name: string; grupo_activo: string | null } | { id: string; full_name: string; grupo_activo: string | null }[] | null;
+    };
+    const { data: rvData } = await supabase
+      .from("reservas")
+      .select("id, asistio, students!reservas_estudiante_id_fkey(id, full_name, grupo_activo)")
+      .eq("sesion_id", sesionId)
+      .eq("estado", "confirmado");
 
-    const alumnos = (alumnosData as StudentRow[]) ?? [];
+    const rows = ((rvData as unknown as ReservaRow[]) ?? [])
+      .map((r) => {
+        const st = Array.isArray(r.students) ? r.students[0] : r.students;
+        if (!st) return null;
+        return { id: st.id, full_name: st.full_name, grupo_activo: st.grupo_activo, reserva_id: r.id, asistio: r.asistio };
+      })
+      .filter((r): r is { id: string; full_name: string; grupo_activo: string | null; reserva_id: string; asistio: boolean | null } => r !== null)
+      .sort((a, b) => a.full_name.localeCompare(b.full_name));
+
+    const alumnos: StudentRow[] = rows.map(({ id, full_name, grupo_activo, reserva_id }) => ({ id, full_name, grupo_activo, reserva_id }));
     setStudents(alumnos);
 
-    // 4. Load existing attendance
-    const { data: asistData } = await supabase
-      .from("asistencias_sesion")
-      .select("student_id, asistio")
-      .eq("sesion_id", sesionId);
-
+    // 4. Seed local attendance state from reservas.asistio
     const map: Record<string, Asistencia> = {};
-    alumnos.forEach((a) => { map[a.id] = null; });
-    (asistData ?? []).forEach((r: { student_id: string; asistio: boolean | null }) => {
-      map[r.student_id] = r.asistio ?? null;
-    });
+    rows.forEach((r) => { map[r.id] = r.asistio; });
     setAsistencias(map);
 
     setLoading(false);
@@ -168,17 +167,16 @@ export default function AsistenciaView({ sesionId }: { sesionId: string }) {
     setSaving(true);
     setError(null);
     try {
-      const upserts = students.map((s) => ({
-        sesion_id: sesionId,
-        student_id: s.id,
+      const updates = students.map((s) => ({
+        id: s.reserva_id,
         asistio: asistencias[s.id] ?? null,
       }));
 
-      // Upsert in batches of 50
-      for (let i = 0; i < upserts.length; i += 50) {
+      // Update reservas.asistio in batches of 50 (upsert on PK = plain update per row)
+      for (let i = 0; i < updates.length; i += 50) {
         const { error: upsertErr } = await supabase
-          .from("asistencias_sesion")
-          .upsert(upserts.slice(i, i + 50), { onConflict: "sesion_id,student_id" });
+          .from("reservas")
+          .upsert(updates.slice(i, i + 50), { onConflict: "id" });
         if (upsertErr) throw new Error(upsertErr.message);
       }
 
@@ -335,7 +333,11 @@ export default function AsistenciaView({ sesionId }: { sesionId: string }) {
           </p>
         </div>
         {studentsFiltered.length === 0 ? (
-          <div className="py-12 text-center text-gray-400 text-sm">No hay alumnos en este grupo.</div>
+          <div className="py-12 text-center text-gray-400 text-sm">
+            {students.length === 0
+              ? "Sin inscritos para esta sesión — ve a Reservas para inscribir alumnos."
+              : "No hay alumnos en este grupo."}
+          </div>
         ) : (
           <div className="divide-y divide-gray-50">
             {studentsFiltered.map((student) => {
