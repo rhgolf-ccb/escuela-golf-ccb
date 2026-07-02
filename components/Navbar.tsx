@@ -2,7 +2,9 @@
 
 import Link from "next/link";
 import Image from "next/image";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
+import { supabase } from "@/lib/supabase";
+import { isRouteAllowed, type Rol } from "@/lib/roles";
 
 const navItems = [
   { label: "Alumnos", href: "/alumnos" },
@@ -11,11 +13,24 @@ const navItems = [
   { label: "Reportes", href: "/reportes" },
   { label: "Protocolos", href: "/protocolos" },
   { label: "Staff", href: "/staff" },
+  { label: "Accesos", href: "/accesos" },
   { label: "Drills", href: "/drills" },
 ];
 
-export default function Navbar() {
+export default function Navbar({ role }: { role: Rol | null }) {
   const pathname = usePathname();
+  const router = useRouter();
+
+  const visibleItems = role ? navItems.filter((item) => isRouteAllowed(role, item.href)) : [];
+
+  async function handleLogout() {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (user) {
+      await supabase.from("access_logs").insert({ user_id: user.id, accion: "logout" });
+    }
+    await supabase.auth.signOut();
+    router.push("/login");
+  }
 
   return (
     <header className="bg-ccb-green shadow-lg">
@@ -39,7 +54,7 @@ export default function Navbar() {
             </div>
             <div className="w-px h-8 bg-ccb-gold opacity-40 mx-2" />
             <nav className="flex gap-1">
-              {navItems.map((item) => {
+              {visibleItems.map((item) => {
                 const active = pathname.startsWith(item.href);
                 return (
                   <Link
@@ -57,8 +72,16 @@ export default function Navbar() {
               })}
             </nav>
           </div>
-          <div className="text-right hidden sm:block">
-            <p className="text-white text-xs opacity-60">Country Club de Bogotá</p>
+          <div className="flex items-center gap-4">
+            <p className="text-white text-xs opacity-60 hidden sm:block">Country Club de Bogotá</p>
+            <button
+              onClick={handleLogout}
+              className="text-white text-xs opacity-70 hover:opacity-100 flex items-center gap-1"
+              title="Cerrar sesión"
+            >
+              <i className="ti ti-logout" style={{ fontSize: 14 }} />
+              Salir
+            </button>
           </div>
         </div>
       </div>
