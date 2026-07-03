@@ -4,7 +4,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { usePathname, useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
-import { isRouteAllowed, type Rol } from "@/lib/roles";
+import { isRouteAllowed, isStaffRole, type Rol } from "@/lib/roles";
 
 const navItems = [
   { label: "Alumnos", href: "/alumnos" },
@@ -21,7 +21,11 @@ export default function Navbar({ role }: { role: Rol | null }) {
   const pathname = usePathname();
   const router = useRouter();
 
-  const visibleItems = role ? navItems.filter((item) => isRouteAllowed(role, item.href)) : [];
+  const visibleItems = !role
+    ? []
+    : isStaffRole(role)
+    ? navItems.filter((item) => isRouteAllowed(role, item.href))
+    : [{ label: "Mi Perfil", href: "/mi-perfil" }];
 
   async function handleLogout() {
     const { data: { user } } = await supabase.auth.getUser();

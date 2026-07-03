@@ -131,7 +131,9 @@ export default function MiPerfilView({ rol, estudiantes }: { rol: Rol; estudiant
 
   return (
     <div className="max-w-3xl mx-auto px-4 sm:px-6 py-8">
-      <h1 className="text-2xl font-bold text-gray-900 mb-1">Mi Perfil</h1>
+      <h1 className="text-2xl font-bold text-gray-900 mb-1">
+        {selected ? `Perfil de ${selected.full_name}` : "Mi Perfil"}
+      </h1>
       <p className="text-sm text-gray-400 mb-4">Consulta el progreso y la información de tu(s) alumno(s)</p>
 
       {(rol === "padre_competencia" || rol === "alumno_competencia") && (
