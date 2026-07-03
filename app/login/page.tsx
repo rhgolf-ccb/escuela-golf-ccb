@@ -37,12 +37,13 @@ function LoginNotice() {
   return null;
 }
 
+type Step = "email" | "password" | "sent";
+
 export default function LoginPage() {
-  const [staffMode, setStaffMode] = useState(false);
+  const [step, setStep] = useState<Step>("email");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [sending, setSending] = useState(false);
-  const [sent, setSent] = useState(false);
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [sessionDays, setSessionDays] = useState<number | null>(30);
 
@@ -52,32 +53,56 @@ export default function LoginPage() {
     });
   }, []);
 
-  async function handleSubmit(e: React.FormEvent) {
+  async function handleEmailSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!email.trim()) return;
-    setSending(true);
+    setLoading(true);
     setError(null);
     try {
-      if (staffMode) {
-        const { error } = await supabase.auth.signInWithPassword({
-          email: email.trim(),
-          password,
-        });
-        if (error) throw new Error(error.message);
-        window.location.href = "/auth/callback";
+      const res = await fetch("/api/check-access", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: email.trim() }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.found) {
+        setError("Este correo no tiene acceso autorizado.");
         return;
       }
-      const { error } = await supabase.auth.signInWithOtp({
-        email: email.trim(),
-        options: { emailRedirectTo: `${window.location.origin}/auth/callback` },
-      });
-      if (error) throw new Error(error.message);
-      setSent(true);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : staffMode ? "Email o contraseña incorrectos." : "No pudimos enviar el link. Intenta de nuevo.");
+
+      if (data.isStaff) {
+        setStep("password");
+        return;
+      }
+
+      const { error: otpError } = await supabase.auth.signInWithOtp({ email: email.trim() });
+      if (otpError) throw new Error(otpError.message);
+      setStep("sent");
+    } catch {
+      setError("No pudimos verificar tu correo. Intenta de nuevo.");
     } finally {
-      setSending(false);
+      setLoading(false);
     }
+  }
+
+  async function handlePasswordSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    setLoading(true);
+    setError(null);
+    try {
+      const { error: pwError } = await supabase.auth.signInWithPassword({ email: email.trim(), password });
+      if (pwError) throw new Error(pwError.message);
+      window.location.href = "/auth/callback";
+    } catch {
+      setError("Email o contraseña incorrectos.");
+      setLoading(false);
+    }
+  }
+
+  function backToEmail() {
+    setStep("email");
+    setPassword("");
+    setError(null);
   }
 
   return (
@@ -93,52 +118,60 @@ export default function LoginPage() {
           <LoginNotice />
         </Suspense>
 
-        {sent ? (
+        {step === "sent" ? (
           <div className="text-center py-2">
             <p className="text-sm text-gray-700">
               Te enviamos un link a <span className="font-medium">{email}</span>.
             </p>
             <p className="text-sm text-gray-500 mt-1">Revisa tu bandeja de entrada.</p>
           </div>
+        ) : step === "password" ? (
+          <form onSubmit={handlePasswordSubmit} className="space-y-3">
+            <p className="text-xs text-gray-500 text-center">
+              {email} <button type="button" onClick={backToEmail} className="underline">Cambiar</button>
+            </p>
+            <input
+              type="password"
+              required
+              autoComplete="current-password"
+              autoFocus
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder="Contraseña"
+              className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2"
+            />
+            {error && <p className="text-xs text-red-600">{error}</p>}
+            <button
+              type="submit"
+              disabled={loading}
+              className="w-full px-4 py-2 rounded-lg text-sm font-medium text-white disabled:opacity-50"
+              style={{ backgroundColor: "#1a3a2a" }}
+            >
+              {loading ? "Ingresando..." : "Ingresar"}
+            </button>
+          </form>
         ) : (
-          <form onSubmit={handleSubmit} className="space-y-3">
+          <form onSubmit={handleEmailSubmit} className="space-y-3">
             <input
               type="email"
               required
               autoComplete="email"
+              autoFocus
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               placeholder="tu@email.com"
               className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2"
             />
-            {staffMode && (
-              <input
-                type="password"
-                required
-                autoComplete="current-password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder="Contraseña"
-                className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2"
-              />
-            )}
             {error && <p className="text-xs text-red-600">{error}</p>}
             <button
               type="submit"
-              disabled={sending}
+              disabled={loading}
               className="w-full px-4 py-2 rounded-lg text-sm font-medium text-white disabled:opacity-50"
               style={{ backgroundColor: "#1a3a2a" }}
             >
-              {sending ? "Ingresando..." : staffMode ? "Ingresar" : "Enviar link de acceso"}
+              {loading ? "Verificando..." : "Continuar"}
             </button>
-            {!staffMode && <p className="text-[11px] text-gray-400 text-center">{sessionDaysNote(sessionDays)}</p>}
-            <button
-              type="button"
-              onClick={() => { setStaffMode((v) => !v); setError(null); setPassword(""); }}
-              className="w-full text-[11px] text-gray-400 text-center underline"
-            >
-              {staffMode ? "Ingresar con link por email" : "¿Eres staff? Ingresa con contraseña"}
-            </button>
+            <p className="text-[11px] text-gray-400 text-center">{sessionDaysNote(sessionDays)}</p>
           </form>
         )}
       </div>

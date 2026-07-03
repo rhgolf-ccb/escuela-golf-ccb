@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
-import { ADMIN_ROLES, type Rol } from "@/lib/roles";
+import { ADMIN_ROLES, isStaffRole, type Rol } from "@/lib/roles";
 
 const VALID_ROLES: Rol[] = [
   "coordinador",
@@ -13,7 +13,7 @@ const VALID_ROLES: Rol[] = [
   "alumno_competencia",
 ];
 
-async function sendInviteEmail(email: string, nombre: string | null, actionLink: string): Promise<string | null> {
+async function sendInviteEmail(email: string, nombre: string | null, loginUrl: string): Promise<string | null> {
   const apiKey = process.env.RESEND_API_KEY;
   if (!apiKey) return "RESEND_API_KEY no configurada";
 
@@ -26,8 +26,7 @@ async function sendInviteEmail(email: string, nombre: string | null, actionLink:
       subject: "Tu acceso a la Escuela de Golf CCB",
       html: `<p>Hola${nombre ? ` ${nombre}` : ""},</p>
 <p>Te dieron acceso al portal de la Escuela de Golf CCB.</p>
-<p><a href="${actionLink}">Ingresar ahora</a></p>
-<p>Si el botón no funciona, copia y pega este link en tu navegador:<br>${actionLink}</p>`,
+<p>Ingresa a <a href="${loginUrl}">${loginUrl}</a> con tu correo (${email}) para recibir tu enlace de acceso.</p>`,
     }),
   });
   if (res.ok) return null;
@@ -80,6 +79,7 @@ export async function POST(request: NextRequest) {
     nombre: nombre ?? null,
     rol,
     created_by: user.id,
+    session_days: isStaffRole(rol) ? null : 30,
   });
   if (insertError) {
     await admin.auth.admin.deleteUser(userId);
@@ -92,18 +92,7 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const { data: linkData, error: linkError } = await admin.auth.admin.generateLink({
-    type: "magiclink",
-    email,
-    options: { redirectTo: `${request.nextUrl.origin}/auth/callback` },
-  });
-
-  let emailWarning: string | null = null;
-  if (linkError || !linkData?.properties?.action_link) {
-    emailWarning = "usuario creado pero no se pudo generar el link de acceso";
-  } else {
-    emailWarning = await sendInviteEmail(email, nombre ?? null, linkData.properties.action_link);
-  }
+  const emailWarning = await sendInviteEmail(email, nombre ?? null, `${request.nextUrl.origin}/login`);
 
   await supabase.from("access_logs").insert({
     user_id: userId,
