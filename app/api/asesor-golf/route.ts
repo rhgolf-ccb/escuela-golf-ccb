@@ -1,9 +1,14 @@
 import Anthropic from "@anthropic-ai/sdk";
 import type { NextRequest } from "next/server";
+import type { SupabaseClient } from "@supabase/supabase-js";
+import { createSupabaseServerClient } from "@/lib/supabase-server";
+import { createSupabaseAdminClient } from "@/lib/supabase-admin";
+import { STAFF_ROLES, type Rol } from "@/lib/roles";
 
 const PRIMARY_MODEL = "claude-opus-4-5";
 const FALLBACK_MODEL = "claude-sonnet-4-6";
 const MAX_CONTINUATIONS = 3;
+const MAX_TOOL_ITERATIONS = 10;
 const MAX_HISTORY = 10;
 
 const SYSTEM_PROMPT = `Eres un experto en pedagogía del golf júnior y adultos, especializado en TPI (Titleist Performance Institute), Canadian LTAD (Long-Term Athlete Development), biomecánica del swing, y desarrollo motor aplicado al golf.
@@ -56,6 +61,26 @@ Kyle Morris es reconocido por análisis detallado de posiciones del swing con re
 
 IMPORTANTE: Solo referenciar a Kyle Morris cuando sea genuinamente relevante (análisis de swing, posiciones, correcciones técnicas). No forzar la referencia en preguntas sobre TPI físico, pedagogía júnior, o temas no relacionados con técnica de swing.
 
+ACCESO A DATOS DE LA ESCUELA:
+Tienes acceso a la base de datos real de la Escuela de Golf CCB. Puedes consultar:
+- Perfiles de alumnos (buscar_alumno)
+- Resultados de tests técnicos y físicos
+- Historial de asistencia
+- Notas del profesor
+- Estado de grupos completos
+- Programación semanal
+- Biblioteca de drills
+
+Cuando el usuario pregunte sobre un alumno específico, búscalo primero con buscar_alumno y luego consulta sus datos con el id que obtengas.
+
+Cuando el usuario pida análisis de un grupo, usa obtener_grupo para ver todos los alumnos y luego analiza patrones.
+
+Cuando el usuario pida planificación semanal, consulta las sesiones con obtener_sesiones_semana y los drills disponibles con obtener_drills, luego propone un plan concreto.
+
+Si una consulta a la base de datos no devuelve resultados, dilo claramente en vez de inventar datos.
+
+PRIVACIDAD: Solo se comparten datos de alumnos con usuarios autenticados como staff (coordinador, profesor, administrativo) — este chat ya está restringido a ese personal.
+
 INSTRUCCIONES DE COMPORTAMIENTO:
 1. Usa búsqueda web cuando necesites información técnica específica, estudios recientes, o valores numéricos de benchmarks — no inventes datos
 2. Cuando no tengas certeza de un valor numérico, búscalo o dilo claramente
@@ -66,38 +91,279 @@ INSTRUCCIONES DE COMPORTAMIENTO:
 
 type ChatMessage = { role: "user" | "assistant"; content: string };
 
-async function runWithModel(client: Anthropic, model: string, history: ChatMessage[]) {
-  const conversation: Anthropic.MessageParam[] = history.map((m) => ({ role: m.role, content: m.content }));
-  let text = "";
-  let usedWebSearch = false;
-  let continuations = 0;
+const CCB_TOOLS: Anthropic.Tool[] = [
+  {
+    name: "buscar_alumno",
+    description:
+      "Busca un alumno activo por nombre en la base de datos de la escuela y devuelve su perfil (id, grupo, edad, estado). Usa el id devuelto para consultar tests, asistencia o notas.",
+    input_schema: {
+      type: "object",
+      properties: {
+        nombre: { type: "string", description: "Nombre o apellido del alumno" },
+      },
+      required: ["nombre"],
+    },
+  },
+  {
+    name: "obtener_tests_alumno",
+    description: "Obtiene el último test técnico (swing) y el último test físico registrados para un alumno.",
+    input_schema: {
+      type: "object",
+      properties: {
+        estudiante_id: { type: "string", description: "ID del estudiante (obtenido con buscar_alumno)" },
+      },
+      required: ["estudiante_id"],
+    },
+  },
+  {
+    name: "obtener_asistencia_alumno",
+    description: "Obtiene el historial de reservas/asistencia de un alumno en las últimas semanas.",
+    input_schema: {
+      type: "object",
+      properties: {
+        estudiante_id: { type: "string", description: "ID del estudiante" },
+        semanas: { type: "number", description: "Número de semanas hacia atrás (default 4)" },
+      },
+      required: ["estudiante_id"],
+    },
+  },
+  {
+    name: "obtener_notas_alumno",
+    description: "Obtiene las notas más recientes del profesor para un alumno específico.",
+    input_schema: {
+      type: "object",
+      properties: {
+        estudiante_id: { type: "string", description: "ID del estudiante" },
+      },
+      required: ["estudiante_id"],
+    },
+  },
+  {
+    name: "obtener_grupo",
+    description: "Obtiene todos los alumnos activos de un grupo específico con sus datos básicos.",
+    input_schema: {
+      type: "object",
+      properties: {
+        grupo: {
+          type: "string",
+          description: "Nombre del grupo: Birdies, Águilas, Albatros, +14, Competencia, Damas, Damas Senior",
+        },
+      },
+      required: ["grupo"],
+    },
+  },
+  {
+    name: "obtener_sesiones_semana",
+    description: "Obtiene las sesiones programadas para la semana actual o la semana de una fecha específica.",
+    input_schema: {
+      type: "object",
+      properties: {
+        grupo: { type: "string", description: "Filtrar por grupo (opcional)" },
+        fecha: { type: "string", description: "Fecha en formato YYYY-MM-DD dentro de la semana deseada (opcional, default semana actual)" },
+      },
+    },
+  },
+  {
+    name: "obtener_drills",
+    description: "Busca drills aprobados en la biblioteca por categoría, grupo o texto libre.",
+    input_schema: {
+      type: "object",
+      properties: {
+        categoria: { type: "string", description: "Categoría del drill" },
+        grupo: { type: "string", description: "Grupo al que aplica" },
+        busqueda: { type: "string", description: "Texto libre para buscar en el título" },
+      },
+    },
+  },
+];
 
-  while (true) {
-    const response = await client.messages.create({
-      model,
-      max_tokens: 2048,
-      system: SYSTEM_PROMPT,
-      tools: [{ type: "web_search_20250305", name: "web_search" }],
-      messages: conversation,
-    });
+const TOOLS: Anthropic.ToolUnion[] = [{ type: "web_search_20250305", name: "web_search" }, ...CCB_TOOLS];
 
-    for (const block of response.content) {
-      if (block.type === "text") text += block.text;
-      else if (block.type === "server_tool_use" || block.type === "web_search_tool_result") usedWebSearch = true;
+function calcularEdad(birthDate: string | null): number | null {
+  if (!birthDate) return null;
+  const birth = new Date(birthDate);
+  const today = new Date();
+  let edad = today.getFullYear() - birth.getFullYear();
+  const m = today.getMonth() - birth.getMonth();
+  if (m < 0 || (m === 0 && today.getDate() < birth.getDate())) edad--;
+  return edad;
+}
+
+function getMonday(d: Date): Date {
+  const date = new Date(d);
+  const day = date.getDay();
+  const diff = date.getDate() - day + (day === 0 ? -6 : 1);
+  date.setDate(diff);
+  date.setHours(0, 0, 0, 0);
+  return date;
+}
+
+function toISODate(d: Date): string {
+  return d.toISOString().split("T")[0];
+}
+
+const GRUPO_A_TIPO_PLAN: Record<string, "juvenil" | "competencia" | "damas"> = {
+  Birdies: "juvenil",
+  "Águilas": "juvenil",
+  Albatros: "juvenil",
+  "+14": "juvenil",
+  Competencia: "competencia",
+  Damas: "damas",
+  "Damas Senior": "damas",
+};
+
+async function buscarAlumno(admin: SupabaseClient, nombre: string) {
+  const { data, error } = await admin
+    .from("students")
+    .select("id, full_name, grupo_activo, birth_date, status")
+    .ilike("full_name", `%${nombre}%`)
+    .eq("status", "activo")
+    .order("full_name")
+    .limit(5);
+  if (error) return { error: error.message };
+  if (!data.length) return { resultados: [], mensaje: "No se encontraron alumnos activos con ese nombre." };
+  return {
+    resultados: data.map((s) => ({ id: s.id, nombre: s.full_name, grupo: s.grupo_activo, edad: calcularEdad(s.birth_date), status: s.status })),
+  };
+}
+
+async function obtenerTestsAlumno(admin: SupabaseClient, estudianteId: string) {
+  const [swing, physical] = await Promise.all([
+    admin.from("swing_evaluations").select("*").eq("student_id", estudianteId).order("evaluation_date", { ascending: false }).limit(1),
+    admin.from("physical_evaluations").select("*").eq("student_id", estudianteId).order("evaluation_date", { ascending: false }).limit(1),
+  ]);
+  if (swing.error && physical.error) return { error: "No se pudieron obtener los tests." };
+  const testTecnico = swing.data?.[0] ?? null;
+  const testFisico = physical.data?.[0] ?? null;
+  return {
+    test_tecnico: testTecnico,
+    test_fisico: testFisico,
+    mensaje: !testTecnico && !testFisico ? "No hay tests registrados para este alumno." : undefined,
+  };
+}
+
+async function obtenerAsistenciaAlumno(admin: SupabaseClient, estudianteId: string, semanas: number) {
+  const desde = new Date();
+  desde.setDate(desde.getDate() - semanas * 7);
+  const { data, error } = await admin
+    .from("reservas")
+    .select("estado, asistio, created_at, sesiones_semana!inner(fecha, tipo_sesion, lugar)")
+    .eq("estudiante_id", estudianteId)
+    .gte("sesiones_semana.fecha", toISODate(desde))
+    .order("fecha", { referencedTable: "sesiones_semana", ascending: false });
+  if (error) return { error: error.message };
+  if (!data.length) return { asistencias: [], mensaje: "No hay registros de asistencia en ese periodo." };
+  return { asistencias: data };
+}
+
+async function obtenerNotasAlumno(admin: SupabaseClient, estudianteId: string) {
+  const { data, error } = await admin
+    .from("notas_profesor")
+    .select("contenido, fecha, imagen_url")
+    .eq("alumno_id", estudianteId)
+    .order("fecha", { ascending: false })
+    .limit(5);
+  if (error) return { error: error.message };
+  if (!data.length) return { notas: [], mensaje: "No hay notas registradas para este alumno." };
+  return { notas: data };
+}
+
+async function obtenerGrupo(admin: SupabaseClient, grupo: string) {
+  const { data, error } = await admin
+    .from("students")
+    .select("id, full_name, grupo_activo, birth_date, status")
+    .eq("grupo_activo", grupo)
+    .eq("status", "activo")
+    .order("full_name");
+  if (error) return { error: error.message };
+  if (!data.length) return { alumnos: [], mensaje: `No hay alumnos activos en el grupo "${grupo}".` };
+  return { alumnos: data.map((s) => ({ id: s.id, nombre: s.full_name, edad: calcularEdad(s.birth_date) })), total: data.length };
+}
+
+async function obtenerSesionesSemana(admin: SupabaseClient, grupo?: string, fecha?: string) {
+  const base = fecha && !Number.isNaN(new Date(fecha).getTime()) ? new Date(fecha) : new Date();
+  const semanaInicio = toISODate(getMonday(base));
+
+  const tiposPlan = grupo ? [GRUPO_A_TIPO_PLAN[grupo]].filter((t): t is "juvenil" | "competencia" | "damas" => !!t) : ["juvenil", "competencia", "damas"];
+  if (grupo && tiposPlan.length === 0) return { error: `Grupo "${grupo}" no reconocido.` };
+
+  const { data: planes, error: planesError } = await admin
+    .from("planes_semanales")
+    .select("id, tipo_plan")
+    .eq("semana_inicio", semanaInicio)
+    .in("tipo_plan", tiposPlan);
+  if (planesError) return { error: planesError.message };
+  if (!planes.length) return { sesiones: [], mensaje: "No hay planificación registrada para esa semana." };
+
+  const tipoPorPlan = Object.fromEntries(planes.map((p) => [p.id, p.tipo_plan]));
+  const { data: sesiones, error: sesionesError } = await admin
+    .from("sesiones_semana")
+    .select("fecha, hora_inicio, hora_fin, tipo_sesion, lugar, objetivo, plan_id")
+    .in(
+      "plan_id",
+      planes.map((p) => p.id)
+    )
+    .order("fecha")
+    .order("hora_inicio");
+  if (sesionesError) return { error: sesionesError.message };
+
+  return { sesiones: sesiones.map(({ plan_id, ...s }) => ({ ...s, grupo: tipoPorPlan[plan_id] })) };
+}
+
+async function obtenerDrills(admin: SupabaseClient, categoria?: string, grupo?: string, busqueda?: string) {
+  let query = admin
+    .from("drills")
+    .select("titulo, descripcion, categoria, subcategoria, nivel_recomendado, lugar, duracion_minutos, error_que_corrige")
+    .eq("aprobado", true);
+  if (categoria) query = query.ilike("categoria", `%${categoria}%`);
+  if (grupo) query = query.contains("nivel_recomendado", [grupo]);
+  if (busqueda) query = query.ilike("titulo", `%${busqueda}%`);
+  const { data, error } = await query.order("titulo").limit(10);
+  if (error) return { error: error.message };
+  if (!data.length) return { drills: [], mensaje: "No se encontraron drills con esos criterios." };
+  return { drills: data };
+}
+
+async function ejecutarTool(admin: SupabaseClient, name: string, input: Record<string, unknown>): Promise<unknown> {
+  try {
+    switch (name) {
+      case "buscar_alumno":
+        return await buscarAlumno(admin, String(input.nombre ?? ""));
+      case "obtener_tests_alumno":
+        return await obtenerTestsAlumno(admin, String(input.estudiante_id ?? ""));
+      case "obtener_asistencia_alumno":
+        return await obtenerAsistenciaAlumno(admin, String(input.estudiante_id ?? ""), Number(input.semanas) > 0 ? Number(input.semanas) : 4);
+      case "obtener_notas_alumno":
+        return await obtenerNotasAlumno(admin, String(input.estudiante_id ?? ""));
+      case "obtener_grupo":
+        return await obtenerGrupo(admin, String(input.grupo ?? ""));
+      case "obtener_sesiones_semana":
+        return await obtenerSesionesSemana(admin, input.grupo as string | undefined, input.fecha as string | undefined);
+      case "obtener_drills":
+        return await obtenerDrills(admin, input.categoria as string | undefined, input.grupo as string | undefined, input.busqueda as string | undefined);
+      default:
+        return { error: `Tool desconocida: ${name}` };
     }
-
-    if (response.stop_reason !== "pause_turn" || continuations >= MAX_CONTINUATIONS) break;
-    conversation.push({ role: "assistant", content: response.content });
-    continuations++;
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : "Error ejecutando la consulta." };
   }
-
-  return { text: text.trim(), usedWebSearch };
 }
 
 export async function POST(request: NextRequest) {
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) {
     return Response.json({ error: "API key no configurada" }, { status: 500 });
+  }
+
+  const supabase = await createSupabaseServerClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return Response.json({ error: "unauthorized" }, { status: 401 });
+
+  const { data: caller } = await supabase.from("app_users").select("rol").eq("id", user.id).maybeSingle();
+  if (!caller || !STAFF_ROLES.includes(caller.rol as Rol)) {
+    return Response.json({ error: "forbidden" }, { status: 403 });
   }
 
   let body: { messages?: ChatMessage[] };
@@ -114,21 +380,84 @@ export async function POST(request: NextRequest) {
   const history = messages.slice(-MAX_HISTORY);
 
   const client = new Anthropic({ apiKey });
+  const admin = createSupabaseAdminClient();
 
-  try {
-    let result;
-    try {
-      result = await runWithModel(client, PRIMARY_MODEL, history);
-    } catch (err) {
-      if (err instanceof Anthropic.NotFoundError) {
-        result = await runWithModel(client, FALLBACK_MODEL, history);
-      } else {
-        throw err;
+  const encoder = new TextEncoder();
+  const stream = new ReadableStream({
+    async start(controller) {
+      const send = (event: Record<string, unknown>) => controller.enqueue(encoder.encode(`data: ${JSON.stringify(event)}\n\n`));
+
+      try {
+        let model = PRIMARY_MODEL;
+        const conversation: Anthropic.MessageParam[] = history.map((m) => ({ role: m.role, content: m.content }));
+        let text = "";
+        let usedWebSearch = false;
+        let continuations = 0;
+        let toolIterations = 0;
+
+        while (true) {
+          let response: Anthropic.Message;
+          try {
+            response = await client.messages.create({ model, max_tokens: 2048, system: SYSTEM_PROMPT, tools: TOOLS, messages: conversation });
+          } catch (err) {
+            if (model === PRIMARY_MODEL && err instanceof Anthropic.NotFoundError) {
+              model = FALLBACK_MODEL;
+              continue;
+            }
+            throw err;
+          }
+
+          for (const block of response.content) {
+            if (block.type === "text") text += block.text;
+            else if (block.type === "server_tool_use") {
+              usedWebSearch = true;
+              send({ type: "tool_status", tool: block.name });
+            } else if (block.type === "web_search_tool_result") {
+              usedWebSearch = true;
+            }
+          }
+
+          if (response.stop_reason === "tool_use") {
+            toolIterations++;
+            if (toolIterations > MAX_TOOL_ITERATIONS) {
+              text += "\n\n(Se alcanzó el máximo de consultas a la base de datos para esta respuesta.)";
+              break;
+            }
+            const toolUseBlocks = response.content.filter((b): b is Anthropic.ToolUseBlock => b.type === "tool_use");
+            for (const t of toolUseBlocks) send({ type: "tool_status", tool: t.name });
+
+            const toolResults = await Promise.all(
+              toolUseBlocks.map(async (t) => {
+                const result = await ejecutarTool(admin, t.name, t.input as Record<string, unknown>);
+                return { type: "tool_result" as const, tool_use_id: t.id, content: JSON.stringify(result) };
+              })
+            );
+
+            conversation.push({ role: "assistant", content: response.content });
+            conversation.push({ role: "user", content: toolResults });
+            continue;
+          }
+
+          if (response.stop_reason === "pause_turn" && continuations < MAX_CONTINUATIONS) {
+            conversation.push({ role: "assistant", content: response.content });
+            continuations++;
+            continue;
+          }
+
+          break;
+        }
+
+        send({ type: "done", text: text.trim(), usedWebSearch });
+      } catch (error) {
+        console.error("Error asesor-golf:", error);
+        send({ type: "error", message: "No pude conectarme. Intenta de nuevo." });
+      } finally {
+        controller.close();
       }
-    }
-    return Response.json(result);
-  } catch (error) {
-    console.error("Error asesor-golf:", error);
-    return Response.json({ error: "No pude conectarme. Intenta de nuevo." }, { status: 500 });
-  }
+    },
+  });
+
+  return new Response(stream, {
+    headers: { "Content-Type": "text/event-stream", "Cache-Control": "no-cache", Connection: "keep-alive" },
+  });
 }

@@ -25,6 +25,17 @@ const SUGGESTIONS = [
 
 const MAX_HISTORY = 10;
 
+const TOOL_STATUS_LABELS: Record<string, string> = {
+  web_search: "🔍 Buscando en internet...",
+  buscar_alumno: "👤 Buscando alumno...",
+  obtener_tests_alumno: "📋 Cargando tests...",
+  obtener_asistencia_alumno: "📅 Revisando asistencia...",
+  obtener_notas_alumno: "📝 Cargando notas...",
+  obtener_grupo: "👥 Consultando grupo...",
+  obtener_sesiones_semana: "🗓️ Revisando programación...",
+  obtener_drills: "🏌️ Buscando drills...",
+};
+
 function formatTime(ts: number): string {
   return new Date(ts).toLocaleTimeString("es-CO", { hour: "2-digit", minute: "2-digit" });
 }
@@ -34,6 +45,7 @@ export default function AsesorGolfChat() {
   const [messages, setMessages] = useState<Message[]>([WELCOME_MESSAGE]);
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [toolStatus, setToolStatus] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -50,6 +62,7 @@ export default function AsesorGolfChat() {
     setMessages(nextMessages);
     setInput("");
     setIsLoading(true);
+    setToolStatus(null);
 
     try {
       const history = nextMessages
@@ -62,9 +75,46 @@ export default function AsesorGolfChat() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ messages: history }),
       });
-      const data = await res.json();
 
-      if (!res.ok || data.error) {
+      if (!res.ok || !res.body) {
+        setMessages((prev) => [
+          ...prev,
+          { role: "assistant", content: "No pude conectarme. Intenta de nuevo.", timestamp: Date.now(), isError: true },
+        ]);
+        return;
+      }
+
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+      let finalText: string | null = null;
+      let usedWebSearch = false;
+      let gotError = false;
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const chunks = buffer.split("\n\n");
+        buffer = chunks.pop() ?? "";
+        for (const chunk of chunks) {
+          const line = chunk.trim();
+          if (!line.startsWith("data:")) continue;
+          let evt: { type: string; tool?: string; text?: string; usedWebSearch?: boolean };
+          try {
+            evt = JSON.parse(line.slice(5).trim());
+          } catch {
+            continue;
+          }
+          if (evt.type === "tool_status" && evt.tool) setToolStatus(evt.tool);
+          else if (evt.type === "done") {
+            finalText = evt.text ?? "";
+            usedWebSearch = !!evt.usedWebSearch;
+          } else if (evt.type === "error") gotError = true;
+        }
+      }
+
+      if (gotError || finalText === null) {
         setMessages((prev) => [
           ...prev,
           { role: "assistant", content: "No pude conectarme. Intenta de nuevo.", timestamp: Date.now(), isError: true },
@@ -72,7 +122,7 @@ export default function AsesorGolfChat() {
       } else {
         setMessages((prev) => [
           ...prev,
-          { role: "assistant", content: data.text || "No obtuve respuesta.", timestamp: Date.now(), usedWebSearch: !!data.usedWebSearch },
+          { role: "assistant", content: finalText || "No obtuve respuesta.", timestamp: Date.now(), usedWebSearch },
         ]);
       }
     } catch {
@@ -82,6 +132,7 @@ export default function AsesorGolfChat() {
       ]);
     } finally {
       setIsLoading(false);
+      setToolStatus(null);
     }
   }
 
@@ -186,7 +237,7 @@ export default function AsesorGolfChat() {
 
             {isLoading && (
               <div className="flex items-center gap-1.5 px-1">
-                <span className="text-xs text-gray-400">Consultando fuentes...</span>
+                <span className="text-xs text-gray-400">{toolStatus ? TOOL_STATUS_LABELS[toolStatus] ?? "Consultando..." : "Pensando..."}</span>
                 <span className="flex gap-0.5">
                   <span className="w-1 h-1 rounded-full bg-gray-300 animate-bounce" style={{ animationDelay: "0ms" }} />
                   <span className="w-1 h-1 rounded-full bg-gray-300 animate-bounce" style={{ animationDelay: "120ms" }} />
