@@ -5,6 +5,7 @@ import { ADMIN_ROLES, type Rol } from "@/lib/roles";
 
 const VALID_ROLES: Rol[] = [
   "coordinador",
+  "director",
   "profesor",
   "administrativo",
   "padre_competencia",

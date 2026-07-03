@@ -1,16 +1,18 @@
 export type Rol =
   | "coordinador"
+  | "director"
   | "profesor"
   | "administrativo"
   | "padre_competencia"
   | "padre_otros"
   | "alumno_competencia";
 
-export const STAFF_ROLES: Rol[] = ["coordinador", "profesor", "administrativo"];
-export const ADMIN_ROLES: Rol[] = ["coordinador", "administrativo"];
+export const STAFF_ROLES: Rol[] = ["coordinador", "director", "profesor", "administrativo"];
+export const ADMIN_ROLES: Rol[] = ["coordinador", "director", "administrativo"];
 
 export const ROLE_ALLOW: Record<Rol, "all" | string[]> = {
   coordinador: "all",
+  director: "all",
   profesor: "all",
   administrativo: "all",
   padre_competencia: ["/mi-perfil", "/reservas", "/staff", "/drills"],
@@ -39,6 +41,8 @@ export function roleLabel(rol: Rol): string {
   switch (rol) {
     case "coordinador":
       return "Coordinador";
+    case "director":
+      return "Director de Golf";
     case "profesor":
       return "Profesor";
     case "administrativo":

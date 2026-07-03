@@ -8,6 +8,7 @@ type Tab = "usuarios" | "roles" | "registro";
 
 const ROL_LABEL: Record<Rol, string> = {
   coordinador: "Coordinador",
+  director: "Director de Golf",
   profesor: "Profesor",
   administrativo: "Administrativo",
   padre_competencia: "Padre (Competencia)",
@@ -15,7 +16,7 @@ const ROL_LABEL: Record<Rol, string> = {
   alumno_competencia: "Alumno (Competencia)",
 };
 
-const ROLES: Rol[] = ["coordinador", "profesor", "administrativo", "padre_competencia", "padre_otros", "alumno_competencia"];
+const ROLES: Rol[] = ["coordinador", "director", "profesor", "administrativo", "padre_competencia", "padre_otros", "alumno_competencia"];
 
 type AppUser = {
   id: string;
@@ -324,7 +325,7 @@ export default function AccesosModule({ currentUserId, initialSessionDays }: { c
                   <p className="text-sm font-semibold text-gray-900">{ROL_LABEL[r]}</p>
                   <p className="text-xs text-gray-500 mt-0.5">
                     {allow === "all" ? "Acceso completo a todos los módulos" : `Acceso a: ${allow.join(", ")}`}
-                    {r === "coordinador" || r === "administrativo" ? " + Accesos" : ""}
+                    {r === "coordinador" || r === "director" || r === "administrativo" ? " + Accesos" : ""}
                   </p>
                 </div>
               );
