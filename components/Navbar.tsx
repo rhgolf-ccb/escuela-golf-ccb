@@ -4,13 +4,14 @@ import Link from "next/link";
 import Image from "next/image";
 import { usePathname, useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
-import { isRouteAllowed, isStaffRole, roleChipColor, roleLabel, type Rol } from "@/lib/roles";
+import { isRouteAllowed, roleChipColor, roleLabel, type Rol } from "@/lib/roles";
 
 function initiales(name: string): string {
   return name.split(" ").slice(0, 2).map((n) => n[0]).join("").toUpperCase();
 }
 
 const navItems = [
+  { label: "Mi Perfil", href: "/mi-perfil" },
   { label: "Alumnos", href: "/alumnos" },
   { label: "Programación", href: "/programacion" },
   { label: "Reservas", href: "/reservas" },
@@ -34,11 +35,7 @@ export default function Navbar({
   const router = useRouter();
   const displayName = nombre?.trim() || email || "";
 
-  const visibleItems = !role
-    ? []
-    : isStaffRole(role)
-    ? navItems.filter((item) => isRouteAllowed(role, item.href))
-    : [{ label: "Mi Perfil", href: "/mi-perfil" }];
+  const visibleItems = role ? navItems.filter((item) => isRouteAllowed(role, item.href)) : [];
 
   async function handleLogout() {
     const { data: { user } } = await supabase.auth.getUser();
