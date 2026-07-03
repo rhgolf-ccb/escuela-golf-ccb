@@ -75,6 +75,10 @@ export default function AccesosModule({ currentUserId, initialSessionDays }: { c
   const [pwdSaving, setPwdSaving] = useState(false);
   const [pwdError, setPwdError] = useState<string | null>(null);
 
+  const [deleteTarget, setDeleteTarget] = useState<AppUser | null>(null);
+  const [deleteSaving, setDeleteSaving] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+
   function showToast(msg: string) { setToast(msg); setTimeout(() => setToast(null), 3500); }
 
   const fetchUsers = useCallback(async () => {
@@ -156,6 +160,21 @@ export default function AccesosModule({ currentUserId, initialSessionDays }: { c
     const body = await res.json();
     if (!res.ok) { showToast(body.error ?? "Error"); return; }
     showToast(u.activo ? "Usuario suspendido" : "Usuario reactivado");
+    await fetchUsers();
+  }
+
+  async function handleDeleteUser() {
+    if (!deleteTarget) return;
+    setDeleteSaving(true); setDeleteError(null);
+    const res = await fetch("/api/delete-user", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ userId: deleteTarget.id }),
+    });
+    const body = await res.json();
+    if (!res.ok) { setDeleteError(body.error ?? "Error"); setDeleteSaving(false); return; }
+    showToast("Usuario eliminado");
+    setDeleteSaving(false); setDeleteTarget(null);
     await fetchUsers();
   }
 
@@ -275,6 +294,14 @@ export default function AccesosModule({ currentUserId, initialSessionDays }: { c
                           style={u.activo ? { color: "#991b1b", borderColor: "#fecaca" } : { color: "#166534", borderColor: "#bbf7d0" }}
                         >
                           {u.activo ? "Suspender" : "Reactivar"}
+                        </button>
+                      )}
+                      {u.id !== currentUserId && (
+                        <button
+                          onClick={() => { setDeleteTarget(u); setDeleteError(null); }}
+                          className="text-xs font-semibold text-red-700 border border-red-200 rounded-lg px-2.5 py-1 hover:bg-red-50"
+                        >
+                          Eliminar
                         </button>
                       )}
                     </div>
@@ -405,6 +432,34 @@ export default function AccesosModule({ currentUserId, initialSessionDays }: { c
               <button
                 onClick={() => { setShowInvite(false); resetInvite(); }}
                 disabled={inviteSaving}
+                className="px-5 py-2.5 rounded-xl text-sm font-medium border border-gray-200 text-gray-600 hover:bg-gray-50 disabled:opacity-50"
+              >
+                Cancelar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {deleteTarget && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={() => { if (!deleteSaving) setDeleteTarget(null); }}>
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6" onClick={(e) => e.stopPropagation()}>
+            <h3 className="font-bold text-gray-900 mb-1">Eliminar usuario</h3>
+            <p className="text-xs text-gray-500 mb-4">
+              Esta acción es irreversible. Se eliminará <span className="font-semibold">{deleteTarget.email}</span>, su registro de accesos y sus vínculos con alumnos.
+            </p>
+            {deleteError && <p className="text-xs text-red-600 mb-2">{deleteError}</p>}
+            <div className="flex gap-2">
+              <button
+                onClick={handleDeleteUser}
+                disabled={deleteSaving}
+                className="flex-1 py-2.5 rounded-xl text-sm font-semibold text-white bg-red-700 disabled:opacity-50"
+              >
+                {deleteSaving ? "Eliminando..." : "Eliminar definitivamente"}
+              </button>
+              <button
+                onClick={() => setDeleteTarget(null)}
+                disabled={deleteSaving}
                 className="px-5 py-2.5 rounded-xl text-sm font-medium border border-gray-200 text-gray-600 hover:bg-gray-50 disabled:opacity-50"
               >
                 Cancelar
