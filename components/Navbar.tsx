@@ -5,7 +5,7 @@ import Image from "next/image";
 import { useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
-import { isRouteAllowed, roleChipColor, roleLabel, type Rol } from "@/lib/roles";
+import { isRouteAllowed, isStaffRole, roleChipColor, roleLabel, type Rol } from "@/lib/roles";
 
 function initiales(name: string): string {
   return name.split(" ").slice(0, 2).map((n) => n[0]).join("").toUpperCase();
@@ -37,7 +37,12 @@ export default function Navbar({
   const displayName = nombre?.trim() || email || "";
   const [mobileOpen, setMobileOpen] = useState(false);
 
-  const visibleItems = role ? navItems.filter((item) => isRouteAllowed(role, item.href)) : [];
+  const visibleItems = role
+    ? navItems.filter((item) => {
+        if (item.href === "/mi-perfil" && isStaffRole(role)) return false;
+        return isRouteAllowed(role, item.href);
+      })
+    : [];
 
   async function handleLogout() {
     const { data: { user } } = await supabase.auth.getUser();
@@ -53,40 +58,41 @@ export default function Navbar({
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between w-full h-16">
           {/* IZQUIERDA: logo */}
-          <div className="flex items-center gap-3 shrink-0">
+          <div className="flex items-center gap-2 shrink-0">
             <Image
               src="/Paco_transparente.png"
               alt="Paco"
-              height={50}
-              width={50}
+              height={38}
+              width={38}
               className="object-contain shrink-0"
             />
             <div className="flex flex-col leading-tight shrink-0">
-              <span className="text-ccb-gold font-bold text-lg tracking-wide">
+              <span className="text-ccb-gold font-bold text-base tracking-wide">
                 CCB
               </span>
-              <span className="text-white text-xs tracking-widest uppercase opacity-80">
+              <span className="text-white text-[11px] tracking-widest uppercase opacity-80">
                 Escuela de Golf
               </span>
-              <span className="text-white opacity-50" style={{ fontSize: 11 }}>
+              <span className="text-white opacity-50" style={{ fontSize: 10 }}>
                 Country Club de Bogotá
               </span>
             </div>
           </div>
 
           {/* CENTRO: navegación */}
-          <nav className="hidden md:flex items-center gap-1 flex-1 justify-center min-w-0 overflow-x-auto px-4">
+          <nav className="hidden lg:flex items-center gap-0.5 flex-1 justify-center min-w-0 px-2">
             {visibleItems.map((item) => {
               const active = pathname.startsWith(item.href);
               return (
                 <Link
                   key={item.href}
                   href={item.href}
-                  className={`px-4 py-2 rounded-md text-sm font-medium whitespace-nowrap transition-colors ${
+                  className={`px-2.5 py-2 rounded-md whitespace-nowrap transition-colors ${
                     active
                       ? "bg-ccb-gold text-ccb-green font-semibold"
-                      : "text-white hover:bg-ccb-green-light"
+                      : "text-white hover:bg-ccb-green-light font-medium"
                   }`}
+                  style={{ fontSize: 13 }}
                 >
                   {item.label}
                 </Link>
@@ -128,7 +134,7 @@ export default function Navbar({
             {visibleItems.length > 0 && (
               <button
                 onClick={() => setMobileOpen((v) => !v)}
-                className="text-white opacity-90 hover:opacity-100 flex items-center justify-center shrink-0 md:hidden"
+                className="text-white opacity-90 hover:opacity-100 flex items-center justify-center shrink-0 lg:hidden"
                 title="Menú"
               >
                 <i className={`ti ${mobileOpen ? "ti-x" : "ti-menu-2"}`} style={{ fontSize: 22 }} />
@@ -137,7 +143,7 @@ export default function Navbar({
           </div>
         </div>
         {mobileOpen && (
-          <nav className="md:hidden flex flex-col gap-1 pb-3">
+          <nav className="lg:hidden flex flex-col gap-1 pb-3">
             {role && (
               <div className="flex items-center gap-2 px-3 py-2 mb-1">
                 <span
