@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createServerClient } from "@supabase/ssr";
-import { isRouteAllowed, type Rol } from "@/lib/roles";
+import { isRouteAllowed, isStaffRole, type Rol } from "@/lib/roles";
 
 const PUBLIC_PATHS = ["/login", "/auth/callback", "/auth/confirm", "/api/check-access"];
 
@@ -44,7 +44,7 @@ export async function middleware(request: NextRequest) {
 
   const { data: appUser } = await supabase
     .from("app_users")
-    .select("rol, activo, session_days, last_sign_in")
+    .select("rol, activo, session_days, last_sign_in, password_set")
     .eq("id", user.id)
     .maybeSingle();
 
@@ -59,6 +59,10 @@ export async function middleware(request: NextRequest) {
       await supabase.auth.signOut();
       return fail(401, "expired");
     }
+  }
+
+  if (isStaffRole(appUser.rol as Rol) && !appUser.password_set && !isApi && pathname !== "/set-password") {
+    return NextResponse.redirect(new URL("/set-password", request.url));
   }
 
   if (!isRouteAllowed(appUser.rol as Rol, pathname)) {

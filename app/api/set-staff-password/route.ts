@@ -38,5 +38,7 @@ export async function POST(request: NextRequest) {
   const { error } = await admin.auth.admin.updateUserById(target.id, { password });
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
+  await admin.from("app_users").update({ password_set: true }).eq("id", target.id);
+
   return NextResponse.json({ ok: true });
 }

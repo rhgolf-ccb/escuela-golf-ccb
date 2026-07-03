@@ -11,7 +11,7 @@ export async function finalizePostAuthRedirect(
 
   const { data: appUser } = await supabase
     .from("app_users")
-    .select("rol, activo")
+    .select("rol, activo, password_set")
     .eq("id", user.id)
     .maybeSingle();
 
@@ -28,6 +28,7 @@ export async function finalizePostAuthRedirect(
     ip: request.headers.get("x-forwarded-for"),
   });
 
-  const dest = isStaffRole(appUser.rol as Rol) ? "/" : "/mi-perfil";
+  const isStaff = isStaffRole(appUser.rol as Rol);
+  const dest = isStaff ? (appUser.password_set ? "/" : "/set-password") : "/mi-perfil";
   return NextResponse.redirect(new URL(dest, request.url));
 }
