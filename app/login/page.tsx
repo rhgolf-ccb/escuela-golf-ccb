@@ -26,6 +26,14 @@ function LoginNotice() {
       </p>
     );
   }
+  if (params.get("error") === "link_invalid") {
+    return (
+      <p className="text-xs text-amber-700 bg-amber-50 border border-amber-100 rounded-lg px-3 py-2 mb-4">
+        Ese enlace ya no es válido — pudo haberse abierto desde otra app o dispositivo, o ya fue usado.
+        Ingresa tu email para recibir uno nuevo. Si acabas de pedir uno, espera un minuto antes de reenviar.
+      </p>
+    );
+  }
   return null;
 }
 
