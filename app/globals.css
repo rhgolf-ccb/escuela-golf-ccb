@@ -21,6 +21,8 @@ body {
   --surface-1: #ffffff;
   --surface-2: #fdfdfc;
   --border-strong: #d1d5db;
+  --border: #e5e7eb;
+  --text-muted: #9ca3af;
 }
 
 @keyframes asesor-golf-panel-in {

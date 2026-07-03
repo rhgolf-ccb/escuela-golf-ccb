@@ -4,7 +4,11 @@ import Link from "next/link";
 import Image from "next/image";
 import { usePathname, useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
-import { isRouteAllowed, isStaffRole, type Rol } from "@/lib/roles";
+import { isRouteAllowed, isStaffRole, roleChipColor, roleLabel, type Rol } from "@/lib/roles";
+
+function initiales(name: string): string {
+  return name.split(" ").slice(0, 2).map((n) => n[0]).join("").toUpperCase();
+}
 
 const navItems = [
   { label: "Alumnos", href: "/alumnos" },
@@ -17,9 +21,18 @@ const navItems = [
   { label: "Drills", href: "/drills" },
 ];
 
-export default function Navbar({ role }: { role: Rol | null }) {
+export default function Navbar({
+  role,
+  nombre,
+  email,
+}: {
+  role: Rol | null;
+  nombre: string | null;
+  email: string | null;
+}) {
   const pathname = usePathname();
   const router = useRouter();
+  const displayName = nombre?.trim() || email || "";
 
   const visibleItems = !role
     ? []
@@ -76,15 +89,36 @@ export default function Navbar({ role }: { role: Rol | null }) {
               })}
             </nav>
           </div>
-          <div className="flex items-center gap-4">
-            <p className="text-white text-xs opacity-60 hidden sm:block">Country Club de Bogotá</p>
+          <div className="flex items-center gap-3">
+            <p className="text-white text-xs opacity-60 hidden lg:block">Country Club de Bogotá</p>
+            {role && (
+              <div
+                className="flex items-center gap-2"
+                style={{
+                  background: "var(--surface-2)",
+                  border: "0.5px solid var(--border)",
+                  borderRadius: 20,
+                  padding: "4px 12px 4px 6px",
+                }}
+              >
+                <span
+                  className="rounded-full flex items-center justify-center text-white font-bold shrink-0"
+                  style={{ width: 24, height: 24, fontSize: 10, background: roleChipColor(role) }}
+                >
+                  {initiales(displayName)}
+                </span>
+                <p className="text-gray-900 whitespace-nowrap" style={{ fontSize: 12, fontWeight: 500 }}>
+                  {displayName}
+                  <span style={{ fontSize: 11, fontWeight: 400, color: "var(--text-muted)" }}> · {roleLabel(role)}</span>
+                </p>
+              </div>
+            )}
             <button
               onClick={handleLogout}
-              className="text-white text-xs opacity-70 hover:opacity-100 flex items-center gap-1"
+              className="text-white opacity-70 hover:opacity-100 flex items-center justify-center"
               title="Cerrar sesión"
             >
-              <i className="ti ti-logout" style={{ fontSize: 14 }} />
-              Salir
+              <i className="ti ti-logout" style={{ fontSize: 18 }} />
             </button>
           </div>
         </div>

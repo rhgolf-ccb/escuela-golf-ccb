@@ -34,3 +34,25 @@ export function isRouteAllowed(rol: Rol, pathname: string): boolean {
 export function isStaffRole(rol: Rol): boolean {
   return STAFF_ROLES.includes(rol);
 }
+
+export function roleLabel(rol: Rol): string {
+  switch (rol) {
+    case "coordinador":
+      return "Coordinador";
+    case "profesor":
+      return "Profesor";
+    case "administrativo":
+      return "Administrativo";
+    case "padre_competencia":
+      return "Padre · Competencia";
+    case "alumno_competencia":
+      return "Alumno · Competencia";
+    case "padre_otros":
+      return "Padre";
+  }
+}
+
+export function roleChipColor(rol: Rol): string {
+  if (rol === "padre_competencia" || rol === "alumno_competencia") return "#7d5a00";
+  return "#1a3a2a";
+}
