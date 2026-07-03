@@ -13,7 +13,7 @@ const VALID_ROLES: Rol[] = [
   "alumno_competencia",
 ];
 
-async function sendInviteEmail(email: string, nombre: string | null, loginUrl: string): Promise<string | null> {
+async function sendInviteEmail(email: string, nombre: string | null, actionLink: string): Promise<string | null> {
   const apiKey = process.env.RESEND_API_KEY;
   if (!apiKey) return "RESEND_API_KEY no configurada";
 
@@ -26,7 +26,8 @@ async function sendInviteEmail(email: string, nombre: string | null, loginUrl: s
       subject: "Tu acceso a la Escuela de Golf CCB",
       html: `<p>Hola${nombre ? ` ${nombre}` : ""},</p>
 <p>Te dieron acceso al portal de la Escuela de Golf CCB.</p>
-<p>Ingresa a <a href="${loginUrl}">${loginUrl}</a> con tu correo (${email}) para recibir tu enlace de acceso.</p>`,
+<p><a href="${actionLink}">Ingresar ahora</a></p>
+<p>Si el botón no funciona, copia y pega este link en tu navegador:<br>${actionLink}</p>`,
     }),
   });
   if (res.ok) return null;
@@ -73,13 +74,19 @@ export async function POST(request: NextRequest) {
 
   const userId = created.user.id;
 
+  let sessionDays: number | null = null;
+  if (!isStaffRole(rol)) {
+    const { data: config } = await supabase.from("app_config").select("value").eq("key", "session_days").maybeSingle();
+    sessionDays = config?.value ? Number(config.value) : 30;
+  }
+
   const { error: insertError } = await supabase.from("app_users").insert({
     id: userId,
     email,
     nombre: nombre ?? null,
     rol,
     created_by: user.id,
-    session_days: isStaffRole(rol) ? null : 30,
+    session_days: sessionDays,
   });
   if (insertError) {
     await admin.auth.admin.deleteUser(userId);
@@ -92,7 +99,18 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const emailWarning = await sendInviteEmail(email, nombre ?? null, `${request.nextUrl.origin}/login`);
+  const { data: linkData, error: linkError } = await admin.auth.admin.generateLink({
+    type: "magiclink",
+    email,
+  });
+
+  let emailWarning: string | null = null;
+  if (linkError || !linkData?.properties?.hashed_token) {
+    emailWarning = "usuario creado pero no se pudo generar el link de acceso";
+  } else {
+    const actionLink = `${request.nextUrl.origin}/auth/confirm?token_hash=${linkData.properties.hashed_token}&type=${linkData.properties.verification_type}`;
+    emailWarning = await sendInviteEmail(email, nombre ?? null, actionLink);
+  }
 
   await supabase.from("access_logs").insert({
     user_id: userId,
