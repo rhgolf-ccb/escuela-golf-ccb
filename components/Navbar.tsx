@@ -51,8 +51,9 @@ export default function Navbar({
   return (
     <header className="bg-ccb-green shadow-lg">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="flex items-center justify-between h-16">
-          <div className="flex items-center gap-4 min-w-0">
+        <div className="flex items-center justify-between w-full h-16">
+          {/* IZQUIERDA: logo */}
+          <div className="flex items-center gap-3 shrink-0">
             <Image
               src="/Paco_transparente.png"
               alt="Paco"
@@ -67,29 +68,34 @@ export default function Navbar({
               <span className="text-white text-xs tracking-widest uppercase opacity-80">
                 Escuela de Golf
               </span>
+              <span className="text-white opacity-50" style={{ fontSize: 11 }}>
+                Country Club de Bogotá
+              </span>
             </div>
-            <div className="w-px h-8 bg-ccb-gold opacity-40 mx-2 hidden md:block" />
-            <nav className="hidden md:flex gap-1">
-              {visibleItems.map((item) => {
-                const active = pathname.startsWith(item.href);
-                return (
-                  <Link
-                    key={item.href}
-                    href={item.href}
-                    className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
-                      active
-                        ? "bg-ccb-gold text-ccb-green font-semibold"
-                        : "text-white hover:bg-ccb-green-light"
-                    }`}
-                  >
-                    {item.label}
-                  </Link>
-                );
-              })}
-            </nav>
           </div>
-          <div className="flex items-center gap-3">
-            <p className="text-white text-xs opacity-60 hidden lg:block">Country Club de Bogotá</p>
+
+          {/* CENTRO: navegación */}
+          <nav className="hidden md:flex items-center gap-1 flex-1 justify-center min-w-0 overflow-x-auto px-4">
+            {visibleItems.map((item) => {
+              const active = pathname.startsWith(item.href);
+              return (
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  className={`px-4 py-2 rounded-md text-sm font-medium whitespace-nowrap transition-colors ${
+                    active
+                      ? "bg-ccb-gold text-ccb-green font-semibold"
+                      : "text-white hover:bg-ccb-green-light"
+                  }`}
+                >
+                  {item.label}
+                </Link>
+              );
+            })}
+          </nav>
+
+          {/* DERECHA: usuario */}
+          <div className="flex items-center gap-3 shrink-0">
             {role && (
               <div
                 className="hidden sm:flex items-center gap-2"
@@ -114,7 +120,7 @@ export default function Navbar({
             )}
             <button
               onClick={handleLogout}
-              className="text-white opacity-70 hover:opacity-100 flex items-center justify-center"
+              className="text-white opacity-70 hover:opacity-100 flex items-center justify-center shrink-0"
               title="Cerrar sesión"
             >
               <i className="ti ti-logout" style={{ fontSize: 18 }} />
@@ -122,7 +128,7 @@ export default function Navbar({
             {visibleItems.length > 0 && (
               <button
                 onClick={() => setMobileOpen((v) => !v)}
-                className="text-white opacity-90 hover:opacity-100 flex items-center justify-center md:hidden"
+                className="text-white opacity-90 hover:opacity-100 flex items-center justify-center shrink-0 md:hidden"
                 title="Menú"
               >
                 <i className={`ti ${mobileOpen ? "ti-x" : "ti-menu-2"}`} style={{ fontSize: 22 }} />
