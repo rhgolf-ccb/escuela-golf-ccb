@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { createSupabaseAdminClient } from "@/lib/supabase-admin";
 import { isStaffRole, type Rol } from "@/lib/roles";
 
 export async function finalizePostAuthRedirect(
@@ -20,7 +21,8 @@ export async function finalizePostAuthRedirect(
     return NextResponse.redirect(new URL("/login?blocked=1", request.url));
   }
 
-  await supabase.from("app_users").update({ last_sign_in: new Date().toISOString() }).eq("id", user.id);
+  const admin = createSupabaseAdminClient();
+  await admin.from("app_users").update({ last_sign_in: new Date().toISOString() }).eq("id", user.id);
   await supabase.from("access_logs").insert({
     user_id: user.id,
     accion: "login",

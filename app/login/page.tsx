@@ -99,6 +99,20 @@ export default function LoginPage() {
     }
   }
 
+  async function handleForgotPassword() {
+    setLoading(true);
+    setError(null);
+    try {
+      const { error: otpError } = await supabase.auth.signInWithOtp({ email: email.trim() });
+      if (otpError) throw new Error(otpError.message);
+      setStep("sent");
+    } catch {
+      setError("No pudimos enviar el link. Intenta de nuevo.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
   function backToEmail() {
     setStep("email");
     setPassword("");
@@ -148,6 +162,14 @@ export default function LoginPage() {
               style={{ backgroundColor: "#1a3a2a" }}
             >
               {loading ? "Ingresando..." : "Ingresar"}
+            </button>
+            <button
+              type="button"
+              onClick={handleForgotPassword}
+              disabled={loading}
+              className="w-full text-[11px] text-gray-400 text-center underline"
+            >
+              ¿Olvidaste tu contraseña o nunca la creaste? Ingresa con un link por correo
             </button>
           </form>
         ) : (
