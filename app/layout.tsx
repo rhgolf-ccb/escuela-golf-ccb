@@ -10,6 +10,10 @@ const geistSans = Geist({
 export const metadata: Metadata = {
   title: "Escuela de Golf CCB",
   description: "Sistema de gestión de la Escuela de Golf del Country Club de Bogotá",
+  icons: {
+    icon: "/icon.png",
+    apple: "/apple-icon.png",
+  },
 };
 
 export default function RootLayout({
