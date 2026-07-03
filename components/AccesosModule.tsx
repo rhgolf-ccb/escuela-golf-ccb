@@ -145,7 +145,7 @@ export default function AccesosModule({ currentUserId, initialSessionDays }: { c
     });
     const body = await res.json();
     if (!res.ok) { setInviteError(body.error ?? "Error al invitar"); setInviteSaving(false); return; }
-    showToast(`${inviteEmail} invitado ✓`);
+    showToast(body.emailWarning ? `${inviteEmail} creado, pero el email falló: ${body.emailWarning}` : `${inviteEmail} invitado ✓`);
     setInviteSaving(false); setShowInvite(false); resetInvite();
     await fetchUsers();
   }
