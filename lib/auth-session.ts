@@ -30,7 +30,8 @@ export async function finalizePostAuthRedirect(
     ip: request.headers.get("x-forwarded-for"),
   });
 
-  const isStaff = isStaffRole(appUser.rol as Rol);
-  const dest = isStaff ? (appUser.password_set ? "/" : "/set-password") : "/mi-perfil";
+  const dest = !appUser.password_set
+    ? "/set-password"
+    : isStaffRole(appUser.rol as Rol) ? "/" : "/mi-perfil";
   return NextResponse.redirect(new URL(dest, request.url));
 }

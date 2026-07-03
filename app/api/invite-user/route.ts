@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
+import { generateAuthLink, sendEmailViaResend } from "@/lib/auth-link";
 import { ADMIN_ROLES, isStaffRole, type Rol } from "@/lib/roles";
 
 const VALID_ROLES: Rol[] = [
@@ -12,28 +13,6 @@ const VALID_ROLES: Rol[] = [
   "padre_otros",
   "alumno_competencia",
 ];
-
-async function sendInviteEmail(email: string, nombre: string | null, actionLink: string): Promise<string | null> {
-  const apiKey = process.env.RESEND_API_KEY;
-  if (!apiKey) return "RESEND_API_KEY no configurada";
-
-  const res = await fetch("https://api.resend.com/emails", {
-    method: "POST",
-    headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
-    body: JSON.stringify({
-      from: "Escuela de Golf CCB <noreply@golfccb.com>",
-      to: email,
-      subject: "Tu acceso a la Escuela de Golf CCB",
-      html: `<p>Hola${nombre ? ` ${nombre}` : ""},</p>
-<p>Te dieron acceso al portal de la Escuela de Golf CCB.</p>
-<p><a href="${actionLink}">Ingresar ahora</a></p>
-<p>Si el botón no funciona, copia y pega este link en tu navegador:<br>${actionLink}</p>`,
-    }),
-  });
-  if (res.ok) return null;
-  const body = await res.json().catch(() => ({}));
-  return body.message ?? `Resend respondió ${res.status}`;
-}
 
 export async function POST(request: NextRequest) {
   const supabase = await createSupabaseServerClient();
@@ -99,17 +78,20 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const { data: linkData, error: linkError } = await admin.auth.admin.generateLink({
-    type: "magiclink",
-    email,
-  });
+  const { link, error: linkError } = await generateAuthLink(email, request.nextUrl.origin);
 
   let emailWarning: string | null = null;
-  if (linkError || !linkData?.properties?.hashed_token) {
-    emailWarning = "usuario creado pero no se pudo generar el link de acceso";
+  if (linkError || !link) {
+    emailWarning = linkError ?? "no se pudo generar el link de acceso";
   } else {
-    const actionLink = `${request.nextUrl.origin}/auth/confirm?token_hash=${linkData.properties.hashed_token}&type=${linkData.properties.verification_type}`;
-    emailWarning = await sendInviteEmail(email, nombre ?? null, actionLink);
+    emailWarning = await sendEmailViaResend(
+      email,
+      "Tu acceso a la Escuela de Golf CCB",
+      `<p>Hola${nombre ? ` ${nombre}` : ""},</p>
+<p>Te dieron acceso al portal de la Escuela de Golf CCB.</p>
+<p><a href="${link}">Ingresar ahora</a></p>
+<p>Si el botón no funciona, copia y pega este link en tu navegador:<br>${link}</p>`
+    );
   }
 
   await supabase.from("access_logs").insert({

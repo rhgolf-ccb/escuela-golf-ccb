@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createServerClient } from "@supabase/ssr";
-import { isRouteAllowed, isStaffRole, type Rol } from "@/lib/roles";
+import { isRouteAllowed, type Rol } from "@/lib/roles";
 
 const PUBLIC_PATHS = ["/login", "/auth/callback", "/auth/confirm", "/api/check-access"];
 
@@ -61,7 +61,7 @@ export async function middleware(request: NextRequest) {
     }
   }
 
-  if (isStaffRole(appUser.rol as Rol) && !appUser.password_set && !isApi && pathname !== "/set-password") {
+  if (!appUser.password_set && !isApi && pathname !== "/set-password") {
     return NextResponse.redirect(new URL("/set-password", request.url));
   }
 

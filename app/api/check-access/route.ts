@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
-import { isStaffRole, type Rol } from "@/lib/roles";
 
 export async function POST(request: NextRequest) {
   const { email } = await request.json();
@@ -11,7 +10,7 @@ export async function POST(request: NextRequest) {
   const admin = createSupabaseAdminClient();
   const { data } = await admin
     .from("app_users")
-    .select("rol, activo")
+    .select("activo, password_set")
     .eq("email", email.trim())
     .maybeSingle();
 
@@ -19,5 +18,5 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ found: false });
   }
 
-  return NextResponse.json({ found: true, isStaff: isStaffRole(data.rol as Rol) });
+  return NextResponse.json({ found: true, passwordSet: data.password_set });
 }

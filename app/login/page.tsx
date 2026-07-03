@@ -53,6 +53,16 @@ export default function LoginPage() {
     });
   }, []);
 
+  async function sendLoginLink() {
+    const res = await fetch("/api/send-login-link", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email: email.trim() }),
+    });
+    if (!res.ok) throw new Error("No pudimos enviar el link.");
+    setStep("sent");
+  }
+
   async function handleEmailSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!email.trim()) return;
@@ -70,14 +80,12 @@ export default function LoginPage() {
         return;
       }
 
-      if (data.isStaff) {
+      if (data.passwordSet) {
         setStep("password");
         return;
       }
 
-      const { error: otpError } = await supabase.auth.signInWithOtp({ email: email.trim() });
-      if (otpError) throw new Error(otpError.message);
-      setStep("sent");
+      await sendLoginLink();
     } catch {
       setError("No pudimos verificar tu correo. Intenta de nuevo.");
     } finally {
@@ -103,9 +111,7 @@ export default function LoginPage() {
     setLoading(true);
     setError(null);
     try {
-      const { error: otpError } = await supabase.auth.signInWithOtp({ email: email.trim() });
-      if (otpError) throw new Error(otpError.message);
-      setStep("sent");
+      await sendLoginLink();
     } catch {
       setError("No pudimos enviar el link. Intenta de nuevo.");
     } finally {
