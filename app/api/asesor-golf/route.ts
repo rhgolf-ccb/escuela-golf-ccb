@@ -56,6 +56,27 @@ Cuando te pidan el análisis inicial del grupo (o cualquier análisis de patrone
 Si un alumno no tiene tests registrados, indícalo explícitamente en una lista aparte de "alumnos sin tests completados" — nunca inventes un resultado para ellos. Nunca asignes un alumno a Competencia automáticamente. Habla de tú al profesor, sé directo y práctico.`;
 }
 
+function buildIndividualPlanIntro(contexto: string): string {
+  return `Eres Paco, asesor experto de golf de la Escuela de Golf CCB. Vas a generar un plan de trabajo individual para un alumno de Competencia, para los días en que NO tiene sesión programada en la escuela esa semana. Contexto disponible: ${contexto}
+
+Genera el plan EXACTAMENTE con este formato, sin agregar secciones adicionales ni preguntar nada antes:
+
+{Nombre del alumno} — Plan de trabajo semana {fecha}
+
+Objetivo de la semana: {una línea con el foco principal, basado en los errores técnicos y restricciones físicas más recientes}
+
+Para cada uno de los días libres de sesión en la escuela esa semana, en este formato exacto:
+Día {nombre}: {duración recomendada — máximo 30 minutos en total}
+- Drill 1: {nombre} — {descripción en lenguaje directo para el alumno, sin jerga técnica de golf o TPI} — {repeticiones}
+- Drill 2: {nombre} — {descripción} — {repeticiones}
+- Ejercicio físico: {nombre} — {descripción} — {series y repeticiones}
+
+Al final, siempre:
+Recordatorio: {mensaje motivacional breve y personalizado, dirigido directamente al alumno}
+
+Usa drills de la librería disponible cuando haya opciones relevantes para los errores detectados; si no hay un drill específico, describe un ejercicio genérico apropiado. Nunca inventes resultados de tests — si algo no está disponible en el contexto, trabaja con lo que sí hay y dilo si es relevante.`;
+}
+
 function buildPlanningIntro(contextoPlanificacion: string): string {
   return `Eres Paco, asesor experto de la Escuela de Golf CCB. Cuando el profesor te pida planificar una semana o un día específico para cualquier grupo, genera una programación detallada usando los drills de la librería disponible y las ubicaciones reales del CCB. Respeta siempre la estructura fija de cada grupo: Juvenil usa 3 estaciones (juego largo, juego corto, putt) con días especiales posibles (test técnico, test físico, campo infantil, Pacos y Fabios); Competencia sigue su estructura día por día; Damas es solo viernes con 3 estaciones rotativas. Nunca uses el término driving range — siempre campo de práctica. Cuando generes una programación muéstrala estructurada por día con estaciones, drills, tiempos y ubicación. Al final pregunta si el profesor quiere publicarla en el calendario.
 
@@ -140,9 +161,10 @@ FORMATO DE RESPUESTA:
 
 const SYSTEM_PROMPT = `${PACO_GENERAL_INTRO}\n\n${PACO_SHARED_SECTIONS}`;
 
-function buildSystemPrompt(studentContext?: string, planningContext?: string, groupContext?: string): string {
+function buildSystemPrompt(studentContext?: string, planningContext?: string, groupContext?: string, individualPlanContext?: string): string {
   if (planningContext) return `${buildPlanningIntro(planningContext)}\n\n${PACO_SHARED_SECTIONS}`;
   if (groupContext) return `${buildGroupIntro(groupContext)}\n\n${PACO_SHARED_SECTIONS}`;
+  if (individualPlanContext) return `${buildIndividualPlanIntro(individualPlanContext)}\n\n${PACO_SHARED_SECTIONS}`;
   if (studentContext) return `${buildContextualIntro(studentContext)}\n\n${PACO_SHARED_SECTIONS}`;
   return SYSTEM_PROMPT;
 }
@@ -444,7 +466,7 @@ export async function POST(request: NextRequest) {
     }
   }
 
-  let body: { messages?: ChatMessage[]; studentContext?: string; planningContext?: string; groupContext?: string };
+  let body: { messages?: ChatMessage[]; studentContext?: string; planningContext?: string; groupContext?: string; individualPlanContext?: string };
   try {
     body = await request.json();
   } catch {
@@ -456,7 +478,7 @@ export async function POST(request: NextRequest) {
     return Response.json({ error: "Se requiere al menos un mensaje" }, { status: 400 });
   }
   const history = messages.slice(-MAX_HISTORY);
-  const systemPrompt = buildSystemPrompt(body.studentContext, body.planningContext, body.groupContext);
+  const systemPrompt = buildSystemPrompt(body.studentContext, body.planningContext, body.groupContext, body.individualPlanContext);
 
   const client = new Anthropic({ apiKey });
 

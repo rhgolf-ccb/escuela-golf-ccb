@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import ParentReportModal from "./ParentReportModal";
 import PacoContextChat from "./PacoContextChat";
+import PlanParaCasaModal from "./PlanParaCasaModal";
 import { isStaff, type Rol } from "@/lib/roles";
 
 type Tab = "datos" | "tecnicos" | "fisicos" | "hitos" | "notas";
@@ -638,6 +639,7 @@ export default function StudentProfile({ studentId, currentRol }: { studentId: s
   const [pacoContext, setPacoContext] = useState<string | null>(null);
   const [pacoContextLoading, setPacoContextLoading] = useState(false);
   const [parentPdfLoading, setParentPdfLoading] = useState(false);
+  const [showPlanCasa, setShowPlanCasa] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [form, setForm] = useState<EditForm|null>(null);
   const [saving, setSaving] = useState(false);
@@ -1630,6 +1632,14 @@ posPayload[`${key}_score`] = rawScore !== null ? Math.round(rawScore) : null;
                 style={{ backgroundColor:"#1a3a2a", color:"white" }}
               >
                 {pacoContextLoading ? "Cargando contexto..." : "Consultar a Paco 🦅"}
+              </button>
+            )}
+            {currentRol && isStaff(currentRol) && student?.grupo_activo === "Competencia" && (
+              <button
+                onClick={() => setShowPlanCasa(true)}
+                className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium border border-gray-200 text-gray-600 hover:bg-gray-50"
+              >
+                Plan para casa 🏠
               </button>
             )}
             {currentRol && isStaff(currentRol) && student && (
@@ -3077,6 +3087,15 @@ posPayload[`${key}_score`] = rawScore !== null ? Math.round(rawScore) : null;
           studentGrupo={student.grupo_activo}
           studentContext={pacoContext}
           onClose={() => setShowPacoChat(false)}
+        />
+      )}
+
+      {showPlanCasa && student && (
+        <PlanParaCasaModal
+          studentId={studentId}
+          studentName={student.full_name}
+          parentPhone={student.parent_phone}
+          onClose={() => setShowPlanCasa(false)}
         />
       )}
     </div>
