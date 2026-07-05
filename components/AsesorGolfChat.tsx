@@ -1,6 +1,9 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
+import { shouldOfferPdf } from "@/lib/pdf-asesor";
 
 type Message = {
   role: "user" | "assistant";
@@ -13,7 +16,7 @@ type Message = {
 const WELCOME_MESSAGE: Message = {
   role: "assistant",
   content:
-    "Hola, soy el asesor especializado de la Escuela de Golf CCB. Puedo ayudarte con preguntas sobre swing, protocolos TPI, benchmarks por grupo, pedagogía júnior y desarrollo atlético. ¿En qué te puedo ayudar?",
+    "¡Hola! Soy Paco, el asesor de golf de la Escuela CCB. Puedo ayudarte con swing, protocolos TPI, benchmarks por grupo, pedagogía júnior y desarrollo atlético. ¿En qué te puedo ayudar?",
   timestamp: Date.now(),
 };
 
@@ -39,6 +42,31 @@ const TOOL_STATUS_LABELS: Record<string, string> = {
 function formatTime(ts: number): string {
   return new Date(ts).toLocaleTimeString("es-CO", { hour: "2-digit", minute: "2-digit" });
 }
+
+const MARKDOWN_COMPONENTS = {
+  h1: (props: React.ComponentProps<"h1">) => <h1 className="text-base font-bold mt-2 mb-1 first:mt-0" style={{ color: "#1a3a2a" }} {...props} />,
+  h2: (props: React.ComponentProps<"h2">) => <h2 className="text-[15px] font-bold mt-2 mb-1 first:mt-0" style={{ color: "#1a3a2a" }} {...props} />,
+  h3: (props: React.ComponentProps<"h3">) => <h3 className="text-sm font-bold mt-1.5 mb-1 first:mt-0" style={{ color: "#1a3a2a" }} {...props} />,
+  p: (props: React.ComponentProps<"p">) => <p className="mb-1.5 last:mb-0 leading-relaxed" {...props} />,
+  ul: (props: React.ComponentProps<"ul">) => <ul className="list-disc pl-4 mb-1.5 space-y-0.5 last:mb-0" {...props} />,
+  ol: (props: React.ComponentProps<"ol">) => <ol className="list-decimal pl-4 mb-1.5 space-y-0.5 last:mb-0" {...props} />,
+  li: (props: React.ComponentProps<"li">) => <li className="leading-relaxed" {...props} />,
+  strong: (props: React.ComponentProps<"strong">) => <strong className="font-semibold text-gray-900" {...props} />,
+  hr: () => <hr className="my-2 border-t border-gray-200" />,
+  a: (props: React.ComponentProps<"a">) => <a className="underline" style={{ color: "#1a3a2a" }} target="_blank" rel="noreferrer" {...props} />,
+  table: (props: React.ComponentProps<"table">) => (
+    <div className="overflow-x-auto mb-1.5 last:mb-0">
+      <table className="w-full border-collapse text-[11px]" {...props} />
+    </div>
+  ),
+  thead: (props: React.ComponentProps<"thead">) => <thead {...props} />,
+  th: (props: React.ComponentProps<"th">) => (
+    <th className="border px-1.5 py-1 text-left font-semibold text-white" style={{ backgroundColor: "#1a3a2a", borderColor: "#1a3a2a" }} {...props} />
+  ),
+  td: (props: React.ComponentProps<"td">) => <td className="border border-gray-200 px-1.5 py-1 even:bg-transparent" {...props} />,
+  tr: (props: React.ComponentProps<"tr">) => <tr className="odd:bg-gray-50" {...props} />,
+  code: (props: React.ComponentProps<"code">) => <code className="text-[11px] bg-gray-100 rounded px-1 py-0.5" {...props} />,
+};
 
 export default function AsesorGolfChat() {
   const [isOpen, setIsOpen] = useState(false);
@@ -148,13 +176,18 @@ export default function AsesorGolfChat() {
     setInput("");
   }
 
+  async function handleDownloadPdf(content: string) {
+    const { generateAsesorPdf } = await import("@/lib/pdf-asesor");
+    generateAsesorPdf(content);
+  }
+
   const hasUserSentMessage = messages.some((m) => m.role === "user");
 
   return (
     <>
       <button
         onClick={() => setIsOpen((v) => !v)}
-        aria-label="Asesor Golf CCB"
+        aria-label="Paco — Asesor de Golf"
         className="fixed flex items-center justify-center rounded-full shadow-lg transition-all hover:opacity-90 hover:scale-105"
         style={{ bottom: 24, right: 24, width: 52, height: 52, backgroundColor: "#1a3a2a", zIndex: 50 }}
       >
@@ -180,7 +213,7 @@ export default function AsesorGolfChat() {
               <i className="ti ti-robot" style={{ color: "#ffffff", fontSize: 20 }} />
               <div className="min-w-0">
                 <div className="flex items-center gap-1.5">
-                  <p className="text-sm font-semibold text-white truncate">Asesor Golf CCB</p>
+                  <p className="text-sm font-semibold text-white truncate">Paco — Asesor de Golf</p>
                   <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded-full bg-white/15 text-white shrink-0">Opus 4</span>
                 </div>
                 <p className="text-[11px] text-white/70 truncate">Especialista en TPI · Swing · Pedagogía</p>
@@ -200,15 +233,29 @@ export default function AsesorGolfChat() {
             {messages.map((m, i) => (
               <div key={i} className={`flex flex-col ${m.role === "user" ? "items-end" : "items-start"}`}>
                 <div
-                  className="max-w-[85%] rounded-2xl px-3 py-2 text-sm whitespace-pre-wrap"
+                  className="max-w-[85%] rounded-2xl px-3 py-2 text-sm"
                   style={
                     m.role === "user"
                       ? { backgroundColor: "#1a3a2a", color: "#ffffff" }
                       : { backgroundColor: "var(--surface-1)", color: m.isError ? "#b91c1c" : "#1f2937", border: "0.5px solid var(--border-strong)" }
                   }
                 >
-                  {m.content}
+                  {m.role === "assistant" && !m.isError ? (
+                    <ReactMarkdown remarkPlugins={[remarkGfm]} components={MARKDOWN_COMPONENTS}>
+                      {m.content}
+                    </ReactMarkdown>
+                  ) : (
+                    <span className="whitespace-pre-wrap">{m.content}</span>
+                  )}
                 </div>
+                {m.role === "assistant" && !m.isError && shouldOfferPdf(m.content) && (
+                  <button
+                    onClick={() => handleDownloadPdf(m.content)}
+                    className="flex items-center gap-1 mt-1 text-[11px] font-medium px-2 py-1 rounded-md border border-gray-200 text-gray-600 hover:bg-gray-50 transition-colors"
+                  >
+                    <i className="ti ti-file-type-pdf" style={{ fontSize: 12 }} /> Descargar PDF
+                  </button>
+                )}
                 <div className="flex items-center gap-1.5 mt-0.5 px-1">
                   {m.usedWebSearch && (
                     <span className="text-[10px] text-gray-400 flex items-center gap-0.5">
