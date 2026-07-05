@@ -151,7 +151,7 @@ export default function ProtocolosModule() {
         .upload(path, file, { upsert: true, contentType: file.type });
       if (uploadError) throw new Error(uploadError.message);
       const { data: urlData } = supabase.storage.from("protocolos-fotos").getPublicUrl(path);
-      updateTest(codigo, { foto_url: urlData.publicUrl });
+      updateTest(codigo, { foto_url: `${urlData.publicUrl}?v=${Date.now()}` });
     } catch (err) {
       alert(err instanceof Error ? err.message : "Error al subir la foto");
     } finally {
