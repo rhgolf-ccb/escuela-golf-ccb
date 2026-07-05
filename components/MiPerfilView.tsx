@@ -52,7 +52,7 @@ type SwingEval = { id: string; evaluation_date: string; evaluation_type: string;
 type PhysicalEval = { id: string; evaluation_date: string; evaluation_type: string; score_promedio: number | null; professor_comment: string | null };
 type AsistenciaRow = { id: string; estado: string; asistio: boolean | null; sesion: { fecha: string; tipo_sesion: string } | null };
 type Hito = { id: string; titulo: string; descripcion: string | null; fecha: string; foto_url: string | null };
-type Nota = { id: string; contenido: string; imagen_url: string | null; profesor_nombre: string | null; fecha: string };
+type Nota = { id: string; contenido: string; imagen_url: string | null; video_url: string | null; profesor_nombre: string | null; fecha: string };
 
 function EvalCard({ label, ev }: { label: string; ev: { evaluation_date: string; evaluation_type: string; score_promedio: number | null; professor_comment: string | null } }) {
   const c = scoreColor(ev.score_promedio);
@@ -251,12 +251,22 @@ export default function MiPerfilView({ rol, estudiantes }: { rol: Rol; estudiant
                     <div key={n.id} className="bg-white rounded-xl border border-gray-100 shadow-sm p-4">
                       <div className="flex items-center justify-between mb-1">
                         <p className="text-xs text-gray-400">{formatFecha(n.fecha)}</p>
-                        {n.profesor_nombre && <p className="text-xs text-gray-400">{n.profesor_nombre}</p>}
+                        <div className="flex items-center gap-1.5">
+                          {n.video_url && (
+                            <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full text-white" style={{ backgroundColor: "#1a3a2a" }}>
+                              🎥 Video
+                            </span>
+                          )}
+                          {n.profesor_nombre && <p className="text-xs text-gray-400">{n.profesor_nombre}</p>}
+                        </div>
                       </div>
                       <p className="text-sm text-gray-700 whitespace-pre-wrap">{n.contenido}</p>
                       {n.imagen_url && (
                         // eslint-disable-next-line @next/next/no-img-element
                         <img src={n.imagen_url} alt="" className="mt-2 rounded-lg max-h-64 object-cover" />
+                      )}
+                      {n.video_url && (
+                        <video src={n.video_url} controls className="mt-2 w-full rounded-lg border border-gray-100" style={{ maxHeight: 300 }} />
                       )}
                     </div>
                   ))
