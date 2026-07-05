@@ -363,7 +363,7 @@ export async function POST(req: NextRequest) {
   const contexto = { ...contexto_grupo, semana_inicio, foco_mes: foco_mes ?? null };
   const { system, user } = buildPrompt(tipo_plan, tema_semanal, contexto);
 
-  const maxTokens = tipo_plan === "competencia" ? 3000 : tipo_plan === "juvenil" ? 2000 : 2000;
+  const maxTokens = tipo_plan === "competencia" ? 8000 : tipo_plan === "juvenil" ? 2000 : 2000;
 
   console.log("[weekly-plan] API key existe:", !!apiKey);
   console.log("[weekly-plan] max_tokens:", maxTokens, "| prompt user length:", user.length, "chars");
