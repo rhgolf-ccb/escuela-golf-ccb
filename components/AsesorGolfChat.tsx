@@ -3,8 +3,10 @@
 import { useEffect, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import { supabase } from "@/lib/supabase";
 import { shouldOfferPdf } from "@/lib/pdf-asesor";
-import { TOOL_STATUS_LABELS, formatTime, MARKDOWN_COMPONENTS, streamAsesorChat } from "@/lib/paco-chat-shared";
+import { TOOL_STATUS_LABELS, formatTime, MARKDOWN_COMPONENTS, streamAsesorChat, todayISODate, PACO_LIMIT_MESSAGE, type PacoUsage } from "@/lib/paco-chat-shared";
+import { pacoLimitFor, type Rol } from "@/lib/roles";
 
 type Message = {
   role: "user" | "assistant";
@@ -29,17 +31,30 @@ const SUGGESTIONS = [
 
 const MAX_HISTORY = 10;
 
-export default function AsesorGolfChat() {
+export default function AsesorGolfChat({ rol }: { rol: Rol | null }) {
   const [isOpen, setIsOpen] = useState(false);
   const [messages, setMessages] = useState<Message[]>([WELCOME_MESSAGE]);
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [toolStatus, setToolStatus] = useState<string | null>(null);
+  const [usage, setUsage] = useState<PacoUsage | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
   }, [messages, isLoading, isOpen]);
+
+  useEffect(() => {
+    if (!rol) return;
+    const limit = pacoLimitFor(rol);
+    if (limit === null) return;
+    supabase
+      .from("paco_usage")
+      .select("mensajes_count")
+      .eq("fecha", todayISODate())
+      .maybeSingle()
+      .then(({ data }) => setUsage({ count: data?.mensajes_count ?? 0, limit }));
+  }, [rol]);
 
   async function sendMessage(text: string) {
     const trimmed = text.trim();
@@ -62,16 +77,23 @@ export default function AsesorGolfChat() {
       let finalText: string | null = null;
       let usedWebSearch = false;
       let gotError = false;
+      let limitReached = false;
 
       await streamAsesorChat({ messages: history }, (evt) => {
         if (evt.type === "tool_status" && evt.tool) setToolStatus(evt.tool);
         else if (evt.type === "done") {
           finalText = evt.text ?? "";
           usedWebSearch = !!evt.usedWebSearch;
+          if (evt.usage) setUsage(evt.usage);
+        } else if (evt.type === "limit_reached") {
+          limitReached = true;
+          if (evt.usage) setUsage(evt.usage);
         } else if (evt.type === "error") gotError = true;
       });
 
-      if (gotError || finalText === null) {
+      if (limitReached) {
+        setMessages((prev) => [...prev, { role: "assistant", content: PACO_LIMIT_MESSAGE, timestamp: Date.now() }]);
+      } else if (gotError || finalText === null) {
         setMessages((prev) => [
           ...prev,
           { role: "assistant", content: "No pude conectarme. Intenta de nuevo.", timestamp: Date.now(), isError: true },
@@ -111,6 +133,7 @@ export default function AsesorGolfChat() {
   }
 
   const hasUserSentMessage = messages.some((m) => m.role === "user");
+  const limitReached = usage !== null && usage.limit !== null && usage.count >= usage.limit;
 
   return (
     <>
@@ -147,6 +170,11 @@ export default function AsesorGolfChat() {
                 </div>
                 <p className="text-[11px] text-white/70 truncate">Especialista en TPI · Swing · Pedagogía</p>
               </div>
+              {usage && usage.limit !== null && (
+                <span className="text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-white/10 text-white/70 shrink-0">
+                  Consultas hoy: {usage.count}/{usage.limit}
+                </span>
+              )}
             </div>
             <div className="flex items-center gap-1 shrink-0">
               <button onClick={handleNuevaConsulta} title="Nueva consulta" className="text-white/70 hover:text-white p-1">
@@ -229,14 +257,14 @@ export default function AsesorGolfChat() {
               value={input}
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={handleKeyDown}
-              disabled={isLoading}
-              placeholder="Pregunta sobre swing, TPI, benchmarks..."
+              disabled={isLoading || limitReached}
+              placeholder={limitReached ? "Límite diario alcanzado" : "Pregunta sobre swing, TPI, benchmarks..."}
               className="flex-1 min-w-0 text-sm px-3 py-2 rounded-full border border-gray-200 focus:outline-none focus:border-[#1a3a2a] disabled:opacity-60"
               style={{ backgroundColor: "var(--surface-1)" }}
             />
             <button
               onClick={() => sendMessage(input)}
-              disabled={isLoading || !input.trim()}
+              disabled={isLoading || !input.trim() || limitReached}
               aria-label="Enviar"
               className="flex items-center justify-center w-9 h-9 rounded-full shrink-0 disabled:opacity-40 transition-opacity"
               style={{ backgroundColor: "#1a3a2a" }}

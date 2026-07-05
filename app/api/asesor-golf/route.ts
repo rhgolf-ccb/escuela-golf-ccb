@@ -3,13 +3,15 @@ import type { NextRequest } from "next/server";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
-import { STAFF_ROLES, type Rol } from "@/lib/roles";
+import { STAFF_ROLES, pacoLimitFor, type Rol } from "@/lib/roles";
 
 const PRIMARY_MODEL = "claude-opus-4-5";
 const FALLBACK_MODEL = "claude-sonnet-4-6";
 const MAX_CONTINUATIONS = 3;
 const MAX_TOOL_ITERATIONS = 10;
 const MAX_HISTORY = 10;
+
+const LIMITE_ALCANZADO_MSG = "Has alcanzado tu límite diario de consultas a Paco. Se renueva mañana a las 12:00 AM.";
 
 const PACO_GENERAL_INTRO = `Eres Paco, el águila mascota y asesor experto de golf de la Escuela de Golf del Country Club de Bogotá (CCB). Eres un experto en técnica de swing (posiciones P1–P10), screening físico TPI, biomecánica, desarrollo atlético juvenil (framework TPI Junior + Canadian LTAD) y análisis Trackman. Tu referencia principal de swing es Kyle Morris (@kylemorrisgolf).
 
@@ -393,8 +395,29 @@ export async function POST(request: NextRequest) {
   if (!user) return Response.json({ error: "unauthorized" }, { status: 401 });
 
   const { data: caller } = await supabase.from("app_users").select("rol").eq("id", user.id).maybeSingle();
-  if (!caller || !STAFF_ROLES.includes(caller.rol as Rol)) {
+  const rol = caller?.rol as Rol | undefined;
+  if (!rol || !STAFF_ROLES.includes(rol)) {
     return Response.json({ error: "forbidden" }, { status: 403 });
+  }
+
+  const admin = createSupabaseAdminClient();
+  const limite = pacoLimitFor(rol);
+  const hoy = new Date().toISOString().split("T")[0];
+
+  if (limite !== null) {
+    const { data: usage } = await admin
+      .from("paco_usage")
+      .select("mensajes_count")
+      .eq("user_id", user.id)
+      .eq("fecha", hoy)
+      .maybeSingle();
+    const consumo = usage?.mensajes_count ?? 0;
+    if (consumo >= limite) {
+      return Response.json(
+        { error: LIMITE_ALCANZADO_MSG, usage: { count: consumo, limit: limite } },
+        { status: 429 }
+      );
+    }
   }
 
   let body: { messages?: ChatMessage[]; studentContext?: string; planningContext?: string };
@@ -412,7 +435,6 @@ export async function POST(request: NextRequest) {
   const systemPrompt = buildSystemPrompt(body.studentContext, body.planningContext);
 
   const client = new Anthropic({ apiKey });
-  const admin = createSupabaseAdminClient();
 
   const encoder = new TextEncoder();
   const stream = new ReadableStream({
@@ -479,7 +501,15 @@ export async function POST(request: NextRequest) {
           break;
         }
 
-        send({ type: "done", text: text.trim(), usedWebSearch });
+        let usage: { count: number; limit: number | null } | undefined;
+        if (limite === null) {
+          usage = { count: 0, limit: null };
+        } else {
+          const { data: nuevoConteo } = await admin.rpc("increment_paco_usage", { p_user_id: user.id, p_fecha: hoy });
+          usage = { count: typeof nuevoConteo === "number" ? nuevoConteo : limite, limit: limite };
+        }
+
+        send({ type: "done", text: text.trim(), usedWebSearch, usage });
       } catch (error) {
         console.error("Error asesor-golf:", error);
         send({ type: "error", message: "No pude conectarme. Intenta de nuevo." });

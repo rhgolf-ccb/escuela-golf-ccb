@@ -21,7 +21,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     <div className="min-h-full flex flex-col">
       <Navbar role={role} nombre={nombre} email={email} />
       <main className="flex-1 flex flex-col">{children}</main>
-      {role && isStaff(role) && <AsesorGolfChat />}
+      {role && isStaff(role) && <AsesorGolfChat rol={role} />}
     </div>
   );
 }

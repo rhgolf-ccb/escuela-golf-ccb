@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { supabase } from "@/lib/supabase";
-import { TOOL_STATUS_LABELS, formatTime, MARKDOWN_COMPONENTS, streamAsesorChat } from "@/lib/paco-chat-shared";
+import { TOOL_STATUS_LABELS, formatTime, MARKDOWN_COMPONENTS, streamAsesorChat, PACO_LIMIT_MESSAGE } from "@/lib/paco-chat-shared";
 import type { SesionJuvenilData, SesionJuvenilLegacy } from "./JuvenileClassModal";
 import {
   toISODate,
@@ -178,6 +178,7 @@ export default function PacoPlanningModal({
     let finalText: string | null = null;
     let usedWebSearch = false;
     let gotError = false;
+    let limitReached = false;
 
     try {
       await streamAsesorChat({ messages: history, planningContext }, (evt) => {
@@ -185,13 +186,16 @@ export default function PacoPlanningModal({
         else if (evt.type === "done") {
           finalText = evt.text ?? "";
           usedWebSearch = !!evt.usedWebSearch;
-        } else if (evt.type === "error") gotError = true;
+        } else if (evt.type === "limit_reached") limitReached = true;
+        else if (evt.type === "error") gotError = true;
       });
     } catch {
       gotError = true;
     }
 
-    if (gotError || finalText === null) {
+    if (limitReached) {
+      setMessages((prev) => [...prev, { role: "assistant", content: PACO_LIMIT_MESSAGE, timestamp: Date.now() }]);
+    } else if (gotError || finalText === null) {
       setMessages((prev) => [...prev, { role: "assistant", content: "No pude conectarme. Intenta de nuevo.", timestamp: Date.now(), isError: true }]);
     } else {
       setMessages((prev) => [...prev, { role: "assistant", content: finalText || "No obtuve respuesta.", timestamp: Date.now(), usedWebSearch }]);

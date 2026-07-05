@@ -41,6 +41,14 @@ export function isPadreOrAlumno(rol: Rol): boolean {
   return rol === "padre_competencia" || rol === "padre_otros" || rol === "alumno_competencia";
 }
 
+// Límite diario de consultas al asesor Paco. null = sin límite (director).
+export function pacoLimitFor(rol: Rol): number | null {
+  if (rol === "director") return null;
+  if (rol === "coordinador") return 40;
+  if (rol === "profesor" || rol === "administrativo") return 20;
+  return 0;
+}
+
 export function roleLabel(rol: Rol): string {
   switch (rol) {
     case "coordinador":

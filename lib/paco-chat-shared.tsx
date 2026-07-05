@@ -13,6 +13,12 @@ export function formatTime(ts: number): string {
   return new Date(ts).toLocaleTimeString("es-CO", { hour: "2-digit", minute: "2-digit" });
 }
 
+export function todayISODate(): string {
+  return new Date().toISOString().split("T")[0];
+}
+
+export const PACO_LIMIT_MESSAGE = "Has alcanzado tu límite diario de consultas. Vuelve mañana 🦅";
+
 export const MARKDOWN_COMPONENTS = {
   h1: (props: React.ComponentProps<"h1">) => <h1 className="text-base font-bold mt-2 mb-1 first:mt-0" style={{ color: "#1a3a2a" }} {...props} />,
   h2: (props: React.ComponentProps<"h2">) => <h2 className="text-[15px] font-bold mt-2 mb-1 first:mt-0" style={{ color: "#1a3a2a" }} {...props} />,
@@ -38,7 +44,8 @@ export const MARKDOWN_COMPONENTS = {
   code: (props: React.ComponentProps<"code">) => <code className="text-[11px] bg-gray-100 rounded px-1 py-0.5" {...props} />,
 };
 
-export type StreamEvent = { type: string; tool?: string; text?: string; usedWebSearch?: boolean };
+export type PacoUsage = { count: number; limit: number | null };
+export type StreamEvent = { type: string; tool?: string; text?: string; usedWebSearch?: boolean; usage?: PacoUsage; message?: string };
 
 export async function streamAsesorChat(body: Record<string, unknown>, onEvent: (evt: StreamEvent) => void): Promise<void> {
   const res = await fetch("/api/asesor-golf", {
@@ -46,6 +53,12 @@ export async function streamAsesorChat(body: Record<string, unknown>, onEvent: (
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
   });
+
+  if (res.status === 429) {
+    const data = await res.json().catch(() => null);
+    onEvent({ type: "limit_reached", usage: data?.usage });
+    return;
+  }
 
   if (!res.ok || !res.body) {
     onEvent({ type: "error" });
