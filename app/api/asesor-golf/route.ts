@@ -31,6 +31,13 @@ function buildContextualIntro(contextoAlumno: string): string {
   return `Eres Paco, el asesor experto de golf de la Escuela de Golf CCB. Estás siendo consultado sobre un alumno específico con el siguiente contexto: ${contextoAlumno}. El profesor puede pedirte análisis técnico, planes de drills, ejercicios correctivos o cualquier consulta relacionada con el desarrollo de este alumno. Cuando generes un plan o recomendación pregunta siempre al profesor si quiere guardarlo en las notas del alumno. Usa toda la información disponible del alumno para personalizar tus respuestas — si no hay tests disponibles trabaja con la descripción que te dé el profesor. Habla de tú al profesor, sé directo y práctico.`;
 }
 
+function buildPlanningIntro(contextoPlanificacion: string): string {
+  return `Eres Paco, asesor experto de la Escuela de Golf CCB. Cuando el profesor te pida planificar una semana o un día específico para cualquier grupo, genera una programación detallada usando los drills de la librería disponible y las ubicaciones reales del CCB. Respeta siempre la estructura fija de cada grupo: Juvenil usa 3 estaciones (juego largo, juego corto, putt) con días especiales posibles (test técnico, test físico, campo infantil, Pacos y Fabios); Competencia sigue su estructura día por día; Damas es solo viernes con 3 estaciones rotativas. Nunca uses el término driving range — siempre campo de práctica. Cuando generes una programación muéstrala estructurada por día con estaciones, drills, tiempos y ubicación. Al final pregunta si el profesor quiere publicarla en el calendario.
+
+Contexto de planificación disponible:
+${contextoPlanificacion}`;
+}
+
 const PACO_SHARED_SECTIONS = `GRUPOS DE LA ESCUELA CCB (detalle de tests por grupo):
 - Birdies (4-5 años): iniciación, desarrollo motor básico
   Tests técnicos: P1, P4, P7, P10 (simplificados)
@@ -108,9 +115,10 @@ FORMATO DE RESPUESTA:
 
 const SYSTEM_PROMPT = `${PACO_GENERAL_INTRO}\n\n${PACO_SHARED_SECTIONS}`;
 
-function buildSystemPrompt(studentContext?: string): string {
-  if (!studentContext) return SYSTEM_PROMPT;
-  return `${buildContextualIntro(studentContext)}\n\n${PACO_SHARED_SECTIONS}`;
+function buildSystemPrompt(studentContext?: string, planningContext?: string): string {
+  if (planningContext) return `${buildPlanningIntro(planningContext)}\n\n${PACO_SHARED_SECTIONS}`;
+  if (studentContext) return `${buildContextualIntro(studentContext)}\n\n${PACO_SHARED_SECTIONS}`;
+  return SYSTEM_PROMPT;
 }
 
 type ChatMessage = { role: "user" | "assistant"; content: string };
@@ -389,7 +397,7 @@ export async function POST(request: NextRequest) {
     return Response.json({ error: "forbidden" }, { status: 403 });
   }
 
-  let body: { messages?: ChatMessage[]; studentContext?: string };
+  let body: { messages?: ChatMessage[]; studentContext?: string; planningContext?: string };
   try {
     body = await request.json();
   } catch {
@@ -401,7 +409,7 @@ export async function POST(request: NextRequest) {
     return Response.json({ error: "Se requiere al menos un mensaje" }, { status: 400 });
   }
   const history = messages.slice(-MAX_HISTORY);
-  const systemPrompt = buildSystemPrompt(body.studentContext);
+  const systemPrompt = buildSystemPrompt(body.studentContext, body.planningContext);
 
   const client = new Anthropic({ apiKey });
   const admin = createSupabaseAdminClient();

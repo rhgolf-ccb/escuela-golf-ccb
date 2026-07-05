@@ -10,15 +10,17 @@ import JuvenileClassModal, {
   type SesionJuvenilEstaciones,
 } from "./JuvenileClassModal";
 import CompetenciaClassModal from "./CompetenciaClassModal";
+import PacoPlanningModal from "./PacoPlanningModal";
+import { isStaff, type Rol } from "@/lib/roles";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
-type TipoPlan   = "juvenil" | "competencia" | "damas";
-type DiaSemana  = "martes" | "miercoles" | "jueves" | "viernes" | "sabado" | "domingo";
-type TipoSesion = "tiro_largo" | "juego_corto" | "putt" | "campo" | "test_tecnico" | "test_fisico" | "competencia" | "damas_estaciones" | "juvenil_estaciones";
-type Lugar      = "campo_practica" | "putting_green" | "campo_infantil" | "campo_pacos_fabios" | "campo_completo";
+export type TipoPlan   = "juvenil" | "competencia" | "damas";
+export type DiaSemana  = "martes" | "miercoles" | "jueves" | "viernes" | "sabado" | "domingo";
+export type TipoSesion = "tiro_largo" | "juego_corto" | "putt" | "campo" | "test_tecnico" | "test_fisico" | "competencia" | "damas_estaciones" | "juvenil_estaciones";
+export type Lugar      = "campo_practica" | "putting_green" | "campo_infantil" | "campo_pacos_fabios" | "campo_completo";
 type ViewMode   = "plan" | "semana" | "mes";
 
-interface Drill {
+export interface Drill {
   titulo: string;
   descripcion: string;
   dificultad_birdies?: string | null;
@@ -34,7 +36,7 @@ interface Drill {
   repeticiones?: string | null;
 }
 
-interface EstacionDamas { nombre: string; lugar: string; duracion_min: number; descripcion: string; }
+export interface EstacionDamas { nombre: string; lugar: string; duracion_min: number; descripcion: string; }
 
 interface OpcionActividad {
   id: number;
@@ -47,13 +49,13 @@ interface OpcionActividad {
   drills: Drill[];
 }
 
-interface PlanSemanal {
+export interface PlanSemanal {
   id: string; semana_inicio: string; tipo_plan: TipoPlan;
   tema_semanal: string; descripcion_tema: string; objetivo_mensual: string | null;
   foco_mes: string | null; created_at: string;
 }
 
-interface SesionSemana {
+export interface SesionSemana {
   id: string; plan_id: string; dia_semana: DiaSemana; fecha: string;
   tipo_sesion: TipoSesion; lugar: Lugar;
   hora_inicio: string | null; hora_fin: string | null;
@@ -71,7 +73,7 @@ interface CalEventReserva {
   students: { full_name: string };
 }
 
-interface PreviewSesion {
+export interface PreviewSesion {
   dia_semana: DiaSemana; fecha: string;
   tipo_sesion: TipoSesion; lugar: Lugar;
   hora_inicio: string; hora_fin: string;
@@ -90,7 +92,7 @@ interface SesionForm {
 interface HorarioDefecto { tipo_plan: TipoPlan; dia_semana: DiaSemana; hora_inicio: string; hora_fin: string; }
 
 // ── Constants ─────────────────────────────────────────────────────────────────
-const DIAS_POR_TIPO: Record<TipoPlan, DiaSemana[]> = {
+export const DIAS_POR_TIPO: Record<TipoPlan, DiaSemana[]> = {
   juvenil:     ["martes", "miercoles", "jueves", "sabado", "domingo"],
   competencia: ["martes", "miercoles", "jueves", "sabado"],
   damas:       ["viernes"],
@@ -98,7 +100,7 @@ const DIAS_POR_TIPO: Record<TipoPlan, DiaSemana[]> = {
 
 const CAL_DIAS: DiaSemana[] = ["martes", "miercoles", "jueves", "viernes", "sabado", "domingo"];
 
-const DIA_LABEL: Record<DiaSemana, string> = {
+export const DIA_LABEL: Record<DiaSemana, string> = {
   martes: "Martes", miercoles: "Miércoles", jueves: "Jueves",
   viernes: "Viernes", sabado: "Sábado", domingo: "Domingo",
 };
@@ -111,7 +113,7 @@ const DIA_OFFSET: Record<DiaSemana, number> = {
   martes: 1, miercoles: 2, jueves: 3, viernes: 4, sabado: 5, domingo: 6,
 };
 
-const TIPO_SESION_LABEL: Record<TipoSesion, string> = {
+export const TIPO_SESION_LABEL: Record<TipoSesion, string> = {
   tiro_largo: "Tiro Largo", juego_corto: "Juego Corto", putt: "Putt",
   campo: "Campo", test_tecnico: "Test Técnico", test_fisico: "Test Físico",
   competencia: "Competencia", damas_estaciones: "Estaciones", juvenil_estaciones: "3 Estaciones",
@@ -129,13 +131,13 @@ const TIPO_SESION_COLOR: Record<TipoSesion, { bg: string; text: string }> = {
   juvenil_estaciones:  { bg: "#f0faf2", text: "#1B4D2E" },
 };
 
-const LUGAR_LABEL: Record<Lugar, string> = {
+export const LUGAR_LABEL: Record<Lugar, string> = {
   campo_practica: "Campo de práctica", putting_green: "Putting Green",
   campo_infantil: "Campo Infantil", campo_pacos_fabios: "Pacos/Fabios",
   campo_completo: "Campo Completo",
 };
 
-const TIPO_PLAN_LABEL: Record<TipoPlan, string> = {
+export const TIPO_PLAN_LABEL: Record<TipoPlan, string> = {
   juvenil: "Juvenil", competencia: "Competencia", damas: "Damas",
 };
 
@@ -182,7 +184,7 @@ const CAL_FULL_H     = 80;  // px for occupied hour rows
 const CAL_THIN_H     = 16;  // px for collapsed empty-hour rows
 const CAL_HOURS      = Array.from({ length: CAL_HOUR_END - CAL_HOUR_START }, (_, i) => CAL_HOUR_START + i);
 // Event colors (dark/solid for contrast)
-const CAL_EVENT: Record<string, { bg: string; text: string }> = {
+export const CAL_EVENT: Record<string, { bg: string; text: string }> = {
   juvenil:     { bg: "#1a3a2a", text: "#ffffff" },
   competencia: { bg: "#7d5a00", text: "#ffffff" },
   damas:       { bg: "#4a1070", text: "#ffffff" },
@@ -194,9 +196,9 @@ function getMonday(d: Date): Date {
   date.setDate(date.getDate() + (day === 0 ? -6 : 1 - day));
   date.setHours(0, 0, 0, 0); return date;
 }
-function toISODate(d: Date): string { return d.toISOString().split("T")[0]; }
+export function toISODate(d: Date): string { return d.toISOString().split("T")[0]; }
 function addDays(d: Date, n: number): Date { const r = new Date(d); r.setDate(r.getDate() + n); return r; }
-function getFechaForDia(monday: Date, dia: DiaSemana): string { return toISODate(addDays(monday, DIA_OFFSET[dia])); }
+export function getFechaForDia(monday: Date, dia: DiaSemana): string { return toISODate(addDays(monday, DIA_OFFSET[dia])); }
 function formatWeekRange(monday: Date): string {
   const dom = addDays(monday, 6);
   return `${monday.toLocaleDateString("es-CO", { day: "numeric", month: "long" })} — ${dom.toLocaleDateString("es-CO", { day: "numeric", month: "long", year: "numeric" })}`;
@@ -475,9 +477,10 @@ function JuvenilPDFHidden({ sesion }: { sesion: SesionSemana }) {
 }
 
 // ── Main component ────────────────────────────────────────────────────────────
-export default function ProgramacionModule() {
+export default function ProgramacionModule({ currentRol }: { currentRol: Rol | null }) {
   const router = useRouter();
   const padresPdfRef = useRef<HTMLDivElement>(null);
+  const [showPacoPlanning, setShowPacoPlanning] = useState(false);
 
   // Plan state
   const [semana, setSemana]       = useState<Date>(() => getMonday(new Date()));
@@ -1547,17 +1550,28 @@ export default function ProgramacionModule() {
       </div>
 
       {/* ── Tabs (always visible) ── */}
-      <div className="flex gap-1 border-b border-gray-200 mb-5">
-        {(["juvenil", "competencia", "damas"] as TipoPlan[]).map((tab) => (
+      <div className="flex items-center justify-between gap-3 border-b border-gray-200 mb-5">
+        <div className="flex gap-1">
+          {(["juvenil", "competencia", "damas"] as TipoPlan[]).map((tab) => (
+            <button
+              key={tab}
+              onClick={() => setActiveTab(tab)}
+              className={`px-5 py-2.5 text-sm font-semibold rounded-t-lg transition-all border-b-2 -mb-px ${activeTab === tab ? "border-current" : "border-transparent text-gray-500 hover:text-gray-700"}`}
+              style={activeTab === tab ? { color: TIPO_PLAN_COLOR[tab], borderColor: TIPO_PLAN_COLOR[tab] } : {}}
+            >
+              {TIPO_PLAN_LABEL[tab]}
+            </button>
+          ))}
+        </div>
+        {currentRol && isStaff(currentRol) && (
           <button
-            key={tab}
-            onClick={() => setActiveTab(tab)}
-            className={`px-5 py-2.5 text-sm font-semibold rounded-t-lg transition-all border-b-2 -mb-px ${activeTab === tab ? "border-current" : "border-transparent text-gray-500 hover:text-gray-700"}`}
-            style={activeTab === tab ? { color: TIPO_PLAN_COLOR[tab], borderColor: TIPO_PLAN_COLOR[tab] } : {}}
+            onClick={() => setShowPacoPlanning(true)}
+            className="flex items-center gap-2 px-4 py-2 mb-2 rounded-lg text-sm font-medium text-white shrink-0"
+            style={{ backgroundColor: "#1a3a2a" }}
           >
-            {TIPO_PLAN_LABEL[tab]}
+            Planificar con Paco 🦅
           </button>
-        ))}
+        )}
       </div>
 
       {/* ── Action bar (create/delete plan) ── */}
@@ -2890,6 +2904,24 @@ export default function ProgramacionModule() {
             showToast("Sesión guardada ✓");
             await fetchPlan();
             if (viewMode === "semana") fetchCalSemana();
+          }}
+        />
+      )}
+
+      {/* ══ MODAL: Planificar con Paco ══════════════════════════════════════ */}
+      {showPacoPlanning && (
+        <PacoPlanningModal
+          tipoPlan={activeTab}
+          semana={semana}
+          planExistente={plan}
+          sesionesExistentes={sesiones}
+          onClose={() => setShowPacoPlanning(false)}
+          onPublished={async () => {
+            setShowPacoPlanning(false);
+            showToast("Programación publicada por Paco ✓");
+            await fetchPlan();
+            if (viewMode === "semana") fetchCalSemana();
+            else if (viewMode === "mes") fetchCalMes();
           }}
         />
       )}
