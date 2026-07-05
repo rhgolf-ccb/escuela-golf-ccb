@@ -260,6 +260,7 @@ type NotaProfesor = {
   profesor_nombre: string | null;
   fecha: string;
   created_at: string;
+  origen: string | null;
 };
 
 type NotaForm = {
@@ -388,45 +389,94 @@ function calcularEdadNum(birthDate: string|null): number|null {
   return edad;
 }
 
+type StudentContextInfo = Pick<Student, "full_name" | "grupo_activo" | "birth_date" | "enrollment_date">;
+type AsistenciaResumen = { asistidas: number; total: number; pct: number };
+
 function buildStudentContext(
-  student: Student,
+  student: StudentContextInfo,
   swingEvals: SwingEvaluation[],
   physicalEvals: PhysicalEvaluation[],
-  notas: NotaProfesor[]
+  notas: NotaProfesor[],
+  asistencia: AsistenciaResumen | null
 ): string {
   const parts: string[] = [`Nombre: ${student.full_name}`];
   if (student.grupo_activo) parts.push(`Grupo: ${student.grupo_activo}`);
   const edad = calcularEdadNum(student.birth_date);
   if (edad !== null) parts.push(`Edad: ${edad} años`);
+  if (student.enrollment_date) parts.push(`Fecha de ingreso a la escuela: ${formatFecha(student.enrollment_date)}`);
 
-  const latestSwing = swingEvals[0];
-  if (latestSwing) {
-    const raw = latestSwing as unknown as Record<string, string | number | boolean | null>;
-    const lines: string[] = [];
-    for (let i = 1; i <= 10; i++) {
-      if (raw[`p${i}_na`]) continue;
-      const score = raw[`p${i}_score`];
-      if (score === null || score === undefined) continue;
-      const obs = raw[`p${i}_obs`];
-      lines.push(`P${i} (${POSICIONES_NOMBRES[`P${i}`]}): ${score}/10${obs ? ` — ${obs}` : ""}`);
-    }
-    if (lines.length) parts.push(`Tests técnicos (${latestSwing.evaluation_date}):\n${lines.join("\n")}`);
+  if (swingEvals.length) {
+    const bloques = swingEvals
+      .map((ev) => {
+        const raw = ev as unknown as Record<string, string | number | boolean | null>;
+        const lines: string[] = [];
+        for (let i = 1; i <= 10; i++) {
+          if (raw[`p${i}_na`]) continue;
+          const score = raw[`p${i}_score`];
+          if (score === null || score === undefined) continue;
+          const obs = raw[`p${i}_obs`];
+          lines.push(`P${i} (${POSICIONES_NOMBRES[`P${i}`]}): ${score}/10${obs ? ` — ${obs}` : ""}`);
+        }
+        return lines.length ? `Evaluación del ${ev.evaluation_date} (${ev.evaluation_type}):\n${lines.join("\n")}` : null;
+      })
+      .filter((b): b is string => !!b);
+    if (bloques.length) parts.push(`Tests técnicos (P1-P10) — historial, más reciente primero:\n\n${bloques.join("\n\n")}`);
   }
 
-  const latestPhysical = physicalEvals[0];
-  if (latestPhysical?.tests_data) {
-    const lines = Object.entries(latestPhysical.tests_data)
-      .filter(([, t]) => !t.na && t.result)
-      .map(([tid, t]) => `${tid}: ${t.result}${t.obs ? ` — ${t.obs}` : ""}`);
-    if (lines.length) parts.push(`Tests físicos (${latestPhysical.evaluation_date}):\n${lines.join("\n")}`);
+  if (physicalEvals.length) {
+    const bloques = physicalEvals
+      .map((ev) => {
+        if (!ev.tests_data) return null;
+        const lines = Object.entries(ev.tests_data)
+          .filter(([, t]) => !t.na && t.result)
+          .map(([tid, t]) => `${tid}: ${t.result}${t.obs ? ` — ${t.obs}` : ""}`);
+        return lines.length ? `Evaluación del ${ev.evaluation_date} (${ev.evaluation_type}):\n${lines.join("\n")}` : null;
+      })
+      .filter((b): b is string => !!b);
+    if (bloques.length) parts.push(`Tests físicos — historial, más reciente primero:\n\n${bloques.join("\n\n")}`);
   }
 
   if (notas.length) {
-    const lines = notas.slice(0, 3).map((n) => `- ${n.fecha}: ${n.contenido}`);
+    const lines = notas.map((n) => `- ${n.fecha}: ${n.contenido}`);
     parts.push(`Últimas notas del profesor:\n${lines.join("\n")}`);
   }
 
+  if (asistencia && asistencia.total > 0) {
+    parts.push(`Asistencia último mes: ${asistencia.asistidas}/${asistencia.total} sesiones (${asistencia.pct}%)`);
+  }
+
   return parts.join("\n\n");
+}
+
+async function fetchFullStudentContext(studentId: string): Promise<string | null> {
+  const unMesAtras = new Date(Date.now() - 30 * 86400000).toISOString().split("T")[0];
+  const [studentRes, swingRes, physicalRes, notasRes, asistRes] = await Promise.all([
+    supabase.from("students").select("full_name, grupo_activo, birth_date, enrollment_date").eq("id", studentId).single(),
+    supabase.from("swing_evaluations").select("*").eq("student_id", studentId).order("evaluation_date", { ascending: false }).limit(5),
+    supabase.from("physical_evaluations").select("*").eq("student_id", studentId).order("evaluation_date", { ascending: false }).limit(5),
+    supabase.from("notas_profesor").select("*").eq("alumno_id", studentId).order("fecha", { ascending: false }).limit(5),
+    supabase.from("reservas").select("asistio, sesiones_semana!inner(fecha)").eq("estudiante_id", studentId).gte("sesiones_semana.fecha", unMesAtras),
+  ]);
+
+  const student = studentRes.data as StudentContextInfo | null;
+  if (!student) return null;
+
+  const reservasMes = (asistRes.data ?? []) as { asistio: boolean | null }[];
+  const asistencia: AsistenciaResumen | null = reservasMes.length
+    ? {
+        total: reservasMes.length,
+        asistidas: reservasMes.filter((r) => r.asistio).length,
+        pct: Math.round((reservasMes.filter((r) => r.asistio).length / reservasMes.length) * 100),
+      }
+    : null;
+
+  return buildStudentContext(
+    student,
+    (swingRes.data as SwingEvaluation[]) ?? [],
+    (physicalRes.data as PhysicalEvaluation[]) ?? [],
+    (notasRes.data as NotaProfesor[]) ?? [],
+    asistencia
+  );
 }
 
 function formatFecha(dateStr: string|null): string {
@@ -502,6 +552,8 @@ export default function StudentProfile({ studentId, currentRol }: { studentId: s
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<Tab>("datos");
   const [showPacoChat, setShowPacoChat] = useState(false);
+  const [pacoContext, setPacoContext] = useState<string | null>(null);
+  const [pacoContextLoading, setPacoContextLoading] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [form, setForm] = useState<EditForm|null>(null);
   const [saving, setSaving] = useState(false);
@@ -1481,8 +1533,19 @@ posPayload[`${key}_score`] = rawScore !== null ? Math.round(rawScore) : null;
           </div>
           <div className="flex items-center gap-2 shrink-0">
             {currentRol && isStaff(currentRol) && (
-              <button onClick={() => setShowPacoChat(true)} className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium" style={{ backgroundColor:"#1a3a2a", color:"white" }}>
-                Consultar a Paco 🦅
+              <button
+                onClick={async () => {
+                  setPacoContextLoading(true);
+                  const ctx = await fetchFullStudentContext(studentId);
+                  setPacoContext(ctx);
+                  setPacoContextLoading(false);
+                  setShowPacoChat(true);
+                }}
+                disabled={pacoContextLoading}
+                className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium disabled:opacity-60"
+                style={{ backgroundColor:"#1a3a2a", color:"white" }}
+              >
+                {pacoContextLoading ? "Cargando contexto..." : "Consultar a Paco 🦅"}
               </button>
             )}
             <button onClick={openEdit} className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium" style={{ backgroundColor:"#1B4D2E", color:"white" }}>
@@ -2905,12 +2968,12 @@ posPayload[`${key}_score`] = rawScore !== null ? Math.round(rawScore) : null;
         </div>
       )}
 
-      {showPacoChat && student && (
+      {showPacoChat && student && pacoContext !== null && (
         <PacoContextChat
           studentId={studentId}
           studentName={student.full_name}
           studentGrupo={student.grupo_activo}
-          studentContext={buildStudentContext(student, swingEvals, physicalEvals, notas)}
+          studentContext={pacoContext}
           onClose={() => setShowPacoChat(false)}
         />
       )}

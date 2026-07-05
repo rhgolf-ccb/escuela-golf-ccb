@@ -155,7 +155,7 @@ class PdfWriter {
   }
 }
 
-export function generateAsesorPdf(markdown: string) {
+export function generateAsesorPdf(markdown: string, studentName?: string) {
   const writer = new PdfWriter();
   const doc = writer.doc;
 
@@ -168,7 +168,8 @@ export function generateAsesorPdf(markdown: string) {
   doc.setFontSize(9);
   doc.setTextColor(...MUTED_COLOR);
   const fecha = new Date().toLocaleDateString("es-CO", { day: "2-digit", month: "long", year: "numeric" });
-  doc.text(`Generado el ${fecha}`, MARGIN, 26);
+  const subtitulo = studentName ? `${studentName} · Generado el ${fecha}` : `Generado el ${fecha}`;
+  doc.text(subtitulo, MARGIN, 26);
 
   doc.setDrawColor(...CCB_GREEN);
   doc.setLineWidth(0.5);
@@ -224,7 +225,8 @@ export function generateAsesorPdf(markdown: string) {
   }
 
   const fileDate = new Date().toISOString().slice(0, 10);
-  doc.save(`Paco-${fileDate}.pdf`);
+  const slug = studentName ? `-${studentName.normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^a-zA-Z0-9]+/g, "-").replace(/^-+|-+$/g, "")}` : "";
+  doc.save(`Paco${slug}-${fileDate}.pdf`);
 }
 
 export function shouldOfferPdf(content: string): boolean {

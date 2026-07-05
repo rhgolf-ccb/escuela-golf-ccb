@@ -15,18 +15,28 @@ type Message = {
   isWelcome?: boolean;
   savedToNotes?: boolean;
   drillsResult?: string | null;
+  isHomePlan?: boolean;
 };
 
 const MAX_HISTORY = 10;
 const DRILL_KEYWORDS = /\bdrills?\b|\bejercicios?\b/i;
 
-function shouldOfferSaveToNotes(content: string): boolean {
+function shouldOfferActions(content: string): boolean {
   return content.trim().split(/\s+/).filter(Boolean).length > 40;
 }
 
 function shouldOfferSaveDrills(content: string): boolean {
   return DRILL_KEYWORDS.test(content);
 }
+
+type QuickAction = { label: string; query: string; homePlan?: boolean };
+
+const QUICK_ACTIONS: QuickAction[] = [
+  { label: "Analizar progreso general", query: "Analiza el progreso general de este alumno." },
+  { label: "Generar plan de drills para esta semana", query: "Genera un plan de drills para esta semana para este alumno." },
+  { label: "Plan de trabajo para casa", query: "Genera un plan de trabajo para casa para este alumno.", homePlan: true },
+  { label: "Identificar prioridades técnicas y físicas", query: "Identifica las prioridades técnicas y físicas de este alumno." },
+];
 
 export default function PacoContextChat({
   studentId,
@@ -60,7 +70,7 @@ export default function PacoContextChat({
     if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
   }, [messages, isLoading]);
 
-  async function sendMessage(text: string) {
+  async function sendMessage(text: string, homePlan = false) {
     const trimmed = text.trim();
     if (!trimmed || isLoading) return;
 
@@ -96,7 +106,7 @@ export default function PacoContextChat({
     } else if (gotError || finalText === null) {
       setMessages((prev) => [...prev, { role: "assistant", content: "No pude conectarme. Intenta de nuevo.", timestamp: Date.now(), isError: true }]);
     } else {
-      setMessages((prev) => [...prev, { role: "assistant", content: finalText || "No obtuve respuesta.", timestamp: Date.now(), usedWebSearch }]);
+      setMessages((prev) => [...prev, { role: "assistant", content: finalText || "No obtuve respuesta.", timestamp: Date.now(), usedWebSearch, isHomePlan: homePlan }]);
     }
     setIsLoading(false);
     setToolStatus(null);
@@ -116,9 +126,10 @@ export default function PacoContextChat({
       const fechaLegible = new Date().toLocaleDateString("es-CO", { day: "2-digit", month: "long", year: "numeric" });
       const { error } = await supabase.from("notas_profesor").insert({
         alumno_id: studentId,
-        contenido: `Plan Paco — ${fechaLegible}\n\n${content}`,
+        contenido: `Análisis Paco — ${fechaLegible}\n\n${content}`,
         fecha,
         profesor_nombre: "Robert Instructor",
+        origen: "paco",
       });
       if (error) throw error;
       setMessages((prev) => prev.map((m, i) => (i === idx ? { ...m, savedToNotes: true } : m)));
@@ -126,6 +137,15 @@ export default function PacoContextChat({
       alert(err instanceof Error ? err.message : "Error al guardar en notas");
     }
     setSavingNotesIdx(null);
+  }
+
+  async function handleDownloadPdf(content: string) {
+    const { generateAsesorPdf } = await import("@/lib/pdf-asesor");
+    generateAsesorPdf(content, studentName);
+  }
+
+  function handleSendWhatsApp(content: string) {
+    window.open(`https://wa.me/?text=${encodeURIComponent(content)}`, "_blank");
   }
 
   async function handleSaveDrills(idx: number, content: string) {
@@ -144,6 +164,8 @@ export default function PacoContextChat({
     }
     setSavingDrillsIdx(null);
   }
+
+  const hasUserSentMessage = messages.some((m) => m.role === "user");
 
   return (
     <div className="fixed inset-0 z-50 flex justify-end" style={{ backgroundColor: "rgba(0,0,0,0.45)" }} onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
@@ -180,18 +202,34 @@ export default function PacoContextChat({
 
               {m.role === "assistant" && !m.isError && !m.isWelcome && (
                 <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
-                  {shouldOfferSaveToNotes(m.content) && (
-                    m.savedToNotes ? (
-                      <span className="text-[11px] font-medium px-2 py-1 rounded-md text-emerald-700 bg-emerald-50">✓ Guardado en notas</span>
-                    ) : (
+                  {shouldOfferActions(m.content) && (
+                    <>
+                      {m.savedToNotes ? (
+                        <span className="text-[11px] font-medium px-2 py-1 rounded-md text-emerald-700 bg-emerald-50">✓ Guardado en notas</span>
+                      ) : (
+                        <button
+                          onClick={() => handleSaveToNotes(i, m.content)}
+                          disabled={savingNotesIdx === i}
+                          className="text-[11px] font-medium px-2 py-1 rounded-md border border-gray-200 text-gray-600 hover:bg-gray-50 disabled:opacity-50"
+                        >
+                          {savingNotesIdx === i ? "Guardando..." : `Guardar en notas de ${studentName.split(" ")[0]}`}
+                        </button>
+                      )}
                       <button
-                        onClick={() => handleSaveToNotes(i, m.content)}
-                        disabled={savingNotesIdx === i}
-                        className="text-[11px] font-medium px-2 py-1 rounded-md border border-gray-200 text-gray-600 hover:bg-gray-50 disabled:opacity-50"
+                        onClick={() => handleDownloadPdf(m.content)}
+                        className="flex items-center gap-1 text-[11px] font-medium px-2 py-1 rounded-md border border-gray-200 text-gray-600 hover:bg-gray-50"
                       >
-                        {savingNotesIdx === i ? "Guardando..." : `Guardar en notas de ${studentName.split(" ")[0]}`}
+                        <i className="ti ti-file-type-pdf" style={{ fontSize: 12 }} /> Descargar PDF
                       </button>
-                    )
+                      {m.isHomePlan && (
+                        <button
+                          onClick={() => handleSendWhatsApp(m.content)}
+                          className="flex items-center gap-1 text-[11px] font-medium px-2 py-1 rounded-md border border-gray-200 text-gray-600 hover:bg-gray-50"
+                        >
+                          <i className="ti ti-brand-whatsapp" style={{ fontSize: 12 }} /> Enviar por WhatsApp
+                        </button>
+                      )}
+                    </>
                   )}
                   {shouldOfferSaveDrills(m.content) && (
                     m.drillsResult ? (
@@ -219,6 +257,20 @@ export default function PacoContextChat({
               </div>
             </div>
           ))}
+
+          {!hasUserSentMessage && !isLoading && (
+            <div className="flex flex-col gap-1.5 pt-1">
+              {QUICK_ACTIONS.filter((a) => !a.homePlan || studentGrupo === "Competencia").map((a) => (
+                <button
+                  key={a.label}
+                  onClick={() => sendMessage(a.query, a.homePlan)}
+                  className="text-left text-xs px-3 py-2 rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 transition-colors"
+                >
+                  {a.label}
+                </button>
+              ))}
+            </div>
+          )}
 
           {isLoading && (
             <div className="flex items-center gap-1.5 px-1">
