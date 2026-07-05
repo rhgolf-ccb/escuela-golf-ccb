@@ -1,7 +1,7 @@
 import { Suspense } from "react";
 import { redirect } from "next/navigation";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
-import { isStaffRole, type Rol } from "@/lib/roles";
+import { isStaff, type Rol } from "@/lib/roles";
 import ReservasModule from "@/components/ReservasModule";
 import ReservaPadreView from "@/components/ReservaPadreView";
 
@@ -18,7 +18,7 @@ export default async function ReservasPage() {
   if (!appUser) redirect("/login");
   const rol = appUser.rol as Rol;
 
-  if (isStaffRole(rol)) {
+  if (isStaff(rol)) {
     return (
       <Suspense>
         <ReservasModule />

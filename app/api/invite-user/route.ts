@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
 import { generateAuthLink, sendEmailViaResend } from "@/lib/auth-link";
-import { ADMIN_ROLES, isStaffRole, type Rol } from "@/lib/roles";
+import { ADMIN_ROLES, isStaff, type Rol } from "@/lib/roles";
 
 const VALID_ROLES: Rol[] = [
   "coordinador",
@@ -54,7 +54,7 @@ export async function POST(request: NextRequest) {
   const userId = created.user.id;
 
   let sessionDays: number | null = null;
-  if (!isStaffRole(rol)) {
+  if (!isStaff(rol)) {
     const { data: config } = await supabase.from("app_config").select("value").eq("key", "session_days").maybeSingle();
     sessionDays = config?.value ? Number(config.value) : 30;
   }

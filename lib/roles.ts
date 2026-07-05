@@ -33,8 +33,12 @@ export function isRouteAllowed(rol: Rol, pathname: string): boolean {
   return allow.some((p) => pathname === p || pathname.startsWith(`${p}/`));
 }
 
-export function isStaffRole(rol: Rol): boolean {
+export function isStaff(rol: Rol): boolean {
   return STAFF_ROLES.includes(rol);
+}
+
+export function isPadreOrAlumno(rol: Rol): boolean {
+  return rol === "padre_competencia" || rol === "padre_otros" || rol === "alumno_competencia";
 }
 
 export function roleLabel(rol: Rol): string {

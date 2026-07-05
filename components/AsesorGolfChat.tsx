@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { shouldOfferPdf } from "@/lib/pdf-asesor";
+import { TOOL_STATUS_LABELS, formatTime, MARKDOWN_COMPONENTS, streamAsesorChat } from "@/lib/paco-chat-shared";
 
 type Message = {
   role: "user" | "assistant";
@@ -27,46 +28,6 @@ const SUGGESTIONS = [
 ];
 
 const MAX_HISTORY = 10;
-
-const TOOL_STATUS_LABELS: Record<string, string> = {
-  web_search: "🔍 Buscando en internet...",
-  buscar_alumno: "👤 Buscando alumno...",
-  obtener_tests_alumno: "📋 Cargando tests...",
-  obtener_asistencia_alumno: "📅 Revisando asistencia...",
-  obtener_notas_alumno: "📝 Cargando notas...",
-  obtener_grupo: "👥 Consultando grupo...",
-  obtener_sesiones_semana: "🗓️ Revisando programación...",
-  obtener_drills: "🏌️ Buscando drills...",
-};
-
-function formatTime(ts: number): string {
-  return new Date(ts).toLocaleTimeString("es-CO", { hour: "2-digit", minute: "2-digit" });
-}
-
-const MARKDOWN_COMPONENTS = {
-  h1: (props: React.ComponentProps<"h1">) => <h1 className="text-base font-bold mt-2 mb-1 first:mt-0" style={{ color: "#1a3a2a" }} {...props} />,
-  h2: (props: React.ComponentProps<"h2">) => <h2 className="text-[15px] font-bold mt-2 mb-1 first:mt-0" style={{ color: "#1a3a2a" }} {...props} />,
-  h3: (props: React.ComponentProps<"h3">) => <h3 className="text-sm font-bold mt-1.5 mb-1 first:mt-0" style={{ color: "#1a3a2a" }} {...props} />,
-  p: (props: React.ComponentProps<"p">) => <p className="mb-1.5 last:mb-0 leading-relaxed" {...props} />,
-  ul: (props: React.ComponentProps<"ul">) => <ul className="list-disc pl-4 mb-1.5 space-y-0.5 last:mb-0" {...props} />,
-  ol: (props: React.ComponentProps<"ol">) => <ol className="list-decimal pl-4 mb-1.5 space-y-0.5 last:mb-0" {...props} />,
-  li: (props: React.ComponentProps<"li">) => <li className="leading-relaxed" {...props} />,
-  strong: (props: React.ComponentProps<"strong">) => <strong className="font-semibold text-gray-900" {...props} />,
-  hr: () => <hr className="my-2 border-t border-gray-200" />,
-  a: (props: React.ComponentProps<"a">) => <a className="underline" style={{ color: "#1a3a2a" }} target="_blank" rel="noreferrer" {...props} />,
-  table: (props: React.ComponentProps<"table">) => (
-    <div className="overflow-x-auto mb-1.5 last:mb-0">
-      <table className="w-full border-collapse text-[11px]" {...props} />
-    </div>
-  ),
-  thead: (props: React.ComponentProps<"thead">) => <thead {...props} />,
-  th: (props: React.ComponentProps<"th">) => (
-    <th className="border px-1.5 py-1 text-left font-semibold text-white" style={{ backgroundColor: "#1a3a2a", borderColor: "#1a3a2a" }} {...props} />
-  ),
-  td: (props: React.ComponentProps<"td">) => <td className="border border-gray-200 px-1.5 py-1 even:bg-transparent" {...props} />,
-  tr: (props: React.ComponentProps<"tr">) => <tr className="odd:bg-gray-50" {...props} />,
-  code: (props: React.ComponentProps<"code">) => <code className="text-[11px] bg-gray-100 rounded px-1 py-0.5" {...props} />,
-};
 
 export default function AsesorGolfChat() {
   const [isOpen, setIsOpen] = useState(false);
@@ -98,49 +59,17 @@ export default function AsesorGolfChat() {
         .slice(-MAX_HISTORY)
         .map((m) => ({ role: m.role, content: m.content }));
 
-      const res = await fetch("/api/asesor-golf", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ messages: history }),
-      });
-
-      if (!res.ok || !res.body) {
-        setMessages((prev) => [
-          ...prev,
-          { role: "assistant", content: "No pude conectarme. Intenta de nuevo.", timestamp: Date.now(), isError: true },
-        ]);
-        return;
-      }
-
-      const reader = res.body.getReader();
-      const decoder = new TextDecoder();
-      let buffer = "";
       let finalText: string | null = null;
       let usedWebSearch = false;
       let gotError = false;
 
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        buffer += decoder.decode(value, { stream: true });
-        const chunks = buffer.split("\n\n");
-        buffer = chunks.pop() ?? "";
-        for (const chunk of chunks) {
-          const line = chunk.trim();
-          if (!line.startsWith("data:")) continue;
-          let evt: { type: string; tool?: string; text?: string; usedWebSearch?: boolean };
-          try {
-            evt = JSON.parse(line.slice(5).trim());
-          } catch {
-            continue;
-          }
-          if (evt.type === "tool_status" && evt.tool) setToolStatus(evt.tool);
-          else if (evt.type === "done") {
-            finalText = evt.text ?? "";
-            usedWebSearch = !!evt.usedWebSearch;
-          } else if (evt.type === "error") gotError = true;
-        }
-      }
+      await streamAsesorChat({ messages: history }, (evt) => {
+        if (evt.type === "tool_status" && evt.tool) setToolStatus(evt.tool);
+        else if (evt.type === "done") {
+          finalText = evt.text ?? "";
+          usedWebSearch = !!evt.usedWebSearch;
+        } else if (evt.type === "error") gotError = true;
+      });
 
       if (gotError || finalText === null) {
         setMessages((prev) => [

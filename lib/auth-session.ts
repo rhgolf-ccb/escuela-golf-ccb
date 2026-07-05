@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
-import { isStaffRole, type Rol } from "@/lib/roles";
+import { isStaff, type Rol } from "@/lib/roles";
 
 export async function finalizePostAuthRedirect(
   supabase: SupabaseClient,
@@ -32,6 +32,6 @@ export async function finalizePostAuthRedirect(
 
   const dest = !appUser.password_set
     ? "/set-password"
-    : isStaffRole(appUser.rol as Rol) ? "/" : "/mi-perfil";
+    : isStaff(appUser.rol as Rol) ? "/" : "/mi-perfil";
   return NextResponse.redirect(new URL(dest, request.url));
 }

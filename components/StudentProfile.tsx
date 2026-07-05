@@ -4,6 +4,8 @@ import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import ParentReportModal from "./ParentReportModal";
+import PacoContextChat from "./PacoContextChat";
+import { isStaff, type Rol } from "@/lib/roles";
 
 type Tab = "datos" | "tecnicos" | "fisicos" | "hitos" | "notas";
 type CritValue = "cumple" | "progreso" | "no" | null;
@@ -386,6 +388,47 @@ function calcularEdadNum(birthDate: string|null): number|null {
   return edad;
 }
 
+function buildStudentContext(
+  student: Student,
+  swingEvals: SwingEvaluation[],
+  physicalEvals: PhysicalEvaluation[],
+  notas: NotaProfesor[]
+): string {
+  const parts: string[] = [`Nombre: ${student.full_name}`];
+  if (student.grupo_activo) parts.push(`Grupo: ${student.grupo_activo}`);
+  const edad = calcularEdadNum(student.birth_date);
+  if (edad !== null) parts.push(`Edad: ${edad} años`);
+
+  const latestSwing = swingEvals[0];
+  if (latestSwing) {
+    const raw = latestSwing as unknown as Record<string, string | number | boolean | null>;
+    const lines: string[] = [];
+    for (let i = 1; i <= 10; i++) {
+      if (raw[`p${i}_na`]) continue;
+      const score = raw[`p${i}_score`];
+      if (score === null || score === undefined) continue;
+      const obs = raw[`p${i}_obs`];
+      lines.push(`P${i} (${POSICIONES_NOMBRES[`P${i}`]}): ${score}/10${obs ? ` — ${obs}` : ""}`);
+    }
+    if (lines.length) parts.push(`Tests técnicos (${latestSwing.evaluation_date}):\n${lines.join("\n")}`);
+  }
+
+  const latestPhysical = physicalEvals[0];
+  if (latestPhysical?.tests_data) {
+    const lines = Object.entries(latestPhysical.tests_data)
+      .filter(([, t]) => !t.na && t.result)
+      .map(([tid, t]) => `${tid}: ${t.result}${t.obs ? ` — ${t.obs}` : ""}`);
+    if (lines.length) parts.push(`Tests físicos (${latestPhysical.evaluation_date}):\n${lines.join("\n")}`);
+  }
+
+  if (notas.length) {
+    const lines = notas.slice(0, 3).map((n) => `- ${n.fecha}: ${n.contenido}`);
+    parts.push(`Últimas notas del profesor:\n${lines.join("\n")}`);
+  }
+
+  return parts.join("\n\n");
+}
+
 function formatFecha(dateStr: string|null): string {
   if (!dateStr) return "—";
   const d = new Date(dateStr + "T00:00:00");
@@ -453,11 +496,12 @@ function defaultSwingForm(protocolosTecnico: Record<string, ProtocoloTestRow[]>,
   return { evaluation_type: "inicial", evaluation_date: new Date().toISOString().split("T")[0], positions, professor_comment: "" };
 }
 
-export default function StudentProfile({ studentId }: { studentId: string }) {
+export default function StudentProfile({ studentId, currentRol }: { studentId: string; currentRol: Rol | null }) {
   const router = useRouter();
   const [student, setStudent] = useState<Student|null>(null);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<Tab>("datos");
+  const [showPacoChat, setShowPacoChat] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [form, setForm] = useState<EditForm|null>(null);
   const [saving, setSaving] = useState(false);
@@ -1435,10 +1479,17 @@ posPayload[`${key}_score`] = rawScore !== null ? Math.round(rawScore) : null;
             </div>
             <p className="text-sm text-gray-500 mt-1">{calcularEdad(student.birth_date)}{student.enrollment_date && <span className="ml-3 text-gray-400">· Ingresó {formatFecha(student.enrollment_date)}</span>}</p>
           </div>
-          <button onClick={openEdit} className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium shrink-0" style={{ backgroundColor:"#1B4D2E", color:"white" }}>
-            <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
-            Editar
-          </button>
+          <div className="flex items-center gap-2 shrink-0">
+            {currentRol && isStaff(currentRol) && (
+              <button onClick={() => setShowPacoChat(true)} className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium" style={{ backgroundColor:"#1a3a2a", color:"white" }}>
+                Consultar a Paco 🦅
+              </button>
+            )}
+            <button onClick={openEdit} className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium" style={{ backgroundColor:"#1B4D2E", color:"white" }}>
+              <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+              Editar
+            </button>
+          </div>
         </div>
       </div>
 
@@ -2852,6 +2903,16 @@ posPayload[`${key}_score`] = rawScore !== null ? Math.round(rawScore) : null;
             </div>
           </div>
         </div>
+      )}
+
+      {showPacoChat && student && (
+        <PacoContextChat
+          studentId={studentId}
+          studentName={student.full_name}
+          studentGrupo={student.grupo_activo}
+          studentContext={buildStudentContext(student, swingEvals, physicalEvals, notas)}
+          onClose={() => setShowPacoChat(false)}
+        />
       )}
     </div>
   );

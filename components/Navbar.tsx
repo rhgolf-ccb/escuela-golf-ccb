@@ -5,7 +5,7 @@ import Image from "next/image";
 import { useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
-import { isRouteAllowed, isStaffRole, roleChipColor, roleLabel, type Rol } from "@/lib/roles";
+import { isRouteAllowed, isStaff, roleChipColor, roleLabel, type Rol } from "@/lib/roles";
 
 function initiales(name: string): string {
   return name.split(" ").slice(0, 2).map((n) => n[0]).join("").toUpperCase();
@@ -39,7 +39,7 @@ export default function Navbar({
 
   const visibleItems = role
     ? navItems.filter((item) => {
-        if (item.href === "/mi-perfil" && isStaffRole(role)) return false;
+        if (item.href === "/mi-perfil" && isStaff(role)) return false;
         return isRouteAllowed(role, item.href);
       })
     : [];
