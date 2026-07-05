@@ -155,20 +155,20 @@ class PdfWriter {
   }
 }
 
-export function generateAsesorPdf(markdown: string, studentName?: string) {
+export function generateAsesorPdf(markdown: string, options?: { title?: string; subtitle?: string; filenamePrefix?: string }) {
   const writer = new PdfWriter();
   const doc = writer.doc;
 
   doc.setFont("helvetica", "bold");
   doc.setFontSize(16);
   doc.setTextColor(...CCB_GREEN);
-  doc.text("Escuela de Golf CCB", MARGIN, 20);
+  doc.text(options?.title ?? "Escuela de Golf CCB", MARGIN, 20);
 
   doc.setFont("helvetica", "normal");
   doc.setFontSize(9);
   doc.setTextColor(...MUTED_COLOR);
   const fecha = new Date().toLocaleDateString("es-CO", { day: "2-digit", month: "long", year: "numeric" });
-  const subtitulo = studentName ? `${studentName} · Generado el ${fecha}` : `Generado el ${fecha}`;
+  const subtitulo = options?.subtitle ? `${options.subtitle} · Generado el ${fecha}` : `Generado el ${fecha}`;
   doc.text(subtitulo, MARGIN, 26);
 
   doc.setDrawColor(...CCB_GREEN);
@@ -225,7 +225,8 @@ export function generateAsesorPdf(markdown: string, studentName?: string) {
   }
 
   const fileDate = new Date().toISOString().slice(0, 10);
-  const slug = studentName ? `-${studentName.normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^a-zA-Z0-9]+/g, "-").replace(/^-+|-+$/g, "")}` : "";
+  const nameSource = options?.filenamePrefix ?? options?.subtitle;
+  const slug = nameSource ? `-${nameSource.normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^a-zA-Z0-9]+/g, "-").replace(/^-+|-+$/g, "")}` : "";
   doc.save(`Paco${slug}-${fileDate}.pdf`);
 }
 

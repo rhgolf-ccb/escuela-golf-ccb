@@ -3,6 +3,8 @@
 import { useEffect, useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { supabase, type Student } from "@/lib/supabase";
+import { isStaff, type Rol } from "@/lib/roles";
+import GroupAnalysisModal from "./GroupAnalysisModal";
 
 type StatusFilter = "todos" | "activo" | "inactivo";
 type GroupFilter = "todos" | "Birdies" | "Águilas" | "Albatros" | "+14" | "Damas" | "Competencia";
@@ -45,13 +47,14 @@ function initiales(name: string): string {
   return name.split(" ").slice(0, 2).map((n) => n[0]).join("").toUpperCase();
 }
 
-export default function StudentsModule() {
+export default function StudentsModule({ currentRol }: { currentRol: Rol | null }) {
   const [students, setStudents] = useState<Student[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("todos");
   const [groupFilter, setGroupFilter] = useState<GroupFilter>("todos");
+  const [showGroupAnalysis, setShowGroupAnalysis] = useState(false);
   const router = useRouter();
 
   useEffect(() => {
@@ -89,6 +92,15 @@ export default function StudentsModule() {
       return matchSearch && matchStatus && matchGroup;
     });
   }, [students, search, statusFilter, groupFilter]);
+
+  const groupActiveStudents = useMemo(() => {
+    if (groupFilter === "todos") return [];
+    return students.filter((s) => {
+      if (s.status !== "activo") return false;
+      const grupoCalculado = calcularGrupo(s.birth_date, s.gender, s.grupo_activo);
+      return groupFilter === "Competencia" ? s.grupo_activo === "Competencia" : grupoCalculado === groupFilter;
+    });
+  }, [students, groupFilter]);
 
   const groupCounts = useMemo(() => {
     const counts: Record<GroupFilter, number> = { todos: students.length, Birdies: 0, Águilas: 0, Albatros: 0, "+14": 0, Damas: 0, Competencia: 0 };
@@ -160,7 +172,7 @@ export default function StudentsModule() {
         </div>
       </div>
 
-      <div className="bg-white rounded-xl shadow-sm border border-gray-100 px-4 py-3 mb-4">
+      <div className="bg-white rounded-xl shadow-sm border border-gray-100 px-4 py-3 mb-4 flex flex-col sm:flex-row gap-3 sm:items-center sm:justify-between">
         <div className="flex gap-2 overflow-x-auto scrollbar-hide">
           {GROUPS.map(({ label, value, isSpecial }) => {
             const active = groupFilter === value;
@@ -193,6 +205,18 @@ export default function StudentsModule() {
             );
           })}
         </div>
+
+        {currentRol && isStaff(currentRol) && (
+          <button
+            onClick={() => groupFilter !== "todos" && setShowGroupAnalysis(true)}
+            disabled={groupFilter === "todos"}
+            title={groupFilter === "todos" ? "Selecciona un grupo primero" : undefined}
+            className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium shrink-0 disabled:opacity-50 disabled:cursor-not-allowed transition-opacity"
+            style={{ backgroundColor: "#1a3a2a", color: "white" }}
+          >
+            Análisis grupal con Paco 🦅
+          </button>
+        )}
       </div>
 
       <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
@@ -282,6 +306,14 @@ export default function StudentsModule() {
           </>
         )}
       </div>
+
+      {showGroupAnalysis && groupFilter !== "todos" && (
+        <GroupAnalysisModal
+          grupo={groupFilter}
+          students={groupActiveStudents.map((s) => ({ id: String(s.id), full_name: s.full_name }))}
+          onClose={() => setShowGroupAnalysis(false)}
+        />
+      )}
     </div>
   );
 }

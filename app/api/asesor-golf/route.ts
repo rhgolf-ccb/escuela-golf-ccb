@@ -42,6 +42,20 @@ Cuando te pidan un PLAN DE TRABAJO PARA CASA (solo aplica a alumnos de Competenc
 - Cierra siempre con un recordatorio motivacional breve, dirigido al alumno`;
 }
 
+function buildGroupIntro(contextoGrupo: string): string {
+  return `Eres Paco, asesor experto de la Escuela de Golf CCB. Estás analizando un grupo completo con el siguiente contexto (resultados individuales, promedios grupales y asistencia): ${contextoGrupo}
+
+Cuando te pidan el análisis inicial del grupo (o cualquier análisis de patrones grupales), estructura tu respuesta con estas secciones, en este orden:
+1. Top 3 patrones técnicos más frecuentes en el grupo — las posiciones (P1-P10) con más calificaciones bajas o en progreso, con el promedio grupal de cada una
+2. Top 3 restricciones físicas más frecuentes — los screens con más resultados bajos o en progreso
+3. Alumnos que necesitan atención prioritaria, cada uno con la razón específica (no genérica)
+4. Alumnos con mejor progreso reciente
+5. Recomendación de enfoque para la próxima semana basada en los patrones detectados
+6. Una tabla markdown resumen con todos los alumnos del grupo y su dato más relevante (ej. prioridad detectada o tema clave)
+
+Si un alumno no tiene tests registrados, indícalo explícitamente en una lista aparte de "alumnos sin tests completados" — nunca inventes un resultado para ellos. Nunca asignes un alumno a Competencia automáticamente. Habla de tú al profesor, sé directo y práctico.`;
+}
+
 function buildPlanningIntro(contextoPlanificacion: string): string {
   return `Eres Paco, asesor experto de la Escuela de Golf CCB. Cuando el profesor te pida planificar una semana o un día específico para cualquier grupo, genera una programación detallada usando los drills de la librería disponible y las ubicaciones reales del CCB. Respeta siempre la estructura fija de cada grupo: Juvenil usa 3 estaciones (juego largo, juego corto, putt) con días especiales posibles (test técnico, test físico, campo infantil, Pacos y Fabios); Competencia sigue su estructura día por día; Damas es solo viernes con 3 estaciones rotativas. Nunca uses el término driving range — siempre campo de práctica. Cuando generes una programación muéstrala estructurada por día con estaciones, drills, tiempos y ubicación. Al final pregunta si el profesor quiere publicarla en el calendario.
 
@@ -126,8 +140,9 @@ FORMATO DE RESPUESTA:
 
 const SYSTEM_PROMPT = `${PACO_GENERAL_INTRO}\n\n${PACO_SHARED_SECTIONS}`;
 
-function buildSystemPrompt(studentContext?: string, planningContext?: string): string {
+function buildSystemPrompt(studentContext?: string, planningContext?: string, groupContext?: string): string {
   if (planningContext) return `${buildPlanningIntro(planningContext)}\n\n${PACO_SHARED_SECTIONS}`;
+  if (groupContext) return `${buildGroupIntro(groupContext)}\n\n${PACO_SHARED_SECTIONS}`;
   if (studentContext) return `${buildContextualIntro(studentContext)}\n\n${PACO_SHARED_SECTIONS}`;
   return SYSTEM_PROMPT;
 }
@@ -429,7 +444,7 @@ export async function POST(request: NextRequest) {
     }
   }
 
-  let body: { messages?: ChatMessage[]; studentContext?: string; planningContext?: string };
+  let body: { messages?: ChatMessage[]; studentContext?: string; planningContext?: string; groupContext?: string };
   try {
     body = await request.json();
   } catch {
@@ -441,7 +456,7 @@ export async function POST(request: NextRequest) {
     return Response.json({ error: "Se requiere al menos un mensaje" }, { status: 400 });
   }
   const history = messages.slice(-MAX_HISTORY);
-  const systemPrompt = buildSystemPrompt(body.studentContext, body.planningContext);
+  const systemPrompt = buildSystemPrompt(body.studentContext, body.planningContext, body.groupContext);
 
   const client = new Anthropic({ apiKey });
 

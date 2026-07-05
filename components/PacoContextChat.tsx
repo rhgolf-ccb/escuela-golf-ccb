@@ -141,7 +141,7 @@ export default function PacoContextChat({
 
   async function handleDownloadPdf(content: string) {
     const { generateAsesorPdf } = await import("@/lib/pdf-asesor");
-    generateAsesorPdf(content, studentName);
+    generateAsesorPdf(content, { subtitle: studentName });
   }
 
   function handleSendWhatsApp(content: string) {

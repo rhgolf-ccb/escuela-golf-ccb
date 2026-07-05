@@ -39,7 +39,7 @@ type ProtocoloTestRow = {
   protocolo_benchmarks: ProtocoloBenchmark[];
 };
 
-const POSICIONES_NOMBRES: Record<string, string> = {
+export const POSICIONES_NOMBRES: Record<string, string> = {
   P1: "Setup", P2: "Palo paralelo — backswing", P3: "Brazo izq. paralelo",
   P4: "Top backswing", P5: "Brazo der. — inicio downswing", P6: "Palo paralelo — downswing",
   P7: "Impacto", P8: "Palo paralelo — follow through", P9: "Brazo der. — follow through", P10: "Finish completo",
@@ -51,7 +51,7 @@ const POSICIONES_FASES = [
   { label: "Follow through", posiciones: ["P8","P9","P10"] },
 ];
 
-type PhysicalResult = "cumple" | "progreso" | "bajo" | null;
+export type PhysicalResult = "cumple" | "progreso" | "bajo" | null;
 
 type PhysicalTestDef = {
   id: string;
@@ -301,7 +301,7 @@ type TrackmanSession = {
   created_at: string;
 };
 
-function physResultToScore(result: PhysicalResult): number | null {
+export function physResultToScore(result: PhysicalResult): number | null {
   if (result === "cumple") return 10;
   if (result === "progreso") return 6;
   if (result === "bajo") return 2;
