@@ -2,17 +2,7 @@ import type { NextRequest } from "next/server";
 
 function calcularGrupoEfectivo(student: { birth_date?: string | null; grupo_activo?: string | null }): string {
   if (student.grupo_activo === "Competencia") return "Competencia";
-  if (student.grupo_activo === "Damas") {
-    if (student.birth_date) {
-      const hoy = new Date();
-      const nac = new Date(student.birth_date);
-      let edad = hoy.getFullYear() - nac.getFullYear();
-      const m = hoy.getMonth() - nac.getMonth();
-      if (m < 0 || (m === 0 && hoy.getDate() < nac.getDate())) edad--;
-      if (edad >= 50) return "Damas Senior";
-    }
-    return "Damas";
-  }
+  if (student.grupo_activo === "Damas") return "Damas";
   if (!student.birth_date) return "Albatros";
   const hoy = new Date();
   const nac = new Date(student.birth_date);
@@ -58,7 +48,6 @@ export async function POST(request: NextRequest) {
     "Grupo +14": "Jugador 14+. Terminología técnica TPI completa. Conecta limitaciones físicas con compensaciones específicas en el swing.",
     Competencia: "Jugador competitivo 13-17 años. Análisis técnico preciso. Cuantifica el impacto de cada limitación en el rendimiento y velocidad de swing.",
     Damas: "Jugadora adulta. Considera hiperlaxitud, patrones de movimiento femeninos, menor masa muscular. Enfoca en estabilidad y eficiencia del movimiento.",
-    "Damas Senior": "Jugadora 50-70 años. PRIORIDAD: prevención de lesiones, movilidad funcional, estabilidad. Sin impacto alto. Progresión conservadora.",
   };
 
   const systemPrompt = `Eres un experto en TPI (Titleist Performance Institute) y fisioterapia deportiva del golf. Analizas evaluaciones físicas de alumnos de la Escuela de Golf CCB y generas guías de ejercicios correctivos para el profesor.

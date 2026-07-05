@@ -36,7 +36,7 @@ const TIPO_SESION_LABEL: Record<string, string> = {
 
 function tipoPlanForGrupo(grupo: string | null): TipoPlan | null {
   if (grupo === "Competencia") return "competencia";
-  if (grupo === "Damas" || grupo === "Damas Senior") return "damas";
+  if (grupo === "Damas") return "damas";
   if (grupo && ["Birdies", "Águilas", "Albatros", "+14"].includes(grupo)) return "juvenil";
   return null;
 }

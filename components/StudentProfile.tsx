@@ -110,16 +110,7 @@ function calcularGrupoEfectivo(student: { birth_date: string | null; grupo_activ
 }
 
 function calcularGrupoFisico(student: { birth_date: string | null; grupo_activo: string | null; gender: string | null }): string {
-  const base = calcularGrupoEfectivo(student);
-  if (base === "Damas" && student.birth_date) {
-    const hoy = new Date();
-    const nac = new Date(student.birth_date);
-    let edad = hoy.getFullYear() - nac.getFullYear();
-    const m = hoy.getMonth() - nac.getMonth();
-    if (m < 0 || (m === 0 && hoy.getDate() < nac.getDate())) edad--;
-    if (edad >= 50) return "Damas Senior";
-  }
-  return base;
+  return calcularGrupoEfectivo(student);
 }
 
 type Student = {

@@ -246,7 +246,7 @@ export default function ReservasModule() {
       } else if (tipoPlan === "juvenil") {
         q = q.in("grupo_activo", ["Birdies", "Águilas", "Albatros", "+14"]);
       } else if (tipoPlan === "damas") {
-        q = q.in("grupo_activo", ["Damas", "Damas Senior"]);
+        q = q.eq("grupo_activo", "Damas");
       }
       const { data } = await q;
       setSearchResults((data as StudentSearch[]) ?? []);

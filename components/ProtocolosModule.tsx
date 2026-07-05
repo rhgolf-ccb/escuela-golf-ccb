@@ -37,7 +37,7 @@ const NAV_TECNICO: NavItem[] = [
   { key: "t-aguilas", label: "Águilas", grupos: ["Águilas"], tipo: "tecnico" },
   { key: "t-albatros14", label: "Albatros · +14", grupos: ["Albatros", "+14"], tipo: "tecnico" },
   { key: "t-competencia", label: "Competencia", grupos: ["Competencia"], tipo: "tecnico" },
-  { key: "t-damas", label: "Damas · Damas Senior", grupos: ["Damas"], tipo: "tecnico" },
+  { key: "t-damas", label: "Damas", grupos: ["Damas"], tipo: "tecnico" },
 ];
 
 const NAV_FISICO: NavItem[] = [
@@ -46,7 +46,6 @@ const NAV_FISICO: NavItem[] = [
   { key: "f-albatros14", label: "Albatros · +14", grupos: ["Albatros", "+14"], tipo: "fisico" },
   { key: "f-competencia", label: "Competencia", grupos: ["Competencia"], tipo: "fisico" },
   { key: "f-damas", label: "Damas", grupos: ["Damas"], tipo: "fisico" },
-  { key: "f-damas-senior", label: "Damas Senior", grupos: ["Damas Senior"], tipo: "fisico" },
 ];
 
 const GROUP_COLOR: Record<"juvenil" | "competencia" | "damas", { bg: string; text: string }> = {

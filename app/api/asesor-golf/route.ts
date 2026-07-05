@@ -37,13 +37,9 @@ GRUPOS DE LA ESCUELA CCB:
   Tests físicos: S1-S16 + P1-P5 + velocidad driver
   IMPORTANTE: un alumno NUNCA entra a Competencia automáticamente — solo por decisión manual del coordinador
 
-- Damas (adultas):
+- Damas (adultas, incluye 50+ años en un solo grupo unificado):
   Tests técnicos: P1-P10 completo
-  Tests físicos: D1-D10 + DP1-DP5
-
-- Damas Senior (50+ años):
-  Tests técnicos: P1-P10 completo
-  Tests físicos: DS1-DS10 (sin categoría Potencia)
+  Tests físicos: 9 screens TPI + DP1-DP5 (potencia)
 
 TERMINOLOGÍA CCB (usar siempre):
 - "Campo de práctica" (nunca "driving range")
@@ -157,7 +153,7 @@ const CCB_TOOLS: Anthropic.Tool[] = [
       properties: {
         grupo: {
           type: "string",
-          description: "Nombre del grupo: Birdies, Águilas, Albatros, +14, Competencia, Damas, Damas Senior",
+          description: "Nombre del grupo: Birdies, Águilas, Albatros, +14, Competencia, Damas",
         },
       },
       required: ["grupo"],
@@ -220,7 +216,6 @@ const GRUPO_A_TIPO_PLAN: Record<string, "juvenil" | "competencia" | "damas"> = {
   "+14": "juvenil",
   Competencia: "competencia",
   Damas: "damas",
-  "Damas Senior": "damas",
 };
 
 async function buscarAlumno(admin: SupabaseClient, nombre: string) {

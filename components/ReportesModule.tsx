@@ -78,7 +78,7 @@ function grupoTipo(g: string | null): "juvenil" | "competencia" | "damas" | null
   if (!g) return null;
   if (["Birdies","Águilas","Albatros","+14"].includes(g)) return "juvenil";
   if (g === "Competencia") return "competencia";
-  if (g === "Damas" || g === "Damas Senior") return "damas";
+  if (g === "Damas") return "damas";
   return null;
 }
 
@@ -1267,7 +1267,7 @@ function TabEstadisticas() {
       const swSet = new Set(swArr.filter((s) => s.score_promedio !== null).map((s) => s.student_id));
       const totalActivos = activos.length;
       const competencia = activos.filter((s) => s.grupo_activo === "Competencia").length;
-      const damas = activos.filter((s) => s.grupo_activo === "Damas" || s.grupo_activo === "Damas Senior").length;
+      const damas = activos.filter((s) => s.grupo_activo === "Damas").length;
       const marcadas = rv.filter((r) => r.asistio !== null);
       const asistidas = rv.filter((r) => r.asistio === true).length;
       const pctAsistencia = marcadas.length > 0 ? pct(asistidas, marcadas.length) : 0;
@@ -1278,7 +1278,7 @@ function TabEstadisticas() {
         const rvG = rv.filter((r) => ids.includes(r.estudiante_id));
         const asistG = rvG.filter((r) => r.asistio === true).length;
         const marcG = rvG.filter((r) => r.asistio !== null).length;
-        const tipo = g === "Competencia" ? "competencia" : g === "Damas" || g === "Damas Senior" ? "damas" : "juvenil";
+        const tipo = g === "Competencia" ? "competencia" : g === "Damas" ? "damas" : "juvenil";
         const sesG = sesArr.filter((s) => s.planes_semanales?.tipo_plan === tipo).length;
         const testsG = ids.filter((id) => swSet.has(id)).length;
         return { grupo: g, alumnos: alumnos.length, sesiones: sesG, asistProm: pct(asistG, marcG), testsCompletos: testsG };

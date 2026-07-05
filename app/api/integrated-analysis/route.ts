@@ -2,17 +2,7 @@ import type { NextRequest } from "next/server";
 
 function calcularGrupoEfectivo(student: { birth_date?: string | null; grupo_activo?: string | null }): string {
   if (student.grupo_activo === "Competencia") return "Competencia";
-  if (student.grupo_activo === "Damas") {
-    if (student.birth_date) {
-      const hoy = new Date();
-      const nac = new Date(student.birth_date);
-      let edad = hoy.getFullYear() - nac.getFullYear();
-      const m = hoy.getMonth() - nac.getMonth();
-      if (m < 0 || (m === 0 && hoy.getDate() < nac.getDate())) edad--;
-      if (edad >= 50) return "Damas Senior";
-    }
-    return "Damas";
-  }
+  if (student.grupo_activo === "Damas") return "Damas";
   if (!student.birth_date) return "Albatros";
   const hoy = new Date();
   const nac = new Date(student.birth_date);
@@ -126,33 +116,20 @@ const TPI_TESTS_INFO: Record<string, Record<string, { nombre: string; swing?: st
     P5: { nombre: "Velocidad de Swing con Driver (potencia total del swing)", swing: "P4–P10" },
   },
   Damas: {
-    D1: { nombre: "Overhead Deep Squat (movilidad global, notar valgo de rodilla)", swing: "P1, P10" },
+    D1: { nombre: "Overhead Deep Squat (movilidad global tobillo-cadera-hombro, postura en el setup)", swing: "P1, P10" },
     D2: { nombre: "Toe Touch (flexibilidad cadena posterior)", swing: "P1" },
-    D3: { nombre: "90/90 Stretch (flexibilidad isquiotibiales en posición sentada)", swing: "P4, P5" },
-    D4: { nombre: "Torso Rotation (rotación de tronco sobre caderas fijas)", swing: "P4, P7" },
-    D5: { nombre: "Shoulder Horizontal Abduction (movilidad hombro, documentar hiperlaxitud)", swing: "P3, P8, P9" },
-    D6: { nombre: "Ankle Mobility (movilidad de tobillo, dorsiflexión)", swing: "P1, P10" },
-    D7: { nombre: "Single Leg Balance 12 seg (equilibrio estático unipodal)", swing: "P5, P10" },
-    D8: { nombre: "Hip Sway Test (estabilidad lateral de cadera en carga)", swing: "P4, P7" },
-    D9: { nombre: "Bridge with Leg Extension (fuerza glúteo, estabilidad lumbo-pélvica)", swing: "P5, P6" },
-    D10: { nombre: "Pelvic Tilt (control lumbo-pélvico, lordosis funcional)", swing: "P1, P4" },
+    D4: { nombre: "Torso Rotation (rotación torácica con caderas fijas, causa común de backswing corto)", swing: "P4, P7" },
+    D6: { nombre: "Ankle Mobility (dorsiflexión de tobillo)", swing: "P1, P10" },
+    D7: { nombre: "Single Leg Balance (equilibrio estático, carga y transferencia de peso)", swing: "P5, P10" },
+    D9: { nombre: "Bridge with Leg Extension (fuerza de glúteo, indicador de sway y early extension)", swing: "P5, P6" },
+    D10: { nombre: "Pelvic Tilt (disociación pélvica, postura en el setup)", swing: "P1, P4" },
+    D11: { nombre: "Cervical Rotation (movilidad de rotación cervical, seguimiento visual de la pelota)", swing: "P7" },
+    D12: { nombre: "Hip Internal Rotation (rotación interna de cadera, causa de early extension)", swing: "P6, P7" },
     DP1: { nombre: "Salto Vertical (potencia explosiva de piernas)" },
     DP2: { nombre: "Sit Up and Throw 1.5 kg (potencia de core)" },
     DP3: { nombre: "Lanzamiento Rotacional 1.5 kg (potencia rotacional)", swing: "P4–P7" },
     DP4: { nombre: "Fuerza de Agarre (fuerza de manos y antebrazos)", swing: "P1" },
     DP5: { nombre: "Velocidad de Swing (potencia total del swing)", swing: "P4–P10" },
-  },
-  "Damas Senior": {
-    DS1: { nombre: "Overhead Deep Squat modificado (movilidad con apoyo, sin dolor)", swing: "P1, P10" },
-    DS2: { nombre: "Toe Touch (flexibilidad cadena posterior)", swing: "P1" },
-    DS3: { nombre: "Torso Rotation (rotación de tronco sobre caderas)", swing: "P4, P7" },
-    DS4: { nombre: "90/90 Stretch (flexibilidad isquiotibiales sentada)", swing: "P4, P5" },
-    DS5: { nombre: "Pelvic Tilt (control lumbo-pélvico, lordosis funcional)", swing: "P1, P4" },
-    DS6: { nombre: "Single Leg Balance (equilibrio unipodal, prevención de caídas)", swing: "P5, P10" },
-    DS7: { nombre: "Hip Sway Test (estabilidad lateral de cadera en carga)", swing: "P4, P7" },
-    DS8: { nombre: "Bridge with Leg Extension modificado (fuerza glúteo, estabilidad lumbo-pélvica)", swing: "P5, P6" },
-    DS9: { nombre: "Fuerza de Agarre (fuerza de manos y antebrazos)", swing: "P1" },
-    DS10: { nombre: "Salto Vertical en Puntillas (potencia de piernas y equilibrio)" },
   },
 };
 
@@ -232,7 +209,6 @@ export async function POST(request: NextRequest) {
     "Grupo +14": "Jugador 14+. Terminología TPI completa. Análisis biomecánico detallado. Las conexiones físico-técnico deben ser precisas y cuantificadas.",
     Competencia: "Jugador competitivo 13-17 años. Máxima profundidad técnica. El plan de clase debe ser un protocolo de entrenamiento estructurado con progresiones.",
     Damas: "Jugadora adulta. Considera hiperlaxitud y biomecánica femenina. Enfoque en estabilidad y eficiencia. Los ejercicios deben ser funcionales.",
-    "Damas Senior": "Jugadora 50-70 años. PRIORIDAD: prevención de lesiones. Ejercicios de bajo impacto. Progresión conservadora. Énfasis en movilidad funcional.",
   };
 
   const systemPrompt = `Eres un coach de golf certificado TPI con especialidad en la conexión entre limitaciones físicas y defectos técnicos del swing. Analizas los datos disponibles de este alumno y generas un análisis integrado para el profesor.
