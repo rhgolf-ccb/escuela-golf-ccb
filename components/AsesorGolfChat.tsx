@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { supabase } from "@/lib/supabase";
-import { shouldOfferPdf } from "@/lib/pdf-asesor";
+import { shouldOfferPdf } from "@/lib/pdf-generator";
 import { TOOL_STATUS_LABELS, formatTime, MARKDOWN_COMPONENTS, streamAsesorChat, todayISODate, PACO_LIMIT_MESSAGE, type PacoUsage } from "@/lib/paco-chat-shared";
 import { pacoLimitFor, type Rol } from "@/lib/roles";
 
@@ -128,8 +128,8 @@ export default function AsesorGolfChat({ rol }: { rol: Rol | null }) {
   }
 
   async function handleDownloadPdf(content: string) {
-    const { generateAsesorPdf } = await import("@/lib/pdf-asesor");
-    generateAsesorPdf(content);
+    const { generateCCBPdf } = await import("@/lib/pdf-generator");
+    generateCCBPdf(content, { documentName: "Consulta a Paco" });
   }
 
   const hasUserSentMessage = messages.some((m) => m.role === "user");

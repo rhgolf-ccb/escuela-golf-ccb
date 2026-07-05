@@ -2,16 +2,22 @@ import { jsPDF } from "jspdf";
 
 type Token = { text: string; bold: boolean };
 
-const CCB_GREEN: [number, number, number] = [26, 58, 42];
+const CCB_GREEN: [number, number, number] = [26, 58, 42]; // #1a3a2a
 const TEXT_COLOR: [number, number, number] = [31, 41, 55];
 const MUTED_COLOR: [number, number, number] = [120, 120, 120];
 const BORDER_COLOR: [number, number, number] = [220, 220, 220];
+const ROW_ALT_COLOR: [number, number, number] = [240, 245, 240]; // #f0f5f0
 
-const MARGIN = 15;
+const MARGIN = 20;
 const PAGE_W = 210;
 const PAGE_H = 297;
 const CONTENT_W = PAGE_W - MARGIN * 2;
-const BOTTOM_LIMIT = PAGE_H - 20;
+const BOTTOM_LIMIT = PAGE_H - 24;
+
+const FONT_NORMAL = 11;
+const FONT_SUBTITLE = 13;
+const FONT_TITLE = 16;
+const LINE_HEIGHT = 6;
 
 function splitInlineBold(line: string): Token[] {
   return line
@@ -73,7 +79,7 @@ class PdfWriter {
         x = startX;
         started = false;
       }
-      this.doc.setTextColor(...TEXT_COLOR);
+      this.doc.setTextColor(...(w.bold ? CCB_GREEN : TEXT_COLOR));
       this.doc.text(w.text, x, this.y);
       x += wordWidth;
       started = true;
@@ -82,22 +88,22 @@ class PdfWriter {
   }
 
   paragraph(line: string) {
-    this.wrappedLine(wordsFromTokens(splitInlineBold(line)), MARGIN, 10.5, 5.5);
+    this.wrappedLine(wordsFromTokens(splitInlineBold(line)), MARGIN, FONT_NORMAL, LINE_HEIGHT);
   }
 
   bullet(line: string) {
-    this.doc.setFontSize(10.5);
+    this.doc.setFontSize(FONT_NORMAL);
     this.doc.setFont("helvetica", "normal");
-    this.ensureSpace(5.5);
+    this.ensureSpace(LINE_HEIGHT);
     this.doc.setTextColor(...CCB_GREEN);
     this.doc.text("•", MARGIN + 1, this.y);
-    this.wrappedLine(wordsFromTokens(splitInlineBold(line)), MARGIN + 6, 10.5, 5.5);
+    this.wrappedLine(wordsFromTokens(splitInlineBold(line)), MARGIN + 6, FONT_NORMAL, LINE_HEIGHT);
   }
 
   heading(text: string, level: 1 | 2 | 3) {
-    const sizes = { 1: 16, 2: 13.5, 3: 11.5 };
-    const gapBefore = { 1: 6, 2: 5, 3: 3.5 };
-    const lineHeight = { 1: 8, 2: 7, 3: 6 };
+    const sizes = { 1: FONT_TITLE, 2: FONT_SUBTITLE, 3: FONT_SUBTITLE };
+    const gapBefore = { 1: 7, 2: 5.5, 3: 4.5 };
+    const lineHeight = { 1: 8.5, 2: 7, 3: 7 };
     this.y += gapBefore[level];
     this.ensureSpace(lineHeight[level]);
     this.doc.setFont("helvetica", "bold");
@@ -124,7 +130,7 @@ class PdfWriter {
     const cols = rows[0].length;
     const colWidth = CONTENT_W / cols;
     const cellPadding = 1.5;
-    const lineHeight = 4.2;
+    const lineHeight = 4.5;
 
     this.doc.setFontSize(9);
     rows.forEach((row, rIdx) => {
@@ -140,8 +146,8 @@ class PdfWriter {
           this.doc.setFillColor(...CCB_GREEN);
           this.doc.setTextColor(255, 255, 255);
         } else {
-          const shade = rIdx % 2 === 0 ? 245 : 255;
-          this.doc.setFillColor(shade, rIdx % 2 === 0 ? 247 : 255, rIdx % 2 === 0 ? 244 : 255);
+          if (rIdx % 2 === 0) this.doc.setFillColor(...ROW_ALT_COLOR);
+          else this.doc.setFillColor(255, 255, 255);
           this.doc.setTextColor(...TEXT_COLOR);
         }
         this.doc.setDrawColor(...BORDER_COLOR);
@@ -155,26 +161,36 @@ class PdfWriter {
   }
 }
 
-export function generateAsesorPdf(markdown: string, options?: { title?: string; subtitle?: string; filenamePrefix?: string }) {
+/**
+ * Estándar de PDF de la Escuela de Golf CCB. Toda generación de PDF de la app
+ * (notas, programación, análisis de Paco, reportes) pasa por esta función.
+ */
+export function generateCCBPdf(markdown: string, options?: { documentName?: string; filenamePrefix?: string }) {
   const writer = new PdfWriter();
   const doc = writer.doc;
 
   doc.setFont("helvetica", "bold");
-  doc.setFontSize(16);
+  doc.setFontSize(FONT_TITLE);
   doc.setTextColor(...CCB_GREEN);
-  doc.text(options?.title ?? "Escuela de Golf CCB", MARGIN, 20);
-
-  doc.setFont("helvetica", "normal");
-  doc.setFontSize(9);
-  doc.setTextColor(...MUTED_COLOR);
-  const fecha = new Date().toLocaleDateString("es-CO", { day: "2-digit", month: "long", year: "numeric" });
-  const subtitulo = options?.subtitle ? `${options.subtitle} · Generado el ${fecha}` : `Generado el ${fecha}`;
-  doc.text(subtitulo, MARGIN, 26);
+  doc.text("Escuela de Golf CCB", MARGIN, 20);
 
   doc.setDrawColor(...CCB_GREEN);
   doc.setLineWidth(0.5);
-  doc.line(MARGIN, 30, PAGE_W - MARGIN, 30);
-  writer.y = 40;
+  doc.line(MARGIN, 25, PAGE_W - MARGIN, 25);
+
+  const fecha = new Date().toLocaleDateString("es-CO", { day: "2-digit", month: "long", year: "numeric" });
+  if (options?.documentName) {
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(FONT_SUBTITLE);
+    doc.setTextColor(...TEXT_COLOR);
+    doc.text(options.documentName, MARGIN, 33);
+  }
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(9);
+  doc.setTextColor(...MUTED_COLOR);
+  doc.text(`Generado el ${fecha}`, PAGE_W - MARGIN, 33, { align: "right" });
+
+  writer.y = options?.documentName ? 42 : 34;
 
   const lines = markdown.split("\n");
   let i = 0;
@@ -214,20 +230,20 @@ export function generateAsesorPdf(markdown: string, options?: { title?: string; 
   const totalPages = doc.getNumberOfPages();
   for (let p = 1; p <= totalPages; p++) {
     doc.setPage(p);
-    doc.setDrawColor(...BORDER_COLOR);
-    doc.setLineWidth(0.2);
-    doc.line(MARGIN, PAGE_H - 14, PAGE_W - MARGIN, PAGE_H - 14);
+    doc.setDrawColor(...CCB_GREEN);
+    doc.setLineWidth(0.4);
+    doc.line(MARGIN, PAGE_H - 16, PAGE_W - MARGIN, PAGE_H - 16);
     doc.setFont("helvetica", "normal");
     doc.setFontSize(8.5);
     doc.setTextColor(...MUTED_COLOR);
-    doc.text("Paco — Asesor de Golf", MARGIN, PAGE_H - 9);
-    doc.text(`Página ${p} de ${totalPages}`, PAGE_W - MARGIN, PAGE_H - 9, { align: "right" });
+    doc.text("Paco — Asesor de Golf CCB", MARGIN, PAGE_H - 10);
+    doc.text(`Página ${p} de ${totalPages}`, PAGE_W - MARGIN, PAGE_H - 10, { align: "right" });
   }
 
   const fileDate = new Date().toISOString().slice(0, 10);
-  const nameSource = options?.filenamePrefix ?? options?.subtitle;
+  const nameSource = options?.filenamePrefix ?? options?.documentName;
   const slug = nameSource ? `-${nameSource.normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^a-zA-Z0-9]+/g, "-").replace(/^-+|-+$/g, "")}` : "";
-  doc.save(`Paco${slug}-${fileDate}.pdf`);
+  doc.save(`CCB${slug}-${fileDate}.pdf`);
 }
 
 export function shouldOfferPdf(content: string): boolean {

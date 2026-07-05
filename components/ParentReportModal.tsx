@@ -2,6 +2,7 @@
 
 import { useState, useRef } from "react";
 import ReportCard, { ParentReport, ParentReportMeta } from "./ReportCard";
+import { formatWhatsAppMessage, openWhatsApp } from "@/lib/whatsapp-formatter";
 
 interface Props {
   studentId: string;
@@ -96,8 +97,8 @@ export default function ParentReportModal({
   function handleWhatsApp() {
     if (!informeId) return;
     const url = window.location.origin + "/informes/" + informeId;
-    const text = `Hola! Te comparto el informe de progreso de ${studentName} de la Escuela de Golf CCB:\n\n${url}`;
-    window.open("https://wa.me/?text=" + encodeURIComponent(text), "_blank");
+    const text = formatWhatsAppMessage(`Aquí está el enlace a tu informe de progreso:\n\n${url}`, "reporte_alumno", `Informe de ${studentName}`);
+    openWhatsApp(text);
   }
 
   async function handleCopyLink() {

@@ -5,6 +5,7 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { supabase } from "@/lib/supabase";
 import { TOOL_STATUS_LABELS, formatTime, MARKDOWN_COMPONENTS, streamAsesorChat, PACO_LIMIT_MESSAGE } from "@/lib/paco-chat-shared";
+import { formatWhatsAppMessage, openWhatsApp } from "@/lib/whatsapp-formatter";
 import { POSICIONES_NOMBRES, physResultToScore, type PhysicalResult } from "./StudentProfile";
 
 type Message = {
@@ -36,21 +37,6 @@ type PhysicalRow = {
   score_promedio: number | null;
   tests_data: Record<string, { result: PhysicalResult; obs: string | null; na: boolean }> | null;
 };
-
-function summarizeForWhatsApp(markdown: string, maxLen = 500): string {
-  const plain = markdown
-    .replace(/^\s*(---|\*\*\*)\s*$/gm, "")
-    .replace(/^#{1,6}\s+/gm, "")
-    .replace(/\*\*(.+?)\*\*/g, "$1")
-    .replace(/^[-*]\s+/gm, "• ")
-    .replace(/\|/g, " ")
-    .replace(/\n{2,}/g, "\n")
-    .trim();
-  if (plain.length <= maxLen) return plain;
-  const cut = plain.slice(0, maxLen - 1);
-  const lastSpace = cut.lastIndexOf(" ");
-  return `${cut.slice(0, lastSpace > 0 ? lastSpace : maxLen - 1)}…`;
-}
 
 async function buildGroupContext(grupo: string, students: { id: string; full_name: string }[]): Promise<string> {
   const ids = students.map((s) => s.id);
@@ -279,15 +265,13 @@ export default function GroupAnalysisModal({
 
   async function handleDownloadPdf() {
     if (!initialAnalysis) return;
-    const { generateAsesorPdf } = await import("@/lib/pdf-asesor");
-    const fecha = new Date().toLocaleDateString("es-CO", { day: "2-digit", month: "long", year: "numeric" });
-    generateAsesorPdf(initialAnalysis, { title: `Escuela de Golf CCB — Análisis Grupal ${grupo} — ${fecha}`, filenamePrefix: `Grupal-${grupo}` });
+    const { generateCCBPdf } = await import("@/lib/pdf-generator");
+    generateCCBPdf(initialAnalysis, { documentName: `Análisis Grupal — ${grupo}`, filenamePrefix: `Grupal-${grupo}` });
   }
 
   function handleSendWhatsApp() {
     if (!initialAnalysis) return;
-    const resumen = summarizeForWhatsApp(initialAnalysis);
-    window.open(`https://wa.me/?text=${encodeURIComponent(resumen)}`, "_blank");
+    openWhatsApp(formatWhatsAppMessage(initialAnalysis, "analisis_grupal", `Análisis grupal — ${grupo}`));
   }
 
   const hasUserSentMessage = messages.some((m) => m.role === "user");

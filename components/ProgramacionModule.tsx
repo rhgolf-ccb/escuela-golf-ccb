@@ -12,6 +12,7 @@ import JuvenileClassModal, {
 import CompetenciaClassModal from "./CompetenciaClassModal";
 import PacoPlanningModal from "./PacoPlanningModal";
 import { isStaff, type Rol } from "@/lib/roles";
+import { formatWhatsAppMessage, openWhatsApp } from "@/lib/whatsapp-formatter";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 export type TipoPlan   = "juvenil" | "competencia" | "damas";
@@ -1180,10 +1181,9 @@ export default function ProgramacionModule({ currentRol }: { currentRol: Rol | n
 
   function handleWhatsApp() {
     if (!plan) return;
-    const lines = [`Programación *${TIPO_PLAN_LABEL[activeTab]}* · Semana del ${formatWeekRange(semana)}`, ``, `*Tema:* ${plan.tema_semanal}`, plan.descripcion_tema || null, ``].filter(Boolean) as string[];
-    for (const s of sesiones) lines.push(`• *${DIA_LABEL[s.dia_semana]} ${formatDiaFecha(s.fecha)}:* ${s.objetivo || TIPO_SESION_LABEL[s.tipo_sesion]}`);
-    lines.push(``, `Escuela de Golf CCB`);
-    window.open(`https://wa.me/?text=${encodeURIComponent(lines.join("\n"))}`, "_blank");
+    const lines = [`## Objetivo`, `${plan.tema_semanal}${plan.descripcion_tema ? `: ${plan.descripcion_tema}` : ""}`, ``, `## Horario de la semana`];
+    for (const s of sesiones) lines.push(`- ${DIA_LABEL[s.dia_semana]} ${formatDiaFecha(s.fecha)}: ${s.objetivo || TIPO_SESION_LABEL[s.tipo_sesion]}`);
+    openWhatsApp(formatWhatsAppMessage(lines.join("\n"), "programacion_semanal", `Programación ${TIPO_PLAN_LABEL[activeTab]} — ${formatWeekRange(semana)}`));
   }
 
   // ── Computed ──────────────────────────────────────────────────────────────

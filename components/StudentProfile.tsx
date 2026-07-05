@@ -479,6 +479,89 @@ async function fetchFullStudentContext(studentId: string): Promise<string | null
   );
 }
 
+function tendenciaTexto(actual: number | null, anterior: number | null): string {
+  if (actual === null || anterior === null) return "sin datos suficientes para comparar";
+  const diff = actual - anterior;
+  if (Math.abs(diff) < 5) return "estable respecto al mes anterior";
+  return diff > 0 ? `mejorando (+${diff} pts vs. mes anterior)` : `bajando (${diff} pts vs. mes anterior)`;
+}
+
+async function buildParentReportMarkdown(studentId: string, student: StudentContextInfo): Promise<string> {
+  const hoy = new Date();
+  const hace30 = new Date(Date.now() - 30 * 86400000).toISOString().split("T")[0];
+  const hace60 = new Date(Date.now() - 60 * 86400000).toISOString().split("T")[0];
+  const grupo = normalizeGrupoKey(student.grupo_activo ?? calcularGrupoFisico({ birth_date: student.birth_date, grupo_activo: student.grupo_activo, gender: null }));
+
+  const [swingRes, physicalRes, notasRes, asistRecienteRes, asistAnteriorRes, protocolosFisicoRes] = await Promise.all([
+    supabase.from("swing_evaluations").select("*").eq("student_id", studentId).order("evaluation_date", { ascending: false }).limit(1),
+    supabase.from("physical_evaluations").select("*").eq("student_id", studentId).order("evaluation_date", { ascending: false }).limit(1),
+    supabase.from("notas_profesor").select("*").eq("alumno_id", studentId).order("fecha", { ascending: false }).limit(20),
+    supabase.from("reservas").select("asistio, sesiones_semana!inner(fecha)").eq("estudiante_id", studentId).gte("sesiones_semana.fecha", hace30),
+    supabase.from("reservas").select("asistio, sesiones_semana!inner(fecha)").eq("estudiante_id", studentId).gte("sesiones_semana.fecha", hace60).lt("sesiones_semana.fecha", hace30),
+    supabase.from("protocolo_tests").select("codigo, nombre").eq("grupo", grupo).eq("tipo", "fisico"),
+  ]);
+
+  const parts: string[] = [`# Reporte de ${student.full_name}`];
+  const edad = calcularEdadNum(student.birth_date);
+  parts.push(
+    `**Grupo:** ${student.grupo_activo ?? grupo}  \n**Edad:** ${edad !== null ? `${edad} años` : "—"}  \n**Fecha del reporte:** ${formatFecha(hoy.toISOString().split("T")[0])}`
+  );
+
+  const reciente = (asistRecienteRes.data ?? []) as { asistio: boolean | null }[];
+  const anterior = (asistAnteriorRes.data ?? []) as { asistio: boolean | null }[];
+  const pctReciente = reciente.length ? Math.round((reciente.filter((r) => r.asistio).length / reciente.length) * 100) : null;
+  const pctAnterior = anterior.length ? Math.round((anterior.filter((r) => r.asistio).length / anterior.length) * 100) : null;
+  parts.push(
+    `## Resumen de asistencia\n${
+      pctReciente !== null
+        ? `${pctReciente}% (${reciente.filter((r) => r.asistio).length}/${reciente.length} sesiones el último mes) — ${tendenciaTexto(pctReciente, pctAnterior)}`
+        : "Sin sesiones registradas en el último mes."
+    }`
+  );
+
+  const swing = (swingRes.data as SwingEvaluation[])?.[0];
+  if (swing) {
+    const raw = swing as unknown as Record<string, string | number | boolean | null>;
+    const rows: string[] = ["| Posición | Calificación | Observación |", "|---|---|---|"];
+    for (let i = 1; i <= 10; i++) {
+      if (raw[`p${i}_na`]) continue;
+      const score = raw[`p${i}_score`];
+      if (score === null || score === undefined) continue;
+      const obs = (raw[`p${i}_obs`] as string | null) ?? "";
+      rows.push(`| ${POSICIONES_NOMBRES[`P${i}`] ?? `P${i}`} | ${score}/10 | ${obs.replace(/\|/g, "/") || "—"} |`);
+    }
+    parts.push(`## Resultados de tests técnicos\nÚltima evaluación: ${formatFecha(swing.evaluation_date)}\n\n${rows.join("\n")}`);
+  } else {
+    parts.push(`## Resultados de tests técnicos\nSin tests técnicos registrados.`);
+  }
+
+  const physicalNombres: Record<string, string> = {};
+  ((protocolosFisicoRes.data ?? []) as { codigo: string; nombre: string }[]).forEach((t) => (physicalNombres[t.codigo] = t.nombre));
+  const physical = (physicalRes.data as PhysicalEvaluation[])?.[0];
+  if (physical?.tests_data) {
+    const rows: string[] = ["| Screen | Calificación | Observación |", "|---|---|---|"];
+    Object.entries(physical.tests_data).forEach(([codigo, t]) => {
+      if (t.na) return;
+      rows.push(`| ${physicalNombres[codigo] ?? codigo} | ${t.result ?? "—"} | ${(t.obs ?? "").replace(/\|/g, "/") || "—"} |`);
+    });
+    parts.push(`## Resultados de tests físicos\nÚltima evaluación: ${formatFecha(physical.evaluation_date)}\n\n${rows.join("\n")}`);
+  } else {
+    parts.push(`## Resultados de tests físicos\nSin tests físicos registrados.`);
+  }
+
+  const notas = (notasRes.data as NotaProfesor[]) ?? [];
+  const analisisPaco = notas.find((n) => n.origen === "paco");
+  if (analisisPaco) parts.push(`## Análisis de Paco\n${analisisPaco.contenido}`);
+
+  const planCasa = notas.find((n) => n.origen === "plan-casa");
+  if (planCasa) parts.push(`## Plan de trabajo actual\n${planCasa.contenido}`);
+
+  const notaManual = notas.find((n) => !n.origen);
+  if (notaManual) parts.push(`## Nota del profesor más reciente\n${formatFecha(notaManual.fecha)}: ${notaManual.contenido}`);
+
+  return parts.join("\n\n");
+}
+
 function formatFecha(dateStr: string|null): string {
   if (!dateStr) return "—";
   const d = new Date(dateStr + "T00:00:00");
@@ -554,6 +637,7 @@ export default function StudentProfile({ studentId, currentRol }: { studentId: s
   const [showPacoChat, setShowPacoChat] = useState(false);
   const [pacoContext, setPacoContext] = useState<string | null>(null);
   const [pacoContextLoading, setPacoContextLoading] = useState(false);
+  const [parentPdfLoading, setParentPdfLoading] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [form, setForm] = useState<EditForm|null>(null);
   const [saving, setSaving] = useState(false);
@@ -1546,6 +1630,24 @@ posPayload[`${key}_score`] = rawScore !== null ? Math.round(rawScore) : null;
                 style={{ backgroundColor:"#1a3a2a", color:"white" }}
               >
                 {pacoContextLoading ? "Cargando contexto..." : "Consultar a Paco 🦅"}
+              </button>
+            )}
+            {currentRol && isStaff(currentRol) && student && (
+              <button
+                onClick={async () => {
+                  setParentPdfLoading(true);
+                  try {
+                    const markdown = await buildParentReportMarkdown(studentId, student);
+                    const { generateCCBPdf } = await import("@/lib/pdf-generator");
+                    generateCCBPdf(markdown, { documentName: `Reporte para Padres — ${student.full_name}`, filenamePrefix: `Reporte-${student.full_name}` });
+                  } finally {
+                    setParentPdfLoading(false);
+                  }
+                }}
+                disabled={parentPdfLoading}
+                className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium border border-gray-200 text-gray-600 hover:bg-gray-50 disabled:opacity-60"
+              >
+                {parentPdfLoading ? "Generando..." : "Reporte para padres PDF"}
               </button>
             )}
             <button onClick={openEdit} className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium" style={{ backgroundColor:"#1B4D2E", color:"white" }}>

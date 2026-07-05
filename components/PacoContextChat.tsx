@@ -5,6 +5,7 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { supabase } from "@/lib/supabase";
 import { TOOL_STATUS_LABELS, formatTime, MARKDOWN_COMPONENTS, streamAsesorChat, PACO_LIMIT_MESSAGE } from "@/lib/paco-chat-shared";
+import { formatWhatsAppMessage, openWhatsApp } from "@/lib/whatsapp-formatter";
 
 type Message = {
   role: "user" | "assistant";
@@ -140,12 +141,12 @@ export default function PacoContextChat({
   }
 
   async function handleDownloadPdf(content: string) {
-    const { generateAsesorPdf } = await import("@/lib/pdf-asesor");
-    generateAsesorPdf(content, { subtitle: studentName });
+    const { generateCCBPdf } = await import("@/lib/pdf-generator");
+    generateCCBPdf(content, { documentName: `Análisis Paco — ${studentName}`, filenamePrefix: studentName });
   }
 
   function handleSendWhatsApp(content: string) {
-    window.open(`https://wa.me/?text=${encodeURIComponent(content)}`, "_blank");
+    openWhatsApp(formatWhatsAppMessage(content, "plan_drills", `Plan para casa — ${studentName.split(" ")[0]}`));
   }
 
   async function handleSaveDrills(idx: number, content: string) {
