@@ -252,6 +252,7 @@ type NotaProfesor = {
   alumno_id: string;
   contenido: string;
   imagen_url: string | null;
+  video_url: string | null;
   tipo_imagen: TipoImagen | null;
   profesor_id: string | null;
   profesor_nombre: string | null;
@@ -264,6 +265,8 @@ type NotaForm = {
   fecha: string;
   imagen: File | null;
   imagenPreview: string | null;
+  video: File | null;
+  videoPreview: string | null;
   tipo_imagen: TipoImagen | null;
 };
 
@@ -1009,10 +1012,10 @@ posPayload[`${key}_score`] = rawScore !== null ? Math.round(rawScore) : null;
   function openNotaForm(nota?: NotaProfesor) {
     if (nota) {
       setEditingNotaId(nota.id);
-      setNotaForm({ contenido: nota.contenido, fecha: nota.fecha, imagen: null, imagenPreview: null, tipo_imagen: nota.tipo_imagen });
+      setNotaForm({ contenido: nota.contenido, fecha: nota.fecha, imagen: null, imagenPreview: null, video: null, videoPreview: null, tipo_imagen: nota.tipo_imagen });
     } else {
       setEditingNotaId(null);
-      setNotaForm({ contenido: "", fecha: new Date().toISOString().split("T")[0], imagen: null, imagenPreview: null, tipo_imagen: null });
+      setNotaForm({ contenido: "", fecha: new Date().toISOString().split("T")[0], imagen: null, imagenPreview: null, video: null, videoPreview: null, tipo_imagen: null });
     }
     setNotaSaveError(null);
     setShowNotaForm(true);
@@ -1041,11 +1044,23 @@ posPayload[`${key}_score`] = rawScore !== null ? Math.round(rawScore) : null;
         if (uploadError) throw uploadError;
         imagen_url = supabase.storage.from("notas-profesor").getPublicUrl(path).data.publicUrl;
       }
+      let video_url: string | null = editingNotaId
+        ? (notas.find((n) => n.id === editingNotaId)?.video_url ?? null)
+        : null;
+      if (notaForm.video) {
+        const path = `${studentId}/videos/${Date.now()}_${notaForm.video.name}`;
+        const { error: uploadError } = await supabase.storage
+          .from("notas-profesor")
+          .upload(path, notaForm.video, { contentType: notaForm.video.type, upsert: true });
+        if (uploadError) throw uploadError;
+        video_url = supabase.storage.from("notas-profesor").getPublicUrl(path).data.publicUrl;
+      }
       const payload = {
         alumno_id: studentId,
         contenido: notaForm.contenido.trim(),
         fecha: notaForm.fecha,
         imagen_url,
+        video_url,
         tipo_imagen: notaForm.tipo_imagen,
         profesor_nombre: "Robert Instructor",
       };
@@ -1070,6 +1085,10 @@ posPayload[`${key}_score`] = rawScore !== null ? Math.round(rawScore) : null;
     const nota = notas.find((n) => n.id === id);
     if (nota?.imagen_url) {
       const parts = nota.imagen_url.split("/notas-profesor/");
+      if (parts[1]) await supabase.storage.from("notas-profesor").remove([parts[1]]);
+    }
+    if (nota?.video_url) {
+      const parts = nota.video_url.split("/notas-profesor/");
       if (parts[1]) await supabase.storage.from("notas-profesor").remove([parts[1]]);
     }
     await supabase.from("notas_profesor").delete().eq("id", id);
@@ -1184,6 +1203,16 @@ posPayload[`${key}_score`] = rawScore !== null ? Math.round(rawScore) : null;
             if (y + imgH > pageH - footerH - 5) { doc.addPage(); y = M; }
             try { doc.addImage(imgBase64, "JPEG", M, y, imgW, imgH); y += imgH + 5; } catch { /* skip */ }
           }
+        }
+
+        // Video (no se incrusta, solo se referencia)
+        if (nota.video_url) {
+          if (y > pageH - footerH - 10) { doc.addPage(); y = M; }
+          doc.setFontSize(8.5);
+          doc.setFont("helvetica", "italic");
+          doc.setTextColor(100, 100, 100);
+          doc.text(`Video adjunto: ${formatFechaLarga(nota.fecha)}`, M, y);
+          y += 5.5;
         }
 
         // Separador
@@ -2219,6 +2248,11 @@ posPayload[`${key}_score`] = rawScore !== null ? Math.round(rawScore) : null;
                             🏷️ {TIPO_IMAGEN_LABELS[nota.tipo_imagen]}
                           </span>
                         )}
+                        {nota.video_url && (
+                          <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full text-white" style={{ backgroundColor: "#1a3a2a" }}>
+                            🎥 Video
+                          </span>
+                        )}
                         <button onClick={() => openNotaForm(nota)} className="p-1.5 rounded-lg text-gray-300 hover:text-blue-500 hover:bg-blue-50 transition-colors" title="Editar">
                           <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
                         </button>
@@ -2249,6 +2283,11 @@ posPayload[`${key}_score`] = rawScore !== null ? Math.round(rawScore) : null;
                           />
                         )}
                       </div>
+                    )}
+
+                    {/* Video */}
+                    {nota.video_url && (
+                      <video src={nota.video_url} controls className="mt-3 w-full rounded-lg border border-gray-100" style={{ maxHeight: 300 }} />
                     )}
                   </div>
                 ))}
@@ -2468,6 +2507,30 @@ posPayload[`${key}_score`] = rawScore !== null ? Math.round(rawScore) : null;
                     <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
                     {notaForm.imagen.name}
                   </div>
+                )}
+              </div>
+
+              {/* Video */}
+              <div>
+                <label className="block text-xs font-semibold text-gray-700 mb-1.5 flex items-center gap-1.5">
+                  <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path d="M15 10l4.553-2.276A1 1 0 0 1 21 8.618v6.764a1 1 0 0 1-1.447.894L15 14M5 6h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2z"/></svg>
+                  Subir video <span className="text-gray-400 font-normal">(opcional — MP4, MOV, AVI, WEBM · máx 100 MB)</span>
+                </label>
+                <input
+                  type="file"
+                  accept="video/mp4,video/quicktime,video/x-msvideo,video/webm"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0] ?? null;
+                    if (!file) return;
+                    if (file.size > 100 * 1024 * 1024) { setNotaSaveError("El video no puede superar 100 MB."); return; }
+                    setNotaSaveError(null);
+                    const preview = URL.createObjectURL(file);
+                    setNotaForm((f) => f ? { ...f, video: file, videoPreview: preview } : f);
+                  }}
+                  className="w-full text-sm text-gray-500 file:mr-3 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-medium file:bg-green-50 file:text-green-700 hover:file:bg-green-100"
+                />
+                {notaForm.videoPreview && (
+                  <video src={notaForm.videoPreview} controls className="mt-2 w-full rounded-lg border border-gray-100" style={{ maxHeight: 200 }} />
                 )}
               </div>
 
