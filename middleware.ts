@@ -2,7 +2,15 @@ import { NextResponse, type NextRequest } from "next/server";
 import { createServerClient } from "@supabase/ssr";
 import { isRouteAllowed, type Rol } from "@/lib/roles";
 
-const PUBLIC_PATHS = ["/login", "/auth/callback", "/auth/confirm", "/api/check-access"];
+const PUBLIC_PATHS = [
+  "/login",
+  "/auth/callback",
+  "/auth/confirm",
+  "/api/check-access",
+  "/manifest.webmanifest",
+  "/manifest.json",
+  "/sw.js",
+];
 
 function isPublicPath(pathname: string): boolean {
   return PUBLIC_PATHS.some((p) => pathname === p || pathname.startsWith(`${p}/`));
