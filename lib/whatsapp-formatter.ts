@@ -1,10 +1,11 @@
-export type WhatsAppDocType = "analisis_grupal" | "programacion_semanal" | "reporte_alumno" | "plan_drills";
+export type WhatsAppDocType = "analisis_grupal" | "programacion_semanal" | "reporte_alumno" | "plan_drills" | "actividad_especial";
 
 const TITLE_EMOJI: Record<WhatsAppDocType, string> = {
   analisis_grupal: "🏌️",
   programacion_semanal: "📅",
   reporte_alumno: "👤",
   plan_drills: "🎯",
+  actividad_especial: "🌟",
 };
 
 const HEADING_EMOJI: Record<WhatsAppDocType, { pattern: RegExp; emoji: string }[]> = {
@@ -28,6 +29,12 @@ const HEADING_EMOJI: Record<WhatsAppDocType, { pattern: RegExp; emoji: string }[
     { pattern: /drill/i, emoji: "💪" },
     { pattern: /duraci[oó]n|tiempo|minuto/i, emoji: "⏱️" },
     { pattern: /lugar|ubicaci/i, emoji: "📍" },
+  ],
+  actividad_especial: [
+    { pattern: /horario|hora/i, emoji: "🕐" },
+    { pattern: /ubicaci|lugar|campo|cancha/i, emoji: "📍" },
+    { pattern: /estaci[oó]n/i, emoji: "🎯" },
+    { pattern: /grupo/i, emoji: "👥" },
   ],
 };
 

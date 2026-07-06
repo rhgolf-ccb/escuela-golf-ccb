@@ -11,6 +11,7 @@ import JuvenileClassModal, {
 } from "./JuvenileClassModal";
 import CompetenciaClassModal from "./CompetenciaClassModal";
 import PacoPlanningModal from "./PacoPlanningModal";
+import ActividadEspecialModal from "./ActividadEspecialModal";
 import { isStaff, type Rol } from "@/lib/roles";
 import { formatWhatsAppMessage, openWhatsApp } from "@/lib/whatsapp-formatter";
 
@@ -38,6 +39,14 @@ export interface Drill {
 }
 
 export interface EstacionDamas { nombre: string; lugar: string; duracion_min: number; descripcion: string; }
+
+export interface DrillLibre { titulo: string; descripcion: string; }
+export interface EstacionLibre { nombre: string; lugar: string; horario: string; drills: DrillLibre[]; }
+export interface ActividadEspecial {
+  id: string; nombre: string; grupos: TipoPlan[]; fecha: string;
+  hora_inicio: string | null; hora_fin: string | null;
+  estaciones: EstacionLibre[]; notas: string | null; created_at: string;
+}
 
 interface OpcionActividad {
   id: number;
@@ -332,6 +341,9 @@ function sesionesToEstaciones(diaySesiones: SesionSemana[], tipoPlan: TipoPlan):
 export default function ProgramacionModule({ currentRol }: { currentRol: Rol | null }) {
   const router = useRouter();
   const [showPacoPlanning, setShowPacoPlanning] = useState(false);
+  const [showActividadEspecial, setShowActividadEspecial] = useState(false);
+  const [calEspeciales, setCalEspeciales] = useState<ActividadEspecial[]>([]);
+  const [calEspecialDetail, setCalEspecialDetail] = useState<ActividadEspecial | null>(null);
 
   // Plan state
   const [semana, setSemana]       = useState<Date>(() => getMonday(new Date()));
@@ -456,11 +468,15 @@ export default function ProgramacionModule({ currentRol }: { currentRol: Rol | n
   // ── Fetch calendar data ───────────────────────────────────────────────────
   const fetchCalSemana = useCallback(async () => {
     setCalSesiones([]);
+    setCalEspeciales([]);
     setCalLoading(true);
-    const { data: plans } = await supabase
-      .from("planes_semanales").select("id, tipo_plan")
-      .eq("semana_inicio", toISODate(semana))
-      .eq("tipo_plan", activeTab);
+    const inicio = toISODate(semana);
+    const fin = toISODate(addDays(semana, 6));
+    const [{ data: plans }, { data: especiales }] = await Promise.all([
+      supabase.from("planes_semanales").select("id, tipo_plan").eq("semana_inicio", inicio).eq("tipo_plan", activeTab),
+      supabase.from("actividades_especiales").select("*").contains("grupos", [activeTab]).gte("fecha", inicio).lte("fecha", fin),
+    ]);
+    setCalEspeciales((especiales as ActividadEspecial[]) ?? []);
     if (!plans?.length) { setCalSesiones([]); setCalLoading(false); return; }
     const planMap = Object.fromEntries(plans.map((p) => [p.id, p.tipo_plan as TipoPlan]));
     const { data: seses } = await supabase
@@ -476,12 +492,16 @@ export default function ProgramacionModule({ currentRol }: { currentRol: Rol | n
 
   const fetchCalMes = useCallback(async () => {
     setCalSesiones([]);
+    setCalEspeciales([]);
     setCalLoading(true);
     const { start, end } = getMesRange(mesCal);
-    const { data: plans } = await supabase
-      .from("planes_semanales").select("id, tipo_plan")
-      .gte("semana_inicio", toISODate(start)).lte("semana_inicio", toISODate(end))
-      .eq("tipo_plan", activeTab);
+    const [{ data: plans }, { data: especiales }] = await Promise.all([
+      supabase.from("planes_semanales").select("id, tipo_plan")
+        .gte("semana_inicio", toISODate(start)).lte("semana_inicio", toISODate(end)).eq("tipo_plan", activeTab),
+      supabase.from("actividades_especiales").select("*").contains("grupos", [activeTab])
+        .gte("fecha", toISODate(start)).lte("fecha", toISODate(end)),
+    ]);
+    setCalEspeciales((especiales as ActividadEspecial[]) ?? []);
     if (!plans?.length) { setCalSesiones([]); setCalLoading(false); return; }
     const planMap = Object.fromEntries(plans.map((p) => [p.id, p.tipo_plan as TipoPlan]));
     const { data: seses } = await supabase
@@ -1071,13 +1091,15 @@ export default function ProgramacionModule({ currentRol }: { currentRol: Rol | n
             </div>
 
             {/* All-day band for sessions without a scheduled time */}
-            {calSesiones.some((s) => !s.hora_inicio) && (
+            {(calSesiones.some((s) => !s.hora_inicio) || calEspeciales.some((e) => !e.hora_inicio)) && (
               <div className="grid" style={{ gridTemplateColumns: "60px repeat(6, 1fr)", background: "#f5f8f4", borderBottom: "1px solid #d4e0d2" }}>
                 <div style={{ borderRight: "1px solid #d4e0d2", display: "flex", alignItems: "center", justifyContent: "flex-end", paddingRight: 6, paddingBlock: 4 }}>
                   <span style={{ fontSize: 10, fontWeight: 600, color: "#6a8a6a", writingMode: "vertical-rl", transform: "rotate(180deg)" }}>sin hora</span>
                 </div>
                 {CAL_DIAS.map((dia) => {
+                  const fechaDia = getFechaForDia(semana, dia);
                   const untimedSes = calSesiones.filter((s) => s.dia_semana === dia && !s.hora_inicio);
+                  const untimedEsp = calEspeciales.filter((e) => e.fecha === fechaDia && !e.hora_inicio);
                   return (
                     <div key={dia} style={{ borderRight: "1px solid #d4e0d2", padding: "3px 4px", minHeight: 30, display: "flex", flexDirection: "column", gap: 2 }}>
                       {untimedSes.map((ses) => {
@@ -1091,6 +1113,14 @@ export default function ProgramacionModule({ currentRol }: { currentRol: Rol | n
                           </div>
                         );
                       })}
+                      {untimedEsp.map((esp) => (
+                        <div key={esp.id} style={{ background: "#b45309", borderRadius: 4, padding: "2px 5px", cursor: "pointer", overflow: "hidden" }}
+                          onClick={() => setCalEspecialDetail(esp)}>
+                          <p style={{ margin: 0, fontSize: 11, fontWeight: 600, color: "#fff", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                            🌟 {esp.nombre}
+                          </p>
+                        </div>
+                      ))}
                     </div>
                   );
                 })}
@@ -1118,6 +1148,8 @@ export default function ProgramacionModule({ currentRol }: { currentRol: Rol | n
                 {/* Day columns */}
                 {CAL_DIAS.map((dia) => {
                   const daySes = calSesiones.filter((s) => s.dia_semana === dia);
+                  const fechaDia = getFechaForDia(semana, dia);
+                  const dayEsp = calEspeciales.filter((e) => e.fecha === fechaDia && !!e.hora_inicio);
                   return (
                     <div key={dia} style={{ position: "relative", height: TOTAL_H, borderLeft: "1px solid #dde8db", background: "#f7faf6" }}>
                       {/* Hour grid lines */}
@@ -1163,6 +1195,33 @@ export default function ProgramacionModule({ currentRol }: { currentRol: Rol | n
                           </div>
                         );
                       })}
+                      {/* Actividades especiales */}
+                      {dayEsp.map((esp, ei) => {
+                        const top    = sesTop(esp.hora_inicio!);
+                        const height = esp.hora_fin ? sesH(esp.hora_inicio!, esp.hora_fin) : ROW_H;
+                        const overlap = daySes.length + ei;
+                        return (
+                          <div
+                            key={esp.id}
+                            style={{
+                              position: "absolute",
+                              top: top + 2, height: Math.max(height - 4, 24),
+                              left: `${3 + overlap * 5}px`, right: `${3 + overlap * 5}px`,
+                              background: "#b45309", borderRadius: 5,
+                              padding: "3px 6px", overflow: "hidden",
+                              cursor: "pointer", zIndex: 20 + ei,
+                            }}
+                            onClick={(e) => { e.stopPropagation(); setCalEspecialDetail(esp); }}
+                          >
+                            <p style={{ margin: 0, fontSize: 13, fontWeight: 700, color: "#fff", lineHeight: 1.2 }}>
+                              🌟 {esp.nombre}
+                            </p>
+                            <p style={{ margin: "1px 0 0", fontSize: 11, color: "#fff", opacity: 0.85 }}>
+                              {esp.hora_inicio!.slice(0, 5)}{esp.hora_fin ? `–${esp.hora_fin.slice(0, 5)}` : ""}
+                            </p>
+                          </div>
+                        );
+                      })}
                     </div>
                   );
                 })}
@@ -1187,6 +1246,7 @@ export default function ProgramacionModule({ currentRol }: { currentRol: Rol | n
     const HEADERS = ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"];
 
     const selectedDaySesiones = selectedCalDate ? calSesiones.filter((s) => s.fecha === selectedCalDate) : [];
+    const selectedDayEspeciales = selectedCalDate ? calEspeciales.filter((e) => e.fecha === selectedCalDate) : [];
 
     return (
       <div className="rounded-xl overflow-hidden shadow-sm" style={{ background: "#f0f5f0" }}>
@@ -1228,6 +1288,7 @@ export default function ProgramacionModule({ currentRol }: { currentRol: Rol | n
                 const isToday = dateStr === todayStr;
                 const isCurrentMonth = date.getMonth() === month;
                 const daySes = calSesiones.filter((s) => s.fecha === dateStr);
+                const dayEsp = calEspeciales.filter((e) => e.fecha === dateStr);
                 const isSelected = selectedCalDate === dateStr;
 
                 return (
@@ -1276,6 +1337,16 @@ export default function ProgramacionModule({ currentRol }: { currentRol: Rol | n
                           +{daySes.length - 3} más
                         </div>
                       )}
+                      {dayEsp.map((esp) => (
+                        <div key={esp.id} style={{
+                          background: "#b45309", color: "#fff",
+                          borderRadius: 3, padding: "2px 5px",
+                          fontSize: 11, fontWeight: 600, lineHeight: 1.35,
+                          overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+                        }}>
+                          🌟 {esp.nombre}
+                        </div>
+                      ))}
                     </div>
                   </div>
                 );
@@ -1291,9 +1362,25 @@ export default function ProgramacionModule({ currentRol }: { currentRol: Rol | n
                   </h4>
                   <button onClick={() => setSelectedCalDate(null)} className="text-xs" style={{ color: "#5a7a5a" }}>✕</button>
                 </div>
-                {selectedDaySesiones.length === 0
+                {selectedDayEspeciales.length > 0 && (
+                  <div className="space-y-2 mb-2">
+                    {selectedDayEspeciales.map((esp) => (
+                      <div key={esp.id} className="flex items-start gap-3 p-3 rounded-lg cursor-pointer" style={{ background: "#b4530918", border: "1px solid #b4530930" }}
+                        onClick={() => setCalEspecialDetail(esp)}>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap mb-1">
+                            <span className="text-xs font-bold" style={{ color: "#b45309" }}>🌟 {esp.nombre}</span>
+                            {esp.hora_inicio && <span className="text-[10px]" style={{ color: "#5a7a5a" }}>{formatHora(esp.hora_inicio)}–{formatHora(esp.hora_fin)}</span>}
+                          </div>
+                          <p className="text-xs" style={{ color: "#8a5a1a" }}>{esp.grupos.map((g) => TIPO_PLAN_LABEL[g]).join(", ")}</p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                {selectedDaySesiones.length === 0 && selectedDayEspeciales.length === 0
                   ? <p className="text-xs italic" style={{ color: "#5a7a5a" }}>Sin sesiones de {TIPO_PLAN_LABEL[activeTab]} este día</p>
-                  : (
+                  : selectedDaySesiones.length > 0 && (
                     <div className="space-y-2">
                       {selectedDaySesiones.map((ses) => {
                         const c = CAL_EVENT[ses.tipo_plan] ?? { bg: "#334155", text: "#fff" };
@@ -1396,13 +1483,22 @@ export default function ProgramacionModule({ currentRol }: { currentRol: Rol | n
           ))}
         </div>
         {currentRol && isStaff(currentRol) && (
-          <button
-            onClick={() => setShowPacoPlanning(true)}
-            className="flex items-center gap-2 px-4 py-2 mb-2 rounded-lg text-sm font-medium text-white shrink-0"
-            style={{ backgroundColor: "#1a3a2a" }}
-          >
-            Planificar con Paco 🦅
-          </button>
+          <div className="flex gap-2 mb-2 shrink-0">
+            <button
+              onClick={() => setShowPacoPlanning(true)}
+              className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium text-white"
+              style={{ backgroundColor: "#1a3a2a" }}
+            >
+              Planificar con Paco 🦅
+            </button>
+            <button
+              onClick={() => setShowActividadEspecial(true)}
+              className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium text-white"
+              style={{ backgroundColor: "#b45309" }}
+            >
+              + Actividad especial 🌟
+            </button>
+          </div>
         )}
       </div>
 
@@ -2606,6 +2702,66 @@ export default function ProgramacionModule({ currentRol }: { currentRol: Rol | n
             else if (viewMode === "mes") fetchCalMes();
           }}
         />
+      )}
+
+      {/* ══ MODAL: Nueva actividad especial ══════════════════════════════════ */}
+      {showActividadEspecial && (
+        <ActividadEspecialModal
+          fechaSugerida={toISODate(semana)}
+          grupoSugerido={activeTab}
+          onClose={() => setShowActividadEspecial(false)}
+          onCreated={() => {
+            showToast("Actividad especial creada ✓");
+            if (viewMode === "semana") fetchCalSemana();
+            else if (viewMode === "mes") fetchCalMes();
+          }}
+        />
+      )}
+
+      {/* ══ MODAL: Detalle actividad especial ════════════════════════════════ */}
+      {calEspecialDetail && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={() => setCalEspecialDetail(null)}>
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[85vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between px-5 py-3.5" style={{ backgroundColor: "#b45309" }}>
+              <p className="text-sm font-semibold text-white">🌟 {calEspecialDetail.nombre}</p>
+              <button onClick={() => setCalEspecialDetail(null)} className="text-white/70 hover:text-white p-1">
+                <i className="ti ti-x" style={{ fontSize: 18 }} />
+              </button>
+            </div>
+            <div className="p-5 space-y-3">
+              <div className="flex flex-wrap items-center gap-2 text-xs" style={{ color: "#8a5a1a" }}>
+                <span className="font-semibold">{calEspecialDetail.grupos.map((g) => TIPO_PLAN_LABEL[g]).join(", ")}</span>
+                <span>·</span>
+                <span>{formatDiaFecha(calEspecialDetail.fecha)}</span>
+                {calEspecialDetail.hora_inicio && <><span>·</span><span>{formatHora(calEspecialDetail.hora_inicio)}{calEspecialDetail.hora_fin ? `–${formatHora(calEspecialDetail.hora_fin)}` : ""}</span></>}
+              </div>
+              {calEspecialDetail.estaciones.map((est, i) => (
+                <div key={i} className="border border-gray-100 rounded-lg p-3">
+                  <p className="text-sm font-semibold text-gray-800">{est.nombre}</p>
+                  <p className="text-xs text-gray-400 mb-1.5">{[est.horario, est.lugar].filter(Boolean).join(" · ")}</p>
+                  {est.drills.map((d, di) => (
+                    <p key={di} className="text-xs text-gray-600"><span className="font-medium">{d.titulo}</span>{d.descripcion ? `: ${d.descripcion}` : ""}</p>
+                  ))}
+                </div>
+              ))}
+              {calEspecialDetail.notas && <p className="text-xs text-gray-500 italic">{calEspecialDetail.notas}</p>}
+              {currentRol && isStaff(currentRol) && (
+                <button
+                  onClick={async () => {
+                    await supabase.from("actividades_especiales").delete().eq("id", calEspecialDetail.id);
+                    setCalEspecialDetail(null);
+                    showToast("Actividad especial eliminada");
+                    if (viewMode === "semana") fetchCalSemana();
+                    else if (viewMode === "mes") fetchCalMes();
+                  }}
+                  className="text-xs text-red-500 hover:underline"
+                >
+                  Eliminar actividad
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

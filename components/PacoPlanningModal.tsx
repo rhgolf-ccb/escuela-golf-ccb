@@ -16,7 +16,6 @@ import {
   TIPO_PLAN_LABEL,
   CAL_EVENT,
   type TipoPlan,
-  type DiaSemana,
   type Lugar,
   type Drill,
   type EstacionDamas,
@@ -319,78 +318,22 @@ export default function PacoPlanningModal({
     setPublishing(true);
     setPublishError(null);
     try {
-      const { data: newPlan, error: planErr } = await supabase
-        .from("planes_semanales")
-        .upsert(
-          {
-            semana_inicio: toISODate(semana),
-            tipo_plan: tipoPlan,
-            tema_semanal: tema.trim(),
-            descripcion_tema: preview.descripcion_tema,
-            objetivo_mensual: focoMes.trim() || null,
-            foco_mes: focoMes.trim() || null,
-          },
-          { onConflict: "semana_inicio,tipo_plan" }
-        )
-        .select()
-        .single();
-      if (planErr || !newPlan) throw new Error(planErr?.message || "Error al crear el plan");
-
-      await supabase.from("sesiones_semana").delete().eq("plan_id", newPlan.id);
-
-      if (tipoPlan === "juvenil" && preview.sesion_juvenil) {
-        const leg = preview.sesion_juvenil as SesionJuvenilLegacy;
-        const JUVENIL_SLOTS: { dia: DiaSemana; hi: string; hf: string }[] = [
-          { dia: "martes", hi: "16:30", hf: "17:30" },
-          { dia: "miercoles", hi: "16:30", hf: "17:30" },
-          { dia: "jueves", hi: "16:30", hf: "17:30" },
-          { dia: "sabado", hi: "09:15", hf: "10:00" },
-          { dia: "sabado", hi: "10:00", hf: "11:00" },
-          { dia: "domingo", hi: "09:15", hf: "10:00" },
-          { dia: "domingo", hi: "10:00", hf: "11:00" },
-        ];
-        for (const slot of JUVENIL_SLOTS) {
-          await supabase.from("sesiones_semana").insert({
-            plan_id: newPlan.id,
-            dia_semana: slot.dia,
-            fecha: getFechaForDia(semana, slot.dia),
-            tipo_sesion: "campo",
-            lugar: "campo_practica",
-            hora_inicio: slot.hi,
-            hora_fin: slot.hf,
-            objetivo: leg.objetivo_simple ?? "",
-            drills: leg.actividades?.map((a) => ({
-              titulo: a.nombre,
-              descripcion: a.como_se_juega,
-              dificultad_birdies: a.adaptacion_birdies || null,
-              dificultad_aguilas: null,
-              dificultad_albatros: a.adaptacion_albatros || null,
-              dificultad_mas14: null,
-            })) ?? [],
-            juego_competitivo: leg.actividad_estrella || null,
-            estaciones_damas: null,
-            notas: null,
-            sesion_juvenil: preview.sesion_juvenil,
-          });
-        }
-      } else {
-        for (const s of preview.sesiones) {
-          await supabase.from("sesiones_semana").insert({
-            plan_id: newPlan.id,
-            dia_semana: s.dia_semana,
-            fecha: s.fecha,
-            tipo_sesion: s.tipo_sesion,
-            lugar: s.lugar,
-            hora_inicio: s.hora_inicio || null,
-            hora_fin: s.hora_fin || null,
-            objetivo: s.objetivo || "",
-            drills: s.drills || [],
-            juego_competitivo: s.juego_competitivo || null,
-            estaciones_damas: s.estaciones_damas || null,
-            notas: s.notas || null,
-          });
-        }
-      }
+      const res = await fetch("/api/publish-plan-semanal", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          tipo_plan: tipoPlan,
+          semana_inicio: toISODate(semana),
+          tema_semanal: tema.trim(),
+          descripcion_tema: preview.descripcion_tema,
+          objetivo_mensual: focoMes.trim() || null,
+          foco_mes: focoMes.trim() || null,
+          sesiones: tipoPlan === "juvenil" ? undefined : preview.sesiones,
+          sesion_juvenil: tipoPlan === "juvenil" ? preview.sesion_juvenil : undefined,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Error al publicar la programación");
 
       onPublished();
     } catch (err) {
