@@ -30,6 +30,8 @@ interface StudentRow {
   full_name: string;
   grupo_activo: string | null;
   foto_url?: string | null;
+  tiene_talega: string | null;
+  birth_date: string | null;
 }
 
 interface ReservaConEstudiante {
@@ -91,6 +93,18 @@ function cupoBarColor(confirmados: number, cupoMax: number): string {
   if (pct >= 1) return "#dc2626";
   if (pct >= 0.8) return "#92400e";
   return "#1a3a2a";
+}
+function calcularEdad(birthDate: string | null): string {
+  if (!birthDate) return "Edad no registrada";
+  const hoy = new Date();
+  const nac = new Date(birthDate);
+  let edad = hoy.getFullYear() - nac.getFullYear();
+  const m = hoy.getMonth() - nac.getMonth();
+  if (m < 0 || (m === 0 && hoy.getDate() < nac.getDate())) edad--;
+  return `${edad} años`;
+}
+function talegaLabel(tiene_talega: string | null): string {
+  return tiene_talega === "Sí" ? "Talega propia" : "Talega escuela";
 }
 
 // ── Avatar ────────────────────────────────────────────────────────────────────
@@ -200,7 +214,7 @@ export default function ReservasModule() {
     setLoadingReservas(true);
     const { data, error } = await supabase
       .from("reservas")
-      .select("id, sesion_id, estudiante_id, estado, posicion_espera, created_at, students!reservas_estudiante_id_fkey(id, full_name, grupo_activo, foto_url)")
+      .select("id, sesion_id, estudiante_id, estado, posicion_espera, created_at, students!reservas_estudiante_id_fkey(id, full_name, grupo_activo, foto_url, tiene_talega, birth_date)")
       .eq("sesion_id", sesionId)
       .order("estado")
       .order("posicion_espera", { ascending: true, nullsFirst: false })
@@ -699,8 +713,11 @@ export default function ReservasModule() {
                               <Avatar name={r.students.full_name} color={GROUP_COLOR[sesionSel.tipo_plan]} size={8} />
                               <div className="flex-1 min-w-0">
                                 <p className="text-sm font-medium text-gray-900 truncate">{r.students.full_name}</p>
-                                <p className="text-xs text-gray-400">{r.students.grupo_activo ?? "Sin grupo"}</p>
+                                <p className="text-xs text-gray-400">{r.students.grupo_activo ?? "Sin grupo"} · {calcularEdad(r.students.birth_date)}</p>
                               </div>
+                              <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full flex-shrink-0 ${r.students.tiene_talega === "Sí" ? "text-emerald-700 bg-emerald-100" : "text-gray-500 bg-gray-100"}`}>
+                                {talegaLabel(r.students.tiene_talega)}
+                              </span>
                               <span className="text-[10px] font-semibold text-green-700 bg-green-100 px-1.5 py-0.5 rounded-full flex-shrink-0">
                                 Confirmado
                               </span>
@@ -734,8 +751,11 @@ export default function ReservasModule() {
                               </div>
                               <div className="flex-1 min-w-0">
                                 <p className="text-sm font-medium text-gray-900 truncate">{r.students.full_name}</p>
-                                <p className="text-xs text-gray-400">{r.students.grupo_activo ?? "Sin grupo"}</p>
+                                <p className="text-xs text-gray-400">{r.students.grupo_activo ?? "Sin grupo"} · {calcularEdad(r.students.birth_date)}</p>
                               </div>
+                              <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full flex-shrink-0 ${r.students.tiene_talega === "Sí" ? "text-emerald-700 bg-emerald-100" : "text-gray-500 bg-gray-100"}`}>
+                                {talegaLabel(r.students.tiene_talega)}
+                              </span>
                               <span className="text-[10px] font-semibold text-amber-700 bg-amber-100 border border-amber-200 px-1.5 py-0.5 rounded-full flex-shrink-0">
                                 Espera #{r.posicion_espera}
                               </span>

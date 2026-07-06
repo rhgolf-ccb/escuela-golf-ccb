@@ -1379,8 +1379,8 @@ function TabEdades() {
   }
 
   function doExportPDF() {
-    const rows = filtered.map((s) => [s.full_name, s.tiene_talega ?? "—"]);
-    exportPDF("Talegas", ["Nombre","Talega"], rows, edadSel !== null ? `Edad: ${edadSel} años` : "Todos los alumnos");
+    const rows = filtered.map((s) => [s.full_name, String(calcEdad(s.birth_date) ?? "—"), s.tiene_talega ?? "—"]);
+    exportPDF("Talegas", ["Nombre","Edad","Talega"], rows, edadSel !== null ? `Edad: ${edadSel} años` : "Todos los alumnos");
   }
   function doExportExcel() {
     const rows = filtered.map((s) => [s.full_name, s.grupo_activo ?? "—", s.tiene_talega ?? "—", String(calcEdad(s.birth_date) ?? "—")]);

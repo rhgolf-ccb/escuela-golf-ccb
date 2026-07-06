@@ -12,4 +12,5 @@ export type Student = {
   status: 'activo' | 'inactivo'
   grupo_activo: string | null
   gender: string | null
+  tiene_talega: string | null
 }

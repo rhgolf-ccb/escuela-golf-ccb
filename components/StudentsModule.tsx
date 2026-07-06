@@ -54,6 +54,7 @@ export default function StudentsModule({ currentRol }: { currentRol: Rol | null 
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("todos");
   const [groupFilter, setGroupFilter] = useState<GroupFilter>("todos");
+  const [soloTalegaPropia, setSoloTalegaPropia] = useState(false);
   const [showGroupAnalysis, setShowGroupAnalysis] = useState(false);
   const router = useRouter();
 
@@ -64,7 +65,7 @@ export default function StudentsModule({ currentRol }: { currentRol: Rol | null 
 
       const { data, error } = await supabase
         .from("students")
-        .select("id, full_name, birth_date, status, grupo_activo, gender")
+        .select("id, full_name, birth_date, status, grupo_activo, gender, tiene_talega")
         .order("full_name", { ascending: true });
 
       if (error) {
@@ -89,9 +90,10 @@ export default function StudentsModule({ currentRol }: { currentRol: Rol | null 
           : groupFilter === "Competencia"
           ? s.grupo_activo === "Competencia"
           : grupoCalculado === groupFilter;
-      return matchSearch && matchStatus && matchGroup;
+      const matchTalega = !soloTalegaPropia || s.tiene_talega === "Sí";
+      return matchSearch && matchStatus && matchGroup && matchTalega;
     });
-  }, [students, search, statusFilter, groupFilter]);
+  }, [students, search, statusFilter, groupFilter, soloTalegaPropia]);
 
   const groupActiveStudents = useMemo(() => {
     if (groupFilter === "todos") return [];
@@ -119,6 +121,7 @@ export default function StudentsModule({ currentRol }: { currentRol: Rol | null 
     todos: students.length,
     activo: students.filter((s) => s.status === "activo").length,
     inactivo: students.filter((s) => s.status === "inactivo").length,
+    talegaPropia: students.filter((s) => s.tiene_talega === "Sí").length,
   }), [students]);
 
   return (
@@ -170,6 +173,16 @@ export default function StudentsModule({ currentRol }: { currentRol: Rol | null 
             </button>
           ))}
         </div>
+
+        <button
+          onClick={() => setSoloTalegaPropia((v) => !v)}
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors self-start sm:self-auto shrink-0 border"
+          style={soloTalegaPropia
+            ? { backgroundColor: "#1B4D2E", color: "white", borderColor: "#1B4D2E" }
+            : { color: "#4b5563", borderColor: "#e5e7eb", backgroundColor: "white" }}
+        >
+          Talega propia ({counts.talegaPropia})
+        </button>
       </div>
 
       <div className="bg-white rounded-xl shadow-sm border border-gray-100 px-4 py-3 mb-4 flex flex-col sm:flex-row gap-3 sm:items-center sm:justify-between">
@@ -300,6 +313,9 @@ export default function StudentsModule({ currentRol }: { currentRol: Rol | null 
                 Mostrando {filtered.length} de {students.length} alumnos
                 {groupFilter !== "todos" && (
                   <span className="ml-1">· filtro: <span style={{ color: "#1B4D2E" }} className="font-medium">{groupFilter}</span></span>
+                )}
+                {soloTalegaPropia && (
+                  <span className="ml-1">· <span style={{ color: "#1B4D2E" }} className="font-medium">talega propia</span></span>
                 )}
               </div>
             )}
