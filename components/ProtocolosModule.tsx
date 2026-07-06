@@ -277,7 +277,7 @@ export default function ProtocolosModule() {
             <div className="space-y-6">
               {categorias.map((cat) => (
                 <div key={cat.label ?? "_"}>
-                  {cat.label && <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">{cat.label}</p>}
+                  {cat.label && <p className="text-sm font-semibold text-gray-400 uppercase tracking-wide mb-2">{cat.label}</p>}
                   <div className="space-y-3">
                     {cat.tests.map((t) => (
                       <TestCard key={t.codigo} test={t} editing={editing} showEdad={showEdad} tipo={activeNav.tipo} color={color}
@@ -316,7 +316,7 @@ function TestCard({ test, editing, showEdad, tipo, color, uploading, onChange, o
           {editing ? (
             <input value={test.nombre} onChange={(e) => onChange({ nombre: e.target.value })} className="text-sm font-medium text-gray-800 border border-gray-200 rounded px-2 py-1 flex-1" />
           ) : (
-            <span className="text-sm font-medium text-gray-800">{test.nombre}</span>
+            <span className="text-base font-semibold text-gray-800">{test.nombre}</span>
           )}
         </div>
         {editing ? (
@@ -375,13 +375,25 @@ function TestCard({ test, editing, showEdad, tipo, color, uploading, onChange, o
                     {editing ? <input value={b.criterio} onChange={(e) => onBenchmarkChange(idx, { criterio: e.target.value })} className="w-full border border-gray-200 rounded px-1.5 py-1" /> : <span className="text-gray-700">{b.criterio}</span>}
                   </td>
                   <td className="py-1.5 pr-2">
-                    {editing ? <input value={b.descripcion_ok ?? ""} onChange={(e) => onBenchmarkChange(idx, { descripcion_ok: e.target.value || null })} className="w-full border border-gray-200 rounded px-1.5 py-1" /> : <span className="text-emerald-700">{b.descripcion_ok ?? "—"}</span>}
+                    {editing ? <input value={b.descripcion_ok ?? ""} onChange={(e) => onBenchmarkChange(idx, { descripcion_ok: e.target.value || null })} className="w-full border border-gray-200 rounded px-1.5 py-1" /> : (
+                      <div className="rounded px-2 py-1" style={{ backgroundColor: "#f1f8e9", borderLeft: "3px solid #2e7d32" }}>
+                        <span style={{ color: "#2e7d32", fontWeight: 600 }}>{b.descripcion_ok ?? "—"}</span>
+                      </div>
+                    )}
                   </td>
                   <td className="py-1.5 pr-2">
-                    {editing ? <input value={b.descripcion_progreso ?? ""} onChange={(e) => onBenchmarkChange(idx, { descripcion_progreso: e.target.value || null })} className="w-full border border-gray-200 rounded px-1.5 py-1" /> : <span className="text-amber-700">{b.descripcion_progreso ?? "—"}</span>}
+                    {editing ? <input value={b.descripcion_progreso ?? ""} onChange={(e) => onBenchmarkChange(idx, { descripcion_progreso: e.target.value || null })} className="w-full border border-gray-200 rounded px-1.5 py-1" /> : (
+                      <div className="rounded px-2 py-1" style={{ backgroundColor: "#fff8e1", borderLeft: "3px solid #f57f17" }}>
+                        <span style={{ color: "#f57f17", fontWeight: 600 }}>{b.descripcion_progreso ?? "—"}</span>
+                      </div>
+                    )}
                   </td>
                   <td className="py-1.5 pr-2">
-                    {editing ? <input value={b.descripcion_no ?? ""} onChange={(e) => onBenchmarkChange(idx, { descripcion_no: e.target.value || null })} className="w-full border border-gray-200 rounded px-1.5 py-1" /> : <span className="text-red-700">{b.descripcion_no ?? "—"}</span>}
+                    {editing ? <input value={b.descripcion_no ?? ""} onChange={(e) => onBenchmarkChange(idx, { descripcion_no: e.target.value || null })} className="w-full border border-gray-200 rounded px-1.5 py-1" /> : (
+                      <div className="rounded px-2 py-1" style={{ backgroundColor: "#ffebee", borderLeft: "3px solid #c62828" }}>
+                        <span style={{ color: "#c62828", fontWeight: 600 }}>{b.descripcion_no ?? "—"}</span>
+                      </div>
+                    )}
                   </td>
                   {showEdad && (
                     <td className="py-1.5 pr-2">
