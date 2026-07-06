@@ -1,13 +1,13 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
-import WeeklyPlanPDFTemplate from "./WeeklyPlanPDFTemplate";
 import JuvenileClassModal, {
   type SesionJuvenilData,
   type SesionJuvenilLegacy,
   type SesionJuvenilEstaciones,
+  type SesionJuvenilEspecial,
 } from "./JuvenileClassModal";
 import CompetenciaClassModal from "./CompetenciaClassModal";
 import PacoPlanningModal from "./PacoPlanningModal";
@@ -146,6 +146,12 @@ const TIPO_PLAN_COLOR: Record<TipoPlan, string> = {
   juvenil: "#1B4D2E", competencia: "#1e40af", damas: "#86198f",
 };
 
+// Colores de marca por grupo — usados en la vista de dos columnas (día/detalle).
+// Distintos de TIPO_PLAN_COLOR (que sigue controlando las tabs existentes).
+const GROUP_COLOR_HEX: Record<TipoPlan, string> = {
+  juvenil: "#1a3a2a", competencia: "#7d5a00", damas: "#4a1070",
+};
+
 // Calendar event colours — dark solid backgrounds with white text
 const CAL_COLOR: Record<TipoPlan, { bg: string; border: string; text: string; dot: string }> = {
   juvenil:     { bg: "#2d5a27", border: "#1a3a18", text: "#ffffff", dot: "#2d5a27" },
@@ -239,9 +245,6 @@ function defaultSesionForm(tipoPlan: TipoPlan): SesionForm {
 }
 
 // ── Juvenil session detail (nuevo formato con actividades) ───────────────────
-const CATEGORIA_EMOJI: Record<string, string> = {
-  juego_largo: "🏌️", juego_corto: "⛳", putt: "🎯",
-};
 const CATEGORIA_LABEL_MAP: Record<string, string> = {
   juego_largo: "Juego Largo", juego_corto: "Juego Corto", putt: "Putt",
 };
@@ -249,238 +252,85 @@ const ESPECIAL_LABEL_MAP: Record<string, string> = {
   test_tecnico: "Test Técnico P1-P10", test_fisico: "Test Físico TPI",
   campo_pacos: "Campo Pacos y Fabios", campo_infantil: "Campo Infantil",
 };
-const ESPECIAL_EMOJI_MAP: Record<string, string> = {
-  test_tecnico: "📋", test_fisico: "💪", campo_pacos: "🌿", campo_infantil: "👶",
+
+// NOTA: JuvenilSessionDetail / ActionButtons / JuvenilPDFHidden (accordion + PDF
+// html2canvas por sesión individual) se retiraron en el rediseño de dos columnas —
+// reemplazados por el adaptador sesionesToEstaciones() + generateCCBPdf() más abajo.
+
+// ── Adaptador: normaliza las 3 formas de sesión (estaciones_damas, sesion_juvenil
+// en sus 3 variantes, y drills genéricos de Competencia) a una vista uniforme de
+// "estación con drills" para la columna de detalle del día.
+export type EstacionView = {
+  nombre: string;
+  lugar: string | null;
+  horario: string | null;
+  drills: { nombre: string; descripcion: string; repeticiones?: string | null; dificultad?: string | null }[];
 };
 
-function JuvenilSessionDetail({
-  sesion, jd, onEdit, onDelete, onPdf, onAsistencia, generatingPdf, accentColor,
-}: {
-  sesion: SesionSemana;
-  jd: SesionJuvenilData;
-  onEdit: () => void;
-  onDelete: () => void;
-  onPdf: () => void;
-  onAsistencia: () => void;
-  generatingPdf: boolean;
-  accentColor: string;
-}) {
-  const GREEN = "#1B4D2E";
-  const [expandedSt, setExpandedSt] = useState<Set<number>>(new Set());
-  const jdAny = jd as unknown as { tipo?: string };
+function sesionesToEstaciones(diaySesiones: SesionSemana[], tipoPlan: TipoPlan): EstacionView[] {
+  const views: EstacionView[] = [];
+  for (const sesion of diaySesiones) {
+    const horario = sesion.hora_inicio ? `${formatHora(sesion.hora_inicio)}${sesion.hora_fin ? `–${formatHora(sesion.hora_fin)}` : ""}` : null;
+    const lugar = LUGAR_LABEL[sesion.lugar] ?? null;
 
-  // Legacy format (old AI-generated sessions)
-  if (!jdAny.tipo) {
-    const leg = jd as SesionJuvenilLegacy;
-    return (
-      <div className="space-y-3">
-        <div className="bg-green-50 border border-green-200 rounded-lg p-3">
-          <p className="text-sm font-bold text-green-900">🎮 {leg.nombre_clase}</p>
-          <p className="text-xs text-gray-600 mt-1 italic">"{leg.objetivo_simple}"</p>
-        </div>
-        <div className="space-y-1.5">
-          {leg.actividades?.map((act, i) => (
-            <div key={i} className="flex items-center gap-2 border border-gray-100 rounded-lg px-3 py-2 bg-gray-50">
-              <span className="text-[10px] font-bold text-white px-1.5 py-0.5 rounded shrink-0" style={{ background: GREEN }}>{i + 1}</span>
-              <span className="text-sm font-medium text-gray-800 truncate">{act.nombre}</span>
-              <span className="text-[10px] text-gray-400 shrink-0 ml-auto">· {act.duracion_min} min</span>
-            </div>
-          ))}
-        </div>
-        <ActionButtons sesion={sesion} onAsistencia={onAsistencia} onEdit={onEdit} onPdf={onPdf} generatingPdf={generatingPdf} onDelete={onDelete} accentColor={accentColor} />
-      </div>
-    );
+    if (sesion.estaciones_damas && sesion.estaciones_damas.length > 0) {
+      sesion.estaciones_damas.forEach((est) => {
+        views.push({
+          nombre: est.nombre,
+          lugar: est.lugar,
+          horario: `${est.duracion_min} min`,
+          drills: [{ nombre: "Actividad principal", descripcion: est.descripcion }],
+        });
+      });
+      continue;
+    }
+
+    if (tipoPlan === "juvenil" && sesion.sesion_juvenil) {
+      const jdAny = sesion.sesion_juvenil as unknown as { tipo?: string };
+      if (jdAny.tipo === "estaciones") {
+        const est = sesion.sesion_juvenil as SesionJuvenilEstaciones;
+        est.estaciones.forEach((e) => {
+          views.push({
+            nombre: CATEGORIA_LABEL_MAP[e.categoria] ?? e.categoria,
+            lugar, horario,
+            drills: [{ nombre: e.juego.nombre, descripcion: e.juego.como_se_juega }],
+          });
+        });
+      } else if (jdAny.tipo === "especial") {
+        const esp = sesion.sesion_juvenil as SesionJuvenilEspecial;
+        views.push({ nombre: ESPECIAL_LABEL_MAP[esp.tipo_especial] ?? esp.tipo_especial, lugar, horario, drills: [] });
+      } else {
+        const leg = sesion.sesion_juvenil as SesionJuvenilLegacy;
+        views.push({
+          nombre: leg.nombre_clase || TIPO_SESION_LABEL[sesion.tipo_sesion],
+          lugar, horario,
+          drills: (leg.actividades ?? []).map((a) => ({ nombre: a.nombre, descripcion: a.como_se_juega, repeticiones: `${a.duracion_min} min` })),
+        });
+      }
+      continue;
+    }
+
+    if (sesion.drills && sesion.drills.length > 0) {
+      views.push({
+        nombre: TIPO_SESION_LABEL[sesion.tipo_sesion],
+        lugar, horario,
+        drills: sesion.drills.map((d) => ({
+          nombre: d.titulo,
+          descripcion: d.descripcion,
+          repeticiones: d.repeticiones,
+          dificultad: d.dificultad_birdies || d.dificultad_aguilas || d.dificultad_albatros || d.dificultad_mas14 || undefined,
+        })),
+      });
+    } else if (sesion.objetivo) {
+      views.push({ nombre: TIPO_SESION_LABEL[sesion.tipo_sesion], lugar, horario, drills: [] });
+    }
   }
-
-  // New especial format
-  if (jdAny.tipo === "especial") {
-    const esp = jd as { tipo: "especial"; tipo_especial: string };
-    return (
-      <div className="space-y-3">
-        <div className="rounded-xl border-2 p-4 flex items-center gap-3" style={{ borderColor: "#7c3aed", background: "#f5f3ff" }}>
-          <span className="text-3xl">{ESPECIAL_EMOJI_MAP[esp.tipo_especial] ?? "⭐"}</span>
-          <div>
-            <p className="text-sm font-bold" style={{ color: "#7c3aed" }}>{ESPECIAL_LABEL_MAP[esp.tipo_especial] ?? esp.tipo_especial}</p>
-            <p className="text-xs text-gray-500 mt-0.5">Día especial Juvenil</p>
-          </div>
-        </div>
-        <ActionButtons sesion={sesion} onAsistencia={onAsistencia} onEdit={onEdit} onPdf={onPdf} generatingPdf={generatingPdf} onDelete={onDelete} accentColor={accentColor} />
-      </div>
-    );
-  }
-
-  // New estaciones format
-  const est = jd as SesionJuvenilEstaciones;
-  return (
-    <div className="space-y-2">
-      <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wide px-1">3 Estaciones</p>
-      {est.estaciones.map((e, i) => {
-        const isOpen = expandedSt.has(i);
-        return (
-          <div key={i} className="border border-gray-200 rounded-xl overflow-hidden">
-            <button
-              onClick={() => setExpandedSt((prev) => { const n = new Set(prev); n.has(i) ? n.delete(i) : n.add(i); return n; })}
-              className="w-full flex items-center gap-3 px-3 py-2.5 text-left bg-gray-50 hover:bg-gray-100 transition-colors"
-            >
-              <span className="text-base flex-shrink-0">{CATEGORIA_EMOJI[e.categoria]}</span>
-              <div className="flex-1 min-w-0">
-                <p className="text-[10px] font-bold text-gray-400 uppercase">{CATEGORIA_LABEL_MAP[e.categoria]}</p>
-                <p className="text-sm font-semibold text-gray-900 truncate">{e.juego.nombre}</p>
-              </div>
-              <svg width="12" height="12" fill="none" viewBox="0 0 24 24" stroke="#9ca3af" strokeWidth={2}
-                className={`flex-shrink-0 transition-transform ${isOpen ? "rotate-180" : ""}`}>
-                <path d="M19 9l-7 7-7-7" />
-              </svg>
-            </button>
-            {isOpen && (
-              <div className="px-3 pb-3 pt-2 space-y-2 border-t border-gray-100">
-                <p className="text-xs text-gray-600">{e.juego.como_se_juega}</p>
-                <p className="text-[11px] text-blue-700 bg-blue-50 rounded px-2 py-1">
-                  🐦 <strong>Fácil:</strong> {e.juego.adaptacion_facil}
-                </p>
-                <p className="text-[11px] text-amber-700 bg-amber-50 rounded px-2 py-1">
-                  🦅 <strong>Retador:</strong> {e.juego.adaptacion_retadora}
-                </p>
-              </div>
-            )}
-          </div>
-        );
-      })}
-      <ActionButtons sesion={sesion} onAsistencia={onAsistencia} onEdit={onEdit} onPdf={onPdf} generatingPdf={generatingPdf} onDelete={onDelete} accentColor={accentColor} />
-    </div>
-  );
-}
-
-function ActionButtons({ sesion, onAsistencia, onEdit, onPdf, generatingPdf, onDelete, accentColor }: {
-  sesion: SesionSemana; onAsistencia: () => void; onEdit: () => void;
-  onPdf: () => void; generatingPdf: boolean; onDelete: () => void; accentColor: string;
-}) {
-  return (
-    <div className="pt-2 border-t border-gray-100 flex flex-wrap gap-2">
-      <button onClick={onAsistencia}
-        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${sesion.asistencia_registrada ? "bg-emerald-50 text-emerald-700 border border-emerald-200" : "text-white"}`}
-        style={sesion.asistencia_registrada ? {} : { background: accentColor }}>
-        <svg width="12" height="12" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/></svg>
-        {sesion.asistencia_registrada ? "Ver asistencia" : "Pasar asistencia"}
-      </button>
-      <button onClick={onEdit} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border border-gray-200 text-gray-600 hover:bg-gray-50">
-        ✏️ Cambiar
-      </button>
-      <button onClick={onPdf} disabled={generatingPdf}
-        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border border-gray-200 text-gray-600 hover:bg-gray-50 disabled:opacity-50">
-        <svg width="11" height="11" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
-        {generatingPdf ? "..." : "PDF padres"}
-      </button>
-      <button onClick={onDelete} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-red-500 hover:bg-red-50">
-        🗑️ Eliminar
-      </button>
-    </div>
-  );
-}
-
-// ── Juvenil PDF hidden template ────────────────────────────────────────────────
-function JuvenilPDFHidden({ sesion }: { sesion: SesionSemana }) {
-  const jd = sesion.sesion_juvenil!;
-  const GREEN = "#1B4D2E";
-  const fechaFmt = new Date(sesion.fecha + "T00:00:00").toLocaleDateString("es-CO", {
-    weekday: "long", day: "numeric", month: "long", year: "numeric",
-  });
-  const LUGAR_PDF: Record<string, string> = {
-    campo_practica: "Campo de práctica", putting_green: "Putting Green",
-    campo_infantil: "Campo Infantil", campo_pacos_fabios: "Pacos y Fabios", campo_completo: "Campo Completo",
-  };
-  const lugar = LUGAR_PDF[sesion.lugar] ?? sesion.lugar;
-  const jdAny = jd as unknown as { tipo?: string };
-
-  // ── Legacy format ──────────────────────────────────────────────────────
-  if (!jdAny.tipo) {
-    const leg = jd as SesionJuvenilLegacy;
-    return (
-      <div style={{ width: 794, padding: "48px 56px", fontFamily: "Arial, sans-serif", background: "#fff", color: "#1a1a1a" }}>
-        <div style={{ textAlign: "center", marginBottom: 32 }}>
-          <div style={{ fontSize: 11, letterSpacing: 3, color: "#4b7c52", textTransform: "uppercase", marginBottom: 8 }}>Escuela de Golf CCB</div>
-          <div style={{ fontSize: 28, fontWeight: "bold", color: GREEN, marginBottom: 6 }}>{leg.nombre_clase}</div>
-          <div style={{ fontSize: 13, color: "#555" }}>Grupo Juvenil · Birdies · Águilas · Albatros</div>
-          <div style={{ marginTop: 10, fontSize: 13, color: "#333" }}>{fechaFmt} · {sesion.hora_inicio?.slice(0, 5)}–{sesion.hora_fin?.slice(0, 5)} · {lugar}</div>
-          <div style={{ width: 60, height: 3, background: GREEN, margin: "16px auto 0" }} />
-        </div>
-        <div style={{ background: "#f0faf2", border: `2px solid ${GREEN}`, borderRadius: 8, padding: "14px 18px", marginBottom: 28 }}>
-          <div style={{ fontSize: 11, fontWeight: "bold", color: GREEN, textTransform: "uppercase", letterSpacing: 1, marginBottom: 6 }}>Hoy trabajamos:</div>
-          <div style={{ fontSize: 15, color: "#1a3a1a", lineHeight: 1.5, fontStyle: "italic" }}>"{leg.objetivo_simple}"</div>
-        </div>
-        {leg.actividades?.map((act, i) => (
-          <div key={i} style={{ marginBottom: 20, borderLeft: "4px solid #a7d7b0", paddingLeft: 16 }}>
-            <div style={{ fontSize: 13, fontWeight: "bold", color: GREEN, marginBottom: 4 }}>Actividad {i + 1} · {act.duracion_min} min — {act.nombre}</div>
-            <div style={{ fontSize: 12, color: "#333", lineHeight: 1.7, marginBottom: 8 }}>{act.como_se_juega}</div>
-            {act.adaptacion_birdies && <div style={{ background: "#dbeafe", borderRadius: 6, padding: "4px 10px", fontSize: 11, color: "#1e40af", marginBottom: 4 }}><strong>Birdies (4-5a):</strong> {act.adaptacion_birdies}</div>}
-            {act.adaptacion_albatros && <div style={{ background: "#fef9c3", borderRadius: 6, padding: "4px 10px", fontSize: 11, color: "#854d0e" }}><strong>Albatros (9-12a):</strong> {act.adaptacion_albatros}</div>}
-          </div>
-        ))}
-        <div style={{ marginTop: 32, paddingTop: 14, borderTop: "1px solid #ddd", textAlign: "center", fontSize: 10, color: "#888" }}>Escuela de Golf CCB · {fechaFmt}<br />¡Hoy aprendemos jugando! ⛳</div>
-      </div>
-    );
-  }
-
-  // ── New especial format ────────────────────────────────────────────────
-  if (jdAny.tipo === "especial") {
-    const esp = jd as { tipo: "especial"; tipo_especial: string };
-    const espLabel: Record<string, string> = {
-      test_tecnico: "Test Técnico P1-P10", test_fisico: "Test Físico TPI",
-      campo_pacos: "Campo Pacos y Fabios", campo_infantil: "Campo Infantil",
-    };
-    return (
-      <div style={{ width: 794, padding: "48px 56px", fontFamily: "Arial, sans-serif", background: "#fff", color: "#1a1a1a" }}>
-        <div style={{ textAlign: "center", marginBottom: 32 }}>
-          <div style={{ fontSize: 11, letterSpacing: 3, color: "#4b7c52", textTransform: "uppercase", marginBottom: 8 }}>Escuela de Golf CCB</div>
-          <div style={{ fontSize: 28, fontWeight: "bold", color: GREEN, marginBottom: 6 }}>Día Especial — {espLabel[esp.tipo_especial] ?? esp.tipo_especial}</div>
-          <div style={{ fontSize: 13, color: "#555" }}>Grupo Juvenil · {fechaFmt}</div>
-          <div style={{ width: 60, height: 3, background: GREEN, margin: "16px auto 0" }} />
-        </div>
-        <div style={{ marginTop: 32, paddingTop: 14, borderTop: "1px solid #ddd", textAlign: "center", fontSize: 10, color: "#888" }}>Escuela de Golf CCB · ¡Hoy aprendemos jugando! ⛳</div>
-      </div>
-    );
-  }
-
-  // ── New estaciones format ──────────────────────────────────────────────
-  const est = jd as SesionJuvenilEstaciones;
-  const catLabel: Record<string, string> = { juego_largo: "Juego Largo 🏌️", juego_corto: "Juego Corto ⛳", putt: "Putt 🎯" };
-  return (
-    <div style={{ width: 794, padding: "48px 56px", fontFamily: "Arial, sans-serif", background: "#fff", color: "#1a1a1a" }}>
-      <div style={{ textAlign: "center", marginBottom: 32 }}>
-        <div style={{ fontSize: 11, letterSpacing: 3, color: "#4b7c52", textTransform: "uppercase", marginBottom: 8 }}>Escuela de Golf CCB</div>
-        <div style={{ fontSize: 28, fontWeight: "bold", color: GREEN, marginBottom: 6 }}>Clase Juvenil — 3 Estaciones</div>
-        <div style={{ fontSize: 13, color: "#555" }}>Birdies · Águilas · Albatros</div>
-        <div style={{ marginTop: 10, fontSize: 13, color: "#333" }}>{fechaFmt} · {sesion.hora_inicio?.slice(0, 5)}–{sesion.hora_fin?.slice(0, 5)} · {lugar}</div>
-        <div style={{ width: 60, height: 3, background: GREEN, margin: "16px auto 0" }} />
-      </div>
-      {est.estaciones.map((e, i) => (
-        <div key={i} style={{ marginBottom: 24, borderLeft: "4px solid #a7d7b0", paddingLeft: 16 }}>
-          <div style={{ fontSize: 11, fontWeight: "bold", color: "#4b7c52", textTransform: "uppercase", letterSpacing: 1, marginBottom: 4 }}>
-            Estación {i + 1} — {catLabel[e.categoria] ?? e.categoria}
-          </div>
-          <div style={{ fontSize: 16, fontWeight: "bold", color: GREEN, marginBottom: 8 }}>{e.juego.nombre}</div>
-          <div style={{ fontSize: 12, color: "#333", lineHeight: 1.7, marginBottom: 8 }}>{e.juego.como_se_juega}</div>
-          <div style={{ display: "flex", gap: 8 }}>
-            <div style={{ flex: 1, background: "#dbeafe", borderRadius: 6, padding: "6px 10px", fontSize: 11, color: "#1e40af" }}>
-              <strong>Birdies (fácil):</strong> {e.juego.adaptacion_facil}
-            </div>
-            <div style={{ flex: 1, background: "#fef9c3", borderRadius: 6, padding: "6px 10px", fontSize: 11, color: "#854d0e" }}>
-              <strong>Albatros (retador):</strong> {e.juego.adaptacion_retadora}
-            </div>
-          </div>
-        </div>
-      ))}
-      <div style={{ marginTop: 32, paddingTop: 14, borderTop: "1px solid #ddd", textAlign: "center", fontSize: 10, color: "#888" }}>
-        Escuela de Golf CCB · {fechaFmt}<br />¡Hoy aprendemos jugando! ⛳
-      </div>
-    </div>
-  );
+  return views;
 }
 
 // ── Main component ────────────────────────────────────────────────────────────
 export default function ProgramacionModule({ currentRol }: { currentRol: Rol | null }) {
   const router = useRouter();
-  const padresPdfRef = useRef<HTMLDivElement>(null);
   const [showPacoPlanning, setShowPacoPlanning] = useState(false);
 
   // Plan state
@@ -489,7 +339,8 @@ export default function ProgramacionModule({ currentRol }: { currentRol: Rol | n
   const [plan, setPlan]           = useState<PlanSemanal | null>(null);
   const [sesiones, setSesiones]   = useState<SesionSemana[]>([]);
   const [loading, setLoading]     = useState(false);
-  const [expandedDias, setExpandedDias] = useState<Set<string>>(new Set());
+  const [selectedDia, setSelectedDia] = useState<DiaSemana | null>(null);
+  const [mobileDetailOpen, setMobileDetailOpen] = useState(false);
 
   // Default schedules
   const [horariosDefecto, setHorariosDefecto] = useState<HorarioDefecto[]>([]);
@@ -520,7 +371,6 @@ export default function ProgramacionModule({ currentRol }: { currentRol: Rol | n
   const [creandoPlan, setCreandoPlan]           = useState(false);
   const [planError, setPlanError]               = useState<string | null>(null);
   const [expandedDrillKeys, setExpandedDrillKeys] = useState<Set<string>>(new Set());
-  const [generatingPdfPadres, setGeneratingPdfPadres] = useState(false);
 
   // AI suggestions — paso 1 (foco) y paso 2 (tema)
   const [suggestingFocos, setSuggestingFocos]   = useState(false);
@@ -561,8 +411,6 @@ export default function ProgramacionModule({ currentRol }: { currentRol: Rol | n
   // Delete sesion
   const [confirmDeleteSesion, setConfirmDeleteSesion] = useState<SesionSemana | null>(null);
   const [deletingSesion, setDeletingSesion]           = useState(false);
-  const [openMenuId, setOpenMenuId]                   = useState<string | null>(null);
-  const [lugarMenuId, setLugarMenuId]                 = useState<string | null>(null);
 
   // Juvenile class modal (3-estaciones o día especial)
   const [juvClassCtx, setJuvClassCtx] = useState<{
@@ -578,18 +426,6 @@ export default function ProgramacionModule({ currentRol }: { currentRol: Rol | n
     setCompClassCtx({ dia, fecha, sesion, horaInicio: extra?.hi, horaFin: extra?.hf });
   }
 
-  async function handleUpdateLugar(sesionId: string, newLugar: Lugar) {
-    await supabase.from("sesiones_semana").update({ lugar: newLugar }).eq("id", sesionId);
-    setLugarMenuId(null);
-    await fetchPlan();
-    if (viewMode === "semana") fetchCalSemana();
-  }
-
-  // PDF para sesión individual Juvenil
-  const [juvPdfSesion, setJuvPdfSesion] = useState<SesionSemana | null>(null);
-  const juvPdfRef = useRef<HTMLDivElement>(null);
-  const [generatingJuvPdf, setGeneratingJuvPdf] = useState(false);
-
   // Toast
   const [toast, setToast] = useState<string | null>(null);
   const showToast = (msg: string) => { setToast(msg); setTimeout(() => setToast(null), 3500); };
@@ -602,7 +438,7 @@ export default function ProgramacionModule({ currentRol }: { currentRol: Rol | n
 
   // ── Fetch plan (for active tab & week) ───────────────────────────────────
   const fetchPlan = useCallback(async () => {
-    setLoading(true); setExpandedDias(new Set());
+    setLoading(true);
     const { data: planData } = await supabase
       .from("planes_semanales").select("*")
       .eq("semana_inicio", toISODate(semana)).eq("tipo_plan", activeTab).maybeSingle();
@@ -695,10 +531,6 @@ export default function ProgramacionModule({ currentRol }: { currentRol: Rol | n
   const goToday   = () => setSemana(getMonday(new Date()));
   const prevMonth = () => setMesCal((d) => new Date(d.getFullYear(), d.getMonth() - 1, 1));
   const nextMonth = () => setMesCal((d) => new Date(d.getFullYear(), d.getMonth() + 1, 1));
-
-  function toggleDia(dia: string) {
-    setExpandedDias((prev) => { const n = new Set(prev); n.has(dia) ? n.delete(dia) : n.add(dia); return n; });
-  }
 
   // ── Default hours helper ──────────────────────────────────────────────────
   function getDefaultHoras(tipoPlan: TipoPlan, dia: DiaSemana, takenHoras: string[]): { hi: string; hf: string } | null {
@@ -1107,28 +939,6 @@ export default function ProgramacionModule({ currentRol }: { currentRol: Rol | n
     setDeletingPlan(false);
   }
 
-  // ── Juvenile PDF ─────────────────────────────────────────────────────────
-  async function handleJuvPdf(sesion: SesionSemana) {
-    setJuvPdfSesion(sesion);
-    await new Promise((r) => setTimeout(r, 120));
-    if (!juvPdfRef.current) return;
-    setGeneratingJuvPdf(true);
-    try {
-      const [{ default: jsPDF }, { default: html2canvas }] = await Promise.all([import("jspdf"), import("html2canvas")]);
-      const canvas = await html2canvas(juvPdfRef.current, { scale: 2, backgroundColor: "#fff", useCORS: true, logging: false });
-      const pdf = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
-      const pdfW = pdf.internal.pageSize.getWidth();
-      const pdfH = (canvas.height * pdfW) / canvas.width;
-      const pageH = pdf.internal.pageSize.getHeight();
-      let y = 0;
-      while (y < pdfH) { if (y > 0) pdf.addPage(); pdf.addImage(canvas.toDataURL("image/jpeg", 0.92), "JPEG", 0, -y, pdfW, pdfH); y += pageH; }
-      pdf.save(`Clase_Juvenil_${sesion.fecha}.pdf`);
-    } finally {
-      setGeneratingJuvPdf(false);
-      setJuvPdfSesion(null);
-    }
-  }
-
   // ── Calendar cell click ───────────────────────────────────────────────────
   function handleCalCellClick(dia: DiaSemana, hour: number) {
     if (!plan) { showToast(`Sin plan ${TIPO_PLAN_LABEL[activeTab]} esta semana — créalo en Vista Plan`); return; }
@@ -1142,43 +952,6 @@ export default function ProgramacionModule({ currentRol }: { currentRol: Rol | n
     }
   }
 
-  // ── PDF semanal ───────────────────────────────────────────────────────────
-  async function handlePdfSemanal() {
-    if (!plan) return;
-    const [{ default: jsPDF }, { default: html2canvas }] = await Promise.all([import("jspdf"), import("html2canvas")]);
-    const el = document.getElementById("plan-pdf-content"); if (!el) return;
-    const canvas = await html2canvas(el, { scale: 1.8, backgroundColor: "#fff", useCORS: true });
-    const pdf = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
-    const pdfW = pdf.internal.pageSize.getWidth();
-    const pdfH = (canvas.height * pdfW) / canvas.width;
-    const pageH = pdf.internal.pageSize.getHeight();
-    let y = 0;
-    while (y < pdfH) { if (y > 0) pdf.addPage(); pdf.addImage(canvas.toDataURL("image/jpeg", 0.92), "JPEG", 0, -y, pdfW, pdfH); y += pageH; }
-    pdf.save(`Plan_${activeTab}_${toISODate(semana)}.pdf`);
-  }
-
-  async function handlePdfPadres() {
-    if (!plan) return;
-    const el = padresPdfRef.current; if (!el) return;
-    setGeneratingPdfPadres(true);
-    try {
-      const [{ default: jsPDF }, { default: html2canvas }] = await Promise.all([import("jspdf"), import("html2canvas")]);
-      const canvas = await html2canvas(el, { scale: 2, backgroundColor: "#fff", useCORS: true, logging: false });
-      // A4 landscape: 297mm × 210mm
-      const pdf = new jsPDF({ orientation: "landscape", unit: "mm", format: "a4" });
-      const pdfW = pdf.internal.pageSize.getWidth();   // 297
-      const pdfH = pdf.internal.pageSize.getHeight();  // 210
-      const ratio = canvas.width / canvas.height;
-      let imgW = pdfW;
-      let imgH = pdfW / ratio;
-      if (imgH > pdfH) { imgH = pdfH; imgW = pdfH * ratio; }
-      const offsetX = (pdfW - imgW) / 2;
-      const offsetY = (pdfH - imgH) / 2;
-      pdf.addImage(canvas.toDataURL("image/jpeg", 0.95), "JPEG", offsetX, offsetY, imgW, imgH);
-      pdf.save(`Programacion_${TIPO_PLAN_LABEL[activeTab]}_${toISODate(semana)}.pdf`);
-    } finally { setGeneratingPdfPadres(false); }
-  }
-
   function handleWhatsApp() {
     if (!plan) return;
     const lines = [`## Objetivo`, `${plan.tema_semanal}${plan.descripcion_tema ? `: ${plan.descripcion_tema}` : ""}`, ``, `## Horario de la semana`];
@@ -1186,11 +959,70 @@ export default function ProgramacionModule({ currentRol }: { currentRol: Rol | n
     openWhatsApp(formatWhatsAppMessage(lines.join("\n"), "programacion_semanal", `Programación ${TIPO_PLAN_LABEL[activeTab]} — ${formatWeekRange(semana)}`));
   }
 
+  // ── PDF semana / PDF día (generateCCBPdf centralizado) ────────────────────
+  function buildDiaMarkdown(dia: DiaSemana, fecha: string, estaciones: EstacionView[]): string {
+    const lines: string[] = [`## ${DIA_LABEL[dia]} — ${formatDiaFecha(fecha)}`];
+    if (estaciones.length === 0) lines.push("Sin programación para este día.");
+    estaciones.forEach((est) => {
+      const meta = [est.horario, est.lugar].filter(Boolean).join(" · ");
+      lines.push(`**${est.nombre}**${meta ? ` · ${meta}` : ""}`);
+      est.drills.forEach((d) => lines.push(`- ${d.nombre}: ${d.descripcion}${d.repeticiones ? ` (${d.repeticiones})` : ""}`));
+      lines.push("");
+    });
+    return lines.join("\n");
+  }
+
+  async function handlePdfSemana() {
+    if (!plan) return;
+    const fechaInicio = formatDiaFecha(toISODate(semana));
+    const fechaFin = formatDiaFecha(toISODate(addDays(semana, 6)));
+    const bloques = diasRequeridos
+      .map((dia) => {
+        const diaySesiones = sesiones.filter((s) => s.dia_semana === dia);
+        if (!diaySesiones.length) return null;
+        return buildDiaMarkdown(dia, getFechaForDia(semana, dia), sesionesToEstaciones(diaySesiones, activeTab));
+      })
+      .filter((b): b is string => !!b);
+    const { generateCCBPdf } = await import("@/lib/pdf-generator");
+    generateCCBPdf(bloques.join("\n\n---\n\n"), {
+      documentName: `Programación Semanal ${TIPO_PLAN_LABEL[activeTab]} — semana del ${fechaInicio} al ${fechaFin}`,
+      filenamePrefix: `Programacion-${activeTab}-${toISODate(semana)}`,
+    });
+  }
+
+  async function handlePdfDia() {
+    if (!plan || !selectedDia) return;
+    const diaySesiones = sesiones.filter((s) => s.dia_semana === selectedDia);
+    const fecha = getFechaForDia(semana, selectedDia);
+    const markdown = buildDiaMarkdown(selectedDia, fecha, sesionesToEstaciones(diaySesiones, activeTab));
+    const { generateCCBPdf } = await import("@/lib/pdf-generator");
+    generateCCBPdf(markdown, {
+      documentName: `Programación ${TIPO_PLAN_LABEL[activeTab]} — ${DIA_LABEL[selectedDia]} ${formatDiaFecha(fecha)}`,
+      filenamePrefix: `Programacion-${activeTab}-${fecha}`,
+    });
+  }
+
   // ── Computed ──────────────────────────────────────────────────────────────
   const diasRequeridos = DIAS_POR_TIPO[activeTab];
-  const planCompleto   = plan !== null && diasRequeridos.every((d) => sesiones.some((s) => s.dia_semana === d && s.objetivo.trim() !== ""));
   const accentColor    = TIPO_PLAN_COLOR[activeTab];
+  const groupColor     = GROUP_COLOR_HEX[activeTab];
   const busy           = generatingAI || savingGenerado || creandoPlan || deletingPlan;
+
+  // ── Selección de día (vista de dos columnas) ──────────────────────────────
+  useEffect(() => {
+    if (diasRequeridos.length === 0) { setSelectedDia(null); return; }
+    const conSesion = diasRequeridos.find((d) => sesiones.some((s) => s.dia_semana === d));
+    setSelectedDia(conSesion ?? diasRequeridos[0]);
+    setMobileDetailOpen(false);
+    // Se reinicia solo al cambiar de grupo o de semana — no en cada refetch de
+    // sesiones, para no perder la selección del profesor mientras edita el día.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab, plan?.id]);
+
+  function selectDia(dia: DiaSemana) {
+    setSelectedDia(dia);
+    setMobileDetailOpen(true);
+  }
 
   // ── Calendar week view ────────────────────────────────────────────────────
   function renderWeekCal() {
@@ -1659,295 +1491,164 @@ export default function ProgramacionModule({ currentRol }: { currentRol: Rol | n
             </button>
           </div>
         ) : (
-          <div id="plan-pdf-content">
-            {/* Tema card */}
-            <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5 mb-4">
-              <div className="flex items-start justify-between gap-4">
-                <div className="flex-1">
-                  <div className="flex items-center gap-2 mb-1">
-                    <div className="w-2 h-2 rounded-full" style={{ background: accentColor }} />
-                    <span className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Tema semanal · {TIPO_PLAN_LABEL[activeTab]}</span>
-                  </div>
-                  <h2 className="text-lg font-bold text-gray-900 mb-1">{plan.tema_semanal}</h2>
-                  {plan.descripcion_tema && <p className="text-sm text-gray-600">{plan.descripcion_tema}</p>}
-                  {plan.objetivo_mensual && (
-                    <div className="mt-3 flex items-start gap-2 bg-gray-50 rounded-lg px-3 py-2">
-                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#6b7280" strokeWidth={2} className="mt-0.5 shrink-0"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
-                      <span className="text-xs text-gray-500"><span className="font-semibold">Objetivo mensual:</span> {plan.objetivo_mensual}</span>
-                    </div>
-                  )}
-                </div>
-                <div className="flex items-center gap-2 shrink-0 flex-wrap justify-end">
-                  <button onClick={handleWhatsApp} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-gray-200 text-xs font-medium text-gray-600 hover:bg-gray-50 transition-colors">
-                    <svg width="12" height="12" viewBox="0 0 24 24" fill="#25D366"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>
-                    WhatsApp
-                  </button>
-                  <button onClick={handlePdfPadres} disabled={generatingPdfPadres} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-gray-200 text-xs font-medium text-gray-600 hover:bg-gray-50 transition-colors disabled:opacity-50">
-                    <svg width="12" height="12" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
-                    {generatingPdfPadres ? "..." : "PDF padres"}
-                  </button>
-                  {planCompleto && (
-                    <button onClick={handlePdfSemanal} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-gray-200 text-xs font-medium text-gray-600 hover:bg-gray-50 transition-colors">
-                      <svg width="12" height="12" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
-                      PDF instructor
+          <div className="flex gap-4" style={{ height: "calc(100vh - 300px)", minHeight: 440 }}>
+            {/* ── Columna izquierda: lista de días (220px fija en desktop) ── */}
+            <div
+              className={`${mobileDetailOpen ? "hidden md:flex" : "flex"} md:w-[220px] w-full shrink-0 flex-col bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden`}
+            >
+              <div className="flex-1 overflow-y-auto">
+                {diasRequeridos.map((dia) => {
+                  const diaySesiones = sesiones.filter((s) => s.dia_semana === dia);
+                  const fecha = getFechaForDia(semana, dia);
+                  const isSelected = selectedDia === dia;
+                  return (
+                    <button
+                      key={dia}
+                      onClick={() => selectDia(dia)}
+                      className="w-full text-left px-3.5 py-3 border-b border-gray-50 transition-colors hover:bg-gray-50 block"
+                      style={isSelected ? { borderLeft: `3px solid ${groupColor}`, backgroundColor: "#f0f5f0" } : { borderLeft: "3px solid transparent" }}
+                    >
+                      <p className="text-sm font-bold text-gray-900">{DIA_LABEL[dia]}</p>
+                      <p className="text-xs text-gray-400 mb-1.5">{formatDiaFecha(fecha)}</p>
+                      {diaySesiones.length > 0 ? (
+                        <div className="flex flex-wrap gap-1">
+                          {diaySesiones.slice(0, 3).map((ses) => (
+                            <span key={ses.id} className="px-1.5 py-0.5 rounded text-[10px] font-medium text-white" style={{ backgroundColor: groupColor }}>
+                              {(ses.objetivo || TIPO_SESION_LABEL[ses.tipo_sesion]).slice(0, 20)}
+                            </span>
+                          ))}
+                        </div>
+                      ) : (
+                        <span className="text-xs text-gray-300">Sin programación</span>
+                      )}
                     </button>
-                  )}
-                  <button onClick={openEditTema} className="p-1.5 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-50 transition-colors">
-                    <svg width="15" height="15" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
-                  </button>
-                </div>
+                  );
+                })}
               </div>
             </div>
 
-            {/* Day cards — supports multiple sessions per day */}
-            <div className="space-y-3">
-              {diasRequeridos.map((dia) => {
+            {/* ── Columna derecha: detalle del día seleccionado ── */}
+            <div className={`${mobileDetailOpen ? "flex" : "hidden md:flex"} flex-1 flex-col bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden min-w-0`}>
+              {selectedDia && (() => {
+                const dia = selectedDia;
                 const diaySesiones = sesiones.filter((s) => s.dia_semana === dia);
                 const fecha = getFechaForDia(semana, dia);
-                const isExpanded = expandedDias.has(dia);
+                const estaciones = sesionesToEstaciones(diaySesiones, activeTab);
+                const totalDrills = estaciones.reduce((acc, e) => acc + e.drills.length, 0);
+                const primeraSesion = diaySesiones[0] ?? null;
+                const btnClass = "flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-gray-200 text-xs font-medium text-gray-600 hover:bg-gray-50 transition-colors";
+
+                function openEditDia() {
+                  if (activeTab === "juvenil") openJuvModal(dia, fecha, primeraSesion);
+                  else if (activeTab === "competencia") openCompModal(dia, fecha, primeraSesion);
+                  else openEditSesion(dia, primeraSesion);
+                }
 
                 return (
-                  <div key={dia} className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-                    {/* Card header */}
-                    <div
-                      className="flex items-center justify-between px-5 py-3.5 cursor-pointer hover:bg-gray-50 transition-colors"
-                      onClick={() => diaySesiones.length > 0 && toggleDia(dia)}
-                    >
-                      <div className="flex items-center gap-3 flex-wrap">
-                        <div className="w-20 shrink-0">
-                          <p className="text-sm font-bold text-gray-900">{DIA_LABEL[dia]}</p>
-                          <p className="text-xs text-gray-400">{formatDiaFecha(fecha)}</p>
+                  <>
+                    <div className="px-5 py-4 border-b border-gray-100 shrink-0">
+                      <button onClick={() => setMobileDetailOpen(false)} className="md:hidden flex items-center gap-1 text-xs text-gray-500 mb-2">
+                        <svg width="12" height="12" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path d="M15 18l-6-6 6-6"/></svg>
+                        Volver
+                      </button>
+                      <div className="flex items-start justify-between gap-3 flex-wrap">
+                        <div>
+                          <h2 className="text-lg font-bold text-gray-900">{DIA_LABEL[dia]}</h2>
+                          <p className="text-xs text-gray-400">{formatDiaFecha(fecha)} · {estaciones.length} estaciones · {totalDrills} drills</p>
                         </div>
-                        {diaySesiones.length > 0 ? (
-                          <div className="flex items-center gap-2 flex-wrap">
-                            {diaySesiones.slice(0, 2).map((ses) => {
-                              const tc = TIPO_SESION_COLOR[ses.tipo_sesion];
-                              return (
-                                <span key={ses.id} className="flex items-center gap-1.5">
-                                  <span className="px-2 py-0.5 rounded-full text-xs font-semibold" style={{ background: tc.bg, color: tc.text }}>{TIPO_SESION_LABEL[ses.tipo_sesion]}</span>
-                                  {ses.hora_inicio && <span className="text-xs text-gray-400">{formatHora(ses.hora_inicio)}</span>}
-                                </span>
-                              );
-                            })}
-                            {diaySesiones.length > 2 && <span className="text-xs text-gray-400">+{diaySesiones.length - 2}</span>}
-                            {diaySesiones.some((s) => s.asistencia_registrada) && (
-                              <span className="flex items-center gap-1 text-xs text-emerald-600 font-medium">
-                                <svg width="11" height="11" viewBox="0 0 20 20" fill="none" stroke="#059669" strokeWidth={2.5}><path d="M3 10l4 4 9-9"/></svg>
-                                Asistencia ✓
-                              </span>
-                            )}
-                          </div>
-                        ) : (
-                          <span className="text-xs text-gray-300 italic">Sin sesión definida</span>
-                        )}
-                      </div>
-                      <div className="flex items-center gap-2 shrink-0">
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            if (activeTab === "juvenil") {
-                              openJuvModal(dia, fecha, null);
-                            } else if (activeTab === "competencia") {
-                              openCompModal(dia, fecha, null);
-                            } else {
-                              openEditSesion(dia, null);
-                            }
-                          }}
-                          className="px-2.5 py-1.5 rounded-lg text-xs font-medium border border-gray-200 text-gray-600 hover:bg-gray-50 transition-colors"
-                        >
-                          {(activeTab === "juvenil" || activeTab === "competencia") ? "+ Asignar" : "+ Agregar"}
-                        </button>
-                        {diaySesiones.length > 0 && (
-                          <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} className={`text-gray-400 transition-transform ${isExpanded ? "rotate-180" : ""}`}><path d="M19 9l-7 7-7-7"/></svg>
-                        )}
+                        <div className="flex items-center gap-1.5 flex-wrap justify-end">
+                          <button onClick={handlePdfSemana} className={btnClass}>
+                            <svg width="12" height="12" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
+                            PDF semana
+                          </button>
+                          <button onClick={handlePdfDia} className={btnClass}>
+                            <svg width="12" height="12" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
+                            PDF día
+                          </button>
+                          <button onClick={handleWhatsApp} className={btnClass}>
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="#25D366"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>
+                            WhatsApp
+                          </button>
+                          <button onClick={openEditDia} className={btnClass}>
+                            <svg width="12" height="12" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                            Editar
+                          </button>
+                        </div>
                       </div>
                     </div>
 
-                    {/* Expanded: all sessions for this day */}
-                    {isExpanded && diaySesiones.length > 0 && (
-                      <div className="border-t border-gray-50">
-                        {diaySesiones.map((sesion, idx) => {
-                          const tc = TIPO_SESION_COLOR[sesion.tipo_sesion];
-                          return (
-                            <div key={sesion.id} className={`px-5 pb-5 ${idx > 0 ? "border-t border-gray-50" : ""}`}>
-                              <div className="pt-4 space-y-4">
-                                {/* Session meta */}
-                                <div className="flex items-center gap-2 flex-wrap">
-                                  <span className="px-2 py-0.5 rounded-full text-xs font-semibold" style={{ background: tc.bg, color: tc.text }}>{TIPO_SESION_LABEL[sesion.tipo_sesion]}</span>
-                                  {activeTab === "juvenil" ? (
-                                    <div className="relative" onClick={(e) => e.stopPropagation()}>
-                                      <button
-                                        onClick={() => setLugarMenuId(lugarMenuId === sesion.id ? null : sesion.id)}
-                                        className="px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-600 hover:bg-gray-200 transition-colors flex items-center gap-1"
-                                      >
-                                        {LUGAR_LABEL[sesion.lugar]}
-                                        <svg width="9" height="9" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path d="M19 9l-7 7-7-7"/></svg>
-                                      </button>
-                                      {lugarMenuId === sesion.id && (
-                                        <div className="absolute left-0 top-full mt-1 z-20 bg-white border border-gray-200 rounded-xl shadow-lg py-1 min-w-[200px]">
-                                          {(["campo_practica", "putting_green", "campo_pacos_fabios", "campo_infantil"] as Lugar[]).map((l) => (
-                                            <button
-                                              key={l}
-                                              onClick={() => handleUpdateLugar(sesion.id, l)}
-                                              className={`w-full text-left px-4 py-2.5 text-xs hover:bg-gray-50 flex items-center gap-2 ${sesion.lugar === l ? "font-semibold text-green-700" : "text-gray-700"}`}
-                                            >
-                                              {sesion.lugar === l && <svg width="10" height="10" fill="none" viewBox="0 0 20 20" stroke="currentColor" strokeWidth={2.5}><path d="M3 10l4 4 9-9"/></svg>}
-                                              {LUGAR_LABEL[l]}
-                                            </button>
-                                          ))}
-                                        </div>
-                                      )}
-                                    </div>
-                                  ) : (
-                                    <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-600">{LUGAR_LABEL[sesion.lugar]}</span>
-                                  )}
-                                  {sesion.hora_inicio && <span className="text-xs text-gray-400">{formatHora(sesion.hora_inicio)}–{formatHora(sesion.hora_fin)}</span>}
-                                  <div className="relative ml-auto" onClick={(e) => e.stopPropagation()}>
-                                    <button
-                                      onClick={() => { setLugarMenuId(null); setOpenMenuId(openMenuId === sesion.id ? null : sesion.id); }}
-                                      className="flex items-center gap-1 text-xs font-medium text-gray-400 hover:text-gray-700 border border-gray-200 rounded px-2 py-1 hover:bg-gray-50 transition-colors"
-                                    >
-                                      Opciones <svg width="10" height="10" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path d="M19 9l-7 7-7-7"/></svg>
-                                    </button>
-                                    {openMenuId === sesion.id && (
-                                      <div className="absolute right-0 top-full mt-1 z-20 bg-white border border-gray-200 rounded-xl shadow-lg py-1 min-w-[160px]">
-                                        <button
-                                          onClick={() => {
-                                            setOpenMenuId(null);
-                                            if (activeTab === "juvenil") {
-                                              openJuvModal(dia, fecha, sesion);
-                                            } else if (activeTab === "competencia") {
-                                              openCompModal(dia, fecha, sesion);
-                                            } else {
-                                              openEditSesion(dia, sesion);
-                                            }
-                                          }}
-                                          className="w-full text-left px-4 py-2.5 text-xs text-gray-700 hover:bg-gray-50 flex items-center gap-2"
-                                        >
-                                          {(activeTab === "juvenil" || activeTab === "competencia") ? "🔄 Cambiar actividad" : "✏️ Editar sesión"}
-                                        </button>
-                                        <button
-                                          onClick={() => { setOpenMenuId(null); setConfirmDeleteSesion(sesion); }}
-                                          className="w-full text-left px-4 py-2.5 text-xs text-red-600 hover:bg-red-50 flex items-center gap-2"
-                                        >
-                                          🗑️ Eliminar sesión
-                                        </button>
-                                      </div>
-                                    )}
-                                  </div>
-                                </div>
-
-                                {sesion.objetivo && (
-                                  <div>
-                                    <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-1">Objetivo</p>
-                                    <p className="text-sm text-gray-700">{sesion.objetivo}</p>
-                                  </div>
-                                )}
-
-                                {sesion.estaciones_damas && sesion.estaciones_damas.length > 0 && (
-                                  <div>
-                                    <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">Estaciones</p>
-                                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                                      {sesion.estaciones_damas.map((est, i) => (
-                                        <div key={i} className="bg-fuchsia-50 border border-fuchsia-100 rounded-lg p-3">
-                                          <p className="text-xs font-bold text-fuchsia-800 mb-0.5">Est. {i + 1}: {est.nombre}</p>
-                                          <p className="text-xs text-fuchsia-700 mb-1">{est.lugar} · {est.duracion_min} min</p>
-                                          <p className="text-xs text-gray-600">{est.descripcion}</p>
-                                        </div>
-                                      ))}
-                                    </div>
-                                  </div>
-                                )}
-
-                                {activeTab === "juvenil" && sesion.sesion_juvenil ? (
-                                  <JuvenilSessionDetail
-                                    sesion={sesion}
-                                    jd={sesion.sesion_juvenil}
-                                    onEdit={() => openJuvModal(dia, fecha, sesion)}
-                                    onDelete={() => setConfirmDeleteSesion(sesion)}
-                                    onPdf={() => handleJuvPdf(sesion)}
-                                    onAsistencia={() => router.push(`/programacion/sesion/${sesion.id}`)}
-                                    generatingPdf={generatingJuvPdf && juvPdfSesion?.id === sesion.id}
-                                    accentColor={accentColor}
-                                  />
-                                ) : null}
-
-                                {!(activeTab === "juvenil" && sesion.sesion_juvenil) && sesion.drills && sesion.drills.length > 0 && (
-                                  <div>
-                                    {/* Generic drills (Competencia / Damas legacy) */}
-                                    <>
-                                      <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">Drills ({sesion.drills.length})</p>
-                                        <div className="space-y-3">
-                                          {sesion.drills.map((drill, i) => (
-                                            <div key={i} className="border border-gray-100 rounded-lg p-3 bg-gray-50">
-                                              <p className="text-sm font-semibold text-gray-900 mb-1">{i + 1}. {drill.titulo}</p>
-                                              <p className="text-xs text-gray-600 mb-2">{drill.descripcion}</p>
-                                              {activeTab === "juvenil" && (drill.dificultad_birdies || drill.dificultad_aguilas || drill.dificultad_albatros || drill.dificultad_mas14) && (
-                                                <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5">
-                                                  {[
-                                                    { label: "Birdies", val: drill.dificultad_birdies, color: "#dbeafe", tc: "#1e40af" },
-                                                    { label: "Águilas", val: drill.dificultad_aguilas, color: "#dcfce7", tc: "#166534" },
-                                                    { label: "Albatros", val: drill.dificultad_albatros, color: "#fef9c3", tc: "#854d0e" },
-                                                    { label: "+14", val: drill.dificultad_mas14, color: "#ede9fe", tc: "#6d28d9" },
-                                                  ].filter((x) => x.val).map((x) => (
-                                                    <div key={x.label} className="rounded-md p-2" style={{ background: x.color }}>
-                                                      <p className="text-[10px] font-bold mb-0.5" style={{ color: x.tc }}>{x.label}</p>
-                                                      <p className="text-[11px] text-gray-700">{x.val}</p>
-                                                    </div>
-                                                  ))}
-                                                </div>
-                                              )}
-                                              {activeTab === "competencia" && (drill.metrica_exito || drill.variante_presion || drill.conexion_tecnica) && (
-                                                <div className="space-y-1.5 mt-1">
-                                                  {drill.metrica_exito && <div className="flex items-start gap-2 bg-blue-50 rounded px-2 py-1.5"><span className="text-[10px] font-bold text-blue-700 shrink-0 mt-0.5">META</span><span className="text-[11px] text-blue-900">{drill.metrica_exito}</span></div>}
-                                                  {drill.variante_presion && <div className="flex items-start gap-2 bg-orange-50 rounded px-2 py-1.5"><span className="text-[10px] font-bold text-orange-700 shrink-0 mt-0.5">PRESIÓN</span><span className="text-[11px] text-orange-900">{drill.variante_presion}</span></div>}
-                                                  {drill.conexion_tecnica && <div className="flex items-start gap-2 bg-purple-50 rounded px-2 py-1.5"><span className="text-[10px] font-bold text-purple-700 shrink-0 mt-0.5">TÉCNICA</span><span className="text-[11px] text-purple-900">{drill.conexion_tecnica}</span></div>}
-                                                </div>
-                                              )}
-                                            </div>
-                                          ))}
-                                        </div>
-                                      </>
-                                  </div>
-                                )}
-
-                                {!(activeTab === "juvenil" && sesion.sesion_juvenil) && (
-                                  <>
-                                    {sesion.juego_competitivo && (
-                                      <div className="bg-orange-50 border border-orange-100 rounded-lg p-3">
-                                        <p className="text-xs font-semibold text-orange-700 mb-1">🏆 Juego competitivo</p>
-                                        <p className="text-xs text-gray-700">{sesion.juego_competitivo}</p>
-                                      </div>
-                                    )}
-
-                                    {sesion.notas && (
-                                      <div className="bg-yellow-50 border border-yellow-100 rounded-lg p-3">
-                                        <p className="text-xs font-semibold text-yellow-700 mb-1">📝 Notas</p>
-                                        <p className="text-xs text-gray-700">{sesion.notas}</p>
-                                      </div>
-                                    )}
-
-                                    <div className="pt-2 border-t border-gray-100">
-                                      <button
-                                        onClick={() => router.push(`/programacion/sesion/${sesion.id}`)}
-                                        className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-semibold transition-colors ${sesion.asistencia_registrada ? "bg-emerald-50 text-emerald-700 border border-emerald-200" : "text-white"}`}
-                                        style={sesion.asistencia_registrada ? {} : { background: accentColor }}
-                                      >
-                                        <svg width="13" height="13" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg>
-                                        {sesion.asistencia_registrada ? "Ver asistencia" : "Pasar asistencia"}
-                                      </button>
-                                    </div>
-                                  </>
+                    <div className="flex-1 overflow-y-auto px-5 py-4">
+                      {estaciones.length === 0 ? (
+                        <div className="flex flex-col items-center justify-center py-16 text-center">
+                          <p className="text-sm font-semibold text-gray-600 mb-1">No hay programación para este día</p>
+                          <p className="text-xs text-gray-400 mb-4">Paco puede generarla, o puedes agregarla manualmente.</p>
+                          <div className="flex items-center gap-3">
+                            <button onClick={() => setShowPacoPlanning(true)} className="px-4 py-2 rounded-lg text-sm font-medium text-white" style={{ backgroundColor: "#1a3a2a" }}>
+                              Pedir a Paco que la genere
+                            </button>
+                            <button onClick={openEditDia} className="text-xs font-medium text-gray-500 hover:text-gray-700 underline">
+                              Agregar manualmente
+                            </button>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="space-y-3">
+                          {estaciones.map((est, i) => (
+                            <div key={i} className="border border-gray-100 rounded-xl p-4">
+                              <div className="flex items-center gap-2 mb-2.5 flex-wrap">
+                                <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: groupColor }} />
+                                <p className="text-sm font-bold text-gray-900">{est.nombre}</p>
+                                {est.horario && <span className="text-xs text-gray-400">{est.horario}</span>}
+                                {est.lugar && (
+                                  <span className="flex items-center gap-1 text-xs text-gray-400">
+                                    <svg width="10" height="10" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path d="M12 21s-7-6.2-7-11a7 7 0 1 1 14 0c0 4.8-7 11-7 11z"/><circle cx="12" cy="10" r="2.5"/></svg>
+                                    {est.lugar}
+                                  </span>
                                 )}
                               </div>
+                              {est.drills.length > 0 && (
+                                <div className="space-y-2">
+                                  {est.drills.map((d, di) => (
+                                    <div key={di} className="flex gap-2.5 bg-gray-50 rounded-lg p-2.5">
+                                      <span className="text-[10px] font-bold text-white rounded w-4 h-4 flex items-center justify-center shrink-0 mt-0.5" style={{ backgroundColor: groupColor }}>{di + 1}</span>
+                                      <div className="min-w-0 flex-1">
+                                        <p className="text-sm font-semibold text-gray-800">{d.nombre}</p>
+                                        {d.descripcion && <p className="text-xs text-gray-600 mt-0.5">{d.descripcion}</p>}
+                                        {(d.repeticiones || d.dificultad) && (
+                                          <div className="flex gap-1.5 mt-1.5 flex-wrap">
+                                            {d.repeticiones && <span className="text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-gray-200 text-gray-600">{d.repeticiones}</span>}
+                                            {d.dificultad && <span className="text-[10px] font-medium px-1.5 py-0.5 rounded-full" style={{ backgroundColor: `${groupColor}18`, color: groupColor }}>{d.dificultad}</span>}
+                                          </div>
+                                        )}
+                                      </div>
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
                             </div>
-                          );
-                        })}
-                      </div>
-                    )}
-                  </div>
+                          ))}
+
+                          {diaySesiones.map((sesion) => (
+                            <div key={sesion.id} className="flex items-center justify-between gap-2 pt-1">
+                              <button
+                                onClick={() => router.push(`/programacion/sesion/${sesion.id}`)}
+                                className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-semibold transition-colors ${sesion.asistencia_registrada ? "bg-emerald-50 text-emerald-700 border border-emerald-200" : "text-white"}`}
+                                style={sesion.asistencia_registrada ? {} : { background: accentColor }}
+                              >
+                                <svg width="13" height="13" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+                                {sesion.asistencia_registrada ? "Ver asistencia" : "Pasar asistencia"}
+                              </button>
+                              <button onClick={() => setConfirmDeleteSesion(sesion)} className="text-xs font-medium text-red-500 hover:text-red-700">
+                                Eliminar sesión
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </>
                 );
-              })}
+              })()}
             </div>
           </div>
         )
@@ -2848,25 +2549,6 @@ export default function ProgramacionModule({ currentRol }: { currentRol: Rol | n
           </div>
         </div>
       )}
-
-      {/* ── Hidden PDF padres — template landscape A4 ────────────────────── */}
-      <div ref={padresPdfRef} style={{ position: "absolute", left: "-9999px", top: 0 }}>
-        {plan && (
-          <WeeklyPlanPDFTemplate
-            plan={plan}
-            sesiones={sesiones}
-            tipoPlan={activeTab}
-            semana={semana}
-          />
-        )}
-      </div>
-
-      {/* ── Hidden PDF sesión juvenil individual ─────────────────────────── */}
-      <div ref={juvPdfRef} style={{ position: "absolute", left: "-9999px", top: 0, pointerEvents: "none" }}>
-        {juvPdfSesion?.sesion_juvenil && (
-          <JuvenilPDFHidden sesion={juvPdfSesion} />
-        )}
-      </div>
 
       {/* ══ MODAL: Clase Juvenil IA ══════════════════════════════════════════ */}
       {juvClassCtx && plan && (
