@@ -23,9 +23,16 @@ export const ROLE_ALLOW: Record<Rol, "all" | string[]> = {
 // Restricted even for roles with "all" access — coordinador/administrativo only.
 const ADMIN_ONLY_PATHS = ["/accesos"];
 
+// Restricted to director/coordinador only — administrativo y profesor no entran.
+export const DIRECTOR_COORD_ROLES: Rol[] = ["director", "coordinador"];
+const DIRECTOR_COORD_ONLY_PATHS = ["/base-conocimiento"];
+
 export function isRouteAllowed(rol: Rol, pathname: string): boolean {
   const isAdminOnly = ADMIN_ONLY_PATHS.some((p) => pathname === p || pathname.startsWith(`${p}/`));
   if (isAdminOnly) return ADMIN_ROLES.includes(rol);
+
+  const isDirectorCoordOnly = DIRECTOR_COORD_ONLY_PATHS.some((p) => pathname === p || pathname.startsWith(`${p}/`));
+  if (isDirectorCoordOnly) return DIRECTOR_COORD_ROLES.includes(rol);
 
   const allow = ROLE_ALLOW[rol];
   if (!allow) return false;

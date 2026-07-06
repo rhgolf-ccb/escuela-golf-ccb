@@ -21,6 +21,7 @@ const navItems = [
   { label: "Staff", href: "/staff" },
   { label: "Accesos", href: "/accesos" },
   { label: "Drills", href: "/drills" },
+  { label: "Base de conocimiento", href: "/base-conocimiento" },
 ];
 
 export default function Navbar({

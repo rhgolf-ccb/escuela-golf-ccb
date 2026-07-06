@@ -163,12 +163,14 @@ FORMATO DE RESPUESTA:
 
 const SYSTEM_PROMPT = `${PACO_GENERAL_INTRO}\n\n${PACO_SHARED_SECTIONS}`;
 
-function buildSystemPrompt(studentContext?: string, planningContext?: string, groupContext?: string, individualPlanContext?: string): string {
-  if (planningContext) return `${buildPlanningIntro(planningContext)}\n\n${PACO_SHARED_SECTIONS}`;
-  if (groupContext) return `${buildGroupIntro(groupContext)}\n\n${PACO_SHARED_SECTIONS}`;
-  if (individualPlanContext) return `${buildIndividualPlanIntro(individualPlanContext)}\n\n${PACO_SHARED_SECTIONS}`;
-  if (studentContext) return `${buildContextualIntro(studentContext)}\n\n${PACO_SHARED_SECTIONS}`;
-  return SYSTEM_PROMPT;
+function buildSystemPrompt(studentContext?: string, planningContext?: string, groupContext?: string, individualPlanContext?: string, knowledgeContext?: string): string {
+  let base: string;
+  if (planningContext) base = `${buildPlanningIntro(planningContext)}\n\n${PACO_SHARED_SECTIONS}`;
+  else if (groupContext) base = `${buildGroupIntro(groupContext)}\n\n${PACO_SHARED_SECTIONS}`;
+  else if (individualPlanContext) base = `${buildIndividualPlanIntro(individualPlanContext)}\n\n${PACO_SHARED_SECTIONS}`;
+  else if (studentContext) base = `${buildContextualIntro(studentContext)}\n\n${PACO_SHARED_SECTIONS}`;
+  else base = SYSTEM_PROMPT;
+  return knowledgeContext ? `${base}\n\nBase de conocimiento CCB:\n${knowledgeContext}` : base;
 }
 
 type ChatMessage = { role: "user" | "assistant"; content: string };
@@ -480,7 +482,13 @@ export async function POST(request: NextRequest) {
     return Response.json({ error: "Se requiere al menos un mensaje" }, { status: 400 });
   }
   const history = messages.slice(-MAX_HISTORY);
-  const systemPrompt = buildSystemPrompt(body.studentContext, body.planningContext, body.groupContext, body.individualPlanContext);
+
+  const { data: knowledgeDocs } = await admin.from("paco_knowledge").select("titulo, tema, contenido").eq("activo", true);
+  const knowledgeContext = knowledgeDocs?.length
+    ? knowledgeDocs.map((d) => `### ${d.titulo}${d.tema ? ` (${d.tema})` : ""}\n${d.contenido}`).join("\n\n")
+    : undefined;
+
+  const systemPrompt = buildSystemPrompt(body.studentContext, body.planningContext, body.groupContext, body.individualPlanContext, knowledgeContext);
 
   const client = new Anthropic({ apiKey });
 

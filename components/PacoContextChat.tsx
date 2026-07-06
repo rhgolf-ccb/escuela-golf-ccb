@@ -65,11 +65,45 @@ export default function PacoContextChat({
   const [toolStatus, setToolStatus] = useState<string | null>(null);
   const [savingNotesIdx, setSavingNotesIdx] = useState<number | null>(null);
   const [savingDrillsIdx, setSavingDrillsIdx] = useState<number | null>(null);
+  const [historialContext, setHistorialContext] = useState("");
   const scrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
   }, [messages, isLoading]);
+
+  useEffect(() => {
+    supabase
+      .from("paco_conversaciones")
+      .select("resumen, created_at")
+      .eq("student_id", studentId)
+      .not("resumen", "is", null)
+      .order("created_at", { ascending: false })
+      .limit(3)
+      .then(({ data }) => {
+        if (!data || data.length === 0) return;
+        const lineas = data
+          .map((c) => `- ${new Date(c.created_at).toLocaleDateString("es-CO", { day: "numeric", month: "long" })}: ${c.resumen}`)
+          .join("\n");
+        setHistorialContext(`\n\nHistorial de sesiones anteriores con Paco para este alumno:\n${lineas}`);
+      });
+  }, [studentId]);
+
+  async function handleClose() {
+    const hayConversacion = messages.some((m) => m.role === "user");
+    if (hayConversacion) {
+      try {
+        await fetch("/api/paco-conversacion", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ student_id: studentId, mensajes: messages.filter((m) => !m.isWelcome) }),
+        });
+      } catch {
+        // Si falla el guardado del historial no bloqueamos el cierre del chat.
+      }
+    }
+    onClose();
+  }
 
   async function sendMessage(text: string, homePlan = false) {
     const trimmed = text.trim();
@@ -90,7 +124,7 @@ export default function PacoContextChat({
     let limitReached = false;
 
     try {
-      await streamAsesorChat({ messages: history, studentContext }, (evt) => {
+      await streamAsesorChat({ messages: history, studentContext: studentContext + historialContext }, (evt) => {
         if (evt.type === "tool_status" && evt.tool) setToolStatus(evt.tool);
         else if (evt.type === "done") {
           finalText = evt.text ?? "";
@@ -169,14 +203,14 @@ export default function PacoContextChat({
   const hasUserSentMessage = messages.some((m) => m.role === "user");
 
   return (
-    <div className="fixed inset-0 z-50 flex justify-end" style={{ backgroundColor: "rgba(0,0,0,0.45)" }} onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
+    <div className="fixed inset-0 z-50 flex justify-end" style={{ backgroundColor: "rgba(0,0,0,0.45)" }} onClick={(e) => { if (e.target === e.currentTarget) handleClose(); }}>
       <div className="flex flex-col h-full w-full sm:w-[440px] bg-white shadow-2xl">
         <div className="flex items-center justify-between px-4 py-3.5 shrink-0" style={{ backgroundColor: "#1a3a2a" }}>
           <div className="min-w-0">
             <p className="text-sm font-semibold text-white truncate">Consultar a Paco 🦅</p>
             <p className="text-[11px] text-white/70 truncate">Contexto: {studentName}</p>
           </div>
-          <button onClick={onClose} aria-label="Cerrar" className="text-white/70 hover:text-white p-1 shrink-0">
+          <button onClick={handleClose} aria-label="Cerrar" className="text-white/70 hover:text-white p-1 shrink-0">
             <i className="ti ti-x" style={{ fontSize: 18 }} />
           </button>
         </div>
