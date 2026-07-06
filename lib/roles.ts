@@ -15,9 +15,9 @@ export const ROLE_ALLOW: Record<Rol, "all" | string[]> = {
   director: "all",
   profesor: "all",
   administrativo: "all",
-  padre_competencia: ["/mi-perfil", "/reservas", "/staff", "/drills"],
-  alumno_competencia: ["/mi-perfil", "/reservas", "/staff", "/drills"],
-  padre_otros: ["/mi-perfil", "/staff", "/drills"],
+  padre_competencia: ["/mi-perfil", "/reservas", "/staff", "/drills", "/calendario"],
+  alumno_competencia: ["/mi-perfil", "/reservas", "/staff", "/drills", "/calendario"],
+  padre_otros: ["/mi-perfil", "/staff", "/drills", "/calendario"],
 };
 
 // Restricted even for roles with "all" access — coordinador/administrativo only.

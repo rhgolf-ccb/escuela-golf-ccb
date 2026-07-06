@@ -12,6 +12,8 @@ import JuvenileClassModal, {
 import CompetenciaClassModal from "./CompetenciaClassModal";
 import PacoPlanningModal from "./PacoPlanningModal";
 import ActividadEspecialModal from "./ActividadEspecialModal";
+import PacoPlanWizard from "./PacoPlanWizard";
+import EventoDiaSinEscuelaModal from "./EventoDiaSinEscuelaModal";
 import { isStaff, type Rol } from "@/lib/roles";
 import { formatWhatsAppMessage, openWhatsApp } from "@/lib/whatsapp-formatter";
 
@@ -46,6 +48,16 @@ export interface ActividadEspecial {
   id: string; nombre: string; grupos: TipoPlan[]; fecha: string;
   hora_inicio: string | null; hora_fin: string | null;
   estaciones: EstacionLibre[]; notas: string | null; created_at: string;
+}
+
+export interface EventoCalendario {
+  id: string; nombre: string; fecha_inicio: string; fecha_fin: string | null;
+  descripcion: string | null; tipo: "especial" | "institucional";
+}
+export interface DiaSinEscuela { id: string; fecha_inicio: string; fecha_fin: string; motivo: string | null; }
+
+export function fechaEnRango(fecha: string, inicio: string, fin: string | null): boolean {
+  return fecha >= inicio && fecha <= (fin ?? inicio);
 }
 
 interface OpcionActividad {
@@ -344,6 +356,12 @@ export default function ProgramacionModule({ currentRol }: { currentRol: Rol | n
   const [showActividadEspecial, setShowActividadEspecial] = useState(false);
   const [calEspeciales, setCalEspeciales] = useState<ActividadEspecial[]>([]);
   const [calEspecialDetail, setCalEspecialDetail] = useState<ActividadEspecial | null>(null);
+  const [calEventos, setCalEventos] = useState<EventoCalendario[]>([]);
+  const [calDiasSinEscuela, setCalDiasSinEscuela] = useState<DiaSinEscuela[]>([]);
+  const [showEventoWizard, setShowEventoWizard] = useState(false);
+  const [showWizard, setShowWizard] = useState(false);
+  const [pendingDiaWizard, setPendingDiaWizard] = useState<{ grupo: TipoPlan; dia: DiaSemana; fecha: string } | null>(null);
+  const [wizardActividadInit, setWizardActividadInit] = useState<{ grupos: TipoPlan[]; fecha: string } | null>(null);
 
   // Plan state
   const [semana, setSemana]       = useState<Date>(() => getMonday(new Date()));
@@ -438,6 +456,50 @@ export default function ProgramacionModule({ currentRol }: { currentRol: Rol | n
     setCompClassCtx({ dia, fecha, sesion, horaInicio: extra?.hi, horaFin: extra?.hf });
   }
 
+  // ── Wizard "Planificar con Paco" ──────────────────────────────────────────
+  function handleWizardSemanaCompleta(grupoElegido: TipoPlan) {
+    setShowWizard(false);
+    setActiveTab(grupoElegido);
+    setShowPacoPlanning(true);
+  }
+
+  function handleWizardDiaEspecifico(grupoElegido: TipoPlan, dia: DiaSemana, fecha: string) {
+    setShowWizard(false);
+    setSemana(getMonday(new Date(`${fecha}T00:00:00`)));
+    setActiveTab(grupoElegido);
+    setPendingDiaWizard({ grupo: grupoElegido, dia, fecha });
+  }
+
+  function handleWizardActividadEspecial(grupos: TipoPlan[], fecha: string) {
+    setShowWizard(false);
+    setWizardActividadInit({ grupos, fecha });
+    setShowActividadEspecial(true);
+  }
+
+  function handleWizardEventos() {
+    setShowWizard(false);
+    setShowEventoWizard(true);
+  }
+
+  // Abre el modal del día correcto en cuanto el plan de la semana/grupo elegido termina de cargar.
+  useEffect(() => {
+    if (!pendingDiaWizard) return;
+    if (activeTab !== pendingDiaWizard.grupo) return;
+    if (loading) return;
+    if (!plan) {
+      showToast(`Sin plan ${TIPO_PLAN_LABEL[pendingDiaWizard.grupo]} esta semana — créalo primero en Vista Plan`);
+      setPendingDiaWizard(null);
+      return;
+    }
+    const { dia, fecha, grupo: grupoPendiente } = pendingDiaWizard;
+    const sesionExistente = sesiones.find((s) => s.dia_semana === dia) ?? null;
+    if (grupoPendiente === "juvenil") openJuvModal(dia, fecha, sesionExistente);
+    else if (grupoPendiente === "competencia") openCompModal(dia, fecha, sesionExistente);
+    else openEditSesion(dia, sesionExistente);
+    setPendingDiaWizard(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingDiaWizard, activeTab, loading, plan, sesiones]);
+
   // Toast
   const [toast, setToast] = useState<string | null>(null);
   const showToast = (msg: string) => { setToast(msg); setTimeout(() => setToast(null), 3500); };
@@ -472,11 +534,15 @@ export default function ProgramacionModule({ currentRol }: { currentRol: Rol | n
     setCalLoading(true);
     const inicio = toISODate(semana);
     const fin = toISODate(addDays(semana, 6));
-    const [{ data: plans }, { data: especiales }] = await Promise.all([
+    const [{ data: plans }, { data: especiales }, { data: eventos }, { data: diasSinEscuela }] = await Promise.all([
       supabase.from("planes_semanales").select("id, tipo_plan").eq("semana_inicio", inicio).eq("tipo_plan", activeTab),
       supabase.from("actividades_especiales").select("*").contains("grupos", [activeTab]).gte("fecha", inicio).lte("fecha", fin),
+      supabase.from("eventos_calendario").select("*"),
+      supabase.from("dias_sin_escuela").select("*"),
     ]);
     setCalEspeciales((especiales as ActividadEspecial[]) ?? []);
+    setCalEventos((eventos as EventoCalendario[]) ?? []);
+    setCalDiasSinEscuela((diasSinEscuela as DiaSinEscuela[]) ?? []);
     if (!plans?.length) { setCalSesiones([]); setCalLoading(false); return; }
     const planMap = Object.fromEntries(plans.map((p) => [p.id, p.tipo_plan as TipoPlan]));
     const { data: seses } = await supabase
@@ -495,13 +561,17 @@ export default function ProgramacionModule({ currentRol }: { currentRol: Rol | n
     setCalEspeciales([]);
     setCalLoading(true);
     const { start, end } = getMesRange(mesCal);
-    const [{ data: plans }, { data: especiales }] = await Promise.all([
+    const [{ data: plans }, { data: especiales }, { data: eventos }, { data: diasSinEscuela }] = await Promise.all([
       supabase.from("planes_semanales").select("id, tipo_plan")
         .gte("semana_inicio", toISODate(start)).lte("semana_inicio", toISODate(end)).eq("tipo_plan", activeTab),
       supabase.from("actividades_especiales").select("*").contains("grupos", [activeTab])
         .gte("fecha", toISODate(start)).lte("fecha", toISODate(end)),
+      supabase.from("eventos_calendario").select("*"),
+      supabase.from("dias_sin_escuela").select("*"),
     ]);
     setCalEspeciales((especiales as ActividadEspecial[]) ?? []);
+    setCalEventos((eventos as EventoCalendario[]) ?? []);
+    setCalDiasSinEscuela((diasSinEscuela as DiaSinEscuela[]) ?? []);
     if (!plans?.length) { setCalSesiones([]); setCalLoading(false); return; }
     const planMap = Object.fromEntries(plans.map((p) => [p.id, p.tipo_plan as TipoPlan]));
     const { data: seses } = await supabase
@@ -1090,6 +1160,28 @@ export default function ProgramacionModule({ currentRol }: { currentRol: Rol | n
               })}
             </div>
 
+            {/* Días sin escuela / eventos del calendario */}
+            {(calDiasSinEscuela.length > 0 || calEventos.length > 0) && (
+              <div className="grid" style={{ gridTemplateColumns: "60px repeat(6, 1fr)", borderBottom: "1px solid #d4e0d2" }}>
+                <div style={{ borderRight: "1px solid #d4e0d2" }} />
+                {CAL_DIAS.map((dia) => {
+                  const fecha = getFechaForDia(semana, dia);
+                  const sinEscuela = calDiasSinEscuela.find((d) => fechaEnRango(fecha, d.fecha_inicio, d.fecha_fin));
+                  const eventosDia = calEventos.filter((e) => fechaEnRango(fecha, e.fecha_inicio, e.fecha_fin));
+                  return (
+                    <div key={dia} style={{ borderRight: "1px solid #d4e0d2", padding: "2px 4px", minHeight: sinEscuela || eventosDia.length ? 24 : 0, background: sinEscuela ? "#e5e7eb" : "transparent" }}>
+                      {sinEscuela && <p style={{ margin: 0, fontSize: 10, fontWeight: 700, color: "#4b5563" }} title={sinEscuela.motivo ?? undefined}>Sin escuela</p>}
+                      {eventosDia.map((e) => (
+                        <p key={e.id} style={{ margin: 0, fontSize: 10, fontWeight: 600, color: e.tipo === "especial" ? "#b45309" : "#1565c0" }} title={e.descripcion ?? undefined}>
+                          {e.tipo === "especial" ? "🌟" : "📌"} {e.nombre}
+                        </p>
+                      ))}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
             {/* All-day band for sessions without a scheduled time */}
             {(calSesiones.some((s) => !s.hora_inicio) || calEspeciales.some((e) => !e.hora_inicio)) && (
               <div className="grid" style={{ gridTemplateColumns: "60px repeat(6, 1fr)", background: "#f5f8f4", borderBottom: "1px solid #d4e0d2" }}>
@@ -1289,15 +1381,18 @@ export default function ProgramacionModule({ currentRol }: { currentRol: Rol | n
                 const isCurrentMonth = date.getMonth() === month;
                 const daySes = calSesiones.filter((s) => s.fecha === dateStr);
                 const dayEsp = calEspeciales.filter((e) => e.fecha === dateStr);
+                const dayEventos = calEventos.filter((e) => fechaEnRango(dateStr, e.fecha_inicio, e.fecha_fin));
+                const sinEscuela = calDiasSinEscuela.find((d) => fechaEnRango(dateStr, d.fecha_inicio, d.fecha_fin));
                 const isSelected = selectedCalDate === dateStr;
 
                 return (
                   <div
                     key={i}
                     onClick={() => setSelectedCalDate(isSelected ? null : dateStr)}
+                    title={sinEscuela?.motivo ?? undefined}
                     style={{
                       minHeight: 100,
-                      background: isSelected ? "#dff0e0" : "#f7faf6",
+                      background: sinEscuela ? "#e5e7eb" : isSelected ? "#dff0e0" : "#f7faf6",
                       borderBottom: "1px solid #dde8db",
                       borderRight: "1px solid #dde8db",
                       padding: "6px",
@@ -1305,8 +1400,8 @@ export default function ProgramacionModule({ currentRol }: { currentRol: Rol | n
                       opacity: !isCurrentMonth ? 0.4 : 1,
                       transition: "background 0.1s",
                     }}
-                    onMouseEnter={(e) => { if (!isSelected) (e.currentTarget as HTMLElement).style.background = "#eef5ec"; }}
-                    onMouseLeave={(e) => { if (!isSelected) (e.currentTarget as HTMLElement).style.background = "#f7faf6"; }}
+                    onMouseEnter={(e) => { if (!isSelected && !sinEscuela) (e.currentTarget as HTMLElement).style.background = "#eef5ec"; }}
+                    onMouseLeave={(e) => { if (!isSelected && !sinEscuela) (e.currentTarget as HTMLElement).style.background = "#f7faf6"; }}
                   >
                     <div style={{
                       width: 24, height: 24,
@@ -1319,6 +1414,17 @@ export default function ProgramacionModule({ currentRol }: { currentRol: Rol | n
                       {date.getDate()}
                     </div>
                     <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+                      {sinEscuela && <p style={{ margin: 0, fontSize: 10, fontWeight: 700, color: "#4b5563" }}>Sin escuela</p>}
+                      {dayEventos.map((e) => (
+                        <div key={e.id} style={{
+                          background: e.tipo === "especial" ? "#b45309" : "#1565c0", color: "#fff",
+                          borderRadius: 3, padding: "2px 5px",
+                          fontSize: 11, fontWeight: 600, lineHeight: 1.35,
+                          overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+                        }}>
+                          {e.tipo === "especial" ? "🌟" : "📌"} {e.nombre}
+                        </div>
+                      ))}
                       {daySes.slice(0, 3).map((s, j) => {
                         const c = CAL_EVENT[s.tipo_plan] ?? { bg: "#334155", text: "#fff" };
                         return (
@@ -1485,18 +1591,11 @@ export default function ProgramacionModule({ currentRol }: { currentRol: Rol | n
         {currentRol && isStaff(currentRol) && (
           <div className="flex gap-2 mb-2 shrink-0">
             <button
-              onClick={() => setShowPacoPlanning(true)}
+              onClick={() => setShowWizard(true)}
               className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium text-white"
               style={{ backgroundColor: "#1a3a2a" }}
             >
               Planificar con Paco 🦅
-            </button>
-            <button
-              onClick={() => setShowActividadEspecial(true)}
-              className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium text-white"
-              style={{ backgroundColor: "#b45309" }}
-            >
-              + Actividad especial 🌟
             </button>
           </div>
         )}
@@ -2707,11 +2806,36 @@ export default function ProgramacionModule({ currentRol }: { currentRol: Rol | n
       {/* ══ MODAL: Nueva actividad especial ══════════════════════════════════ */}
       {showActividadEspecial && (
         <ActividadEspecialModal
-          fechaSugerida={toISODate(semana)}
-          grupoSugerido={activeTab}
-          onClose={() => setShowActividadEspecial(false)}
+          fechaSugerida={wizardActividadInit?.fecha ?? toISODate(semana)}
+          gruposSugeridos={wizardActividadInit?.grupos ?? [activeTab]}
+          onClose={() => { setShowActividadEspecial(false); setWizardActividadInit(null); }}
           onCreated={() => {
             showToast("Actividad especial creada ✓");
+            if (viewMode === "semana") fetchCalSemana();
+            else if (viewMode === "mes") fetchCalMes();
+          }}
+        />
+      )}
+
+      {/* ══ MODAL: Planificar con Paco — selector ═════════════════════════════ */}
+      {showWizard && (
+        <PacoPlanWizard
+          fechaSugerida={toISODate(semana)}
+          onClose={() => setShowWizard(false)}
+          onSemanaCompleta={handleWizardSemanaCompleta}
+          onDiaEspecifico={handleWizardDiaEspecifico}
+          onActividadEspecial={handleWizardActividadEspecial}
+          onEventos={handleWizardEventos}
+        />
+      )}
+
+      {/* ══ MODAL: Evento / día sin escuela ════════════════════════════════════ */}
+      {showEventoWizard && (
+        <EventoDiaSinEscuelaModal
+          fechaSugerida={toISODate(semana)}
+          onClose={() => setShowEventoWizard(false)}
+          onCreated={() => {
+            showToast("Guardado en el calendario ✓");
             if (viewMode === "semana") fetchCalSemana();
             else if (viewMode === "mes") fetchCalMes();
           }}

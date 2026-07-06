@@ -140,6 +140,13 @@ Cuando el usuario pida planificación semanal, consulta las sesiones con obtener
 
 Si una consulta a la base de datos no devuelve resultados, dilo claramente en vez de inventar datos.
 
+CALENDARIO — EVENTOS Y DÍAS SIN ESCUELA:
+Cuando el profesor mencione un evento, fecha de torneo, festival u otro evento institucional, ofrece agregarlo al calendario con nombre, fecha y descripción. Al confirmar publícalo directamente en la tabla de eventos del calendario usando crear_evento_calendario.
+
+Cuando el profesor indique un rango de fechas sin escuela (ej. "del 20 al 25 de julio no hay escuela", vacaciones, festivo, receso), confirma el rango y el motivo, y al confirmar regístralo con marcar_dias_sin_escuela.
+
+Nunca uses crear_evento_calendario ni marcar_dias_sin_escuela sin que el profesor haya confirmado explícitamente — primero propone, y solo ejecutas la herramienta en el turno donde el profesor confirma.
+
 PRIVACIDAD: Solo se comparten datos de alumnos con usuarios autenticados como staff (coordinador, profesor, administrativo) — este chat ya está restringido a ese personal.
 
 INSTRUCCIONES DE COMPORTAMIENTO:
@@ -257,6 +264,34 @@ const CCB_TOOLS: Anthropic.Tool[] = [
         grupo: { type: "string", description: "Grupo al que aplica" },
         busqueda: { type: "string", description: "Texto libre para buscar en el título" },
       },
+    },
+  },
+  {
+    name: "crear_evento_calendario",
+    description: "Crea un evento en el calendario general de la escuela (torneo, festival, día institucional, etc.). Úsala solo después de que el profesor confirme explícitamente que quiere agregarlo.",
+    input_schema: {
+      type: "object",
+      properties: {
+        nombre: { type: "string", description: "Nombre del evento" },
+        fecha_inicio: { type: "string", description: "Fecha en formato YYYY-MM-DD" },
+        fecha_fin: { type: "string", description: "Fecha final si es un rango (opcional, formato YYYY-MM-DD)" },
+        descripcion: { type: "string", description: "Descripción opcional del evento" },
+        tipo: { type: "string", description: "'especial' (actividad puntual de la escuela) o 'institucional' (evento del club/torneo/festival). Default institucional." },
+      },
+      required: ["nombre", "fecha_inicio"],
+    },
+  },
+  {
+    name: "marcar_dias_sin_escuela",
+    description: "Marca un rango de fechas como días sin escuela (vacaciones, festivo, receso). Úsala solo después de que el profesor confirme explícitamente.",
+    input_schema: {
+      type: "object",
+      properties: {
+        fecha_inicio: { type: "string", description: "Fecha de inicio en formato YYYY-MM-DD" },
+        fecha_fin: { type: "string", description: "Fecha final en formato YYYY-MM-DD (igual a fecha_inicio si es un solo día)" },
+        motivo: { type: "string", description: "Motivo opcional (ej: vacaciones de mitad de año, festivo nacional)" },
+      },
+      required: ["fecha_inicio", "fecha_fin"],
     },
   },
 ];
@@ -407,6 +442,28 @@ async function obtenerDrills(admin: SupabaseClient, categoria?: string, grupo?: 
   return { drills: data };
 }
 
+async function crearEventoCalendario(admin: SupabaseClient, nombre: string, fechaInicio: string, fechaFin?: string, descripcion?: string, tipo?: string) {
+  if (!nombre || !fechaInicio) return { error: "Falta nombre o fecha_inicio." };
+  const { data, error } = await admin
+    .from("eventos_calendario")
+    .insert({ nombre, fecha_inicio: fechaInicio, fecha_fin: fechaFin || null, descripcion: descripcion || null, tipo: tipo === "especial" ? "especial" : "institucional" })
+    .select()
+    .single();
+  if (error) return { error: error.message };
+  return { ok: true, evento: data };
+}
+
+async function marcarDiasSinEscuela(admin: SupabaseClient, fechaInicio: string, fechaFin: string, motivo?: string) {
+  if (!fechaInicio || !fechaFin) return { error: "Falta fecha_inicio o fecha_fin." };
+  const { data, error } = await admin
+    .from("dias_sin_escuela")
+    .insert({ fecha_inicio: fechaInicio, fecha_fin: fechaFin, motivo: motivo || null })
+    .select()
+    .single();
+  if (error) return { error: error.message };
+  return { ok: true, dia_sin_escuela: data };
+}
+
 async function ejecutarTool(admin: SupabaseClient, name: string, input: Record<string, unknown>): Promise<unknown> {
   try {
     switch (name) {
@@ -424,6 +481,10 @@ async function ejecutarTool(admin: SupabaseClient, name: string, input: Record<s
         return await obtenerSesionesSemana(admin, input.grupo as string | undefined, input.fecha as string | undefined);
       case "obtener_drills":
         return await obtenerDrills(admin, input.categoria as string | undefined, input.grupo as string | undefined, input.busqueda as string | undefined);
+      case "crear_evento_calendario":
+        return await crearEventoCalendario(admin, String(input.nombre ?? ""), String(input.fecha_inicio ?? ""), input.fecha_fin as string | undefined, input.descripcion as string | undefined, input.tipo as string | undefined);
+      case "marcar_dias_sin_escuela":
+        return await marcarDiasSinEscuela(admin, String(input.fecha_inicio ?? ""), String(input.fecha_fin ?? ""), input.motivo as string | undefined);
       default:
         return { error: `Tool desconocida: ${name}` };
     }

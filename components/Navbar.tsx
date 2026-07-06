@@ -22,6 +22,7 @@ const navItems = [
   { label: "Accesos", href: "/accesos" },
   { label: "Drills", href: "/drills" },
   { label: "Base de conocimiento", href: "/base-conocimiento" },
+  { label: "Calendario", href: "/calendario" },
 ];
 
 export default function Navbar({
@@ -41,6 +42,7 @@ export default function Navbar({
   const visibleItems = role
     ? navItems.filter((item) => {
         if (item.href === "/mi-perfil" && isStaff(role)) return false;
+        if (item.href === "/calendario" && isStaff(role)) return false;
         return isRouteAllowed(role, item.href);
       })
     : [];

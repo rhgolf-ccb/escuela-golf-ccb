@@ -44,12 +44,12 @@ function buildActividadMarkdown(nombre: string, fecha: string, grupos: TipoPlan[
 }
 
 export default function ActividadEspecialModal({
-  fechaSugerida, grupoSugerido, onClose, onCreated,
+  fechaSugerida, gruposSugeridos, onClose, onCreated,
 }: {
-  fechaSugerida: string; grupoSugerido: TipoPlan; onClose: () => void; onCreated: () => void;
+  fechaSugerida: string; gruposSugeridos: TipoPlan[]; onClose: () => void; onCreated: () => void;
 }) {
   const [nombre, setNombre] = useState("");
-  const [grupos, setGrupos] = useState<TipoPlan[]>([grupoSugerido]);
+  const [grupos, setGrupos] = useState<TipoPlan[]>(gruposSugeridos);
   const [fecha, setFecha] = useState(fechaSugerida);
   const [horaInicio, setHoraInicio] = useState("");
   const [horaFin, setHoraFin] = useState("");
