@@ -327,17 +327,17 @@ function TestCard({ test, editing, showEdad, tipo, color, uploading, onChange, o
       </div>
 
       <div className="px-4 py-3 space-y-3">
-        <div className="flex gap-3 items-start">
-          <div className="w-20 h-20 rounded-lg bg-gray-100 overflow-hidden shrink-0 flex items-center justify-center">
+        <div className="space-y-2">
+          <div className="w-full h-[180px] sm:h-[200px] rounded-lg overflow-hidden flex items-center justify-center" style={{ backgroundColor: "#f8f8f8" }}>
             {test.foto_url ? (
               // eslint-disable-next-line @next/next/no-img-element
-              <img src={test.foto_url} alt={test.nombre} loading="lazy" className="w-full h-full object-cover" />
+              <img src={test.foto_url} alt={test.nombre} loading="lazy" className="w-full h-full object-contain" />
             ) : (
-              <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5} className="text-gray-300"><path d="M4 16l4.586-4.586a2 2 0 0 1 2.828 0L16 16m-2-2 1.586-1.586a2 2 0 0 1 2.828 0L20 14M4 4h16v16H4V4z" /></svg>
+              <svg width="28" height="28" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5} className="text-gray-300"><path d="M4 16l4.586-4.586a2 2 0 0 1 2.828 0L16 16m-2-2 1.586-1.586a2 2 0 0 1 2.828 0L20 14M4 4h16v16H4V4z" /></svg>
             )}
           </div>
           {editing && (
-            <label className="text-xs text-blue-600 hover:underline cursor-pointer mt-2">
+            <label className="text-xs text-blue-600 hover:underline cursor-pointer">
               {uploading ? "Subiendo..." : "Subir foto de referencia"}
               <input type="file" accept="image/*" className="hidden" disabled={uploading}
                 onChange={(e) => { const f = e.target.files?.[0]; if (f) onUploadFoto(f); e.target.value = ""; }} />

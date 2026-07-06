@@ -47,6 +47,12 @@ function badgeColor(member: Pick<StaffMember, "rol" | "categoria">): string | nu
   return null;
 }
 
+function staffRolPrioridad(rol: string): number {
+  if (rol === "Director de Golf") return 0;
+  if (rol === "Coordinador de Escuelas") return 1;
+  return 2;
+}
+
 function emptyForm(categoria: Categoria, orden: number): StaffForm {
   return { id: crypto.randomUUID(), nombre: "", rol: "", categoria, descripcion: "", foto_url: null, orden };
 }
@@ -82,7 +88,9 @@ export default function StaffModule() {
 
   useEffect(() => { load(); }, [load]);
 
-  const profesores = members.filter((m) => m.categoria === "profesores");
+  const profesores = members
+    .filter((m) => m.categoria === "profesores")
+    .sort((a, b) => staffRolPrioridad(a.rol) - staffRolPrioridad(b.rol));
   const administrativos = members.filter((m) => m.categoria === "administrativos");
 
   function openAdd(categoria: Categoria) {
