@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
 
 type Benchmark = {
@@ -30,15 +30,22 @@ type TestFull = {
   protocolo_benchmarks: Benchmark[];
 };
 
-type Tipo = "tecnico" | "fisico";
-type GrupoKey = "birdies" | "aguilas" | "albatros" | "competencia" | "damas";
+type NavItem = { key: string; label: string; grupos: string[]; tipo: "tecnico" | "fisico" };
 
-const GRUPO_OPTIONS: { key: GrupoKey; label: string; grupos: string[] }[] = [
-  { key: "birdies", label: "Birdies (4–5 años)", grupos: ["Birdies"] },
-  { key: "aguilas", label: "Águilas (6–8 años)", grupos: ["Águilas"] },
-  { key: "albatros", label: "Albatros · +14", grupos: ["Albatros", "+14"] },
-  { key: "competencia", label: "Competencia", grupos: ["Competencia"] },
-  { key: "damas", label: "Damas", grupos: ["Damas"] },
+const NAV_TECNICO: NavItem[] = [
+  { key: "t-birdies", label: "Birdies", grupos: ["Birdies"], tipo: "tecnico" },
+  { key: "t-aguilas", label: "Águilas", grupos: ["Águilas"], tipo: "tecnico" },
+  { key: "t-albatros14", label: "Albatros · +14", grupos: ["Albatros", "+14"], tipo: "tecnico" },
+  { key: "t-competencia", label: "Competencia", grupos: ["Competencia"], tipo: "tecnico" },
+  { key: "t-damas", label: "Damas", grupos: ["Damas"], tipo: "tecnico" },
+];
+
+const NAV_FISICO: NavItem[] = [
+  { key: "f-birdies", label: "Birdies", grupos: ["Birdies"], tipo: "fisico" },
+  { key: "f-aguilas", label: "Águilas", grupos: ["Águilas"], tipo: "fisico" },
+  { key: "f-albatros14", label: "Albatros · +14", grupos: ["Albatros", "+14"], tipo: "fisico" },
+  { key: "f-competencia", label: "Competencia", grupos: ["Competencia"], tipo: "fisico" },
+  { key: "f-damas", label: "Damas", grupos: ["Damas"], tipo: "fisico" },
 ];
 
 const GROUP_COLOR: Record<"juvenil" | "competencia" | "damas", { bg: string; text: string }> = {
@@ -47,9 +54,9 @@ const GROUP_COLOR: Record<"juvenil" | "competencia" | "damas", { bg: string; tex
   damas: { bg: "#4a107018", text: "#4a1070" },
 };
 
-function grupoKeyColor(key: GrupoKey): "juvenil" | "competencia" | "damas" {
-  if (key === "competencia") return "competencia";
-  if (key === "damas") return "damas";
+function navTipoColor(item: NavItem): "juvenil" | "competencia" | "damas" {
+  if (item.grupos.includes("Competencia")) return "competencia";
+  if (item.grupos.some((g) => g.startsWith("Damas"))) return "damas";
   return "juvenil";
 }
 
@@ -69,21 +76,13 @@ function EmptyState({ msg }: { msg: string }) {
 }
 
 export default function ProtocolosModule() {
-  const [activeTipo, setActiveTipo] = useState<Tipo>("tecnico");
-  const [activeGrupoKey, setActiveGrupoKey] = useState<GrupoKey>("birdies");
+  const [activeNav, setActiveNav] = useState<NavItem>(NAV_TECNICO[0]);
   const [testsByGrupo, setTestsByGrupo] = useState<Record<string, TestFull[]>>({});
   const [loading, setLoading] = useState(false);
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [draft, setDraft] = useState<TestFull[] | null>(null);
   const [uploadingFor, setUploadingFor] = useState<string | null>(null);
-  const [selectedCodigo, setSelectedCodigo] = useState<string | null>(null);
-  const [mobileDetailOpen, setMobileDetailOpen] = useState(false);
-  const fileInputRef = useRef<HTMLInputElement>(null);
-
-  const activeGrupoOption = GRUPO_OPTIONS.find((g) => g.key === activeGrupoKey)!;
-  const grupos = activeGrupoOption.grupos;
-  const primaryGrupo = grupos[0];
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -91,7 +90,7 @@ export default function ProtocolosModule() {
     setDraft(null);
     const { data } = await supabase.from("protocolo_tests")
       .select("*, protocolo_benchmarks(*)")
-      .in("grupo", grupos).eq("tipo", activeTipo).eq("activo", true).order("orden");
+      .in("grupo", activeNav.grupos).eq("tipo", activeNav.tipo).eq("activo", true).order("orden");
     const rows = (data ?? []) as unknown as TestFull[];
     const byGrupo: Record<string, TestFull[]> = {};
     rows.forEach((row) => {
@@ -101,14 +100,15 @@ export default function ProtocolosModule() {
     Object.values(byGrupo).forEach((arr) => arr.sort((a, b) => (a.orden ?? 0) - (b.orden ?? 0)));
     setTestsByGrupo(byGrupo);
     setLoading(false);
-  }, [activeTipo, grupos]);
+  }, [activeNav]);
 
   useEffect(() => { load(); }, [load]);
 
+  const primaryGrupo = activeNav.grupos[0];
   const tests = draft ?? testsByGrupo[primaryGrupo] ?? [];
 
   const categorias: { label: string | null; tests: TestFull[] }[] = (() => {
-    if (activeTipo === "tecnico") return [{ label: null, tests }];
+    if (activeNav.tipo === "tecnico") return [{ label: null, tests }];
     const order: string[] = [];
     const map = new Map<string, TestFull[]>();
     tests.forEach((t) => {
@@ -118,20 +118,6 @@ export default function ProtocolosModule() {
     });
     return order.map((label) => ({ label, tests: map.get(label)! }));
   })();
-
-  // Selección de test — se reinicia al cambiar de grupo/tipo (tras recargar
-  // datos), pero se conserva mientras se edita o tras guardar si sigue existiendo.
-  useEffect(() => {
-    const list = testsByGrupo[primaryGrupo] ?? [];
-    if (list.length === 0) { setSelectedCodigo(null); return; }
-    setSelectedCodigo((prev) => (prev && list.some((t) => t.codigo === prev)) ? prev : list[0].codigo);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeTipo, activeGrupoKey, testsByGrupo]);
-
-  function selectTest(codigo: string) {
-    setSelectedCodigo(codigo);
-    setMobileDetailOpen(true);
-  }
 
   function startEdit() {
     setDraft(JSON.parse(JSON.stringify(testsByGrupo[primaryGrupo] ?? [])));
@@ -159,7 +145,7 @@ export default function ProtocolosModule() {
     setUploadingFor(codigo);
     try {
       const ext = file.name.split(".").pop()?.toLowerCase() ?? "jpg";
-      const path = `${activeTipo}/${sanitizePath(primaryGrupo)}/${codigo}.${ext}`;
+      const path = `${activeNav.tipo}/${sanitizePath(primaryGrupo)}/${codigo}.${ext}`;
       const { error: uploadError } = await supabase.storage
         .from("protocolos-fotos")
         .upload(path, file, { upsert: true, contentType: file.type });
@@ -202,7 +188,7 @@ export default function ProtocolosModule() {
         }
 
         // Grupos "hermanos" (ej. Albatros · +14) mantienen el mismo contenido — se reflejan los mismos cambios.
-        for (const mirrorGrupo of grupos.slice(1)) {
+        for (const mirrorGrupo of activeNav.grupos.slice(1)) {
           const mirrorTest = (testsByGrupo[mirrorGrupo] ?? []).find((o) => o.codigo === t.codigo);
           if (!mirrorTest) continue;
           await supabase.from("protocolo_tests").update({
@@ -226,251 +212,86 @@ export default function ProtocolosModule() {
     }
   }
 
-  const color = GROUP_COLOR[grupoKeyColor(activeGrupoKey)];
-  const showEdad = grupos.includes("Competencia");
-  const showValores = activeTipo === "fisico";
+  const color = GROUP_COLOR[navTipoColor(activeNav)];
   const totalTests = tests.length;
-  const selectedTest = tests.find((t) => t.codigo === selectedCodigo) ?? null;
-  const selectedIndex = selectedTest ? tests.findIndex((t) => t.codigo === selectedTest.codigo) : -1;
-
-  function goPrev() {
-    if (selectedIndex > 0) selectTest(tests[selectedIndex - 1].codigo);
-  }
-  function goNext() {
-    if (selectedIndex >= 0 && selectedIndex < tests.length - 1) selectTest(tests[selectedIndex + 1].codigo);
-  }
+  const showEdad = activeNav.grupos.includes("Competencia");
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 flex flex-col" style={{ height: "calc(100vh - 64px)" }}>
-      <div className="flex items-center gap-2 mb-4 shrink-0">
-        {(["tecnico", "fisico"] as Tipo[]).map((t) => (
-          <button key={t} onClick={() => setActiveTipo(t)}
-            className="px-4 py-2 rounded-lg text-sm font-medium transition-colors"
-            style={activeTipo === t ? { backgroundColor: "#1B4D2E", color: "white" } : { color: "#6b7280", backgroundColor: "#f3f4f6" }}>
-            {t === "tecnico" ? "Técnico" : "Físico"}
-          </button>
-        ))}
-      </div>
+    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+      <div className="flex gap-6">
+        <nav className="w-[260px] shrink-0">
+          <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2 px-2">Técnico</p>
+          <div className="space-y-1 mb-6">
+            {NAV_TECNICO.map((item) => {
+              const active = activeNav.key === item.key;
+              const c = GROUP_COLOR[navTipoColor(item)];
+              return (
+                <button key={item.key} onClick={() => setActiveNav(item)}
+                  className="w-full text-left px-3 py-2 rounded-lg text-sm font-medium transition-colors"
+                  style={active ? { backgroundColor: c.bg, color: c.text, borderLeft: `3px solid ${c.text}` } : { color: "#6b7280", borderLeft: "3px solid transparent" }}>
+                  {item.label}
+                </button>
+              );
+            })}
+          </div>
+          <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2 px-2">Físico</p>
+          <div className="space-y-1">
+            {NAV_FISICO.map((item) => {
+              const active = activeNav.key === item.key;
+              const c = GROUP_COLOR[navTipoColor(item)];
+              return (
+                <button key={item.key} onClick={() => setActiveNav(item)}
+                  className="w-full text-left px-3 py-2 rounded-lg text-sm font-medium transition-colors"
+                  style={active ? { backgroundColor: c.bg, color: c.text, borderLeft: `3px solid ${c.text}` } : { color: "#6b7280", borderLeft: "3px solid transparent" }}>
+                  {item.label}
+                </button>
+              );
+            })}
+          </div>
+        </nav>
 
-      <div className="flex gap-4 flex-1 min-h-0">
-        {/* Columna izquierda: grupo + lista de tests (210px fija en desktop) */}
-        <div className={`${mobileDetailOpen ? "hidden md:flex" : "flex"} md:w-[210px] w-full shrink-0 flex-col bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden`}>
-          <div className="p-3 border-b border-gray-100 shrink-0 space-y-2">
-            <label className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Grupo</label>
-            <select value={activeGrupoKey} onChange={(e) => setActiveGrupoKey(e.target.value as GrupoKey)}
-              className="w-full px-2 py-1.5 rounded-lg border border-gray-200 text-sm focus:outline-none focus:border-[#1B4D2E] bg-white">
-              {GRUPO_OPTIONS.map((o) => <option key={o.key} value={o.key}>{o.label}</option>)}
-            </select>
-            <span className="inline-block text-xs font-medium px-2 py-0.5 rounded-full" style={{ backgroundColor: color.bg, color: color.text }}>
-              {activeGrupoOption.label}
-            </span>
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center justify-between mb-5 flex-wrap gap-3">
+            <div className="flex items-center gap-3">
+              <h1 className="text-lg font-semibold text-gray-900">{activeNav.label}</h1>
+              <span className="text-xs font-medium px-2 py-0.5 rounded-full" style={{ backgroundColor: color.bg, color: color.text }}>
+                {activeNav.tipo === "tecnico" ? "Técnico" : "Físico"}
+              </span>
+              <span className="text-xs text-gray-400">{totalTests} tests</span>
+            </div>
+            <div className="flex gap-2">
+              {editing ? (
+                <>
+                  <button onClick={cancelEdit} disabled={saving} className="px-4 py-2 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-100">Cancelar</button>
+                  <button onClick={handleSave} disabled={saving} className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium text-white disabled:opacity-50" style={{ backgroundColor: "#1B4D2E" }}>
+                    {saving ? "Guardando..." : "Guardar"}
+                  </button>
+                </>
+              ) : (
+                <button onClick={startEdit} className="px-4 py-2 rounded-lg text-sm font-medium border border-gray-200 text-gray-600 hover:bg-gray-50">Editar</button>
+              )}
+            </div>
           </div>
 
-          <div className="flex-1 overflow-y-auto">
-            {loading ? <Loading /> : totalTests === 0 ? <EmptyState msg="Sin tests definidos." /> : (
-              categorias.map((cat) => (
+          {loading ? <Loading /> : totalTests === 0 ? <EmptyState msg="Sin tests definidos para este grupo." /> : (
+            <div className="space-y-6">
+              {categorias.map((cat) => (
                 <div key={cat.label ?? "_"}>
-                  {cat.label && <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wide px-3 pt-3 pb-1">{cat.label}</p>}
-                  {cat.tests.map((t) => {
-                    const isSelected = selectedCodigo === t.codigo;
-                    const hasContent = !!(t.descripcion || t.instrucciones || t.protocolo_benchmarks.length);
-                    return (
-                      <button key={t.codigo} onClick={() => selectTest(t.codigo)}
-                        className="w-full text-left px-3 py-2 flex items-center gap-2 transition-colors hover:bg-gray-50"
-                        style={isSelected ? { borderLeft: `3px solid ${color.text}`, backgroundColor: "#f0f5f0" } : { borderLeft: "3px solid transparent" }}>
-                        <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded shrink-0 text-white" style={{ backgroundColor: color.text }}>{t.codigo}</span>
-                        <span className="text-sm text-gray-800 flex-1 min-w-0 truncate">{t.nombre}</span>
-                        <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${hasContent ? "bg-emerald-500" : "bg-gray-300"}`} />
-                      </button>
-                    );
-                  })}
-                </div>
-              ))
-            )}
-          </div>
-        </div>
-
-        {/* Columna derecha: detalle del test seleccionado */}
-        <div className={`${mobileDetailOpen ? "flex" : "hidden md:flex"} flex-1 flex-col bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden min-w-0`}>
-          {loading ? <Loading /> : !selectedTest ? (
-            <EmptyState msg="Selecciona un test de la lista." />
-          ) : (
-            <>
-              <div className="px-5 py-4 border-b border-gray-100 shrink-0">
-                <button onClick={() => setMobileDetailOpen(false)} className="md:hidden flex items-center gap-1 text-xs text-gray-500 mb-2">
-                  ← Volver
-                </button>
-                <div className="flex items-start justify-between gap-3 flex-wrap">
-                  <div className="flex items-center gap-3">
-                    <span className="text-xs font-semibold px-2 py-1 rounded shrink-0 text-white" style={{ backgroundColor: color.text }}>{selectedTest.codigo}</span>
-                    <div>
-                      <h2 className="text-base font-semibold text-gray-900">{selectedTest.nombre}</h2>
-                      <p className="text-xs text-gray-400">{activeGrupoOption.label} · {activeTipo === "tecnico" ? "Técnico" : "Físico"}</p>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2 flex-wrap justify-end">
-                    {editing ? (
-                      <>
-                        <button onClick={cancelEdit} disabled={saving} className="px-3 py-1.5 rounded-lg text-xs font-medium text-gray-600 hover:bg-gray-100">Cancelar</button>
-                        <button onClick={handleSave} disabled={saving} className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium text-white disabled:opacity-50" style={{ backgroundColor: "#1B4D2E" }}>
-                          {saving ? "Guardando..." : "Guardar"}
-                        </button>
-                      </>
-                    ) : (
-                      <>
-                        <button onClick={startEdit} className="px-3 py-1.5 rounded-lg text-xs font-medium border border-gray-200 text-gray-600 hover:bg-gray-50">Editar</button>
-                        <button onClick={() => fileInputRef.current?.click()} disabled={uploadingFor === selectedTest.codigo}
-                          className="px-3 py-1.5 rounded-lg text-xs font-medium border border-gray-200 text-gray-600 hover:bg-gray-50 disabled:opacity-50">
-                          {uploadingFor === selectedTest.codigo ? "Subiendo..." : "Cambiar foto"}
-                        </button>
-                      </>
-                    )}
-                    <input ref={fileInputRef} type="file" accept="image/*" className="hidden"
-                      onChange={(e) => { const f = e.target.files?.[0]; if (f && selectedTest) uploadFoto(selectedTest.codigo, f); e.target.value = ""; }} />
+                  {cat.label && <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">{cat.label}</p>}
+                  <div className="space-y-3">
+                    {cat.tests.map((t) => (
+                      <TestCard key={t.codigo} test={t} editing={editing} showEdad={showEdad} tipo={activeNav.tipo} color={color}
+                        uploading={uploadingFor === t.codigo}
+                        onChange={(patch) => updateTest(t.codigo, patch)}
+                        onBenchmarkChange={(idx, patch) => updateBenchmark(t.codigo, idx, patch)}
+                        onAddBenchmark={() => addBenchmark(t.codigo)}
+                        onRemoveBenchmark={(idx) => removeBenchmark(t.codigo, idx)}
+                        onUploadFoto={(file) => uploadFoto(t.codigo, file)} />
+                    ))}
                   </div>
                 </div>
-              </div>
-
-              <div className="flex-1 overflow-y-auto px-5 py-4">
-                <div className="flex gap-5 flex-col md:flex-row">
-                  <div className="flex-1 min-w-0 space-y-4 order-2 md:order-1">
-                    <div>
-                      <label className="text-xs font-semibold text-gray-400 uppercase tracking-wide">¿Qué evalúa este test?</label>
-                      {editing ? (
-                        <textarea value={selectedTest.descripcion ?? ""} onChange={(e) => updateTest(selectedTest.codigo, { descripcion: e.target.value || null })} rows={3}
-                          className="w-full mt-1 text-sm border border-gray-200 rounded-lg px-3 py-2 resize-none" />
-                      ) : (
-                        <p className="text-sm text-gray-700 mt-1">{selectedTest.descripcion || "—"}</p>
-                      )}
-                    </div>
-                    <div>
-                      <label className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Instrucciones de ejecución</label>
-                      {editing ? (
-                        <textarea value={selectedTest.instrucciones ?? ""} onChange={(e) => updateTest(selectedTest.codigo, { instrucciones: e.target.value || null })} rows={4}
-                          className="w-full mt-1 text-sm border border-gray-200 rounded-lg px-3 py-2 resize-none" />
-                      ) : (
-                        <p className="text-sm text-gray-700 mt-1 italic">{selectedTest.instrucciones || "—"}</p>
-                      )}
-                    </div>
-                  </div>
-
-                  <div className="w-full md:w-[180px] shrink-0 order-1 md:order-2">
-                    {editing && (
-                      <button onClick={() => fileInputRef.current?.click()} disabled={uploadingFor === selectedTest.codigo} className="text-xs text-blue-600 hover:underline mb-2 block disabled:opacity-50">
-                        {uploadingFor === selectedTest.codigo ? "Subiendo..." : "Cambiar foto"}
-                      </button>
-                    )}
-                    {selectedTest.foto_url ? (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img src={selectedTest.foto_url} alt={selectedTest.nombre} loading="lazy"
-                        className="w-full h-[220px] md:h-[140px] rounded-[10px] md:rounded-lg object-cover" />
-                    ) : (
-                      <div className="hidden md:flex w-full h-[140px] rounded-lg bg-gray-100 items-center justify-center">
-                        <svg width="24" height="24" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5} className="text-gray-300"><path d="M4 16l4.586-4.586a2 2 0 0 1 2.828 0L16 16m-2-2 1.586-1.586a2 2 0 0 1 2.828 0L20 14M4 4h16v16H4V4z" /></svg>
-                      </div>
-                    )}
-                    <p className="text-xs text-gray-400 mt-1.5">{selectedTest.codigo} · {selectedTest.nombre}</p>
-                  </div>
-                </div>
-
-                <hr className="my-5 border-gray-100" />
-
-                <div className="space-y-4">
-                  <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Criterios de evaluación</p>
-
-                  {selectedTest.protocolo_benchmarks.length === 0 && !editing ? (
-                    <p className="text-sm text-gray-300 italic">Sin criterios definidos</p>
-                  ) : editing ? (
-                    <div className="space-y-4">
-                      {selectedTest.protocolo_benchmarks.map((b, idx) => (
-                        <div key={idx} className="border border-gray-100 rounded-xl p-3 space-y-2">
-                          <div className="flex items-center gap-2">
-                            <input value={b.criterio} onChange={(e) => updateBenchmark(selectedTest.codigo, idx, { criterio: e.target.value })} placeholder="Criterio"
-                              className="flex-1 text-sm font-medium border border-gray-200 rounded-lg px-2 py-1.5" />
-                            <button onClick={() => removeBenchmark(selectedTest.codigo, idx)} className="text-gray-300 hover:text-red-500 shrink-0" title="Eliminar criterio">
-                              <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path d="M18 6 6 18M6 6l12 12" /></svg>
-                            </button>
-                          </div>
-                          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-                            <div>
-                              <label className="text-[11px] font-medium text-emerald-700">✓ Correcto</label>
-                              <input value={b.descripcion_ok ?? ""} onChange={(e) => updateBenchmark(selectedTest.codigo, idx, { descripcion_ok: e.target.value || null })}
-                                className="w-full text-sm border border-gray-200 rounded-lg px-2 py-1.5 mt-0.5" />
-                            </div>
-                            <div>
-                              <label className="text-[11px] font-medium text-amber-700">En progreso</label>
-                              <input value={b.descripcion_progreso ?? ""} onChange={(e) => updateBenchmark(selectedTest.codigo, idx, { descripcion_progreso: e.target.value || null })}
-                                className="w-full text-sm border border-gray-200 rounded-lg px-2 py-1.5 mt-0.5" />
-                            </div>
-                            <div>
-                              <label className="text-[11px] font-medium text-red-700">✗ Incorrecto</label>
-                              <input value={b.descripcion_no ?? ""} onChange={(e) => updateBenchmark(selectedTest.codigo, idx, { descripcion_no: e.target.value || null })}
-                                className="w-full text-sm border border-gray-200 rounded-lg px-2 py-1.5 mt-0.5" />
-                            </div>
-                          </div>
-                          {(showEdad || showValores) && (
-                            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-1">
-                              {showEdad && (
-                                <div className="col-span-2 sm:col-span-1">
-                                  <label className="text-[11px] font-medium text-gray-500">Edad</label>
-                                  <div className="flex gap-1 items-center mt-0.5">
-                                    <input type="number" value={b.edad_min ?? ""} onChange={(e) => updateBenchmark(selectedTest.codigo, idx, { edad_min: e.target.value ? Number(e.target.value) : null })} placeholder="min" className="w-full border border-gray-200 rounded-lg px-2 py-1.5" />
-                                    <span className="text-gray-300">–</span>
-                                    <input type="number" value={b.edad_max ?? ""} onChange={(e) => updateBenchmark(selectedTest.codigo, idx, { edad_max: e.target.value ? Number(e.target.value) : null })} placeholder="max" className="w-full border border-gray-200 rounded-lg px-2 py-1.5" />
-                                  </div>
-                                </div>
-                              )}
-                              {showValores && (
-                                <>
-                                  <div>
-                                    <label className="text-[11px] font-medium text-gray-500">Mínimo</label>
-                                    <input value={b.valor_minimo ?? ""} onChange={(e) => updateBenchmark(selectedTest.codigo, idx, { valor_minimo: e.target.value || null })} className="w-full border border-gray-200 rounded-lg px-2 py-1.5 mt-0.5" />
-                                  </div>
-                                  <div>
-                                    <label className="text-[11px] font-medium text-gray-500">Óptimo</label>
-                                    <input value={b.valor_optimo ?? ""} onChange={(e) => updateBenchmark(selectedTest.codigo, idx, { valor_optimo: e.target.value || null })} className="w-full border border-gray-200 rounded-lg px-2 py-1.5 mt-0.5" />
-                                  </div>
-                                  <div>
-                                    <label className="text-[11px] font-medium text-gray-500">Unidad</label>
-                                    <input value={b.unidad ?? ""} onChange={(e) => updateBenchmark(selectedTest.codigo, idx, { unidad: e.target.value || null })} className="w-full border border-gray-200 rounded-lg px-2 py-1.5 mt-0.5" />
-                                  </div>
-                                </>
-                              )}
-                            </div>
-                          )}
-                        </div>
-                      ))}
-                      <button onClick={() => addBenchmark(selectedTest.codigo)} className="text-xs text-blue-600 hover:underline">+ Agregar criterio</button>
-                    </div>
-                  ) : (
-                    <div className="space-y-4">
-                      {selectedTest.protocolo_benchmarks.map((b, idx) => (
-                        <div key={idx}>
-                          {selectedTest.protocolo_benchmarks.length > 1 && <p className="text-sm font-medium text-gray-700 mb-2">{b.criterio}</p>}
-                          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                            <CriteriaCard icon="✓" label="Correcto" text={b.descripcion_ok} bg="#f1f8e9" border="#a5d6a7" color="#33691e" />
-                            <CriteriaCard icon="~" label="En progreso" text={b.descripcion_progreso} bg="#fff8e1" border="#ffe082" color="#f57f17" />
-                            <CriteriaCard icon="✗" label="Incorrecto" text={b.descripcion_no} bg="#ffebee" border="#ffcdd2" color="#c62828" />
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              <div className="px-5 py-3 border-t border-gray-100 shrink-0 flex items-center justify-between">
-                <button onClick={goPrev} disabled={selectedIndex <= 0}
-                  className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-medium border border-gray-200 text-gray-600 hover:bg-gray-50 disabled:opacity-30 disabled:cursor-not-allowed">
-                  ← Anterior
-                </button>
-                <span className="text-xs text-gray-400">{selectedIndex + 1} de {tests.length}</span>
-                <button onClick={goNext} disabled={selectedIndex < 0 || selectedIndex >= tests.length - 1}
-                  className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-medium border border-gray-200 text-gray-600 hover:bg-gray-50 disabled:opacity-30 disabled:cursor-not-allowed">
-                  Siguiente →
-                </button>
-              </div>
-            </>
+              ))}
+            </div>
           )}
         </div>
       </div>
@@ -478,14 +299,124 @@ export default function ProtocolosModule() {
   );
 }
 
-function CriteriaCard({ icon, label, text, bg, border, color }: { icon: string; label: string; text: string | null; bg: string; border: string; color: string }) {
+function TestCard({ test, editing, showEdad, tipo, color, uploading, onChange, onBenchmarkChange, onAddBenchmark, onRemoveBenchmark, onUploadFoto }: {
+  test: TestFull; editing: boolean; showEdad: boolean; tipo: "tecnico" | "fisico"; color: { bg: string; text: string }; uploading: boolean;
+  onChange: (patch: Partial<TestFull>) => void;
+  onBenchmarkChange: (idx: number, patch: Partial<Benchmark>) => void;
+  onAddBenchmark: () => void;
+  onRemoveBenchmark: (idx: number) => void;
+  onUploadFoto: (file: File) => void;
+}) {
+  const showValores = tipo === "fisico";
   return (
-    <div className="rounded-xl p-3" style={{ backgroundColor: bg, border: `1px solid ${border}` }}>
-      <div className="flex items-center gap-1.5 mb-1">
-        <span className="text-sm font-bold" style={{ color }}>{icon}</span>
-        <span className="text-xs font-semibold" style={{ color }}>{label}</span>
+    <div className="border border-gray-100 rounded-xl overflow-hidden bg-white">
+      <div className="px-4 py-3 bg-gray-50">
+        <div className="flex items-center gap-2 mb-1">
+          <span className="text-xs font-semibold px-1.5 py-0.5 rounded shrink-0 text-white" style={{ backgroundColor: color.text }}>{test.codigo}</span>
+          {editing ? (
+            <input value={test.nombre} onChange={(e) => onChange({ nombre: e.target.value })} className="text-sm font-medium text-gray-800 border border-gray-200 rounded px-2 py-1 flex-1" />
+          ) : (
+            <span className="text-sm font-medium text-gray-800">{test.nombre}</span>
+          )}
+        </div>
+        {editing ? (
+          <textarea value={test.descripcion ?? ""} onChange={(e) => onChange({ descripcion: e.target.value || null })} rows={2} placeholder="¿Qué evalúa este test?" className="w-full text-xs border border-gray-200 rounded px-2 py-1 mt-1 resize-none bg-white" />
+        ) : test.descripcion ? (
+          <p className="text-xs text-gray-500 mt-1">{test.descripcion}</p>
+        ) : null}
       </div>
-      <p className="text-sm" style={{ color }}>{text || "—"}</p>
+
+      <div className="px-4 py-3 space-y-3">
+        <div className="flex gap-3 items-start">
+          <div className="w-20 h-20 rounded-lg bg-gray-100 overflow-hidden shrink-0 flex items-center justify-center">
+            {test.foto_url ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={test.foto_url} alt={test.nombre} loading="lazy" className="w-full h-full object-cover" />
+            ) : (
+              <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5} className="text-gray-300"><path d="M4 16l4.586-4.586a2 2 0 0 1 2.828 0L16 16m-2-2 1.586-1.586a2 2 0 0 1 2.828 0L20 14M4 4h16v16H4V4z" /></svg>
+            )}
+          </div>
+          {editing && (
+            <label className="text-xs text-blue-600 hover:underline cursor-pointer mt-2">
+              {uploading ? "Subiendo..." : "Subir foto de referencia"}
+              <input type="file" accept="image/*" className="hidden" disabled={uploading}
+                onChange={(e) => { const f = e.target.files?.[0]; if (f) onUploadFoto(f); e.target.value = ""; }} />
+            </label>
+          )}
+        </div>
+
+        {editing ? (
+          <textarea value={test.instrucciones ?? ""} onChange={(e) => onChange({ instrucciones: e.target.value || null })} rows={2} placeholder="Instrucciones de ejecución" className="w-full text-xs border border-gray-200 rounded px-2 py-1 resize-none" />
+        ) : test.instrucciones ? (
+          <p className="text-xs text-gray-500 italic">{test.instrucciones}</p>
+        ) : null}
+
+        <div className="overflow-x-auto">
+          <table className="w-full text-xs">
+            <thead>
+              <tr className="text-left text-gray-400 border-b border-gray-100">
+                <th className="py-1 pr-2 font-medium">Criterio</th>
+                <th className="py-1 pr-2 font-medium">✓ Correcto</th>
+                <th className="py-1 pr-2 font-medium">Progreso</th>
+                <th className="py-1 pr-2 font-medium">✗ Incorrecto</th>
+                {showEdad && <th className="py-1 pr-2 font-medium">Edad</th>}
+                {showValores && <th className="py-1 pr-2 font-medium">Mínimo</th>}
+                {showValores && <th className="py-1 pr-2 font-medium">Óptimo</th>}
+                {showValores && <th className="py-1 pr-2 font-medium">Unidad</th>}
+                {editing && <th className="py-1 w-6" />}
+              </tr>
+            </thead>
+            <tbody>
+              {test.protocolo_benchmarks.length === 0 && !editing ? (
+                <tr><td colSpan={4 + (showEdad ? 1 : 0) + (showValores ? 3 : 0)} className="py-2 text-gray-300 italic">Sin criterios definidos</td></tr>
+              ) : test.protocolo_benchmarks.map((b, idx) => (
+                <tr key={idx} className="border-b border-gray-50 last:border-0 align-top">
+                  <td className="py-1.5 pr-2">
+                    {editing ? <input value={b.criterio} onChange={(e) => onBenchmarkChange(idx, { criterio: e.target.value })} className="w-full border border-gray-200 rounded px-1.5 py-1" /> : <span className="text-gray-700">{b.criterio}</span>}
+                  </td>
+                  <td className="py-1.5 pr-2">
+                    {editing ? <input value={b.descripcion_ok ?? ""} onChange={(e) => onBenchmarkChange(idx, { descripcion_ok: e.target.value || null })} className="w-full border border-gray-200 rounded px-1.5 py-1" /> : <span className="text-emerald-700">{b.descripcion_ok ?? "—"}</span>}
+                  </td>
+                  <td className="py-1.5 pr-2">
+                    {editing ? <input value={b.descripcion_progreso ?? ""} onChange={(e) => onBenchmarkChange(idx, { descripcion_progreso: e.target.value || null })} className="w-full border border-gray-200 rounded px-1.5 py-1" /> : <span className="text-amber-700">{b.descripcion_progreso ?? "—"}</span>}
+                  </td>
+                  <td className="py-1.5 pr-2">
+                    {editing ? <input value={b.descripcion_no ?? ""} onChange={(e) => onBenchmarkChange(idx, { descripcion_no: e.target.value || null })} className="w-full border border-gray-200 rounded px-1.5 py-1" /> : <span className="text-red-700">{b.descripcion_no ?? "—"}</span>}
+                  </td>
+                  {showEdad && (
+                    <td className="py-1.5 pr-2">
+                      {editing ? (
+                        <div className="flex gap-1 items-center">
+                          <input type="number" value={b.edad_min ?? ""} onChange={(e) => onBenchmarkChange(idx, { edad_min: e.target.value ? Number(e.target.value) : null })} className="w-12 border border-gray-200 rounded px-1 py-1" placeholder="min" />
+                          <span className="text-gray-300">–</span>
+                          <input type="number" value={b.edad_max ?? ""} onChange={(e) => onBenchmarkChange(idx, { edad_max: e.target.value ? Number(e.target.value) : null })} className="w-12 border border-gray-200 rounded px-1 py-1" placeholder="max" />
+                        </div>
+                      ) : (b.edad_min !== null || b.edad_max !== null) ? <span className="text-gray-600">{b.edad_min ?? "—"}–{b.edad_max ?? "—"}</span> : <span className="text-gray-300">—</span>}
+                    </td>
+                  )}
+                  {showValores && (
+                    <>
+                      <td className="py-1.5 pr-2">{editing ? <input value={b.valor_minimo ?? ""} onChange={(e) => onBenchmarkChange(idx, { valor_minimo: e.target.value || null })} className="w-16 border border-gray-200 rounded px-1.5 py-1" /> : <span className="text-gray-600">{b.valor_minimo ?? "—"}</span>}</td>
+                      <td className="py-1.5 pr-2">{editing ? <input value={b.valor_optimo ?? ""} onChange={(e) => onBenchmarkChange(idx, { valor_optimo: e.target.value || null })} className="w-16 border border-gray-200 rounded px-1.5 py-1" /> : <span className="text-gray-600">{b.valor_optimo ?? "—"}</span>}</td>
+                      <td className="py-1.5 pr-2">{editing ? <input value={b.unidad ?? ""} onChange={(e) => onBenchmarkChange(idx, { unidad: e.target.value || null })} className="w-14 border border-gray-200 rounded px-1.5 py-1" /> : <span className="text-gray-600">{b.unidad ?? "—"}</span>}</td>
+                    </>
+                  )}
+                  {editing && (
+                    <td className="py-1.5">
+                      <button onClick={() => onRemoveBenchmark(idx)} className="text-gray-300 hover:text-red-500" title="Eliminar criterio">
+                        <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path d="M18 6 6 18M6 6l12 12" /></svg>
+                      </button>
+                    </td>
+                  )}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          {editing && (
+            <button onClick={onAddBenchmark} className="text-xs text-blue-600 hover:underline mt-2">+ Agregar criterio</button>
+          )}
+        </div>
+      </div>
     </div>
   );
 }
