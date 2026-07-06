@@ -333,7 +333,7 @@ export default function ProtocolosModule() {
 
               <div className="flex-1 overflow-y-auto px-5 py-4">
                 <div className="flex gap-5 flex-col md:flex-row">
-                  <div className="flex-1 min-w-0 space-y-4">
+                  <div className="flex-1 min-w-0 space-y-4 order-2 md:order-1">
                     <div>
                       <label className="text-xs font-semibold text-gray-400 uppercase tracking-wide">¿Qué evalúa este test?</label>
                       {editing ? (
@@ -354,20 +354,21 @@ export default function ProtocolosModule() {
                     </div>
                   </div>
 
-                  <div className="w-full md:w-[180px] shrink-0">
+                  <div className="w-full md:w-[180px] shrink-0 order-1 md:order-2">
                     {editing && (
                       <button onClick={() => fileInputRef.current?.click()} disabled={uploadingFor === selectedTest.codigo} className="text-xs text-blue-600 hover:underline mb-2 block disabled:opacity-50">
                         {uploadingFor === selectedTest.codigo ? "Subiendo..." : "Cambiar foto"}
                       </button>
                     )}
-                    <div className="w-full h-[140px] rounded-lg bg-gray-100 overflow-hidden flex items-center justify-center">
-                      {selectedTest.foto_url ? (
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img src={selectedTest.foto_url} alt={selectedTest.nombre} loading="lazy" className="w-full h-full object-cover" />
-                      ) : (
+                    {selectedTest.foto_url ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={selectedTest.foto_url} alt={selectedTest.nombre} loading="lazy"
+                        className="w-full h-[220px] md:h-[140px] rounded-[10px] md:rounded-lg object-cover" />
+                    ) : (
+                      <div className="hidden md:flex w-full h-[140px] rounded-lg bg-gray-100 items-center justify-center">
                         <svg width="24" height="24" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5} className="text-gray-300"><path d="M4 16l4.586-4.586a2 2 0 0 1 2.828 0L16 16m-2-2 1.586-1.586a2 2 0 0 1 2.828 0L20 14M4 4h16v16H4V4z" /></svg>
-                      )}
-                    </div>
+                      </div>
+                    )}
                     <p className="text-xs text-gray-400 mt-1.5">{selectedTest.codigo} · {selectedTest.nombre}</p>
                   </div>
                 </div>

@@ -2395,20 +2395,20 @@ posPayload[`${key}_score`] = rawScore !== null ? Math.round(rawScore) : null;
             ) : (
               <div className="space-y-3">
                 {hitos.map((h) => (
-                  <div key={h.id} className="flex items-start gap-4 p-4 rounded-xl border border-gray-100 bg-white hover:border-gray-200 transition-colors">
+                  <div key={h.id} className="flex flex-col md:flex-row items-start gap-4 p-4 rounded-xl border border-gray-100 bg-white hover:border-gray-200 transition-colors">
                     {h.foto_url ? (
-                      <img src={h.foto_url} alt={h.titulo} className="w-20 h-20 rounded-lg object-cover shrink-0 border border-gray-100" />
+                      <img src={h.foto_url} alt={h.titulo} className="order-1 w-full h-48 md:w-20 md:h-20 rounded-lg object-cover shrink-0 border border-gray-100" />
                     ) : (
-                      <div className="w-20 h-20 rounded-lg shrink-0 flex items-center justify-center" style={{ backgroundColor:"#F0FDF4" }}>
+                      <div className="order-1 hidden md:flex w-20 h-20 rounded-lg shrink-0 items-center justify-center" style={{ backgroundColor:"#F0FDF4" }}>
                         <svg width="28" height="28" fill="none" viewBox="0 0 24 24" stroke="#1B4D2E" strokeWidth={1.5}><path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"/><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"/><path d="M4 22h16"/><path d="M18 2H6v7a6 6 0 0 0 12 0V2Z"/></svg>
                       </div>
                     )}
-                    <div className="flex-1 min-w-0">
+                    <div className="order-2 flex-1 min-w-0">
                       <p className="font-semibold text-gray-900 text-sm">{h.titulo}</p>
                       <p className="text-xs text-gray-400 mt-0.5">{formatFecha(h.fecha)}</p>
                       {h.descripcion && <p className="text-sm text-gray-600 mt-1.5 leading-relaxed">{h.descripcion}</p>}
                     </div>
-                    <button onClick={() => handleDeleteHito(h.id)} className="shrink-0 p-1.5 rounded-lg text-gray-300 hover:text-red-400 hover:bg-red-50 transition-colors">
+                    <button onClick={() => handleDeleteHito(h.id)} className="order-3 shrink-0 p-1.5 rounded-lg text-gray-300 hover:text-red-400 hover:bg-red-50 transition-colors">
                       <svg width="15" height="15" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}><path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6"/></svg>
                     </button>
                   </div>
