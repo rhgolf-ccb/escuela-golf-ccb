@@ -55,31 +55,31 @@ export async function POST(request: NextRequest) {
 INSTRUCCIONES PARA ESTE GRUPO (${grupo}):
 ${instruccionesGrupo[grupo] || instruccionesGrupo["Albatros"]}
 
-ESTILO: Tono técnico, coaching deportivo. Oraciones cortas y directas. Sin frases motivacionales genéricas. Usa nomenclatura TPI cuando el grupo lo permite.
+ESTILO: Tono técnico, coaching deportivo. Oraciones cortas y directas. Sin frases motivacionales genéricas. Usa nomenclatura TPI cuando el grupo lo permite. Sé conciso — cada campo debe respetar su límite de longitud estrictamente, sin relleno.
 
 CRÍTICO: Responde ÚNICAMENTE con un objeto JSON válido. Sin texto antes, sin texto después, sin markdown, sin backticks. Solo el JSON puro empezando con { y terminando con }.
 
 {
-  "resumen": "2-3 oraciones sobre el estado físico general del alumno y su impacto potencial en el swing de golf",
+  "resumen": "1-2 oraciones sobre el estado físico general del alumno y su impacto potencial en el swing de golf",
   "limitaciones": [
     {
       "test": "código del test evaluado (ej: S1, DM3, PB2)",
       "titulo": "nombre corto del problema físico (máx 5 palabras)",
       "nivel": "bajo o progreso",
-      "descripcion": "qué significa esta limitación biomecánica para el swing, máx 2 oraciones técnicas",
+      "descripcion": "qué significa esta limitación biomecánica para el swing, 1 oración técnica",
       "conexion_swing": "posición(es) del swing directamente afectada(s), ej: P4 top backswing",
-      "ejercicios": ["ejercicio específico con instrucción técnica breve", "segundo ejercicio"]
+      "ejercicios": ["ejercicio específico con instrucción técnica breve (1 línea)"]
     }
   ],
-  "patron_general": "si hay un patrón común entre las limitaciones (ej: déficit de movilidad rotacional torácica), descríbelo en 1-2 oraciones; null si no hay patrón claro",
-  "fortalezas_fisicas": ["fortaleza física específica observada en los resultados", "segunda si existe"],
+  "patron_general": "si hay un patrón común entre las limitaciones (ej: déficit de movilidad rotacional torácica), descríbelo en 1 oración; null si no hay patrón claro",
+  "fortalezas_fisicas": ["fortaleza física específica observada en los resultados (1 línea)", "segunda si existe (1 línea)"],
   "plan_trabajo": [
-    { "semanas": "1-4", "objetivo": "objetivo físico medible para esas semanas", "ejercicios": ["ejercicio 1 con sets/reps", "ejercicio 2"] }
+    { "semanas": "1-4", "objetivo": "objetivo físico medible para esas semanas, 1 línea", "ejercicios": ["ejercicio con sets/reps, 1 línea"] }
   ],
-  "nota_edad": "consideración pedagógica específica para edad y grupo, máx 2 oraciones"
+  "nota_edad": "consideración pedagógica específica para edad y grupo, 1 oración"
 }
 
-Solo incluye en limitaciones los tests con resultado bajo o en progreso. Máximo 4 limitaciones, ordenadas por impacto en el swing.`;
+Solo incluye en limitaciones los tests con resultado bajo o en progreso. Máximo 3 limitaciones (la de mayor impacto en el swing primero), con exactamente 1 ejercicio cada una. Máximo 2 bloques en plan_trabajo, con 1 ejercicio cada uno.`;
 
   const userMessage = `ALUMNO: ${student.full_name}
 GRUPO: ${grupo}
@@ -103,7 +103,7 @@ ${evaluation.professor_comment ? `\nOBSERVACIONES DEL PROFESOR: ${evaluation.pro
       },
       body: JSON.stringify({
         model: "claude-sonnet-4-6",
-        max_tokens: 2000,
+        max_tokens: 1600,
         system: systemPrompt,
         messages: [{ role: "user", content: userMessage }],
       }),

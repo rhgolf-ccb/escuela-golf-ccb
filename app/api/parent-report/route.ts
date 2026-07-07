@@ -156,24 +156,26 @@ ${hitos.map((h) => `- ${h.titulo} (${formatFecha(h.fecha)})${h.descripcion ? `: 
 
 REGLAS:
 - Tono: cálido, motivador, enfocado en logros y potencial
-- Lenguaje: español sencillo, sin jerga técnica de golf
+- Lenguaje: español sencillo, sin jerga técnica de golf — esto incluye términos como "backswing", "downswing", "swing plane", o anatómicos como "torácica"/"lumbo-pélvica"; usa siempre su equivalente en lenguaje cotidiano
 - Cuando menciones aspectos a mejorar, enmarcarlos siempre como oportunidades de crecimiento, nunca como deficiencias
-- Máximo 400 palabras en el resumen narrativo
+- Sé conciso: el resumen narrativo debe respetar el límite de palabras estrictamente, sin relleno
+- Máximo 200 palabras en el resumen narrativo
 - NO mencionar números de posición (P1, P5, P7) ni códigos TPI (S11, S16, DM3) — tradúcelos a lenguaje natural:
   Ejemplo: "P4 top backswing" → "la parte alta del swing"
   Ejemplo: "S11 Hip Internal Rotation" → "la flexibilidad de cadera"
   Ejemplo: "P7 impacto" → "el momento de contacto con la pelota"
 - Si hay hitos o logros, menciónalos con orgullo
 - Si hay datos Trackman, menciona la velocidad de swing de forma positiva y comprensible para padres
+- Exactamente 2 elementos en "fortalezas", 2 en "areas_crecimiento" y 2 en "recomendaciones_casa" — ni más ni menos
 
 Devuelve SOLO un JSON válido sin backticks, sin texto extra, comenzando con {:
 {
   "saludo": "Estimada familia [apellido del alumno],",
-  "resumen_narrativo": "párrafo principal motivador de 200-400 palabras",
-  "fortalezas": ["fortaleza concreta 1", "fortaleza 2", "fortaleza 3"],
-  "areas_crecimiento": ["oportunidad de crecimiento 1 (tono positivo)", "oportunidad 2", "oportunidad 3"],
-  "mensaje_cierre": "frase motivadora y cálida de cierre (1-2 oraciones)",
-  "recomendaciones_casa": ["actividad práctica simple en casa 1", "actividad 2", "actividad 3"]
+  "resumen_narrativo": "párrafo principal motivador de 120-200 palabras",
+  "fortalezas": ["fortaleza concreta 1 (1 línea)", "fortaleza 2 (1 línea)"],
+  "areas_crecimiento": ["oportunidad de crecimiento 1, tono positivo (1 línea)", "oportunidad 2 (1 línea)"],
+  "mensaje_cierre": "frase motivadora y cálida de cierre (1 oración)",
+  "recomendaciones_casa": ["actividad práctica simple en casa 1 (1 línea)", "actividad 2 (1 línea)"]
 }`;
 
   // Call Claude
@@ -182,7 +184,7 @@ Devuelve SOLO un JSON válido sin backticks, sin texto extra, comenzando con {:
     headers: { "Content-Type": "application/json", "x-api-key": apiKey, "anthropic-version": "2023-06-01" },
     body: JSON.stringify({
       model: "claude-sonnet-4-6",
-      max_tokens: 2000,
+      max_tokens: 1200,
       system: systemPrompt,
       messages: [{ role: "user", content: `Genera el informe para los padres basado en estos datos:\n\n${contexto}` }],
     }),

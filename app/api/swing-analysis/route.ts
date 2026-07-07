@@ -80,32 +80,32 @@ export async function POST(request: NextRequest) {
 INSTRUCCIONES PARA ESTE GRUPO (${grupo}):
 ${instruccionesGrupo[grupo] || instruccionesGrupo["Albatros"]}
 
-ESTILO DE REDACCIÓN: Tono técnico y formal de coaching deportivo. Oraciones cortas y directas. Sin frases motivacionales genéricas ("gran potencial", "sigue así"). Usa nomenclatura técnica de golf (on-plane, lag, shaft lean, etc.) cuando el grupo lo permite.
+ESTILO DE REDACCIÓN: Tono técnico y formal de coaching deportivo. Oraciones cortas y directas. Sin frases motivacionales genéricas ("gran potencial", "sigue así"). Usa nomenclatura técnica de golf (on-plane, lag, shaft lean, etc.) cuando el grupo lo permite. Sé conciso — cada campo debe respetar su límite de longitud estrictamente, sin relleno.
 
 CRÍTICO: Responde ÚNICAMENTE con un objeto JSON válido. Sin texto antes, sin texto después, sin markdown, sin backticks, sin explicaciones. Solo el JSON puro empezando con { y terminando con }.
 
 El JSON debe tener exactamente esta estructura:
 {
-  "resumen": "párrafo técnico de 2-3 oraciones sobre el estado actual del swing, tono formal y objetivo, sin frases genéricas",
+  "resumen": "párrafo técnico de 2 oraciones sobre el estado actual del swing, tono formal y objetivo, sin frases genéricas",
   "prioridades": [
     {
       "orden": 1,
       "posicion": "código de posición(es) afectadas, ej: P2 / P3",
       "titulo": "máx 6 palabras, nombre técnico del defecto",
-      "descripcion": "observación técnica objetiva del problema, máx 2 oraciones cortas",
-      "instruccion_profesor": "indicación directa y accionable para el profesor en clase, máx 3 oraciones",
-      "conexion_fisica": "restricción física TPI relacionada o null si no hay test disponible",
-      "drills": ["nombre del drill específico con descripción breve", "segundo drill"]
+      "descripcion": "observación técnica objetiva del problema, 1 oración corta",
+      "instruccion_profesor": "indicación directa y accionable para el profesor en clase, máx 2 oraciones",
+      "conexion_fisica": "restricción física TPI relacionada, máx 1 oración, o null si no hay test disponible",
+      "drills": ["nombre del drill específico con descripción breve (1 línea)"]
     }
   ],
-  "fortalezas": ["observación técnica positiva concreta", "segunda fortaleza"],
+  "fortalezas": ["observación técnica positiva concreta (1 línea)", "segunda fortaleza (1 línea)"],
   "plan_clase": [
-    { "minutos": "0-10", "actividad": "descripción específica de la actividad", "tipo": "fisico" }
+    { "minutos": "0-10", "actividad": "descripción específica de la actividad en 1 línea", "tipo": "fisico" }
   ],
-  "nota_edad": "consideración pedagógica concisa por edad y nivel del grupo, máx 2 oraciones"
+  "nota_edad": "consideración pedagógica concisa por edad y nivel del grupo, 1 oración"
 }
 
-Máximo 3 prioridades. Solo incluye posiciones evaluadas (no N/A). Los tipos de plan_clase son: fisico, tecnico, juego_corto, mental.`;
+Máximo 2 prioridades, con exactamente 1 drill cada una. Máximo 3 bloques en plan_clase. Solo incluye posiciones evaluadas (no N/A). Los tipos de plan_clase son: fisico, tecnico, juego_corto, mental.`;
 
   const userMessage = `ALUMNO: ${student.full_name}
 GRUPO: ${grupo}
@@ -131,7 +131,7 @@ ${contextoFisico}`;
       },
       body: JSON.stringify({
         model: "claude-sonnet-4-6",
-        max_tokens: 2000,
+        max_tokens: 1600,
         system: systemPrompt,
         messages: [{ role: "user", content: userMessage }],
       }),

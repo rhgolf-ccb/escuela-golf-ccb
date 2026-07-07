@@ -225,27 +225,27 @@ En el campo "resumen_integrado" SIEMPRE indica qué fuentes utilizaste (ej: "An�
 
 PRINCIPIO FUNDAMENTAL: Solo incluye conexiones donde haya datos reales. No inventes métricas ni hallazgos que no estén en los datos.
 
-CRÍTICO: Responde SIEMPRE en español. Responde ÚNICAMENTE con el objeto JSON puro sin backticks, sin texto antes ni después. Solo el JSON empezando con { y terminando con }.
+CRÍTICO: Responde SIEMPRE en español. Responde ÚNICAMENTE con el objeto JSON puro sin backticks, sin texto antes ni después. Solo el JSON empezando con { y terminando con }. Sé conciso — cada campo debe respetar su límite de longitud estrictamente, sin relleno.
 
 {
-  "resumen_integrado": "Comienza con 'Análisis basado en [fuentes]:'. Luego 2-3 oraciones explicando los hallazgos principales y la conexión más importante entre los datos disponibles.",
+  "resumen_integrado": "Comienza con 'Análisis basado en [fuentes]:'. Luego 1-2 oraciones explicando el hallazgo principal y la conexión más importante entre los datos disponibles.",
   "prioridades_cruzadas": [
     {
       "orden": 1,
       "titulo": "nombre del problema combinado (máx 6 palabras)",
       "limitacion_fisica": "código test + hallazgo si hay datos físicos, o 'Sin datos físicos' si no hay screening",
       "error_tecnico": "posición + descripción si hay datos técnicos, o 'Sin evaluación técnica' si no hay swing",
-      "descripcion": "explicación biomecánica o técnica precisa según los datos disponibles. Máx 3 oraciones.",
-      "ejercicio_fisico": "ejercicio correctivo específico con instrucción de ejecución y sets/reps",
-      "drill_tecnico": "drill de swing específico que trabaja el patrón",
-      "progresion": "cómo secuenciar el trabajo físico y técnico en el tiempo"
+      "descripcion": "explicación biomecánica o técnica precisa según los datos disponibles. Máx 2 oraciones.",
+      "ejercicio_fisico": "ejercicio correctivo específico con instrucción de ejecución y sets/reps, máx 2 oraciones",
+      "drill_tecnico": "drill de swing específico que trabaja el patrón, máx 1-2 oraciones",
+      "progresion": "cómo secuenciar el trabajo físico y técnico en el tiempo, máx 2 oraciones"
     }
   ],
-  "plan_sesion": "plan de trabajo para la próxima sesión en 2-3 oraciones directas basado en las fuentes disponibles.",
-  "nota_trackman": "si hay datos Trackman, interpreta la métrica más relevante en relación con las limitaciones o patrones identificados. Si no hay datos Trackman, usa null."
+  "plan_sesion": "plan de trabajo para la próxima sesión en 1-2 oraciones directas basado en las fuentes disponibles.",
+  "nota_trackman": "si hay datos Trackman, interpreta la métrica más relevante en relación con las limitaciones o patrones identificados, máx 2 oraciones. Si no hay datos Trackman, usa null."
 }
 
-Máximo 3 prioridades. Adapta el contenido a las fuentes disponibles — no dejes campos vacíos innecesariamente.`;
+Máximo 2 prioridades. Adapta el contenido a las fuentes disponibles — no dejes campos vacíos innecesariamente.`;
 
   const swingSection = hasSwing ? `
 ════════════════════════════════════════
@@ -305,7 +305,7 @@ ${swingSection}${physicalSection}${trackmanSection}`;
       },
       body: JSON.stringify({
         model: "claude-sonnet-4-6",
-        max_tokens: 3000,
+        max_tokens: 2000,
         system: systemPrompt,
         messages: [{ role: "user", content: userMessage }],
       }),
