@@ -267,12 +267,23 @@ function StaffCard({ member, onEdit }: { member: StaffMember; onEdit: () => void
       </button>
       <div className="flex items-center gap-4">
         <div
-          className="w-[80px] h-[80px] md:w-[96px] md:h-[96px] rounded-full overflow-hidden flex-shrink-0 flex items-center justify-center text-[32px] font-medium"
-          style={{ backgroundColor: avatar.bg, color: avatar.text }}
+          className="w-[80px] h-[80px] md:w-[96px] md:h-[96px] overflow-hidden flex-shrink-0 flex items-center justify-center text-[32px] font-medium"
+          style={{ backgroundColor: avatar.bg, color: avatar.text, borderRadius: "50%" }}
         >
           {member.foto_url ? (
             // eslint-disable-next-line @next/next/no-img-element
-            <img src={member.foto_url} alt={member.nombre} className="w-full h-full object-cover object-top rounded-full scale-125 origin-top" />
+            <img
+              src={member.foto_url}
+              alt={member.nombre}
+              style={{
+                width: "100%",
+                height: "100%",
+                objectFit: "cover",
+                objectPosition: "center center",
+                borderRadius: "50%",
+                display: "block",
+              }}
+            />
           ) : (
             getInitials(member.nombre)
           )}
@@ -319,7 +330,18 @@ function StaffModal({
           >
             {form.foto_url ? (
               // eslint-disable-next-line @next/next/no-img-element
-              <img src={form.foto_url} alt={form.nombre} className="w-full h-full object-cover object-top scale-125 origin-top" />
+              <img
+                src={form.foto_url}
+                alt={form.nombre}
+                style={{
+                  width: "100%",
+                  height: "100%",
+                  objectFit: "cover",
+                  objectPosition: "center center",
+                  borderRadius: "50%",
+                  display: "block",
+                }}
+              />
             ) : (
               getInitials(form.nombre || "??")
             )}
