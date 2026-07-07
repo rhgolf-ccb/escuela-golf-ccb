@@ -11,7 +11,7 @@ import JuvenileClassModal, {
 } from "./JuvenileClassModal";
 import CompetenciaClassModal from "./CompetenciaClassModal";
 import PacoPlanningModal from "./PacoPlanningModal";
-import ActividadEspecialModal from "./ActividadEspecialModal";
+import ActividadEspecialWizard from "./ActividadEspecialWizard";
 import PacoPlanWizard from "./PacoPlanWizard";
 import EventoDiaSinEscuelaModal from "./EventoDiaSinEscuelaModal";
 import { isStaff, type Rol } from "@/lib/roles";
@@ -44,10 +44,33 @@ export interface EstacionDamas { nombre: string; lugar: string; duracion_min: nu
 
 export interface DrillLibre { titulo: string; descripcion: string; }
 export interface EstacionLibre { nombre: string; lugar: string; horario: string; drills: DrillLibre[]; }
+
+export type CategoriaEstacionEspecial = "juego_largo" | "juego_corto" | "putt";
+export interface JuegoEstructurado {
+  nombre: string; objetivo_pedagogico: string; materiales: string;
+  instrucciones_profesor: string; explicacion_ninos: string; reglas: string[];
+}
+export interface EstacionEstructurada {
+  categoria: CategoriaEstacionEspecial; duracion_min: number; juego: JuegoEstructurado;
+}
+export interface Calentamiento { incluye: boolean; duracion_min: number; juego: JuegoEstructurado | null; }
+export interface Replicas { veces: number; intervalo_min: number; }
+
 export interface ActividadEspecial {
   id: string; nombre: string; grupos: TipoPlan[]; fecha: string;
   hora_inicio: string | null; hora_fin: string | null;
-  estaciones: EstacionLibre[]; notas: string | null; created_at: string;
+  tipo_estructura: "estaciones" | "libre";
+  estaciones: (EstacionLibre | EstacionEstructurada)[];
+  calentamiento: Calentamiento | null; replicas: Replicas | null;
+  notas: string | null; created_at: string;
+}
+
+export const CATEGORIA_ESTACION_LABEL: Record<CategoriaEstacionEspecial, string> = {
+  juego_largo: "Juego Largo", juego_corto: "Juego Corto", putt: "Putt",
+};
+
+export function esEstacionEstructurada(e: EstacionLibre | EstacionEstructurada): e is EstacionEstructurada {
+  return "juego" in e;
 }
 
 export interface EventoCalendario {
@@ -2805,7 +2828,7 @@ export default function ProgramacionModule({ currentRol }: { currentRol: Rol | n
 
       {/* ══ MODAL: Nueva actividad especial ══════════════════════════════════ */}
       {showActividadEspecial && (
-        <ActividadEspecialModal
+        <ActividadEspecialWizard
           fechaSugerida={wizardActividadInit?.fecha ?? toISODate(semana)}
           gruposSugeridos={wizardActividadInit?.grupos ?? [activeTab]}
           onClose={() => { setShowActividadEspecial(false); setWizardActividadInit(null); }}
@@ -2859,13 +2882,39 @@ export default function ProgramacionModule({ currentRol }: { currentRol: Rol | n
                 <span>{formatDiaFecha(calEspecialDetail.fecha)}</span>
                 {calEspecialDetail.hora_inicio && <><span>·</span><span>{formatHora(calEspecialDetail.hora_inicio)}{calEspecialDetail.hora_fin ? `–${formatHora(calEspecialDetail.hora_fin)}` : ""}</span></>}
               </div>
+              {calEspecialDetail.replicas && (
+                <p className="text-xs text-gray-500">Se replica {calEspecialDetail.replicas.veces} veces, cada {calEspecialDetail.replicas.intervalo_min} min.</p>
+              )}
+              {calEspecialDetail.calentamiento?.incluye && (
+                <div className="border border-gray-100 rounded-lg p-3" style={{ background: "#fffbeb" }}>
+                  <p className="text-sm font-semibold text-gray-800">🔥 Calentamiento — {calEspecialDetail.calentamiento.duracion_min} min</p>
+                  {calEspecialDetail.calentamiento.juego && <p className="text-xs text-gray-600 mt-1">{calEspecialDetail.calentamiento.juego.nombre}: {calEspecialDetail.calentamiento.juego.objetivo_pedagogico}</p>}
+                </div>
+              )}
               {calEspecialDetail.estaciones.map((est, i) => (
                 <div key={i} className="border border-gray-100 rounded-lg p-3">
-                  <p className="text-sm font-semibold text-gray-800">{est.nombre}</p>
-                  <p className="text-xs text-gray-400 mb-1.5">{[est.horario, est.lugar].filter(Boolean).join(" · ")}</p>
-                  {est.drills.map((d, di) => (
-                    <p key={di} className="text-xs text-gray-600"><span className="font-medium">{d.titulo}</span>{d.descripcion ? `: ${d.descripcion}` : ""}</p>
-                  ))}
+                  {esEstacionEstructurada(est) ? (
+                    <>
+                      <p className="text-sm font-semibold text-gray-800">{CATEGORIA_ESTACION_LABEL[est.categoria]} — {est.juego.nombre}</p>
+                      <p className="text-xs text-gray-400 mb-1.5">{est.duracion_min} min</p>
+                      <p className="text-xs text-gray-600"><span className="font-medium">Objetivo:</span> {est.juego.objetivo_pedagogico}</p>
+                      <p className="text-xs text-gray-600 mt-1"><span className="font-medium">Materiales:</span> {est.juego.materiales}</p>
+                      <p className="text-xs text-gray-600 mt-1"><span className="font-medium">Instrucciones:</span> {est.juego.instrucciones_profesor}</p>
+                      {est.juego.reglas.length > 0 && (
+                        <ol className="text-xs text-gray-600 mt-1 list-decimal pl-4">
+                          {est.juego.reglas.map((r, ri) => <li key={ri}>{r}</li>)}
+                        </ol>
+                      )}
+                    </>
+                  ) : (
+                    <>
+                      <p className="text-sm font-semibold text-gray-800">{est.nombre}</p>
+                      <p className="text-xs text-gray-400 mb-1.5">{[est.horario, est.lugar].filter(Boolean).join(" · ")}</p>
+                      {est.drills.map((d, di) => (
+                        <p key={di} className="text-xs text-gray-600"><span className="font-medium">{d.titulo}</span>{d.descripcion ? `: ${d.descripcion}` : ""}</p>
+                      ))}
+                    </>
+                  )}
                 </div>
               ))}
               {calEspecialDetail.notas && <p className="text-xs text-gray-500 italic">{calEspecialDetail.notas}</p>}
