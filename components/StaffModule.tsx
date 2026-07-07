@@ -267,12 +267,12 @@ function StaffCard({ member, onEdit }: { member: StaffMember; onEdit: () => void
       </button>
       <div className="flex gap-3">
         <div
-          className="w-14 h-14 rounded-full overflow-hidden shrink-0 flex items-center justify-center text-sm font-bold"
+          className="w-[60px] h-[60px] md:w-[72px] md:h-[72px] rounded-full overflow-hidden shrink-0 flex items-center justify-center text-[20px] md:text-[24px] font-medium"
           style={{ backgroundColor: avatar.bg, color: avatar.text }}
         >
           {member.foto_url ? (
             // eslint-disable-next-line @next/next/no-img-element
-            <img src={member.foto_url} alt={member.nombre} className="w-full h-full object-cover" />
+            <img src={member.foto_url} alt={member.nombre} className="w-full h-full object-cover rounded-full" />
           ) : (
             getInitials(member.nombre)
           )}
