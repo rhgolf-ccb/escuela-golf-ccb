@@ -31,6 +31,16 @@ function addMinutes(hhmm: string, min: number): string {
   const mm = ((total % 60) + 60) % 60;
   return `${String(hh).padStart(2, "0")}:${String(mm).padStart(2, "0")}`;
 }
+function formatHora12(hhmm: string): string {
+  if (!hhmm) return "";
+  const [h, m] = hhmm.split(":").map(Number);
+  const period = h >= 12 ? "PM" : "AM";
+  const h12 = h % 12 === 0 ? 12 : h % 12;
+  return `${h12}:${String(m).padStart(2, "0")} ${period}`;
+}
+function turnoLabel(t: ReplicaTurno, idx: number): string {
+  return `Turno ${idx + 1} — ${t.nombre_grupo || "Sin nombre"} (${formatHora12(t.hora_inicio)})`;
+}
 
 async function buildDrillsContext(): Promise<string> {
   const { data } = await supabase.from("drills").select("titulo, categoria").eq("aprobado", true).order("categoria").limit(150);
@@ -44,24 +54,9 @@ async function buildDrillsContext(): Promise<string> {
   return Array.from(porCategoria.entries()).map(([cat, titulos]) => `${cat}: ${titulos.join(", ")}`).join("\n");
 }
 
-function buildMarkdown(params: {
-  nombre: string; fecha: string; grupos: TipoPlan[]; horaInicio: string;
-  tipoEstructura: TipoEstructura; calentamiento: Calentamiento | null; replicas: Replicas | null;
-  estaciones: (EstacionLibre | EstacionEstructurada)[]; notas: string;
-}): string {
-  const { nombre, fecha, grupos, horaInicio, calentamiento, replicas, estaciones, notas } = params;
-  const fechaFmt = fecha ? new Date(`${fecha}T00:00:00`).toLocaleDateString("es-CO", { day: "numeric", month: "long", year: "numeric" }) : "";
-  const gruposLine = grupos.map((g) => TIPO_PLAN_LABEL[g]).join(", ") || "Sin especificar";
-  const lines: string[] = [`## Grupos participantes`, gruposLine, ``];
-
-  if (replicas && replicas.turnos.length > 0) {
-    lines.push(`## Turnos`);
-    replicas.turnos.forEach((t) => lines.push(`- **${t.hora_inicio}** — ${t.nombre_grupo}`));
-    lines.push("");
-  }
-
-  let cursor = horaInicio;
-  lines.push(`## Cronograma`);
+function buildCronogramaLines(inicio: string, calentamiento: Calentamiento | null, estaciones: (EstacionLibre | EstacionEstructurada)[]): string[] {
+  let cursor = inicio;
+  const lines: string[] = [];
   if (calentamiento?.incluye) {
     lines.push(`- **${cursor}–${addMinutes(cursor, calentamiento.duracion_min)} · Calentamiento**`);
     calentamiento.ejercicios.forEach((ej) => lines.push(`  - ${ej.nombre} (${ej.duracion_min} min): ${ej.descripcion}`));
@@ -76,7 +71,31 @@ function buildMarkdown(params: {
       lines.push(`- **${est.nombre}**${est.horario ? ` (${est.horario})` : ""}${est.lugar ? ` · ${est.lugar}` : ""}`);
     }
   });
-  lines.push("");
+  return lines;
+}
+
+function buildMarkdown(params: {
+  nombre: string; fecha: string; grupos: TipoPlan[]; horaInicio: string;
+  tipoEstructura: TipoEstructura; calentamiento: Calentamiento | null; replicas: Replicas | null;
+  estaciones: (EstacionLibre | EstacionEstructurada)[]; notas: string;
+}): string {
+  const { nombre, fecha, grupos, horaInicio, calentamiento, replicas, estaciones, notas } = params;
+  const fechaFmt = fecha ? new Date(`${fecha}T00:00:00`).toLocaleDateString("es-CO", { day: "numeric", month: "long", year: "numeric" }) : "";
+  const gruposLine = grupos.map((g) => TIPO_PLAN_LABEL[g]).join(", ") || "Sin especificar";
+  const lines: string[] = [`## Grupos participantes`, gruposLine, ``];
+
+  if (replicas && replicas.turnos.length > 0) {
+    lines.push(`## Cronograma por turno`);
+    replicas.turnos.forEach((t, ti) => {
+      lines.push(`### ${turnoLabel(t, ti)}`);
+      lines.push(...buildCronogramaLines(t.hora_inicio, calentamiento, estaciones));
+      lines.push("");
+    });
+  } else {
+    lines.push(`## Cronograma`);
+    lines.push(...buildCronogramaLines(horaInicio, calentamiento, estaciones));
+    lines.push("");
+  }
 
   lines.push(`## Detalle por estación`);
   estaciones.forEach((est) => {
@@ -685,7 +704,7 @@ export default function ActividadEspecialWizard({
                     {seReplica && turnos.length > 0 ? (
                       turnos.map((t, ti) => (
                         <div key={ti} className="space-y-1">
-                          <p className="text-xs font-semibold text-gray-500">{t.nombre_grupo || `Turno ${ti + 1}`}</p>
+                          <p className="text-xs font-semibold text-gray-500">{turnoLabel(t, ti)}</p>
                           {renderCronograma(t.hora_inicio)}
                         </div>
                       ))

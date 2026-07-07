@@ -2888,7 +2888,7 @@ export default function ProgramacionModule({ currentRol }: { currentRol: Rol | n
                 <div className="space-y-1">
                   <p className="text-xs font-semibold text-gray-500">Turnos</p>
                   {calEspecialDetail.replicas.turnos.map((t, i) => (
-                    <p key={i} className="text-xs text-gray-600">{formatHora(t.hora_inicio)} — {t.nombre_grupo}</p>
+                    <p key={i} className="text-xs text-gray-600">Turno {i + 1} — {t.nombre_grupo || "Sin nombre"} ({formatHora(t.hora_inicio)})</p>
                   ))}
                 </div>
               )}
