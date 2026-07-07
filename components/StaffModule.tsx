@@ -267,7 +267,7 @@ function StaffCard({ member, onEdit }: { member: StaffMember; onEdit: () => void
       </button>
       <div className="flex gap-3">
         <div
-          className="w-[60px] h-[60px] md:w-[72px] md:h-[72px] rounded-full overflow-hidden shrink-0 flex items-center justify-center text-[20px] md:text-[24px] font-medium"
+          className="w-[80px] h-[80px] md:w-[96px] md:h-[96px] rounded-full overflow-hidden shrink-0 flex items-center justify-center text-[32px] font-medium"
           style={{ backgroundColor: avatar.bg, color: avatar.text }}
         >
           {member.foto_url ? (
