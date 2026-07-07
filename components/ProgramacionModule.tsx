@@ -64,7 +64,6 @@ export interface ActividadEspecial {
   tipo_estructura: "estaciones" | "libre";
   estaciones: (EstacionLibre | EstacionEstructurada)[];
   calentamiento: Calentamiento | null; replicas: Replicas | null;
-  nombre_grupo_libre: string | null;
   notas: string | null; created_at: string;
 }
 
@@ -2881,7 +2880,6 @@ export default function ProgramacionModule({ currentRol }: { currentRol: Rol | n
             <div className="p-5 space-y-3">
               <div className="flex flex-wrap items-center gap-2 text-xs" style={{ color: "#8a5a1a" }}>
                 <span className="font-semibold">{calEspecialDetail.grupos.map((g) => TIPO_PLAN_LABEL[g]).join(", ")}</span>
-                {calEspecialDetail.nombre_grupo_libre && <span className="italic">({calEspecialDetail.nombre_grupo_libre})</span>}
                 <span>·</span>
                 <span>{formatDiaFecha(calEspecialDetail.fecha)}</span>
                 {calEspecialDetail.hora_inicio && <><span>·</span><span>{formatHora(calEspecialDetail.hora_inicio)}{calEspecialDetail.hora_fin ? `–${formatHora(calEspecialDetail.hora_fin)}` : ""}</span></>}

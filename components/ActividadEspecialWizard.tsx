@@ -45,14 +45,14 @@ async function buildDrillsContext(): Promise<string> {
 }
 
 function buildMarkdown(params: {
-  nombre: string; fecha: string; grupos: TipoPlan[]; horaInicio: string; nombreGrupoLibre: string;
+  nombre: string; fecha: string; grupos: TipoPlan[]; horaInicio: string;
   tipoEstructura: TipoEstructura; calentamiento: Calentamiento | null; replicas: Replicas | null;
   estaciones: (EstacionLibre | EstacionEstructurada)[]; notas: string;
 }): string {
-  const { nombre, fecha, grupos, horaInicio, nombreGrupoLibre, calentamiento, replicas, estaciones, notas } = params;
+  const { nombre, fecha, grupos, horaInicio, calentamiento, replicas, estaciones, notas } = params;
   const fechaFmt = fecha ? new Date(`${fecha}T00:00:00`).toLocaleDateString("es-CO", { day: "numeric", month: "long", year: "numeric" }) : "";
   const gruposLine = grupos.map((g) => TIPO_PLAN_LABEL[g]).join(", ") || "Sin especificar";
-  const lines: string[] = [`## Grupos participantes`, nombreGrupoLibre.trim() ? `${gruposLine} — ${nombreGrupoLibre.trim()}` : gruposLine, ``];
+  const lines: string[] = [`## Grupos participantes`, gruposLine, ``];
 
   if (replicas && replicas.turnos.length > 0) {
     lines.push(`## Turnos`);
@@ -112,7 +112,6 @@ export default function ActividadEspecialWizard({
   // Paso 2
   const [nombre, setNombre] = useState("");
   const [grupos, setGrupos] = useState<TipoPlan[]>(gruposSugeridos);
-  const [nombreGrupoLibre, setNombreGrupoLibre] = useState("");
   const [fecha, setFecha] = useState(fechaSugerida);
   const [horaInicio, setHoraInicio] = useState("09:00");
   const [duracionTotal, setDuracionTotal] = useState(60);
@@ -332,7 +331,6 @@ export default function ActividadEspecialWizard({
         estaciones: estacionesFinal,
         calentamiento: calentamientoFinal,
         replicas: replicasFinal,
-        nombre_grupo_libre: nombreGrupoLibre.trim() || null,
         notas: notas.trim() || null,
       });
       if (error) throw new Error(error.message);
@@ -365,7 +363,7 @@ export default function ActividadEspecialWizard({
   function handlePdf() {
     import("@/lib/pdf-generator").then(({ generateCCBPdf }) => {
       generateCCBPdf(
-        buildMarkdown({ nombre, fecha, grupos, horaInicio, nombreGrupoLibre, tipoEstructura: tipoEstructura ?? "libre", calentamiento: calentamientoFinal, replicas: replicasFinal, estaciones: estacionesFinal, notas }),
+        buildMarkdown({ nombre, fecha, grupos, horaInicio, tipoEstructura: tipoEstructura ?? "libre", calentamiento: calentamientoFinal, replicas: replicasFinal, estaciones: estacionesFinal, notas }),
         {
           documentName: `${nombre}${fecha ? ` — ${new Date(`${fecha}T00:00:00`).toLocaleDateString("es-CO", { day: "numeric", month: "long", year: "numeric" })}` : ""}`,
           filenamePrefix: `Actividad-especial-${fecha || toISODate(new Date())}`,
@@ -376,7 +374,7 @@ export default function ActividadEspecialWizard({
 
   function handleWhatsApp() {
     openWhatsApp(formatWhatsAppMessage(
-      buildMarkdown({ nombre, fecha, grupos, horaInicio, nombreGrupoLibre, tipoEstructura: tipoEstructura ?? "libre", calentamiento: calentamientoFinal, replicas: replicasFinal, estaciones: estacionesFinal, notas }),
+      buildMarkdown({ nombre, fecha, grupos, horaInicio, tipoEstructura: tipoEstructura ?? "libre", calentamiento: calentamientoFinal, replicas: replicasFinal, estaciones: estacionesFinal, notas }),
       "actividad_especial", nombre
     ));
   }
@@ -440,8 +438,6 @@ export default function ActividadEspecialWizard({
                   ))}
                 </div>
               </div>
-              <input value={nombreGrupoLibre} onChange={(e) => setNombreGrupoLibre(e.target.value)} placeholder="Nombre del grupo o subgrupo (opcional, ej: Summer Camp, Átomos)"
-                className="w-full text-sm px-3 py-2 rounded-lg border border-gray-200" />
               <div className="flex gap-2">
                 <input type="date" value={fecha} onChange={(e) => setFecha(e.target.value)} className="flex-1 text-sm px-3 py-2 rounded-lg border border-gray-200" />
                 <input type="time" value={horaInicio} onChange={(e) => setHoraInicio(e.target.value)} className="text-sm px-3 py-2 rounded-lg border border-gray-200" />
@@ -551,7 +547,7 @@ export default function ActividadEspecialWizard({
               </div>
               <div className="flex gap-2 pt-2">
                 <button onClick={() => setStep(2)} className="flex-1 py-2 rounded-xl text-sm font-medium border border-gray-200 text-gray-600 hover:bg-gray-50">Atrás</button>
-                <button onClick={() => setStep(4)} disabled={calentIncluye && calentEjercicios.length === 0} className="flex-1 py-2 rounded-xl text-sm font-semibold text-white disabled:opacity-50" style={{ backgroundColor: COLOR }}>Continuar</button>
+                <button onClick={() => setStep(4)} className="flex-1 py-2 rounded-xl text-sm font-semibold text-white" style={{ backgroundColor: COLOR }}>Continuar</button>
               </div>
             </div>
           )}
