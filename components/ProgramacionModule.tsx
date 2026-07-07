@@ -53,8 +53,10 @@ export interface JuegoEstructurado {
 export interface EstacionEstructurada {
   categoria: CategoriaEstacionEspecial; duracion_min: number; juego: JuegoEstructurado;
 }
-export interface Calentamiento { incluye: boolean; duracion_min: number; juego: JuegoEstructurado | null; }
-export interface Replicas { veces: number; intervalo_min: number; }
+export interface EjercicioCalentamiento { nombre: string; duracion_min: number; descripcion: string; }
+export interface Calentamiento { incluye: boolean; duracion_min: number; ejercicios: EjercicioCalentamiento[]; }
+export interface ReplicaTurno { hora_inicio: string; nombre_grupo: string; }
+export interface Replicas { turnos: ReplicaTurno[]; }
 
 export interface ActividadEspecial {
   id: string; nombre: string; grupos: TipoPlan[]; fecha: string;
@@ -62,6 +64,7 @@ export interface ActividadEspecial {
   tipo_estructura: "estaciones" | "libre";
   estaciones: (EstacionLibre | EstacionEstructurada)[];
   calentamiento: Calentamiento | null; replicas: Replicas | null;
+  nombre_grupo_libre: string | null;
   notas: string | null; created_at: string;
 }
 
@@ -2878,17 +2881,25 @@ export default function ProgramacionModule({ currentRol }: { currentRol: Rol | n
             <div className="p-5 space-y-3">
               <div className="flex flex-wrap items-center gap-2 text-xs" style={{ color: "#8a5a1a" }}>
                 <span className="font-semibold">{calEspecialDetail.grupos.map((g) => TIPO_PLAN_LABEL[g]).join(", ")}</span>
+                {calEspecialDetail.nombre_grupo_libre && <span className="italic">({calEspecialDetail.nombre_grupo_libre})</span>}
                 <span>·</span>
                 <span>{formatDiaFecha(calEspecialDetail.fecha)}</span>
                 {calEspecialDetail.hora_inicio && <><span>·</span><span>{formatHora(calEspecialDetail.hora_inicio)}{calEspecialDetail.hora_fin ? `–${formatHora(calEspecialDetail.hora_fin)}` : ""}</span></>}
               </div>
-              {calEspecialDetail.replicas && (
-                <p className="text-xs text-gray-500">Se replica {calEspecialDetail.replicas.veces} veces, cada {calEspecialDetail.replicas.intervalo_min} min.</p>
+              {calEspecialDetail.replicas && calEspecialDetail.replicas.turnos.length > 0 && (
+                <div className="space-y-1">
+                  <p className="text-xs font-semibold text-gray-500">Turnos</p>
+                  {calEspecialDetail.replicas.turnos.map((t, i) => (
+                    <p key={i} className="text-xs text-gray-600">{formatHora(t.hora_inicio)} — {t.nombre_grupo}</p>
+                  ))}
+                </div>
               )}
               {calEspecialDetail.calentamiento?.incluye && (
                 <div className="border border-gray-100 rounded-lg p-3" style={{ background: "#fffbeb" }}>
                   <p className="text-sm font-semibold text-gray-800">🔥 Calentamiento — {calEspecialDetail.calentamiento.duracion_min} min</p>
-                  {calEspecialDetail.calentamiento.juego && <p className="text-xs text-gray-600 mt-1">{calEspecialDetail.calentamiento.juego.nombre}: {calEspecialDetail.calentamiento.juego.objetivo_pedagogico}</p>}
+                  {calEspecialDetail.calentamiento.ejercicios.map((ej, i) => (
+                    <p key={i} className="text-xs text-gray-600 mt-1">{ej.nombre} ({ej.duracion_min} min): {ej.descripcion}</p>
+                  ))}
                 </div>
               )}
               {calEspecialDetail.estaciones.map((est, i) => (

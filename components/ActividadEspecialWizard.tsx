@@ -6,7 +6,8 @@ import { formatWhatsAppMessage, openWhatsApp } from "@/lib/whatsapp-formatter";
 import {
   TIPO_PLAN_LABEL, CATEGORIA_ESTACION_LABEL, toISODate, esEstacionEstructurada,
   type TipoPlan, type EstacionLibre, type DrillLibre, type EstacionEstructurada,
-  type JuegoEstructurado, type Calentamiento, type Replicas, type CategoriaEstacionEspecial,
+  type JuegoEstructurado, type Calentamiento, type Replicas, type ReplicaTurno,
+  type EjercicioCalentamiento, type CategoriaEstacionEspecial,
 } from "./ProgramacionModule";
 
 const GRUPOS: TipoPlan[] = ["juvenil", "competencia", "damas"];
@@ -44,22 +45,26 @@ async function buildDrillsContext(): Promise<string> {
 }
 
 function buildMarkdown(params: {
-  nombre: string; fecha: string; grupos: TipoPlan[]; horaInicio: string;
+  nombre: string; fecha: string; grupos: TipoPlan[]; horaInicio: string; nombreGrupoLibre: string;
   tipoEstructura: TipoEstructura; calentamiento: Calentamiento | null; replicas: Replicas | null;
   estaciones: (EstacionLibre | EstacionEstructurada)[]; notas: string;
 }): string {
-  const { nombre, fecha, grupos, horaInicio, calentamiento, replicas, estaciones, notas } = params;
+  const { nombre, fecha, grupos, horaInicio, nombreGrupoLibre, calentamiento, replicas, estaciones, notas } = params;
   const fechaFmt = fecha ? new Date(`${fecha}T00:00:00`).toLocaleDateString("es-CO", { day: "numeric", month: "long", year: "numeric" }) : "";
-  const lines: string[] = [`## Grupos participantes`, grupos.map((g) => TIPO_PLAN_LABEL[g]).join(", ") || "Sin especificar", ``];
+  const gruposLine = grupos.map((g) => TIPO_PLAN_LABEL[g]).join(", ") || "Sin especificar";
+  const lines: string[] = [`## Grupos participantes`, nombreGrupoLibre.trim() ? `${gruposLine} — ${nombreGrupoLibre.trim()}` : gruposLine, ``];
 
-  if (replicas) {
-    lines.push(`## Réplicas`, `Se repite ${replicas.veces} veces, cada ${replicas.intervalo_min} minutos.`, ``);
+  if (replicas && replicas.turnos.length > 0) {
+    lines.push(`## Turnos`);
+    replicas.turnos.forEach((t) => lines.push(`- **${t.hora_inicio}** — ${t.nombre_grupo}`));
+    lines.push("");
   }
 
   let cursor = horaInicio;
   lines.push(`## Cronograma`);
   if (calentamiento?.incluye) {
-    lines.push(`- **${cursor}–${addMinutes(cursor, calentamiento.duracion_min)} · Calentamiento**${calentamiento.juego ? ` — ${calentamiento.juego.nombre}` : ""}`);
+    lines.push(`- **${cursor}–${addMinutes(cursor, calentamiento.duracion_min)} · Calentamiento**`);
+    calentamiento.ejercicios.forEach((ej) => lines.push(`  - ${ej.nombre} (${ej.duracion_min} min): ${ej.descripcion}`));
     cursor = addMinutes(cursor, calentamiento.duracion_min);
   }
   estaciones.forEach((est) => {
@@ -107,17 +112,18 @@ export default function ActividadEspecialWizard({
   // Paso 2
   const [nombre, setNombre] = useState("");
   const [grupos, setGrupos] = useState<TipoPlan[]>(gruposSugeridos);
+  const [nombreGrupoLibre, setNombreGrupoLibre] = useState("");
   const [fecha, setFecha] = useState(fechaSugerida);
   const [horaInicio, setHoraInicio] = useState("09:00");
   const [duracionTotal, setDuracionTotal] = useState(60);
   const [seReplica, setSeReplica] = useState(false);
-  const [replicaVeces, setReplicaVeces] = useState(2);
-  const [replicaIntervalo, setReplicaIntervalo] = useState(60);
+  const [turnos, setTurnos] = useState<ReplicaTurno[]>([]);
 
   // Paso 3
   const [calentIncluye, setCalentIncluye] = useState(true);
   const [calentDuracion, setCalentDuracion] = useState(10);
-  const [calentJuego, setCalentJuego] = useState({ nombre: "Juego de calentamiento dinámico", objetivo: "Activar el cuerpo y subir la energía antes de empezar" });
+  const [calentEjercicios, setCalentEjercicios] = useState<EjercicioCalentamiento[]>([]);
+  const [loadingCalent, setLoadingCalent] = useState(false);
   const [numEstaciones, setNumEstaciones] = useState(3);
   const [categoriasEstaciones, setCategoriasEstaciones] = useState<CategoriaEstacionEspecial[]>(["juego_largo", "juego_corto", "putt"]);
   const [duracionesEstaciones, setDuracionesEstaciones] = useState<number[]>([15, 15, 15]);
@@ -136,7 +142,6 @@ export default function ActividadEspecialWizard({
 
   // Paso 5
   const [notas, setNotas] = useState("");
-  const [replicaLabels, setReplicaLabels] = useState<string[]>([]);
 
   // Paso 6
   const [saving, setSaving] = useState(false);
@@ -152,6 +157,46 @@ export default function ActividadEspecialWizard({
 
   function toggleGrupo(g: TipoPlan) {
     setGrupos((prev) => (prev.includes(g) ? prev.filter((x) => x !== g) : [...prev, g]));
+  }
+
+  function toggleReplica(checked: boolean) {
+    setSeReplica(checked);
+    if (checked && turnos.length === 0) {
+      setTurnos([{ hora_inicio: horaInicio, nombre_grupo: "" }, { hora_inicio: addMinutes(horaInicio, duracionTotal), nombre_grupo: "" }]);
+    }
+  }
+  function addTurno() {
+    setTurnos((prev) => [...prev, { hora_inicio: addMinutes(prev[prev.length - 1]?.hora_inicio ?? horaInicio, duracionTotal), nombre_grupo: "" }]);
+  }
+  function updateTurno(idx: number, patch: Partial<ReplicaTurno>) {
+    setTurnos((prev) => prev.map((t, i) => (i === idx ? { ...t, ...patch } : t)));
+  }
+  function removeTurno(idx: number) {
+    setTurnos((prev) => prev.filter((_, i) => i !== idx));
+  }
+
+  async function fetchCalentamiento() {
+    setLoadingCalent(true);
+    try {
+      const res = await fetch("/api/actividad-especial-calentamiento", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ grupos, duracion_min: calentDuracion }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Error al generar el calentamiento");
+      setCalentEjercicios(data.ejercicios as EjercicioCalentamiento[]);
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "Error al generar el calentamiento");
+    }
+    setLoadingCalent(false);
+  }
+
+  function updateEjercicioCalent(idx: number, patch: Partial<EjercicioCalentamiento>) {
+    setCalentEjercicios((prev) => prev.map((e, i) => (i === idx ? { ...e, ...patch } : e)));
+  }
+  function removeEjercicioCalent(idx: number) {
+    setCalentEjercicios((prev) => prev.filter((_, i) => i !== idx));
   }
 
   function setNumEstacionesTo(n: number) {
@@ -251,7 +296,7 @@ export default function ActividadEspecialWizard({
       if (p.calentamiento) {
         setCalentIncluye(p.calentamiento.incluye);
         setCalentDuracion(p.calentamiento.duracion_min);
-        if (p.calentamiento.juego) setCalentJuego({ nombre: p.calentamiento.juego.nombre, objetivo: p.calentamiento.juego.objetivo_pedagogico });
+        setCalentEjercicios(p.calentamiento.ejercicios ?? []);
       }
       setStep(5);
     } else {
@@ -266,10 +311,10 @@ export default function ActividadEspecialWizard({
     : estacionesLibres;
 
   const calentamientoFinal: Calentamiento | null = tipoEstructura === "estaciones"
-    ? { incluye: calentIncluye, duracion_min: calentDuracion, juego: calentIncluye ? { ...emptyJuego(), nombre: calentJuego.nombre, objetivo_pedagogico: calentJuego.objetivo } : null }
+    ? { incluye: calentIncluye, duracion_min: calentDuracion, ejercicios: calentIncluye ? calentEjercicios : [] }
     : null;
 
-  const replicasFinal: Replicas | null = seReplica ? { veces: replicaVeces, intervalo_min: replicaIntervalo } : null;
+  const replicasFinal: Replicas | null = seReplica && turnos.length > 0 ? { turnos } : null;
 
   const horaFin = addMinutes(horaInicio, duracionTotal);
 
@@ -287,6 +332,7 @@ export default function ActividadEspecialWizard({
         estaciones: estacionesFinal,
         calentamiento: calentamientoFinal,
         replicas: replicasFinal,
+        nombre_grupo_libre: nombreGrupoLibre.trim() || null,
         notas: notas.trim() || null,
       });
       if (error) throw new Error(error.message);
@@ -319,7 +365,7 @@ export default function ActividadEspecialWizard({
   function handlePdf() {
     import("@/lib/pdf-generator").then(({ generateCCBPdf }) => {
       generateCCBPdf(
-        buildMarkdown({ nombre, fecha, grupos, horaInicio, tipoEstructura: tipoEstructura ?? "libre", calentamiento: calentamientoFinal, replicas: replicasFinal, estaciones: estacionesFinal, notas }),
+        buildMarkdown({ nombre, fecha, grupos, horaInicio, nombreGrupoLibre, tipoEstructura: tipoEstructura ?? "libre", calentamiento: calentamientoFinal, replicas: replicasFinal, estaciones: estacionesFinal, notas }),
         {
           documentName: `${nombre}${fecha ? ` — ${new Date(`${fecha}T00:00:00`).toLocaleDateString("es-CO", { day: "numeric", month: "long", year: "numeric" })}` : ""}`,
           filenamePrefix: `Actividad-especial-${fecha || toISODate(new Date())}`,
@@ -330,7 +376,7 @@ export default function ActividadEspecialWizard({
 
   function handleWhatsApp() {
     openWhatsApp(formatWhatsAppMessage(
-      buildMarkdown({ nombre, fecha, grupos, horaInicio, tipoEstructura: tipoEstructura ?? "libre", calentamiento: calentamientoFinal, replicas: replicasFinal, estaciones: estacionesFinal, notas }),
+      buildMarkdown({ nombre, fecha, grupos, horaInicio, nombreGrupoLibre, tipoEstructura: tipoEstructura ?? "libre", calentamiento: calentamientoFinal, replicas: replicasFinal, estaciones: estacionesFinal, notas }),
       "actividad_especial", nombre
     ));
   }
@@ -394,6 +440,8 @@ export default function ActividadEspecialWizard({
                   ))}
                 </div>
               </div>
+              <input value={nombreGrupoLibre} onChange={(e) => setNombreGrupoLibre(e.target.value)} placeholder="Nombre del grupo o subgrupo (opcional, ej: Summer Camp, Átomos)"
+                className="w-full text-sm px-3 py-2 rounded-lg border border-gray-200" />
               <div className="flex gap-2">
                 <input type="date" value={fecha} onChange={(e) => setFecha(e.target.value)} className="flex-1 text-sm px-3 py-2 rounded-lg border border-gray-200" />
                 <input type="time" value={horaInicio} onChange={(e) => setHoraInicio(e.target.value)} className="text-sm px-3 py-2 rounded-lg border border-gray-200" />
@@ -404,15 +452,21 @@ export default function ActividadEspecialWizard({
                 <span className="text-xs text-gray-400">termina {horaFin}</span>
               </div>
               <label className="flex items-center gap-2 text-sm text-gray-700">
-                <input type="checkbox" checked={seReplica} onChange={(e) => setSeReplica(e.target.checked)} />
-                ¿La actividad se replica durante el día? (ej. varios grupos rotando por turnos)
+                <input type="checkbox" checked={seReplica} onChange={(e) => toggleReplica(e.target.checked)} />
+                ¿El mismo plan se ejecuta con grupos diferentes en horarios distintos el mismo día?
               </label>
               {seReplica && (
-                <div className="flex items-center gap-3 pl-6">
-                  <label className="text-xs text-gray-500">Veces</label>
-                  <input type="number" min={2} value={replicaVeces} onChange={(e) => setReplicaVeces(Number(e.target.value) || 2)} className="w-16 text-sm px-2 py-1.5 rounded-lg border border-gray-200" />
-                  <label className="text-xs text-gray-500">Intervalo (min)</label>
-                  <input type="number" min={5} value={replicaIntervalo} onChange={(e) => setReplicaIntervalo(Number(e.target.value) || 45)} className="w-16 text-sm px-2 py-1.5 rounded-lg border border-gray-200" />
+                <div className="pl-6 space-y-2">
+                  {turnos.map((t, i) => (
+                    <div key={i} className="flex items-center gap-2">
+                      <input type="time" value={t.hora_inicio} onChange={(e) => updateTurno(i, { hora_inicio: e.target.value })} className="text-sm px-2 py-1.5 rounded-lg border border-gray-200" />
+                      <input value={t.nombre_grupo} onChange={(e) => updateTurno(i, { nombre_grupo: e.target.value })} placeholder="Nombre del grupo (ej: Átomos)" className="flex-1 text-sm px-2 py-1.5 rounded-lg border border-gray-200" />
+                      <button onClick={() => removeTurno(i)} className="text-gray-300 hover:text-red-500 shrink-0">
+                        <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path d="M18 6 6 18M6 6l12 12" /></svg>
+                      </button>
+                    </div>
+                  ))}
+                  <button onClick={addTurno} className="text-xs text-blue-600 hover:underline">+ Agregar turno</button>
                 </div>
               )}
               <div className="flex gap-2 pt-2">
@@ -437,9 +491,31 @@ export default function ActividadEspecialWizard({
                 ¿Incluye calentamiento activo con juego?
               </label>
               {calentIncluye && (
-                <div className="pl-6 flex items-center gap-2">
-                  <label className="text-xs text-gray-500">Duración (min)</label>
-                  <input type="number" min={5} value={calentDuracion} onChange={(e) => setCalentDuracion(Number(e.target.value) || 10)} className="w-16 text-sm px-2 py-1.5 rounded-lg border border-gray-200" />
+                <div className="pl-6 space-y-2">
+                  <div className="flex items-center gap-2">
+                    <label className="text-xs text-gray-500">Duración (min)</label>
+                    <input type="number" min={5} value={calentDuracion} onChange={(e) => setCalentDuracion(Number(e.target.value) || 10)} className="w-16 text-sm px-2 py-1.5 rounded-lg border border-gray-200" />
+                    <button onClick={fetchCalentamiento} disabled={loadingCalent} className="text-xs text-blue-600 hover:underline disabled:opacity-50">
+                      {loadingCalent ? "Generando..." : calentEjercicios.length > 0 ? "Regenerar con Paco" : "Generar con Paco"}
+                    </button>
+                  </div>
+                  {calentEjercicios.length > 0 && (
+                    <div className="space-y-1.5">
+                      {calentEjercicios.map((ej, i) => (
+                        <div key={i} className="border border-gray-100 rounded-lg p-2 space-y-1">
+                          <div className="flex items-center gap-2">
+                            <input value={ej.nombre} onChange={(e) => updateEjercicioCalent(i, { nombre: e.target.value })} className="flex-1 text-xs font-medium px-2 py-1 rounded border border-gray-200" />
+                            <input type="number" min={1} value={ej.duracion_min} onChange={(e) => updateEjercicioCalent(i, { duracion_min: Number(e.target.value) || 1 })} className="w-14 text-xs px-2 py-1 rounded border border-gray-200" />
+                            <span className="text-[10px] text-gray-400">min</span>
+                            <button onClick={() => removeEjercicioCalent(i)} className="text-gray-300 hover:text-red-500 shrink-0">
+                              <svg width="12" height="12" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path d="M18 6 6 18M6 6l12 12" /></svg>
+                            </button>
+                          </div>
+                          <textarea value={ej.descripcion} onChange={(e) => updateEjercicioCalent(i, { descripcion: e.target.value })} rows={1} className="w-full text-xs px-2 py-1 rounded border border-gray-200 resize-none" />
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               )}
               <div>
@@ -475,7 +551,7 @@ export default function ActividadEspecialWizard({
               </div>
               <div className="flex gap-2 pt-2">
                 <button onClick={() => setStep(2)} className="flex-1 py-2 rounded-xl text-sm font-medium border border-gray-200 text-gray-600 hover:bg-gray-50">Atrás</button>
-                <button onClick={() => setStep(4)} className="flex-1 py-2 rounded-xl text-sm font-semibold text-white" style={{ backgroundColor: COLOR }}>Continuar</button>
+                <button onClick={() => setStep(4)} disabled={calentIncluye && calentEjercicios.length === 0} className="flex-1 py-2 rounded-xl text-sm font-semibold text-white disabled:opacity-50" style={{ backgroundColor: COLOR }}>Continuar</button>
               </div>
             </div>
           )}
@@ -583,40 +659,49 @@ export default function ActividadEspecialWizard({
                 </>
               )}
 
-              {tipoEstructura === "estaciones" && (
-                <div className="space-y-2">
-                  <p className="text-xs font-semibold text-gray-500">Cronograma</p>
-                  {calentIncluye && (
-                    <div className="text-xs text-gray-600 border-l-2 pl-2" style={{ borderColor: COLOR }}>
-                      {horaInicio}–{addMinutes(horaInicio, calentDuracion)} · Calentamiento — {calentJuego.nombre}
-                    </div>
-                  )}
-                  {(() => {
-                    let cursor = calentIncluye ? addMinutes(horaInicio, calentDuracion) : horaInicio;
-                    return categoriasEstaciones.slice(0, numEstaciones).map((cat, i) => {
-                      const inicio = cursor;
-                      const fin = addMinutes(cursor, duracionesEstaciones[i]);
-                      cursor = fin;
-                      return (
-                        <div key={i} className="text-xs text-gray-600 border-l-2 pl-2" style={{ borderColor: COLOR }}>
-                          {inicio}–{fin} · {CATEGORIA_ESTACION_LABEL[cat]} — {elegidoPorEstacion[i]?.nombre}
+              {tipoEstructura === "estaciones" && (() => {
+                function renderCronograma(inicio: string) {
+                  let cursor = inicio;
+                  const bloques: React.ReactNode[] = [];
+                  if (calentIncluye) {
+                    bloques.push(
+                      <div key="calent" className="text-xs text-gray-600 border-l-2 pl-2" style={{ borderColor: COLOR }}>
+                        {cursor}–{addMinutes(cursor, calentDuracion)} · Calentamiento
+                      </div>
+                    );
+                    cursor = addMinutes(cursor, calentDuracion);
+                  }
+                  categoriasEstaciones.slice(0, numEstaciones).forEach((cat, i) => {
+                    const ini = cursor;
+                    const fin = addMinutes(cursor, duracionesEstaciones[i]);
+                    cursor = fin;
+                    bloques.push(
+                      <div key={i} className="text-xs text-gray-600 border-l-2 pl-2" style={{ borderColor: COLOR }}>
+                        {ini}–{fin} · {CATEGORIA_ESTACION_LABEL[cat]} — {elegidoPorEstacion[i]?.nombre}
+                      </div>
+                    );
+                  });
+                  return bloques;
+                }
+
+                return (
+                  <div className="space-y-3">
+                    {seReplica && turnos.length > 0 ? (
+                      turnos.map((t, ti) => (
+                        <div key={ti} className="space-y-1">
+                          <p className="text-xs font-semibold text-gray-500">{t.nombre_grupo || `Turno ${ti + 1}`}</p>
+                          {renderCronograma(t.hora_inicio)}
                         </div>
-                      );
-                    });
-                  })()}
-                  {seReplica && (
-                    <div className="pt-1 space-y-1">
-                      <p className="text-xs font-semibold text-gray-500">Réplicas</p>
-                      {Array.from({ length: replicaVeces }, (_, r) => (
-                        <div key={r} className="flex items-center gap-2">
-                          <span className="text-xs text-gray-400 w-24">{addMinutes(horaInicio, r * replicaIntervalo)}</span>
-                          <input value={replicaLabels[r] ?? `Turno ${r + 1}`} onChange={(e) => setReplicaLabels((prev) => { const n = [...prev]; n[r] = e.target.value; return n; })} className="text-xs px-2 py-1 rounded border border-gray-200 flex-1" />
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              )}
+                      ))
+                    ) : (
+                      <div className="space-y-1">
+                        <p className="text-xs font-semibold text-gray-500">Cronograma</p>
+                        {renderCronograma(horaInicio)}
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
 
               <textarea value={notas} onChange={(e) => setNotas(e.target.value)} rows={2} placeholder="Notas logísticas (qué preparar antes, cómo organizar el espacio)"
                 className="w-full text-xs border border-gray-200 rounded-lg px-3 py-2 resize-none" />
