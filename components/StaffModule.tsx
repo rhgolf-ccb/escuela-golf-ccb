@@ -257,7 +257,7 @@ function StaffCard({ member, onEdit }: { member: StaffMember; onEdit: () => void
   const badge = badgeColor(member);
 
   return (
-    <div className="relative group border border-gray-100 rounded-xl p-3 bg-white">
+    <div className="relative group border border-gray-100 rounded-xl p-4 bg-white">
       <button
         onClick={onEdit}
         className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity text-gray-400 hover:text-gray-700 p-1"
@@ -265,9 +265,9 @@ function StaffCard({ member, onEdit }: { member: StaffMember; onEdit: () => void
       >
         <i className="ti ti-pencil" style={{ fontSize: 14 }} />
       </button>
-      <div className="flex gap-3">
+      <div className="flex items-center gap-4">
         <div
-          className="w-[80px] h-[80px] md:w-[96px] md:h-[96px] rounded-full overflow-hidden shrink-0 flex items-center justify-center text-[32px] font-medium"
+          className="w-[80px] h-[80px] md:w-[96px] md:h-[96px] rounded-full overflow-hidden flex-shrink-0 flex items-center justify-center text-[32px] font-medium"
           style={{ backgroundColor: avatar.bg, color: avatar.text }}
         >
           {member.foto_url ? (
@@ -277,7 +277,7 @@ function StaffCard({ member, onEdit }: { member: StaffMember; onEdit: () => void
             getInitials(member.nombre)
           )}
         </div>
-        <div className="min-w-0 pt-0.5">
+        <div className="min-w-0">
           <span
             className="inline-block text-[10px] font-medium px-1.5 py-0.5 rounded-full border mb-1"
             style={badge ? { borderColor: badge, color: badge } : { borderColor: "var(--border-strong)", color: "#6b7280" }}
