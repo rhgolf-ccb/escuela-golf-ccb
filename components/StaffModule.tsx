@@ -272,7 +272,7 @@ function StaffCard({ member, onEdit }: { member: StaffMember; onEdit: () => void
         >
           {member.foto_url ? (
             // eslint-disable-next-line @next/next/no-img-element
-            <img src={member.foto_url} alt={member.nombre} className="w-full h-full object-cover rounded-full" />
+            <img src={member.foto_url} alt={member.nombre} className="w-full h-full object-cover object-top rounded-full" />
           ) : (
             getInitials(member.nombre)
           )}
@@ -319,7 +319,7 @@ function StaffModal({
           >
             {form.foto_url ? (
               // eslint-disable-next-line @next/next/no-img-element
-              <img src={form.foto_url} alt={form.nombre} className="w-full h-full object-cover" />
+              <img src={form.foto_url} alt={form.nombre} className="w-full h-full object-cover object-top" />
             ) : (
               getInitials(form.nombre || "??")
             )}
