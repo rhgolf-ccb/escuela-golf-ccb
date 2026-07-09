@@ -63,13 +63,126 @@ function buildPreviewFromPlan(semana: Date, plan: RawPlan): Preview {
 }
 
 const WELCOME_BY_TIPO: Record<TipoPlan, string> = {
-  juvenil:
-    "Listo, vamos con Juvenil esta semana. Cuéntame: ¿cuántas estaciones quieres por día — 2, 3 o 4? ¿Incluimos estación física algún día? ¿Hay algún problema técnico específico que quieras trabajar esta semana — por ejemplo sway en Águilas, backswing corto, setup?",
+  juvenil: "Listo, vamos con Juvenil esta semana. Marca abajo lo que quieres trabajar y seguimos con la programación.",
   competencia:
-    "Perfecto, semana de Competencia. Ya sé que el martes es tiro largo, miércoles putt y campo, jueves juego corto y sábado campo de práctica. ¿Incluimos estación física algún día esta semana? ¿Hay torneo próximo que deba tener en cuenta? ¿Algún aspecto técnico prioritario esta semana?",
-  damas:
-    "Vamos con Damas. ¿Esta semana es sesión normal de viernes o hay día de campo también? ¿Incluimos bunker en la estación de juego corto? ¿Calentamiento estándar con baile y movilidad funcional?",
+    "Perfecto, semana de Competencia. Ya sé que el martes es tiro largo, miércoles putt y campo, jueves juego corto y sábado campo de práctica. Marca abajo lo que aplique esta semana y seguimos.",
+  damas: "Vamos con Damas. Marca abajo cómo es la semana y seguimos con la programación.",
 };
+
+// ── Opciones rápidas (checkboxes) para el primer turno — evitan que el
+// profesor tenga que escribir las respuestas a las preguntas iniciales.
+type Torneo = "no" | "1semana" | "2semanas" | "estefinde";
+type TipoSemanaDamas = "normal" | "normal_mas_campo" | "solo_campo";
+
+type OpcionesEstado = {
+  estaciones: string[];
+  enfoqueFisico: string[];
+  fisicoComp: boolean;
+  torneo: Torneo;
+  enfoqueTecnico: string[];
+  enfoqueTecnicoOtro: string;
+  tipoSemanaDamas: TipoSemanaDamas;
+  horaCampoDamas: string;
+  bunkerDamas: boolean;
+  calentamientoDamas: boolean;
+};
+
+const OPCIONES_INICIALES: OpcionesEstado = {
+  estaciones: [],
+  enfoqueFisico: [],
+  fisicoComp: false,
+  torneo: "no",
+  enfoqueTecnico: [],
+  enfoqueTecnicoOtro: "",
+  tipoSemanaDamas: "normal",
+  horaCampoDamas: "",
+  bunkerDamas: false,
+  calentamientoDamas: true,
+};
+
+const ESTACIONES_JUVENIL = ["Juego largo", "Juego corto", "Putt", "Física"];
+const ENFOQUE_FISICO_OPCIONES: Record<"juvenil" | "competencia", string[]> = {
+  juvenil: ["Movilidad de cadera y rotación", "Estabilidad de tronco", "Coordinación y equilibrio", "Potencia"],
+  competencia: ["Movilidad", "Estabilidad / Core", "Potencia y velocidad", "Prevención de lesiones"],
+};
+const ENFOQUE_TECNICO_OPCIONES: Record<"juvenil" | "competencia", string[]> = {
+  juvenil: [
+    "Sway / rotación descentrada (Águilas)",
+    "Backswing corto, no llega al hombro (Águilas)",
+    "Coordinación general (Birdies)",
+    "Contacto con la pelota (Birdies)",
+    "Finish en balance (Birdies)",
+    "Ninguno en particular",
+  ],
+  competencia: ["Lag", "Plano del swing", "Setup", "Tempo", "Ninguno en particular"],
+};
+const TORNEO_OPCIONES: { value: Torneo; label: string }[] = [
+  { value: "no", label: "Sin torneo próximo" },
+  { value: "1semana", label: "Torneo en 1 semana" },
+  { value: "2semanas", label: "Torneo en 2 semanas" },
+  { value: "estefinde", label: "Torneo este fin de semana" },
+];
+const TIPO_SEMANA_DAMAS_OPCIONES: { value: TipoSemanaDamas; label: string }[] = [
+  { value: "normal", label: "Sesión normal de viernes" },
+  { value: "normal_mas_campo", label: "Viernes + día de campo" },
+  { value: "solo_campo", label: "Solo día de campo" },
+];
+
+function buildOpcionesMensaje(tipoPlan: TipoPlan, o: OpcionesEstado): string {
+  if (tipoPlan === "juvenil") {
+    const partes: string[] = [
+      o.estaciones.length ? `Estaciones esta semana: ${o.estaciones.join(", ")}.` : "Elige tú las estaciones de esta semana.",
+    ];
+    if (o.estaciones.includes("Física")) {
+      partes.push(o.enfoqueFisico.length ? `Enfoque físico: ${o.enfoqueFisico.join(", ")}.` : "Enfoque físico: el que consideres según el grupo.");
+    }
+    const tecnico = o.enfoqueTecnico.filter((v) => v !== "Ninguno en particular");
+    const otro = o.enfoqueTecnicoOtro.trim();
+    partes.push(
+      tecnico.length || otro
+        ? `Enfoque técnico de la semana: ${[...tecnico, otro].filter(Boolean).join(", ")}.`
+        : "Sin un enfoque técnico particular esta semana."
+    );
+    return partes.join(" ");
+  }
+  if (tipoPlan === "competencia") {
+    const partes: string[] = [
+      o.fisicoComp
+        ? `Sí, incluyamos estación física${o.enfoqueFisico.length ? ` (enfoque: ${o.enfoqueFisico.join(", ")})` : ""}.`
+        : "No incluyamos estación física esta semana.",
+      `${TORNEO_OPCIONES.find((t) => t.value === o.torneo)?.label}.`,
+    ];
+    const tecnico = o.enfoqueTecnico.filter((v) => v !== "Ninguno en particular");
+    const otro = o.enfoqueTecnicoOtro.trim();
+    partes.push(
+      tecnico.length || otro
+        ? `Enfoque técnico prioritario: ${[...tecnico, otro].filter(Boolean).join(", ")}.`
+        : "Sin un aspecto técnico prioritario esta semana."
+    );
+    return partes.join(" ");
+  }
+  // damas
+  const tipoSemanaLabel = TIPO_SEMANA_DAMAS_OPCIONES.find((t) => t.value === o.tipoSemanaDamas)?.label;
+  const horaLine = o.tipoSemanaDamas !== "normal" && o.horaCampoDamas ? ` (día de campo a las ${o.horaCampoDamas})` : "";
+  return [
+    `${tipoSemanaLabel}${horaLine}.`,
+    o.bunkerDamas ? "Sí, incluyamos bunker en la estación de juego corto." : "No incluyamos bunker esta semana.",
+    o.calentamientoDamas ? "Calentamiento estándar con baile y movilidad funcional." : "Sin el calentamiento estándar esta vez.",
+  ].join(" ");
+}
+
+function Pill({ active, onClick, children }: { active: boolean; onClick: () => void; children: React.ReactNode }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="text-xs font-medium px-3 py-1.5 rounded-full border transition-colors"
+      style={active ? { backgroundColor: "#1a3a2a", color: "#fff", borderColor: "#1a3a2a" } : { color: "#6b7280", borderColor: "#e5e7eb", backgroundColor: "#fff" }}
+    >
+      {children}
+    </button>
+  );
+}
 
 const MAX_HISTORY = 10;
 const LUGARES: Lugar[] = ["campo_practica", "putting_green", "campo_infantil", "campo_pacos_fabios", "campo_completo"];
@@ -167,6 +280,8 @@ export default function PacoPlanningModal({
   const [toolStatus, setToolStatus] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
 
+  const [opciones, setOpciones] = useState<OpcionesEstado>(OPCIONES_INICIALES);
+
   const [preview, setPreview] = useState<Preview | null>(null);
 
   const [publishing, setPublishing] = useState(false);
@@ -238,6 +353,17 @@ export default function PacoPlanningModal({
       e.preventDefault();
       sendMessage(input);
     }
+  }
+
+  function toggleOpcionArray(key: "estaciones" | "enfoqueFisico" | "enfoqueTecnico", value: string) {
+    setOpciones((prev) => {
+      const list = prev[key];
+      return { ...prev, [key]: list.includes(value) ? list.filter((v) => v !== value) : [...list, value] };
+    });
+  }
+
+  function handleSubmitOpciones() {
+    sendMessage(buildOpcionesMensaje(tipoPlan, opciones));
   }
 
   function updateSesion(idx: number, updates: Partial<PreviewSesion>) {
@@ -345,6 +471,7 @@ export default function PacoPlanningModal({
 
   const eventColor = CAL_EVENT[tipoPlan]?.bg ?? "#1a3a2a";
   const diasSemana = DIAS_POR_TIPO[tipoPlan];
+  const hasUserSentMessage = messages.some((m) => m.role === "user");
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ backgroundColor: "rgba(0,0,0,0.45)" }} onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
@@ -390,6 +517,138 @@ export default function PacoPlanningModal({
                 </div>
               </div>
             ))}
+
+            {!hasUserSentMessage && !isLoading && (
+              <div className="rounded-2xl border border-gray-100 p-3.5 space-y-3">
+                {tipoPlan === "juvenil" && (
+                  <>
+                    <div>
+                      <p className="text-xs font-semibold text-gray-500 mb-1.5">Estaciones esta semana</p>
+                      <div className="flex flex-wrap gap-1.5">
+                        {ESTACIONES_JUVENIL.map((op) => (
+                          <Pill key={op} active={opciones.estaciones.includes(op)} onClick={() => toggleOpcionArray("estaciones", op)}>{op}</Pill>
+                        ))}
+                      </div>
+                    </div>
+                    {opciones.estaciones.includes("Física") && (
+                      <div>
+                        <p className="text-xs font-semibold text-gray-500 mb-1.5">Enfoque físico</p>
+                        <div className="flex flex-wrap gap-1.5">
+                          {ENFOQUE_FISICO_OPCIONES.juvenil.map((op) => (
+                            <Pill key={op} active={opciones.enfoqueFisico.includes(op)} onClick={() => toggleOpcionArray("enfoqueFisico", op)}>{op}</Pill>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                    <div>
+                      <p className="text-xs font-semibold text-gray-500 mb-1.5">Enfoque técnico</p>
+                      <div className="flex flex-wrap gap-1.5">
+                        {ENFOQUE_TECNICO_OPCIONES.juvenil.map((op) => (
+                          <Pill key={op} active={opciones.enfoqueTecnico.includes(op)} onClick={() => toggleOpcionArray("enfoqueTecnico", op)}>{op}</Pill>
+                        ))}
+                      </div>
+                      <input
+                        type="text"
+                        value={opciones.enfoqueTecnicoOtro}
+                        onChange={(e) => setOpciones((p) => ({ ...p, enfoqueTecnicoOtro: e.target.value }))}
+                        placeholder="Otro (opcional)"
+                        className="w-full text-xs px-2 py-1.5 rounded-lg border border-gray-200 mt-1.5"
+                      />
+                    </div>
+                  </>
+                )}
+
+                {tipoPlan === "competencia" && (
+                  <>
+                    <div>
+                      <p className="text-xs font-semibold text-gray-500 mb-1.5">¿Estación física esta semana?</p>
+                      <div className="flex gap-1.5">
+                        <Pill active={opciones.fisicoComp} onClick={() => setOpciones((p) => ({ ...p, fisicoComp: true }))}>Sí</Pill>
+                        <Pill active={!opciones.fisicoComp} onClick={() => setOpciones((p) => ({ ...p, fisicoComp: false, enfoqueFisico: [] }))}>No</Pill>
+                      </div>
+                    </div>
+                    {opciones.fisicoComp && (
+                      <div>
+                        <p className="text-xs font-semibold text-gray-500 mb-1.5">Enfoque físico</p>
+                        <div className="flex flex-wrap gap-1.5">
+                          {ENFOQUE_FISICO_OPCIONES.competencia.map((op) => (
+                            <Pill key={op} active={opciones.enfoqueFisico.includes(op)} onClick={() => toggleOpcionArray("enfoqueFisico", op)}>{op}</Pill>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                    <div>
+                      <p className="text-xs font-semibold text-gray-500 mb-1.5">Torneo próximo</p>
+                      <div className="flex flex-wrap gap-1.5">
+                        {TORNEO_OPCIONES.map((t) => (
+                          <Pill key={t.value} active={opciones.torneo === t.value} onClick={() => setOpciones((p) => ({ ...p, torneo: t.value }))}>{t.label}</Pill>
+                        ))}
+                      </div>
+                    </div>
+                    <div>
+                      <p className="text-xs font-semibold text-gray-500 mb-1.5">Enfoque técnico prioritario</p>
+                      <div className="flex flex-wrap gap-1.5">
+                        {ENFOQUE_TECNICO_OPCIONES.competencia.map((op) => (
+                          <Pill key={op} active={opciones.enfoqueTecnico.includes(op)} onClick={() => toggleOpcionArray("enfoqueTecnico", op)}>{op}</Pill>
+                        ))}
+                      </div>
+                      <input
+                        type="text"
+                        value={opciones.enfoqueTecnicoOtro}
+                        onChange={(e) => setOpciones((p) => ({ ...p, enfoqueTecnicoOtro: e.target.value }))}
+                        placeholder="Otro (opcional)"
+                        className="w-full text-xs px-2 py-1.5 rounded-lg border border-gray-200 mt-1.5"
+                      />
+                    </div>
+                  </>
+                )}
+
+                {tipoPlan === "damas" && (
+                  <>
+                    <div>
+                      <p className="text-xs font-semibold text-gray-500 mb-1.5">Esta semana</p>
+                      <div className="flex flex-wrap gap-1.5">
+                        {TIPO_SEMANA_DAMAS_OPCIONES.map((t) => (
+                          <Pill key={t.value} active={opciones.tipoSemanaDamas === t.value} onClick={() => setOpciones((p) => ({ ...p, tipoSemanaDamas: t.value }))}>{t.label}</Pill>
+                        ))}
+                      </div>
+                      {opciones.tipoSemanaDamas !== "normal" && (
+                        <input
+                          type="time"
+                          value={opciones.horaCampoDamas}
+                          onChange={(e) => setOpciones((p) => ({ ...p, horaCampoDamas: e.target.value }))}
+                          className="text-xs px-2 py-1.5 rounded-lg border border-gray-200 mt-1.5"
+                        />
+                      )}
+                    </div>
+                    <div>
+                      <p className="text-xs font-semibold text-gray-500 mb-1.5">¿Bunker en juego corto?</p>
+                      <div className="flex gap-1.5">
+                        <Pill active={opciones.bunkerDamas} onClick={() => setOpciones((p) => ({ ...p, bunkerDamas: true }))}>Sí</Pill>
+                        <Pill active={!opciones.bunkerDamas} onClick={() => setOpciones((p) => ({ ...p, bunkerDamas: false }))}>No</Pill>
+                      </div>
+                    </div>
+                    <div>
+                      <p className="text-xs font-semibold text-gray-500 mb-1.5">¿Calentamiento estándar con baile y movilidad?</p>
+                      <div className="flex gap-1.5">
+                        <Pill active={opciones.calentamientoDamas} onClick={() => setOpciones((p) => ({ ...p, calentamientoDamas: true }))}>Sí</Pill>
+                        <Pill active={!opciones.calentamientoDamas} onClick={() => setOpciones((p) => ({ ...p, calentamientoDamas: false }))}>No</Pill>
+                      </div>
+                    </div>
+                  </>
+                )}
+
+                <button
+                  onClick={handleSubmitOpciones}
+                  disabled={!planningContext}
+                  className="w-full py-2 rounded-lg text-sm font-semibold text-white disabled:opacity-50"
+                  style={{ backgroundColor: "#1a3a2a" }}
+                >
+                  Continuar
+                </button>
+              </div>
+            )}
+
             {isLoading && (
               <div className="flex items-center gap-1.5 px-1">
                 <span className="text-xs text-gray-400">{toolStatus ? TOOL_STATUS_LABELS[toolStatus] ?? "Consultando..." : "Pensando..."}</span>
