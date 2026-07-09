@@ -5,7 +5,8 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { supabase } from "@/lib/supabase";
 import { TOOL_STATUS_LABELS, formatTime, MARKDOWN_COMPONENTS, streamAsesorChat, PACO_LIMIT_MESSAGE } from "@/lib/paco-chat-shared";
-import type { SesionJuvenilData, SesionJuvenilLegacy } from "./JuvenileClassModal";
+import { DRILLS_CATEGORIA_JUVENIL, type CategoriaEstacion, type DrillJuvenilEstacion, type EstacionJuvenil } from "./JuvenileClassModal";
+import BibliotecaDrillPicker from "./BibliotecaDrillPicker";
 import {
   toISODate,
   getFechaForDia,
@@ -15,6 +16,7 @@ import {
   LUGAR_LABEL,
   TIPO_PLAN_LABEL,
   CAL_EVENT,
+  CATEGORIA_ESTACION_LABEL,
   type TipoPlan,
   type DiaSemana,
   type TipoSesion,
@@ -35,7 +37,14 @@ type Message = {
   isWelcome?: boolean;
 };
 
-type Preview = { descripcion_tema: string; sesiones: PreviewSesion[]; sesion_juvenil?: SesionJuvenilData | null };
+type JuvenilDiaSemana = "martes" | "miercoles" | "jueves" | "sabado" | "domingo";
+type SesionJuvenilDiaPreview = { dia_semana: JuvenilDiaSemana; estaciones: EstacionJuvenil[] };
+const JUVENIL_HORARIOS_COMPARTIDOS: Record<string, string> = {
+  sabado: "Aplica para ambos horarios: 9:15 AM y 10:00 AM",
+  domingo: "Aplica para ambos horarios: 9:15 AM y 10:00 AM",
+};
+
+type Preview = { descripcion_tema: string; sesiones: PreviewSesion[]; sesion_juvenil?: SesionJuvenilDiaPreview[] | null };
 
 type RawPlanSesion = {
   dia_semana: DiaSemana; tipo_sesion: TipoSesion; lugar: Lugar;
@@ -43,7 +52,7 @@ type RawPlanSesion = {
   drills?: Drill[]; juego_competitivo?: string | null;
   estaciones_damas?: EstacionDamas[] | null; notas?: string | null;
 };
-type RawPlan = { descripcion_tema?: string; sesion_juvenil?: SesionJuvenilLegacy | null; sesiones?: RawPlanSesion[] };
+type RawPlan = { descripcion_tema?: string; sesion_juvenil?: SesionJuvenilDiaPreview[] | null; sesiones?: RawPlanSesion[] };
 
 function buildPreviewFromPlan(semana: Date, plan: RawPlan): Preview {
   const sesiones: PreviewSesion[] = (plan.sesiones ?? []).map((s) => ({
@@ -287,6 +296,7 @@ export default function PacoPlanningModal({
   const [publishing, setPublishing] = useState(false);
   const [publishError, setPublishError] = useState<string | null>(null);
   const [showConfirmReplace, setShowConfirmReplace] = useState(false);
+  const [pickerFor, setPickerFor] = useState<{ diaIdx: number; estIdx: number } | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -415,20 +425,51 @@ export default function PacoPlanningModal({
     });
   }
 
-  function updateJuvenil(updates: Partial<SesionJuvenilLegacy>) {
+  function updateJuvenilDrill(diaIdx: number, estIdx: number, drillIdx: number, updates: Partial<DrillJuvenilEstacion>) {
     setPreview((prev) => {
       if (!prev || !prev.sesion_juvenil) return prev;
-      return { ...prev, sesion_juvenil: { ...(prev.sesion_juvenil as SesionJuvenilLegacy), ...updates } };
+      const dias = [...prev.sesion_juvenil];
+      const estaciones = [...dias[diaIdx].estaciones];
+      const drills = [...estaciones[estIdx].drills];
+      drills[drillIdx] = { ...drills[drillIdx], ...updates };
+      estaciones[estIdx] = { ...estaciones[estIdx], drills };
+      dias[diaIdx] = { ...dias[diaIdx], estaciones };
+      return { ...prev, sesion_juvenil: dias };
     });
   }
 
-  function updateJuvenilActividad(idx: number, updates: Partial<SesionJuvenilLegacy["actividades"][0]>) {
+  function removeJuvenilDrill(diaIdx: number, estIdx: number, drillIdx: number) {
     setPreview((prev) => {
       if (!prev || !prev.sesion_juvenil) return prev;
-      const leg = prev.sesion_juvenil as SesionJuvenilLegacy;
-      const actividades = [...leg.actividades];
-      actividades[idx] = { ...actividades[idx], ...updates };
-      return { ...prev, sesion_juvenil: { ...leg, actividades } };
+      const dias = [...prev.sesion_juvenil];
+      const estaciones = [...dias[diaIdx].estaciones];
+      if (estaciones[estIdx].drills.length <= 1) return prev;
+      estaciones[estIdx] = { ...estaciones[estIdx], drills: estaciones[estIdx].drills.filter((_, i) => i !== drillIdx) };
+      dias[diaIdx] = { ...dias[diaIdx], estaciones };
+      return { ...prev, sesion_juvenil: dias };
+    });
+  }
+
+  function addJuvenilDrillDeBiblioteca(diaIdx: number, estIdx: number, drill: DrillJuvenilEstacion) {
+    setPreview((prev) => {
+      if (!prev || !prev.sesion_juvenil) return prev;
+      const dias = [...prev.sesion_juvenil];
+      const estaciones = [...dias[diaIdx].estaciones];
+      if (estaciones[estIdx].drills.length >= 3) return prev;
+      estaciones[estIdx] = { ...estaciones[estIdx], drills: [...estaciones[estIdx].drills, drill] };
+      dias[diaIdx] = { ...dias[diaIdx], estaciones };
+      return { ...prev, sesion_juvenil: dias };
+    });
+  }
+
+  function updateJuvenilDesafio(diaIdx: number, estIdx: number, value: string) {
+    setPreview((prev) => {
+      if (!prev || !prev.sesion_juvenil) return prev;
+      const dias = [...prev.sesion_juvenil];
+      const estaciones = [...dias[diaIdx].estaciones];
+      estaciones[estIdx] = { ...estaciones[estIdx], desafio: value };
+      dias[diaIdx] = { ...dias[diaIdx], estaciones };
+      return { ...prev, sesion_juvenil: dias };
     });
   }
 
@@ -700,41 +741,76 @@ export default function PacoPlanningModal({
               <div className="space-y-4">
                 {preview.descripcion_tema && <p className="text-sm text-gray-600 italic">{preview.descripcion_tema}</p>}
 
-                {tipoPlan === "juvenil" && preview.sesion_juvenil && "actividades" in preview.sesion_juvenil && (
-                  <div className="rounded-xl border border-gray-100 overflow-hidden">
+                {tipoPlan === "juvenil" && preview.sesion_juvenil?.map((diaPlan, diaIdx) => (
+                  <div key={diaPlan.dia_semana} className="rounded-xl border border-gray-100 overflow-hidden">
                     <div className="px-4 py-2.5" style={{ backgroundColor: eventColor }}>
-                      <input
-                        value={(preview.sesion_juvenil as SesionJuvenilLegacy).nombre_clase}
-                        onChange={(e) => updateJuvenil({ nombre_clase: e.target.value })}
-                        className="w-full bg-transparent text-white font-semibold text-sm focus:outline-none placeholder-white/60"
-                      />
+                      <span className="text-white font-semibold text-sm">{DIA_LABEL[diaPlan.dia_semana]}</span>
+                      {JUVENIL_HORARIOS_COMPARTIDOS[diaPlan.dia_semana] && (
+                        <p className="text-white/70 text-[11px] mt-0.5">{JUVENIL_HORARIOS_COMPARTIDOS[diaPlan.dia_semana]}</p>
+                      )}
                     </div>
                     <div className="p-4 space-y-3">
-                      <textarea
-                        value={(preview.sesion_juvenil as SesionJuvenilLegacy).objetivo_simple}
-                        onChange={(e) => updateJuvenil({ objetivo_simple: e.target.value })}
-                        rows={2}
-                        className="w-full text-xs border border-gray-200 rounded-lg px-2 py-1.5 resize-none"
-                        placeholder="Objetivo de la clase"
-                      />
-                      {(preview.sesion_juvenil as SesionJuvenilLegacy).actividades?.map((a, ai) => (
-                        <div key={ai} className="border border-gray-100 rounded-lg p-3 space-y-1.5">
-                          <div className="flex items-center gap-2">
-                            <input value={a.nombre} onChange={(e) => updateJuvenilActividad(ai, { nombre: e.target.value })} className="flex-1 text-sm font-medium border border-gray-200 rounded px-2 py-1" />
-                            <input type="number" value={a.duracion_min} onChange={(e) => updateJuvenilActividad(ai, { duracion_min: Number(e.target.value) })} className="w-16 text-xs border border-gray-200 rounded px-2 py-1" />
-                            <span className="text-xs text-gray-400">min</span>
+                      {diaPlan.estaciones.map((est, estIdx) => (
+                        <div key={`${est.categoria}-${estIdx}`} className="border border-gray-100 rounded-lg p-3 space-y-2">
+                          <p className="text-xs font-bold" style={{ color: eventColor }}>
+                            {CATEGORIA_ESTACION_LABEL[est.categoria] ?? est.categoria}
+                          </p>
+                          <div className="space-y-1.5">
+                            {est.drills.map((d, di) => (
+                              <div key={di} className="border border-gray-100 rounded-lg p-2 bg-gray-50 space-y-1">
+                                <div className="flex items-center gap-2">
+                                  <input
+                                    value={d.titulo}
+                                    onChange={(e) => updateJuvenilDrill(diaIdx, estIdx, di, { titulo: e.target.value })}
+                                    className="flex-1 text-xs font-medium border border-gray-200 rounded px-2 py-1 bg-white"
+                                  />
+                                  <button
+                                    onClick={() => removeJuvenilDrill(diaIdx, estIdx, di)}
+                                    disabled={est.drills.length <= 1}
+                                    className="text-gray-300 hover:text-red-500 disabled:opacity-30 shrink-0"
+                                  >
+                                    <svg width="12" height="12" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path d="M18 6 6 18M6 6l12 12" /></svg>
+                                  </button>
+                                </div>
+                                <textarea
+                                  value={d.descripcion}
+                                  onChange={(e) => updateJuvenilDrill(diaIdx, estIdx, di, { descripcion: e.target.value })}
+                                  rows={2}
+                                  className="w-full text-xs border border-gray-200 rounded px-2 py-1 resize-none bg-white"
+                                />
+                              </div>
+                            ))}
                           </div>
-                          <textarea value={a.como_se_juega} onChange={(e) => updateJuvenilActividad(ai, { como_se_juega: e.target.value })} rows={2} className="w-full text-xs border border-gray-200 rounded px-2 py-1 resize-none" />
+                          <button
+                            onClick={() => setPickerFor({ diaIdx, estIdx })}
+                            disabled={est.drills.length >= 3}
+                            className="text-xs font-medium text-blue-600 hover:underline disabled:opacity-40"
+                          >
+                            + Agregar de la biblioteca
+                          </button>
+                          <div>
+                            <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wide block mb-1">Desafío</label>
+                            <textarea
+                              value={est.desafio}
+                              onChange={(e) => updateJuvenilDesafio(diaIdx, estIdx, e.target.value)}
+                              rows={2}
+                              className="w-full text-xs border border-gray-200 rounded px-2 py-1 resize-none"
+                              placeholder="Reto o juego competitivo de cierre"
+                            />
+                          </div>
                         </div>
                       ))}
-                      <input
-                        value={(preview.sesion_juvenil as SesionJuvenilLegacy).actividad_estrella ?? ""}
-                        onChange={(e) => updateJuvenil({ actividad_estrella: e.target.value })}
-                        placeholder="Actividad estrella"
-                        className="w-full text-xs border border-gray-200 rounded px-2 py-1.5 italic"
-                      />
                     </div>
                   </div>
+                ))}
+
+                {pickerFor && preview.sesion_juvenil && (
+                  <BibliotecaDrillPicker
+                    categoriaDrills={DRILLS_CATEGORIA_JUVENIL[preview.sesion_juvenil[pickerFor.diaIdx].estaciones[pickerFor.estIdx].categoria as CategoriaEstacion]}
+                    yaSeleccionados={preview.sesion_juvenil[pickerFor.diaIdx].estaciones[pickerFor.estIdx].drills.map((d) => d.titulo)}
+                    onAdd={(drill) => { addJuvenilDrillDeBiblioteca(pickerFor.diaIdx, pickerFor.estIdx, drill); setPickerFor(null); }}
+                    onClose={() => setPickerFor(null)}
+                  />
                 )}
 
                 {preview.sesiones.map((s, si) => (

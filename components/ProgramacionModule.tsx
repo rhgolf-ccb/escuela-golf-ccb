@@ -312,7 +312,11 @@ export type EstacionView = {
 
 function sesionesToEstaciones(diaySesiones: SesionSemana[], tipoPlan: TipoPlan): EstacionView[] {
   const views: EstacionView[] = [];
-  for (const sesion of diaySesiones) {
+  // Sábado y domingo de Juvenil guardan 2 filas físicas (una por horario) con el
+  // MISMO contenido por construcción (ver publish-plan-semanal) — solo se procesa
+  // la primera para no duplicar las estaciones en pantalla/PDF/WhatsApp.
+  const sesionesAProcesar = tipoPlan === "juvenil" ? diaySesiones.slice(0, 1) : diaySesiones;
+  for (const sesion of sesionesAProcesar) {
     const horario = sesion.hora_inicio ? `${formatHora(sesion.hora_inicio)}${sesion.hora_fin ? `–${formatHora(sesion.hora_fin)}` : ""}` : null;
     const lugar = LUGAR_LABEL[sesion.lugar] ?? null;
 
@@ -346,11 +350,13 @@ function sesionesToEstaciones(diaySesiones: SesionSemana[], tipoPlan: TipoPlan):
       const jdAny = sesion.sesion_juvenil as unknown as { tipo?: string };
       if (jdAny.tipo === "estaciones") {
         const est = sesion.sesion_juvenil as SesionJuvenilEstaciones;
-        est.estaciones.forEach((e) => {
+        est.estaciones.forEach((e, idx) => {
           views.push({
             nombre: CATEGORIA_LABEL_MAP[e.categoria] ?? e.categoria,
             lugar, horario,
-            drills: [{ nombre: e.juego.nombre, descripcion: e.juego.como_se_juega }],
+            numero: idx + 1,
+            reto: e.desafio ?? null,
+            drills: (e.drills ?? []).map((d) => ({ nombre: d.titulo, descripcion: d.descripcion })),
           });
         });
       } else if (jdAny.tipo === "especial") {
@@ -803,6 +809,7 @@ export default function ProgramacionModule({ currentRol }: { currentRol: Rol | n
       const meta = [est.horario, est.lugar].filter(Boolean).join(" · ");
       lines.push(`**${est.nombre}**${meta ? ` · ${meta}` : ""}`);
       est.drills.forEach((d) => lines.push(`- ${d.nombre}: ${d.descripcion}${d.repeticiones ? ` (${d.repeticiones})` : ""}`));
+      if (est.reto) lines.push(`🏆 Desafío: ${est.reto}`);
       lines.push("");
     });
     return lines.join("\n");
@@ -1515,6 +1522,11 @@ export default function ProgramacionModule({ currentRol }: { currentRol: Rol | n
                         <div>
                           <h2 className="text-lg font-bold text-gray-900">{DIA_LABEL[dia]}</h2>
                           <p className="text-xs text-gray-400">{formatDiaFecha(fecha)} · {estaciones.length} estaciones · {totalDrills} drills</p>
+                          {activeTab === "juvenil" && (dia === "sabado" || dia === "domingo") && diaySesiones.length > 1 && (
+                            <p className="text-xs font-medium mt-1" style={{ color: groupColor }}>
+                              Aplica para ambos horarios: 9:15 AM y 10:00 AM
+                            </p>
+                          )}
                         </div>
                         <div className="flex items-center gap-1.5 flex-wrap justify-end">
                           <button onClick={handlePdfSemana} className={btnClass}>

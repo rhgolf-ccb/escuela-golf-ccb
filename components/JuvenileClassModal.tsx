@@ -2,27 +2,29 @@
 
 import { useState } from "react";
 import { supabase } from "@/lib/supabase";
+import BibliotecaDrillPicker from "./BibliotecaDrillPicker";
 
-// ── Types (exported — used in ProgramacionModule) ─────────────────────────────
+// ── Types (exported — used in ProgramacionModule / PacoPlanningModal) ────────
 export interface Actividad {
   nombre: string; duracion_min: number; como_se_juega: string;
   adaptacion_birdies: string; adaptacion_albatros: string;
   como_se_gana: string; materiales: string;
 }
 
-export interface JuegoJuvenil {
-  nombre: string;
-  como_se_juega: string;
-  adaptacion_facil: string;
-  adaptacion_retadora: string;
-}
-
 export type CategoriaEstacion = "juego_largo" | "juego_corto" | "putt";
 export type TipoEspecial = "test_tecnico" | "test_fisico" | "campo_pacos" | "campo_infantil";
 
+export interface DrillJuvenilEstacion { titulo: string; descripcion: string; }
+
+export interface EstacionJuvenil {
+  categoria: CategoriaEstacion;
+  drills: DrillJuvenilEstacion[]; // 1 a 3
+  desafio: string;
+}
+
 export interface SesionJuvenilEstaciones {
   tipo: "estaciones";
-  estaciones: Array<{ categoria: CategoriaEstacion; juego: JuegoJuvenil }>;
+  estaciones: EstacionJuvenil[];
 }
 
 export interface SesionJuvenilEspecial {
@@ -30,7 +32,7 @@ export interface SesionJuvenilEspecial {
   tipo_especial: TipoEspecial;
 }
 
-// Legacy format (backward compat — weekly plan AI still generates this)
+// Legacy format — solo lectura, para semanas ya publicadas antes de este cambio
 export interface SesionJuvenilLegacy {
   nombre_clase: string;
   objetivo_simple: string;
@@ -40,86 +42,11 @@ export interface SesionJuvenilLegacy {
 
 export type SesionJuvenilData = SesionJuvenilEstaciones | SesionJuvenilEspecial | SesionJuvenilLegacy;
 
-// ── Game library ───────────────────────────────────────────────────────────────
-const JUEGOS_BIBLIOTECA: Record<CategoriaEstacion, JuegoJuvenil[]> = {
-  juego_largo: [
-    {
-      nombre: "El Lanzamisiles",
-      como_se_juega: "5 pelotas a zonas marcadas a 10, 20, 30, 40 y 50m. Zona más lejana = más puntos. Gana mayor suma en 5 turnos.",
-      adaptacion_facil: "Birdies: tee elevado, solo 3 zonas, contar los 3 mejores de 5 tiros.",
-      adaptacion_retadora: "Albatros: puntos solo si cae dentro de la zona exacta.",
-    },
-    {
-      nombre: "El Rey del Fairway",
-      como_se_juega: "Quien llega más lejos dentro del fairway (zona delimitada) gana la ronda. 5 rondas, el que gana 3 primero es Rey.",
-      adaptacion_facil: "Birdies: zona más ancha, cualquier tiro dentro del área cuenta.",
-      adaptacion_retadora: "Albatros: fairway más estrecho, los tiros fuera restan 1 punto.",
-    },
-    {
-      nombre: "La Catapulta",
-      como_se_juega: "Carrera de 2 min: ¿cuántas pelotas llegas al aro a 30m? Cada pelota dentro suma 2 pts. Rebotes que quedan en el aro suman 1.",
-      adaptacion_facil: "Birdies: aro más grande y más cerca, tiempo 3 min.",
-      adaptacion_retadora: "Albatros: solo vuelo directo al aro (no rebotes).",
-    },
-    {
-      nombre: "Semáforo de Swing",
-      como_se_juega: "El instructor grita colores: Verde = swing completo, Rojo = parar en P5 foto, Amarillo = girar pie trasero. 10 instrucciones. Fallo = -1 pto.",
-      adaptacion_facil: "Birdies: solo Verde y Rojo, sin penalización.",
-      adaptacion_retadora: "Albatros: secuencias más rápidas, deben nombrar el siguiente color.",
-    },
-  ],
-  juego_corto: [
-    {
-      nombre: "El Malabarista",
-      como_se_juega: "Chip desde 15m a 3 aros: rojo (más lejos, 3 pts), azul (medio, 2 pts), blanco (más cerca, 1 pt). 8 chips por persona.",
-      adaptacion_facil: "Birdies: aros más grandes, posición más cerca.",
-      adaptacion_retadora: "Albatros: los aros cambian de posición entre turno y turno.",
-    },
-    {
-      nombre: "El Francotirador",
-      como_se_juega: "Pitch a banderitas de colores a 8, 12 y 18m. Cada banderita vale pts según distancia. 3 rondas, suma total.",
-      adaptacion_facil: "Birdies: banderitas grandes, solo 2 distancias.",
-      adaptacion_retadora: "Albatros: penalización si la pelota rebota antes de llegar a la banderita.",
-    },
-    {
-      nombre: "La Pelota Caliente",
-      como_se_juega: "Turno de 60 seg: todos chipean a la zona marcada en equipo. El equipo suma puntos de las pelotas dentro. Se compite contra el tiempo.",
-      adaptacion_facil: "Birdies: chipean al mismo tiempo (no turnos individuales).",
-      adaptacion_retadora: "Albatros: solo 2 pelotas por jugador, deben escoger el momento.",
-    },
-    {
-      nombre: "El Castillo",
-      como_se_juega: "3 conos a 10m. Derríbalos con chips. Cono derribado = 1 pt. Derribar los 3 en un turno = 5 pts bono.",
-      adaptacion_facil: "Birdies: conos más cerca, 3 intentos por cono.",
-      adaptacion_retadora: "Albatros: solo chip de vuelo limpio derriba los conos.",
-    },
-  ],
-  putt: [
-    {
-      nombre: "La Batalla de Putts",
-      como_se_juega: "Duelos 1 vs 1: quien emboca o queda más cerca gana el duelo. Torneo de eliminación. Distancia varía por ronda (1-5m).",
-      adaptacion_facil: "Birdies: distancias cortas (1-2m), quedar cerca cuenta como ganar.",
-      adaptacion_retadora: "Albatros: solo embocar gana el duelo (quedar cerca no suma).",
-    },
-    {
-      nombre: "El Caracol",
-      como_se_juega: "Recorrido de 6 hoyos en espiral. Si embocan avanzan 2 extra. Si fallan 2 seguidos, vuelven 1. Gana quien termina primero.",
-      adaptacion_facil: "Birdies: distancias de 0.5-1m, máximo 3 intentos por hoyo.",
-      adaptacion_retadora: "Albatros: 1 sola oportunidad por hoyo, fallo = volver al anterior.",
-    },
-    {
-      nombre: "La Caja de Sorpresas",
-      como_se_juega: "El instructor saca un papel: distancia + regla especial (mano contraria, ojos cerrados, rodillas…). Todos puttean con esa regla. Emboca = 2 pts, más cerca = 1 pt.",
-      adaptacion_facil: "Birdies: reglas especiales solo en último turno.",
-      adaptacion_retadora: "Albatros: deben cumplir regla Y embocar para sumar.",
-    },
-    {
-      nombre: "El Rompecabezas",
-      como_se_juega: "5 hoyos numerados, el jugador elige el orden. Se acumulan golpes. Al final se revela el 'hoyo doble' que multiplica ese resultado ×2.",
-      adaptacion_facil: "Birdies: máximo 3 golpes por hoyo antes de avanzar (gipper).",
-      adaptacion_retadora: "Albatros: completar todos en cierto total de golpes para ganar.",
-    },
-  ],
+// drills.categoria (tabla real de la biblioteca) por categoría de estación juvenil
+export const DRILLS_CATEGORIA_JUVENIL: Record<CategoriaEstacion, string> = {
+  juego_largo: "tecnico",
+  juego_corto: "juego_corto",
+  putt: "putting",
 };
 
 // ── Constants ──────────────────────────────────────────────────────────────────
@@ -182,29 +109,28 @@ interface Props {
 // ── Station state ──────────────────────────────────────────────────────────────
 interface StationState {
   categoria: CategoriaEstacion;
-  juegoIdx: number | null;
-  extras: JuegoJuvenil[];
-  generando: boolean;
   open: boolean;
+  fetched: boolean; // ya se pidió (o ya traía) contenido — no dispares IA de nuevo al abrir
+  loading: boolean;
+  failed: boolean;
+  drills: DrillJuvenilEstacion[];
+  desafio: string;
+  showPicker: boolean;
 }
 
 function initStations(sesion?: ExistingSesion | null): StationState[] {
   const base: StationState[] = CATEGORIAS.map((c) => ({
-    categoria: c.value, juegoIdx: null, extras: [], generando: false, open: false,
+    categoria: c.value, open: false, fetched: false, loading: false, failed: false,
+    drills: [], desafio: "", showPicker: false,
   }));
   if (sesion?.sesion_juvenil && 'tipo' in sesion.sesion_juvenil && sesion.sesion_juvenil.tipo === "estaciones") {
     const est = sesion.sesion_juvenil.estaciones;
     base.forEach((s, i) => {
       const existing = est.find((e) => e.categoria === s.categoria);
       if (!existing) return;
-      const lib = JUEGOS_BIBLIOTECA[s.categoria];
-      const libIdx = lib.findIndex((g) => g.nombre === existing.juego.nombre);
-      if (libIdx >= 0) {
-        base[i].juegoIdx = libIdx;
-      } else {
-        base[i].extras = [existing.juego];
-        base[i].juegoIdx = lib.length; // extras start at lib.length
-      }
+      base[i].drills = existing.drills ?? [];
+      base[i].desafio = existing.desafio ?? "";
+      base[i].fetched = true;
     });
   }
   return base;
@@ -237,57 +163,49 @@ export default function JuvenileClassModal({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const busy = saving || stations.some((s) => s.generando);
-  const allStationsFilled = stations.every((s) => s.juegoIdx !== null);
+  const busy = saving || stations.some((s) => s.loading);
+  const allStationsFilled = stations.every((s) => s.drills.length > 0 && s.desafio.trim().length > 0);
 
-  // ── Resolve selected game for a station ──────────────────────────────────
-  function getJuego(s: StationState): JuegoJuvenil | null {
-    if (s.juegoIdx === null) return null;
-    const lib = JUEGOS_BIBLIOTECA[s.categoria];
-    if (s.juegoIdx < lib.length) return lib[s.juegoIdx];
-    return s.extras[s.juegoIdx - lib.length] ?? null;
-  }
-
-  function allGames(s: StationState): JuegoJuvenil[] {
-    return [...JUEGOS_BIBLIOTECA[s.categoria], ...s.extras];
-  }
-
-  // ── Toggle station open/closed ───────────────────────────────────────────
-  function toggleStation(idx: number) {
-    setStations((prev) => prev.map((s, i) => i === idx ? { ...s, open: !s.open } : s));
-  }
-
-  function selectGame(stIdx: number, gameIdx: number) {
-    setStations((prev) => prev.map((s, i) => i === stIdx ? { ...s, juegoIdx: gameIdx, open: false } : s));
-  }
-
-  // ── AI: suggest more games for a station ────────────────────────────────
-  async function handleSuggestMore(stIdx: number) {
+  // ── AI: sugerir drills + desafío para una estación ──────────────────────
+  async function fetchSuggestion(stIdx: number) {
     const st = stations[stIdx];
-    setStations((prev) => prev.map((s, i) => i === stIdx ? { ...s, generando: true } : s));
-    setError(null);
+    setStations((prev) => prev.map((s, i) => i === stIdx ? { ...s, loading: true, failed: false } : s));
     try {
-      const juegosYaUsados = allGames(st).map((g) => g.nombre);
       const res = await fetch("/api/suggest-station-game", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          plan_id: planId,
-          categoria: st.categoria,
-          juegos_ya_usados: juegosYaUsados,
-        }),
+        body: JSON.stringify({ plan_id: planId, categoria: st.categoria }),
       });
-      const data = await res.json() as { opciones?: JuegoJuvenil[]; error?: string };
-      if (!res.ok) throw new Error(data.error ?? "Error al generar");
-      const nuevos = data.opciones ?? [];
-      if (nuevos.length === 0) throw new Error("Sin opciones nuevas");
-      setStations((prev) => prev.map((s, i) =>
-        i === stIdx ? { ...s, extras: [...s.extras, ...nuevos], generando: false, open: true } : s
-      ));
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Error");
-      setStations((prev) => prev.map((s, i) => i === stIdx ? { ...s, generando: false } : s));
+      const data = await res.json() as { drills?: DrillJuvenilEstacion[]; desafio?: string; error?: string };
+      if (!res.ok || !data.drills?.length) throw new Error(data.error ?? "Sin sugerencias");
+      setStations((prev) => prev.map((s, i) => i === stIdx
+        ? { ...s, drills: data.drills!.slice(0, 3), desafio: data.desafio ?? "", loading: false, fetched: true }
+        : s));
+    } catch {
+      setStations((prev) => prev.map((s, i) => i === stIdx ? { ...s, loading: false, failed: true, fetched: true } : s));
     }
+  }
+
+  function toggleStation(idx: number) {
+    const st = stations[idx];
+    setStations((prev) => prev.map((s, i) => i === idx ? { ...s, open: !s.open } : s));
+    if (!st.open && !st.fetched) fetchSuggestion(idx);
+  }
+
+  function removeDrill(stIdx: number, drillIdx: number) {
+    setStations((prev) => prev.map((s, i) => i === stIdx ? { ...s, drills: s.drills.filter((_, j) => j !== drillIdx) } : s));
+  }
+
+  function addDrillFromBiblioteca(stIdx: number, drill: DrillJuvenilEstacion) {
+    setStations((prev) => prev.map((s, i) => i === stIdx ? { ...s, drills: [...s.drills, drill].slice(0, 3), showPicker: false } : s));
+  }
+
+  function updateDesafio(stIdx: number, value: string) {
+    setStations((prev) => prev.map((s, i) => i === stIdx ? { ...s, desafio: value } : s));
+  }
+
+  function togglePicker(stIdx: number, show: boolean) {
+    setStations((prev) => prev.map((s, i) => i === stIdx ? { ...s, showPicker: show } : s));
   }
 
   // ── Save ─────────────────────────────────────────────────────────────────
@@ -310,10 +228,9 @@ export default function JuvenileClassModal({
           sesion_juvenil: { tipo: "especial", tipo_especial: tipoEspecial },
         };
       } else {
-        const estaciones = stations.map((s) => {
-          const juego = getJuego(s);
-          if (!juego) throw new Error(`Falta juego en ${s.categoria}`);
-          return { categoria: s.categoria, juego };
+        const estaciones: EstacionJuvenil[] = stations.map((s) => {
+          if (s.drills.length === 0) throw new Error(`Falta al menos 1 drill en ${s.categoria}`);
+          return { categoria: s.categoria, drills: s.drills, desafio: s.desafio };
         });
         payload = {
           plan_id: planId, dia_semana: dia, fecha,
@@ -377,7 +294,7 @@ export default function JuvenileClassModal({
               <span className="text-3xl">🎯</span>
               <div>
                 <p className="font-bold text-gray-900 group-hover:text-green-900">Día de 3 estaciones</p>
-                <p className="text-xs text-gray-500">Juego Largo · Juego Corto · Putt — elige un juego para cada una</p>
+                <p className="text-xs text-gray-500">Juego Largo · Juego Corto · Putt — 2-3 drills y un desafío por estación</p>
               </div>
             </button>
             <button
@@ -399,16 +316,15 @@ export default function JuvenileClassModal({
             <div className="p-4 space-y-3 max-h-[70vh] overflow-y-auto">
               {stations.map((st, stIdx) => {
                 const cat = CATEGORIAS[stIdx];
-                const games = allGames(st);
-                const selectedJuego = getJuego(st);
+                const filled = st.drills.length > 0 && st.desafio.trim().length > 0;
                 return (
                   <div key={st.categoria} className="border rounded-xl overflow-hidden"
-                    style={{ borderColor: st.juegoIdx !== null ? GREEN : "#e5e7eb" }}>
+                    style={{ borderColor: filled ? GREEN : "#e5e7eb" }}>
                     {/* Station header */}
                     <button
                       onClick={() => toggleStation(stIdx)}
                       className="w-full flex items-center justify-between px-4 py-3 text-left"
-                      style={{ background: st.juegoIdx !== null ? "#f0faf2" : "#f9fafb" }}
+                      style={{ background: filled ? "#f0faf2" : "#f9fafb" }}
                     >
                       <div className="flex items-center gap-2 min-w-0">
                         <span className="text-lg flex-shrink-0">{cat.emoji}</span>
@@ -417,12 +333,14 @@ export default function JuvenileClassModal({
                             Estación {stIdx + 1} — {cat.label}
                           </p>
                           <p className="text-sm font-semibold text-gray-800 truncate">
-                            {selectedJuego ? selectedJuego.nombre : <span className="text-gray-400 font-normal">Elige un juego →</span>}
+                            {st.drills.length > 0
+                              ? `${st.drills.length} drill${st.drills.length > 1 ? "s" : ""}${st.desafio ? " + desafío" : ""}`
+                              : <span className="text-gray-400 font-normal">Ver sugerencias →</span>}
                           </p>
                         </div>
                       </div>
                       <div className="flex items-center gap-2 flex-shrink-0">
-                        {st.juegoIdx !== null && (
+                        {filled && (
                           <div className="w-5 h-5 rounded-full flex items-center justify-center" style={{ background: GREEN }}>
                             <svg width="10" height="10" viewBox="0 0 20 20" fill="none" stroke="#fff" strokeWidth={3}><path d="M3 10l4 4 9-9" /></svg>
                           </div>
@@ -434,58 +352,83 @@ export default function JuvenileClassModal({
                       </div>
                     </button>
 
-                    {/* Game list */}
+                    {/* Station content */}
                     {st.open && (
-                      <div className="border-t border-gray-100 divide-y divide-gray-50">
-                        {games.map((juego, gIdx) => {
-                          const isSelected = st.juegoIdx === gIdx;
-                          return (
-                            <button
-                              key={gIdx}
-                              onClick={() => selectGame(stIdx, gIdx)}
-                              className="w-full text-left px-4 py-3 transition-colors hover:bg-gray-50"
-                              style={isSelected ? { background: "#f0faf2" } : {}}
-                            >
-                              <div className="flex items-start gap-2">
-                                <div className={`w-4 h-4 rounded-full border-2 flex-shrink-0 mt-0.5 flex items-center justify-center transition-all`}
-                                  style={isSelected ? { borderColor: GREEN, background: GREEN } : { borderColor: "#d1d5db" }}>
-                                  {isSelected && <div className="w-1.5 h-1.5 rounded-full bg-white" />}
-                                </div>
-                                <div className="flex-1 min-w-0">
-                                  <p className="text-sm font-semibold text-gray-900">{juego.nombre}</p>
-                                  <p className="text-xs text-gray-500 mt-0.5 leading-relaxed">{juego.como_se_juega}</p>
-                                  {isSelected && (
-                                    <div className="mt-2 space-y-1">
-                                      <p className="text-[11px] text-blue-700 bg-blue-50 rounded px-2 py-1">
-                                        🐦 <strong>Fácil:</strong> {juego.adaptacion_facil}
-                                      </p>
-                                      <p className="text-[11px] text-amber-700 bg-amber-50 rounded px-2 py-1">
-                                        🦅 <strong>Retador:</strong> {juego.adaptacion_retadora}
-                                      </p>
-                                    </div>
-                                  )}
-                                </div>
+                      <div className="border-t border-gray-100 p-3 space-y-3">
+                        {st.loading ? (
+                          <div className="flex items-center gap-2 text-xs text-gray-400 py-4 justify-center">
+                            <svg className="animate-spin h-3.5 w-3.5" fill="none" viewBox="0 0 24 24">
+                              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
+                            </svg>
+                            Generando sugerencias con IA... (5–10 seg)
+                          </div>
+                        ) : (
+                          <>
+                            {st.failed && (
+                              <div className="flex items-center justify-between gap-2 px-3 py-2 rounded-lg bg-amber-50 border border-amber-200">
+                                <p className="text-xs text-amber-700">No se generaron sugerencias.</p>
+                                <button onClick={() => fetchSuggestion(stIdx)} className="text-xs font-semibold text-amber-800 hover:underline whitespace-nowrap shrink-0">
+                                  🔄 Reintentar
+                                </button>
                               </div>
-                            </button>
-                          );
-                        })}
+                            )}
 
-                        {/* Suggest more */}
-                        <div className="px-4 py-2.5">
-                          <button
-                            onClick={() => handleSuggestMore(stIdx)}
-                            disabled={st.generando}
-                            className="flex items-center gap-2 text-xs font-medium text-purple-700 hover:text-purple-900 disabled:opacity-50"
-                          >
-                            {st.generando ? (
-                              <svg className="animate-spin h-3.5 w-3.5" fill="none" viewBox="0 0 24 24">
-                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
-                              </svg>
-                            ) : "🎲"}
-                            {st.generando ? "Generando... (5–10 seg)" : "Sugerir más con IA"}
-                          </button>
-                        </div>
+                            <div className="space-y-2">
+                              {st.drills.map((d, dIdx) => (
+                                <div key={dIdx} className="border border-gray-100 rounded-lg p-2.5 bg-gray-50 flex items-start gap-2">
+                                  <div className="min-w-0 flex-1">
+                                    <p className="text-sm font-semibold text-gray-900">{d.titulo}</p>
+                                    <p className="text-xs text-gray-500 mt-0.5">{d.descripcion}</p>
+                                  </div>
+                                  <button
+                                    onClick={() => removeDrill(stIdx, dIdx)}
+                                    disabled={st.drills.length <= 1}
+                                    className="text-gray-300 hover:text-red-500 disabled:opacity-30 disabled:hover:text-gray-300 shrink-0"
+                                  >
+                                    <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path d="M18 6L6 18M6 6l12 12" /></svg>
+                                  </button>
+                                </div>
+                              ))}
+                            </div>
+
+                            <div className="flex items-center gap-3">
+                              <button
+                                onClick={() => togglePicker(stIdx, true)}
+                                disabled={st.drills.length >= 3}
+                                className="text-xs font-medium text-blue-700 hover:text-blue-900 disabled:opacity-40 disabled:hover:text-blue-700"
+                              >
+                                + Agregar de la biblioteca
+                              </button>
+                              <button
+                                onClick={() => fetchSuggestion(stIdx)}
+                                className="flex items-center gap-1.5 text-xs font-medium text-purple-700 hover:text-purple-900"
+                              >
+                                🔄 Regenerar con IA
+                              </button>
+                            </div>
+
+                            <div>
+                              <label className="text-[11px] font-bold text-gray-500 uppercase tracking-wide block mb-1">Desafío</label>
+                              <textarea
+                                value={st.desafio}
+                                onChange={(e) => updateDesafio(stIdx, e.target.value)}
+                                rows={2}
+                                placeholder="Reto o juego competitivo de cierre para esta estación"
+                                className="w-full text-xs border border-gray-200 rounded-lg px-2.5 py-1.5 resize-none"
+                              />
+                            </div>
+                          </>
+                        )}
+
+                        {st.showPicker && (
+                          <BibliotecaDrillPicker
+                            categoriaDrills={DRILLS_CATEGORIA_JUVENIL[st.categoria]}
+                            yaSeleccionados={st.drills.map((d) => d.titulo)}
+                            onAdd={(drill) => addDrillFromBiblioteca(stIdx, drill)}
+                            onClose={() => togglePicker(stIdx, false)}
+                          />
+                        )}
                       </div>
                     )}
                   </div>
@@ -508,7 +451,7 @@ export default function JuvenileClassModal({
                 className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-semibold text-white disabled:opacity-40 transition-all hover:brightness-110"
                 style={{ background: GREEN }}
               >
-                {saving ? "Guardando..." : allStationsFilled ? "✓ Guardar sesión" : `Elige los 3 juegos (${stations.filter(s => s.juegoIdx !== null).length}/3)`}
+                {saving ? "Guardando..." : allStationsFilled ? "✓ Guardar sesión" : `Completa las 3 estaciones (${stations.filter((s) => s.drills.length > 0 && s.desafio.trim()).length}/3)`}
               </button>
             </div>
           </>

@@ -83,6 +83,8 @@ function buildPlanningIntro(contextoPlanificacion: string): string {
 
 En cuanto tengas la información que falta (estaciones/enfoque físico esta semana, aspecto técnico prioritario, y para Competencia si hay torneo próximo, o para Damas si es día de campo y si incluye bunker), genera la programación completa de la semana llamando a la herramienta proponer_programacion_semana — esto la muestra automáticamente en el panel de vista previa del profesor, editable antes de publicar. Respeta siempre la estructura fija de cada grupo: Juvenil (martes si el lunes no es festivo, miércoles y jueves 4:30-5:30pm, sábado y domingo dos horarios cada uno) con estaciones y drills conectados a los protocolos P1–P10; Competencia sigue su estructura día por día (martes tiro largo, miércoles putt y campo, jueves juego corto, sábado siempre campo de práctica); Damas es viernes con 3 estaciones rotativas, o día de campo si el profesor lo indica. Nunca uses el término driving range — siempre campo de práctica. Usa los drills de la librería disponible cuando haya opciones relevantes.
 
+Cuando planifiques una semana completa para Juvenil genera planes diferentes para cada día de la semana — martes, miércoles y jueves deben tener drills distintos por estación. El sábado tiene dos horarios (9:15 AM y 10:00 AM) que comparten el mismo plan. El domingo igual. Por cada estación sugiere 2 a 3 drills de la biblioteca rotando para evitar repetición. Incluye siempre un desafío competitivo al final de cada estación apropiado para la edad del grupo.
+
 Junto con la llamada a la herramienta, responde también en texto con un resumen breve de la semana y cierra con la sección "Materiales necesarios". No le digas al profesor que ya la publicaste ni le preguntes si quiere publicarla por chat — la programación queda en el panel de vista previa para que la revise, edite y publique él mismo con el botón de esa pantalla.
 
 Si la respuesta del profesor es incompleta o ambigua, no asumas — haz una pregunta de seguimiento concreta. Por ejemplo si dice "enfócate en el putt": "¿Quieres que todos los días tengan énfasis en putt o solo algunos días? ¿Y cuántos drills de putt por estación — 1 o 2?"
@@ -335,29 +337,35 @@ const PROPONER_PROGRAMACION_TOOL: Anthropic.Tool = {
     properties: {
       descripcion_tema: { type: "string", description: "Resumen de 1-2 líneas del enfoque de la semana" },
       sesion_juvenil: {
-        type: "object",
-        description: "Solo si el grupo es Juvenil — la clase de la semana",
-        properties: {
-          nombre_clase: { type: "string" },
-          objetivo_simple: { type: "string", description: "Objetivo en 1 línea, para los padres" },
-          actividades: {
-            type: "array",
-            description: "Exactamente 3 actividades tipo juego",
-            items: {
-              type: "object",
-              properties: {
-                nombre: { type: "string" },
-                duracion_min: { type: "number" },
-                como_se_juega: { type: "string" },
-                adaptacion_birdies: { type: "string" },
-                adaptacion_albatros: { type: "string" },
-                como_se_gana: { type: "string" },
-                materiales: { type: "string" },
+        type: "array",
+        description: "Solo si el grupo es Juvenil — una entrada por día: martes, miercoles, jueves, sabado, domingo. Sábado y domingo son UNA SOLA entrada cada uno (su contenido aplica a los 2 horarios de ese día). Martes, miércoles y jueves deben tener drills distintos entre sí en cada estación.",
+        items: {
+          type: "object",
+          properties: {
+            dia_semana: { type: "string", enum: ["martes", "miercoles", "jueves", "sabado", "domingo"] },
+            estaciones: {
+              type: "array",
+              description: "SIEMPRE exactamente 3 estaciones, una de cada categoría sin repetir ninguna: juego_largo, juego_corto y putt. Esto no cambia aunque el profesor pida enfocarse en una sola categoría esa semana — en ese caso el enfoque se refleja en los DRILLS elegidos para cada estación, no en repetir o eliminar categorías de estación.",
+              items: {
+                type: "object",
+                properties: {
+                  categoria: { type: "string", enum: ["juego_largo", "juego_corto", "putt"] },
+                  drills: {
+                    type: "array",
+                    description: "2 a 3 drills de la librería, conectados a los protocolos P1-P10",
+                    items: {
+                      type: "object",
+                      properties: { titulo: { type: "string" }, descripcion: { type: "string" } },
+                      required: ["titulo", "descripcion"],
+                    },
+                  },
+                  desafio: { type: "string", description: "Reto o juego competitivo de cierre de la estación, apropiado para la edad del grupo" },
+                },
+                required: ["categoria", "drills", "desafio"],
               },
-              required: ["nombre", "duracion_min", "como_se_juega"],
             },
           },
-          actividad_estrella: { type: "string", description: "Nombre de la actividad más divertida de las 3" },
+          required: ["dia_semana", "estaciones"],
         },
       },
       sesiones: {
@@ -402,6 +410,26 @@ const PROPONER_PROGRAMACION_TOOL: Anthropic.Tool = {
 };
 
 const TOOLS: Anthropic.ToolUnion[] = [{ type: "web_search_20250305", name: "web_search" }, ...CCB_TOOLS];
+
+// El modelo a veces repite una categoría de estación dentro del mismo día en vez
+// de generar las 3 distintas — se deduplica por categoría (se queda con la
+// primera aparición) antes de mostrarlo en la vista previa del profesor.
+function dedupeSesionJuvenil(input: unknown): unknown {
+  if (!input || typeof input !== "object") return input;
+  const obj = input as { sesion_juvenil?: { dia_semana: string; estaciones?: { categoria: string }[] }[] };
+  if (!Array.isArray(obj.sesion_juvenil)) return input;
+  const sesionJuvenil = obj.sesion_juvenil.map((dia) => {
+    if (!Array.isArray(dia.estaciones)) return dia;
+    const vistas = new Set<string>();
+    const estaciones = dia.estaciones.filter((e) => {
+      if (vistas.has(e.categoria)) return false;
+      vistas.add(e.categoria);
+      return true;
+    });
+    return { ...dia, estaciones };
+  });
+  return { ...obj, sesion_juvenil: sesionJuvenil };
+}
 
 function calcularEdad(birthDate: string | null): number | null {
   if (!birthDate) return null;
@@ -724,7 +752,7 @@ export async function POST(request: NextRequest) {
             const toolUseBlocks = response.content.filter((b): b is Anthropic.ToolUseBlock => b.type === "tool_use");
             for (const t of toolUseBlocks) {
               send({ type: "tool_status", tool: t.name });
-              if (t.name === "proponer_programacion_semana") send({ type: "plan_preview", plan: t.input });
+              if (t.name === "proponer_programacion_semana") send({ type: "plan_preview", plan: dedupeSesionJuvenil(t.input) });
             }
 
             const toolResults = await Promise.all(

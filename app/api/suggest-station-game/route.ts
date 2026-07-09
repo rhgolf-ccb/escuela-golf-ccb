@@ -21,13 +21,12 @@ export async function POST(req: NextRequest) {
   const body = await req.json() as {
     plan_id?: string;
     categoria: "juego_largo" | "juego_corto" | "putt";
-    juegos_ya_usados?: string[];
   };
-  const { plan_id, categoria, juegos_ya_usados: frontendUsados = [] } = body;
+  const { plan_id, categoria } = body;
   const categoriaLabel = CATEGORIA_LABEL[categoria] ?? categoria;
 
-  // ── Query Supabase for games already used this week in this category ──────
-  let nombresUsados: string[] = [...frontendUsados];
+  // ── Query Supabase for drills already used this week in this category ─────
+  let titulosUsados: string[] = [];
   if (plan_id) {
     try {
       const supabase = createClient(
@@ -41,32 +40,30 @@ export async function POST(req: NextRequest) {
         .not("sesion_juvenil", "is", null);
 
       if (data) {
-        const fromDB = (data as { sesion_juvenil?: { tipo?: string; estaciones?: { categoria: string; juego?: { nombre: string } }[] } | null }[])
+        const fromDB = (data as { sesion_juvenil?: { tipo?: string; estaciones?: { categoria: string; drills?: { titulo: string }[] }[] } | null }[])
           .flatMap((s) => {
             if (s.sesion_juvenil?.tipo !== "estaciones") return [];
             return (s.sesion_juvenil.estaciones ?? [])
               .filter((e) => e.categoria === categoria)
-              .map((e) => e.juego?.nombre ?? "")
+              .flatMap((e) => (e.drills ?? []).map((d) => d.titulo))
               .filter(Boolean);
           });
-        nombresUsados = Array.from(new Set([...nombresUsados, ...fromDB]));
+        titulosUsados = Array.from(new Set(fromDB));
       }
     } catch (err) {
       console.error("[suggest-station-game] Supabase error:", err);
     }
   }
 
-  console.log(`[suggest-station-game] categoria=${categoria}, yaUsados=`, nombresUsados);
-
-  const usadosLine = nombresUsados.length > 0
-    ? `\nJUEGOS YA USADOS ESTA SEMANA EN ESTA ESTACIÓN: ${nombresUsados.join(", ")}\nREGLA: No repitas ninguno. Los 3 nuevos deben tener nombres completamente diferentes.`
+  const usadosLine = titulosUsados.length > 0
+    ? `\nDRILLS YA USADOS ESTA SEMANA EN ESTA ESTACIÓN: ${titulosUsados.join(", ")}\nREGLA: No repitas ninguno. Los nuevos deben tener títulos completamente diferentes.`
     : "";
 
-  const system = `Juegos de golf para niños 4-12 años (Birdies 4-5a, Albatros 9-12a).
+  const system = `Sesión de golf para niños/jóvenes 4-17 años (Birdies 4-5a, Águilas 6-8a, Albatros 9-12a, +14).
 ESTACIÓN: ${categoriaLabel}${usadosLine}
-Sugiere 3 juegos distintos. Cada uno: nombre creativo corto, cómo se juega (2 líneas), adaptación fácil (Birdies), adaptación retadora (Albatros).
+Sugiere 2 a 3 drills técnicos concretos y ejecutables para esta estación (no genéricos), y 1 desafío o juego competitivo de cierre apropiado para la edad del grupo.
 Devuelve SOLO JSON:
-{"opciones":[{"nombre":"","como_se_juega":"","adaptacion_facil":"","adaptacion_retadora":""}]}
+{"drills":[{"titulo":"","descripcion":""}],"desafio":""}
 
 ${PACO_PLANNING_KNOWLEDGE}`;
 
@@ -83,7 +80,7 @@ ${PACO_PLANNING_KNOWLEDGE}`;
       model: "claude-sonnet-4-6",
       max_tokens: 800,
       system,
-      messages: [{ role: "user", content: `Sugiere 3 juegos para: ${categoriaLabel}. [${nonce}]` }],
+      messages: [{ role: "user", content: `Sugiere drills y desafío para: ${categoriaLabel}. [${nonce}]` }],
     }),
   });
 
@@ -91,8 +88,8 @@ ${PACO_PLANNING_KNOWLEDGE}`;
   if (!aiRes.ok) return Response.json({ error: aiData.error?.message ?? "Error IA" }, { status: 500 });
 
   const raw = aiData.content?.[0]?.text ?? "";
-  const parsed = parseJSON(raw) as { opciones?: unknown[] } | null;
-  if (!parsed || !Array.isArray(parsed.opciones) || parsed.opciones.length === 0) {
+  const parsed = parseJSON(raw) as { drills?: unknown[]; desafio?: string } | null;
+  if (!parsed || !Array.isArray(parsed.drills) || parsed.drills.length === 0) {
     return Response.json({ error: "Sin opciones", raw }, { status: 500 });
   }
   return Response.json(parsed);

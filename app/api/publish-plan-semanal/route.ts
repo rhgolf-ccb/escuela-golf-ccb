@@ -15,10 +15,20 @@ type SesionInput = {
   drills?: unknown; juego_competitivo?: string | null; estaciones_damas?: unknown; notas?: string | null;
 };
 
-type SesionJuvenilInput = {
-  objetivo_simple?: string;
-  actividades?: { nombre: string; como_se_juega: string; adaptacion_birdies?: string; adaptacion_albatros?: string }[];
-  actividad_estrella?: string;
+type EstacionJuvenilInput = {
+  categoria: string;
+  drills: { titulo: string; descripcion: string }[];
+  desafio: string;
+};
+
+type SesionJuvenilDiaInput = {
+  dia_semana: string;
+  estaciones: EstacionJuvenilInput[];
+};
+
+const JUVENIL_DIA_VALUES = ["martes", "miercoles", "jueves", "sabado", "domingo"] as const;
+const CATEGORIA_ESTACION_LABEL: Record<string, string> = {
+  juego_largo: "Juego Largo", juego_corto: "Juego Corto", putt: "Putt",
 };
 
 const JUVENIL_SLOTS: { dia: string; hi: string; hf: string }[] = [
@@ -52,7 +62,7 @@ export async function POST(req: NextRequest) {
   } = body as {
     tipo_plan: string; semana_inicio: string; tema_semanal: string;
     descripcion_tema?: string; objetivo_mensual?: string | null; foco_mes?: string | null;
-    sesiones?: SesionInput[]; sesion_juvenil?: SesionJuvenilInput | null;
+    sesiones?: SesionInput[]; sesion_juvenil?: SesionJuvenilDiaInput[] | null;
   };
 
   if (!tipo_plan || !TIPO_PLAN_VALUES.includes(tipo_plan as typeof TIPO_PLAN_VALUES[number])) {
@@ -83,8 +93,18 @@ export async function POST(req: NextRequest) {
         return Response.json({ error: `Falta la fecha en la sesión del día ${s.dia_semana}.` }, { status: 400 });
       }
     }
-  } else if (!sesion_juvenil) {
-    return Response.json({ error: "No hay contenido de la clase juvenil para publicar" }, { status: 400 });
+  } else {
+    if (!sesion_juvenil || !Array.isArray(sesion_juvenil) || sesion_juvenil.length === 0) {
+      return Response.json({ error: "No hay contenido de la clase juvenil para publicar" }, { status: 400 });
+    }
+    for (const entry of sesion_juvenil) {
+      if (!JUVENIL_DIA_VALUES.includes(entry.dia_semana as typeof JUVENIL_DIA_VALUES[number])) {
+        return Response.json({ error: `Día inválido "${entry.dia_semana}" en la programación juvenil. Corrígelo en la vista previa antes de publicar.` }, { status: 400 });
+      }
+      if (!entry.estaciones || entry.estaciones.length === 0) {
+        return Response.json({ error: `Falta el contenido de estaciones el día ${entry.dia_semana}.` }, { status: 400 });
+      }
+    }
   }
 
   const supabase = createSupabaseAdminClient();
@@ -114,28 +134,25 @@ export async function POST(req: NextRequest) {
   }
 
   if (tipo_plan === "juvenil" && sesion_juvenil) {
-    const rows = JUVENIL_SLOTS.map((slot) => ({
-      plan_id: newPlan.id,
-      dia_semana: slot.dia,
-      fecha: getFechaForDia(semana_inicio, slot.dia),
-      tipo_sesion: "campo",
-      lugar: "campo_practica",
-      hora_inicio: slot.hi,
-      hora_fin: slot.hf,
-      objetivo: sesion_juvenil.objetivo_simple ?? "",
-      drills: (sesion_juvenil.actividades ?? []).map((a) => ({
-        titulo: a.nombre,
-        descripcion: a.como_se_juega,
-        dificultad_birdies: a.adaptacion_birdies || null,
-        dificultad_aguilas: null,
-        dificultad_albatros: a.adaptacion_albatros || null,
-        dificultad_mas14: null,
-      })),
-      juego_competitivo: sesion_juvenil.actividad_estrella || null,
-      estaciones_damas: null,
-      notas: null,
-      sesion_juvenil,
-    }));
+    const rows = JUVENIL_SLOTS.map((slot) => {
+      const entry = sesion_juvenil.find((e) => e.dia_semana === slot.dia);
+      const estaciones = entry?.estaciones ?? [];
+      return {
+        plan_id: newPlan.id,
+        dia_semana: slot.dia,
+        fecha: getFechaForDia(semana_inicio, slot.dia),
+        tipo_sesion: "juvenil_estaciones",
+        lugar: "campo_practica",
+        hora_inicio: slot.hi,
+        hora_fin: slot.hf,
+        objetivo: estaciones.map((e) => CATEGORIA_ESTACION_LABEL[e.categoria] ?? e.categoria).join(" · "),
+        drills: [],
+        juego_competitivo: null,
+        estaciones_damas: null,
+        notas: null,
+        sesion_juvenil: { tipo: "estaciones", estaciones },
+      };
+    });
     const { error: insertErr } = await supabase.from("sesiones_semana").insert(rows);
     if (insertErr) {
       return Response.json({ error: `Error al guardar las sesiones: ${insertErr.message}` }, { status: 500 });
