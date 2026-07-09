@@ -16,6 +16,8 @@ import {
   TIPO_PLAN_LABEL,
   CAL_EVENT,
   type TipoPlan,
+  type DiaSemana,
+  type TipoSesion,
   type Lugar,
   type Drill,
   type EstacionDamas,
@@ -34,6 +36,40 @@ type Message = {
 };
 
 type Preview = { descripcion_tema: string; sesiones: PreviewSesion[]; sesion_juvenil?: SesionJuvenilData | null };
+
+type RawPlanSesion = {
+  dia_semana: DiaSemana; tipo_sesion: TipoSesion; lugar: Lugar;
+  hora_inicio?: string; hora_fin?: string; objetivo?: string;
+  drills?: Drill[]; juego_competitivo?: string | null;
+  estaciones_damas?: EstacionDamas[] | null; notas?: string | null;
+};
+type RawPlan = { descripcion_tema?: string; sesion_juvenil?: SesionJuvenilLegacy | null; sesiones?: RawPlanSesion[] };
+
+function buildPreviewFromPlan(semana: Date, plan: RawPlan): Preview {
+  const sesiones: PreviewSesion[] = (plan.sesiones ?? []).map((s) => ({
+    dia_semana: s.dia_semana,
+    fecha: getFechaForDia(semana, s.dia_semana),
+    tipo_sesion: s.tipo_sesion,
+    lugar: s.lugar,
+    hora_inicio: s.hora_inicio ?? "",
+    hora_fin: s.hora_fin ?? "",
+    objetivo: s.objetivo ?? "",
+    drills: s.drills ?? [],
+    juego_competitivo: s.juego_competitivo ?? null,
+    estaciones_damas: s.estaciones_damas ?? null,
+    notas: s.notas ?? null,
+  }));
+  return { descripcion_tema: plan.descripcion_tema ?? "", sesiones, sesion_juvenil: plan.sesion_juvenil ?? null };
+}
+
+const WELCOME_BY_TIPO: Record<TipoPlan, string> = {
+  juvenil:
+    "Listo, vamos con Juvenil esta semana. Cuéntame: ¿cuántas estaciones quieres por día — 2, 3 o 4? ¿Incluimos estación física algún día? ¿Hay algún problema técnico específico que quieras trabajar esta semana — por ejemplo sway en Águilas, backswing corto, setup?",
+  competencia:
+    "Perfecto, semana de Competencia. Ya sé que el martes es tiro largo, miércoles putt y campo, jueves juego corto y sábado campo de práctica. ¿Incluimos estación física algún día esta semana? ¿Hay torneo próximo que deba tener en cuenta? ¿Algún aspecto técnico prioritario esta semana?",
+  damas:
+    "Vamos con Damas. ¿Esta semana es sesión normal de viernes o hay día de campo también? ¿Incluimos bunker en la estación de juego corto? ¿Calentamiento estándar con baile y movilidad funcional?",
+};
 
 const MAX_HISTORY = 10;
 const LUGARES: Lugar[] = ["campo_practica", "putting_green", "campo_infantil", "campo_pacos_fabios", "campo_completo"];
@@ -121,7 +157,7 @@ export default function PacoPlanningModal({
   const [messages, setMessages] = useState<Message[]>(() => [
     {
       role: "assistant",
-      content: `¡Hola! Soy Paco. Ya tengo el contexto de la semana y del grupo **${TIPO_PLAN_LABEL[tipoPlan]}** cargado. Cuéntame qué quieres trabajar esta semana (un tema, un enfoque, algo puntual) y cuando estés listo genera la programación con el formulario de abajo.`,
+      content: WELCOME_BY_TIPO[tipoPlan],
       timestamp: Date.now(),
       isWelcome: true,
     },
@@ -131,13 +167,6 @@ export default function PacoPlanningModal({
   const [toolStatus, setToolStatus] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
 
-  const [tema, setTema] = useState("");
-  const [focoMes, setFocoMes] = useState("");
-  const [modoComp, setModoComp] = useState<"construccion" | "preparacion">("construccion");
-  const [torneoComp, setTorneoComp] = useState("sin_torneo");
-
-  const [generating, setGenerating] = useState(false);
-  const [generateError, setGenerateError] = useState<string | null>(null);
   const [preview, setPreview] = useState<Preview | null>(null);
 
   const [publishing, setPublishing] = useState(false);
@@ -182,6 +211,7 @@ export default function PacoPlanningModal({
     try {
       await streamAsesorChat({ messages: history, planningContext }, (evt) => {
         if (evt.type === "tool_status" && evt.tool) setToolStatus(evt.tool);
+        else if (evt.type === "plan_preview" && evt.plan) setPreview(buildPreviewFromPlan(semana, evt.plan as RawPlan));
         else if (evt.type === "done") {
           finalText = evt.text ?? "";
           usedWebSearch = !!evt.usedWebSearch;
@@ -208,43 +238,6 @@ export default function PacoPlanningModal({
       e.preventDefault();
       sendMessage(input);
     }
-  }
-
-  async function handleGenerar() {
-    if (!tema.trim()) {
-      setGenerateError("Escribe un tema para generar la programación.");
-      return;
-    }
-    setGenerating(true);
-    setGenerateError(null);
-    try {
-      const contexto_grupo: Record<string, unknown> =
-        tipoPlan === "competencia" ? { modo: modoComp, torneo: torneoComp, primer_dia: "martes" } : {};
-      const res = await fetch("/api/weekly-plan", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          tipo_plan: tipoPlan,
-          tema_semanal: tema.trim(),
-          foco_mes: focoMes.trim() || undefined,
-          semana_inicio: toISODate(semana),
-          contexto_grupo,
-        }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Error al generar la programación");
-
-      const sesiones: PreviewSesion[] = (data.sesiones ?? []).map((s: PreviewSesion) => ({
-        ...s,
-        fecha: getFechaForDia(semana, s.dia_semana),
-        hora_inicio: s.hora_inicio ?? "",
-        hora_fin: s.hora_fin ?? "",
-      }));
-      setPreview({ descripcion_tema: data.descripcion_tema ?? "", sesiones, sesion_juvenil: data.sesion_juvenil ?? null });
-    } catch (err) {
-      setGenerateError(err instanceof Error ? err.message : "Error al generar la programación");
-    }
-    setGenerating(false);
   }
 
   function updateSesion(idx: number, updates: Partial<PreviewSesion>) {
@@ -324,10 +317,10 @@ export default function PacoPlanningModal({
         body: JSON.stringify({
           tipo_plan: tipoPlan,
           semana_inicio: toISODate(semana),
-          tema_semanal: tema.trim(),
+          tema_semanal: preview.descripcion_tema || TIPO_PLAN_LABEL[tipoPlan],
           descripcion_tema: preview.descripcion_tema,
-          objetivo_mensual: focoMes.trim() || null,
-          foco_mes: focoMes.trim() || null,
+          objetivo_mensual: null,
+          foco_mes: null,
           sesiones: tipoPlan === "juvenil" ? undefined : preview.sesiones,
           sesion_juvenil: tipoPlan === "juvenil" ? preview.sesion_juvenil : undefined,
         }),
@@ -430,46 +423,6 @@ export default function PacoPlanningModal({
             </button>
           </div>
 
-          {/* ── Formulario de generación ── */}
-          <div className="px-4 py-3 border-t border-gray-100 shrink-0 space-y-2 bg-gray-50">
-            <input
-              type="text"
-              value={tema}
-              onChange={(e) => setTema(e.target.value)}
-              placeholder="Tema de la semana (ej: Control de distancia)"
-              className="w-full text-sm px-3 py-2 rounded-lg border border-gray-200 focus:outline-none focus:border-[#1a3a2a]"
-            />
-            <input
-              type="text"
-              value={focoMes}
-              onChange={(e) => setFocoMes(e.target.value)}
-              placeholder="Foco del mes (opcional)"
-              className="w-full text-sm px-3 py-2 rounded-lg border border-gray-200 focus:outline-none focus:border-[#1a3a2a]"
-            />
-            {tipoPlan === "competencia" && (
-              <div className="flex gap-2">
-                <select value={modoComp} onChange={(e) => setModoComp(e.target.value as "construccion" | "preparacion")} className="flex-1 text-xs px-2 py-2 rounded-lg border border-gray-200 bg-white">
-                  <option value="construccion">Construcción de swing</option>
-                  <option value="preparacion">Preparación para competencia</option>
-                </select>
-                <select value={torneoComp} onChange={(e) => setTorneoComp(e.target.value)} className="flex-1 text-xs px-2 py-2 rounded-lg border border-gray-200 bg-white">
-                  <option value="sin_torneo">Sin torneo</option>
-                  <option value="torneo_1_semana">Torneo en 1 semana</option>
-                  <option value="torneo_2_semanas">Torneo en 2 semanas</option>
-                  <option value="torneo_este_finde">Torneo este fin de semana</option>
-                </select>
-              </div>
-            )}
-            {generateError && <p className="text-xs text-red-600">{generateError}</p>}
-            <button
-              onClick={handleGenerar}
-              disabled={generating}
-              className="w-full py-2 rounded-lg text-sm font-semibold text-white disabled:opacity-50"
-              style={{ backgroundColor: "#1a3a2a" }}
-            >
-              {generating ? "Generando..." : "Generar programación"}
-            </button>
-          </div>
         </div>
 
         {/* ── Panel derecho: vista previa ── */}
@@ -482,7 +435,7 @@ export default function PacoPlanningModal({
           <div className="flex-1 overflow-y-auto px-5 py-4">
             {!preview ? (
               <div className="h-full flex flex-col items-center justify-center text-center text-gray-400">
-                <p className="text-sm">Genera una programación desde el panel de la izquierda para ver la vista previa aquí.</p>
+                <p className="text-sm">Responde las preguntas de Paco en el chat — en cuanto tenga suficiente información, la programación aparece aquí lista para editar.</p>
               </div>
             ) : (
               <div className="space-y-4">

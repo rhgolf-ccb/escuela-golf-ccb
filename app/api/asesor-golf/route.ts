@@ -79,9 +79,13 @@ Usa drills de la librería disponible cuando haya opciones relevantes para los e
 }
 
 function buildPlanningIntro(contextoPlanificacion: string): string {
-  return `Eres Paco, asesor experto de la Escuela de Golf CCB. Cuando el profesor te pida planificar una semana o un día específico para cualquier grupo, genera una programación detallada usando los drills de la librería disponible y las ubicaciones reales del CCB. Respeta siempre la estructura fija de cada grupo: Juvenil usa 3 estaciones (juego largo, juego corto, putt) con días especiales posibles (test técnico, test físico, campo infantil, Pacos y Fabios); Competencia sigue su estructura día por día; Damas es solo viernes con 3 estaciones rotativas. Nunca uses el término driving range — siempre campo de práctica. Cuando generes una programación muéstrala estructurada por día con estaciones, drills, tiempos y ubicación. Al final pregunta si el profesor quiere publicarla en el calendario.
+  return `Eres Paco, asesor experto de la Escuela de Golf CCB. Estás guiando la planificación de la SEMANA COMPLETA del grupo indicado en el contexto de abajo. El profesor ya vio tu primer mensaje con las preguntas iniciales específicas de ese grupo — continúa la conversación desde ahí. Nunca repreguntes algo que ya te respondió ni hagas una pregunta genérica como "¿qué quieres planificar?": el grupo y la semana ya se saben.
 
-Cuando el profesor pida planificar una actividad especial, día diferente o evento fuera de la estructura normal, genera el plan con formato libre sin restricciones de estaciones fijas ni días específicos. Usa los drills de la librería y las ubicaciones del CCB. Al terminar pregunta si quiere publicarlo en el calendario como actividad especial.
+En cuanto tengas la información que falta (estaciones/enfoque físico esta semana, aspecto técnico prioritario, y para Competencia si hay torneo próximo, o para Damas si es día de campo y si incluye bunker), genera la programación completa de la semana llamando a la herramienta proponer_programacion_semana — esto la muestra automáticamente en el panel de vista previa del profesor, editable antes de publicar. Respeta siempre la estructura fija de cada grupo: Juvenil (martes si el lunes no es festivo, miércoles y jueves 4:30-5:30pm, sábado y domingo dos horarios cada uno) con estaciones y drills conectados a los protocolos P1–P10; Competencia sigue su estructura día por día (martes tiro largo, miércoles putt y campo, jueves juego corto, sábado siempre campo de práctica); Damas es viernes con 3 estaciones rotativas, o día de campo si el profesor lo indica. Nunca uses el término driving range — siempre campo de práctica. Usa los drills de la librería disponible cuando haya opciones relevantes.
+
+Junto con la llamada a la herramienta, responde también en texto con un resumen breve de la semana y cierra con la sección "Materiales necesarios". No le digas al profesor que ya la publicaste ni le preguntes si quiere publicarla por chat — la programación queda en el panel de vista previa para que la revise, edite y publique él mismo con el botón de esa pantalla.
+
+Si la respuesta del profesor es incompleta o ambigua, no asumas — haz una pregunta de seguimiento concreta. Por ejemplo si dice "enfócate en el putt": "¿Quieres que todos los días tengan énfasis en putt o solo algunos días? ¿Y cuántos drills de putt por estación — 1 o 2?"
 
 Contexto de planificación disponible:
 ${contextoPlanificacion}`;
@@ -301,6 +305,85 @@ const CCB_TOOLS: Anthropic.Tool[] = [
   },
 ];
 
+// Tool "de vista previa": no escribe nada en la base de datos, solo le entrega al
+// frontend la programación estructurada de la semana para el panel editable de
+// PacoPlanningModal. Solo se ofrece cuando la conversación trae planningContext
+// (ver POST) — ahí es donde tiene sentido que Paco la use.
+const PROPONER_PROGRAMACION_TOOL: Anthropic.Tool = {
+  name: "proponer_programacion_semana",
+  description:
+    "Genera la programación completa de la semana para mostrarla en el panel de vista previa del profesor, editable antes de publicar. No publica nada — solo llena la vista previa. Úsala en cuanto tengas la información necesaria del profesor para el grupo que se está planificando.",
+  input_schema: {
+    type: "object",
+    properties: {
+      descripcion_tema: { type: "string", description: "Resumen de 1-2 líneas del enfoque de la semana" },
+      sesion_juvenil: {
+        type: "object",
+        description: "Solo si el grupo es Juvenil — la clase de la semana",
+        properties: {
+          nombre_clase: { type: "string" },
+          objetivo_simple: { type: "string", description: "Objetivo en 1 línea, para los padres" },
+          actividades: {
+            type: "array",
+            description: "Exactamente 3 actividades tipo juego",
+            items: {
+              type: "object",
+              properties: {
+                nombre: { type: "string" },
+                duracion_min: { type: "number" },
+                como_se_juega: { type: "string" },
+                adaptacion_birdies: { type: "string" },
+                adaptacion_albatros: { type: "string" },
+                como_se_gana: { type: "string" },
+                materiales: { type: "string" },
+              },
+              required: ["nombre", "duracion_min", "como_se_juega"],
+            },
+          },
+          actividad_estrella: { type: "string", description: "Nombre de la actividad más divertida de las 3" },
+        },
+      },
+      sesiones: {
+        type: "array",
+        description: "Solo si el grupo es Competencia o Damas — una entrada por sesión de la semana",
+        items: {
+          type: "object",
+          properties: {
+            dia_semana: { type: "string", description: "martes | miercoles | jueves | viernes | sabado | domingo" },
+            tipo_sesion: { type: "string", description: "tiro_largo | juego_corto | putt | campo | test_tecnico | test_fisico | competencia | damas_estaciones" },
+            lugar: { type: "string", description: "campo_practica | putting_green | campo_infantil | campo_pacos_fabios | campo_completo" },
+            hora_inicio: { type: "string", description: "HH:MM" },
+            hora_fin: { type: "string", description: "HH:MM" },
+            objetivo: { type: "string" },
+            drills: {
+              type: "array",
+              items: { type: "object", properties: { titulo: { type: "string" }, descripcion: { type: "string" } }, required: ["titulo", "descripcion"] },
+            },
+            juego_competitivo: { type: "string", description: "Descripción del juego o ejercicio competitivo, si aplica" },
+            estaciones_damas: {
+              type: "array",
+              description: "Solo para Damas — exactamente 3 estaciones (Juego Largo, Juego Corto, Putt)",
+              items: {
+                type: "object",
+                properties: {
+                  nombre: { type: "string" },
+                  lugar: { type: "string" },
+                  duracion_min: { type: "number" },
+                  descripcion: { type: "string" },
+                },
+                required: ["nombre", "lugar", "duracion_min", "descripcion"],
+              },
+            },
+            notas: { type: "string" },
+          },
+          required: ["dia_semana", "tipo_sesion", "lugar", "hora_inicio", "hora_fin", "objetivo"],
+        },
+      },
+    },
+    required: ["descripcion_tema"],
+  },
+};
+
 const TOOLS: Anthropic.ToolUnion[] = [{ type: "web_search_20250305", name: "web_search" }, ...CCB_TOOLS];
 
 function calcularEdad(birthDate: string | null): number | null {
@@ -490,6 +573,10 @@ async function ejecutarTool(admin: SupabaseClient, name: string, input: Record<s
         return await crearEventoCalendario(admin, String(input.nombre ?? ""), String(input.fecha_inicio ?? ""), input.fecha_fin as string | undefined, input.descripcion as string | undefined, input.tipo as string | undefined);
       case "marcar_dias_sin_escuela":
         return await marcarDiasSinEscuela(admin, String(input.fecha_inicio ?? ""), String(input.fecha_fin ?? ""), input.motivo as string | undefined);
+      case "proponer_programacion_semana":
+        // No escribe nada — el input ya se le envió al frontend como evento
+        // "plan_preview" antes de llegar aquí (ver POST). Solo confirma al modelo.
+        return { ok: true, mensaje: "Vista previa actualizada en el panel del profesor." };
       default:
         return { error: `Tool desconocida: ${name}` };
     }
@@ -555,6 +642,8 @@ export async function POST(request: NextRequest) {
     : undefined;
 
   const systemPrompt = buildSystemPrompt(body.studentContext, body.planningContext, body.groupContext, body.individualPlanContext, knowledgeContext);
+  const tools: Anthropic.ToolUnion[] = body.planningContext ? [...TOOLS, PROPONER_PROGRAMACION_TOOL] : TOOLS;
+  const maxTokens = body.planningContext ? 8000 : 2048;
 
   const client = new Anthropic({ apiKey });
 
@@ -574,7 +663,7 @@ export async function POST(request: NextRequest) {
         while (true) {
           let response: Anthropic.Message;
           try {
-            response = await client.messages.create({ model, max_tokens: 2048, system: systemPrompt, tools: TOOLS, messages: conversation });
+            response = await client.messages.create({ model, max_tokens: maxTokens, system: systemPrompt, tools, messages: conversation });
           } catch (err) {
             if (model === PRIMARY_MODEL && err instanceof Anthropic.NotFoundError) {
               model = FALLBACK_MODEL;
@@ -600,7 +689,10 @@ export async function POST(request: NextRequest) {
               break;
             }
             const toolUseBlocks = response.content.filter((b): b is Anthropic.ToolUseBlock => b.type === "tool_use");
-            for (const t of toolUseBlocks) send({ type: "tool_status", tool: t.name });
+            for (const t of toolUseBlocks) {
+              send({ type: "tool_status", tool: t.name });
+              if (t.name === "proponer_programacion_semana") send({ type: "plan_preview", plan: t.input });
+            }
 
             const toolResults = await Promise.all(
               toolUseBlocks.map(async (t) => {
