@@ -42,6 +42,7 @@ interface AIDrill {
   descripcion: string;
   duracion_min: number;
   repeticiones: string;
+  categoriaOrigen: TipoSesion;
 }
 
 interface DrillEdit { titulo: string; descripcion: string }
@@ -93,7 +94,7 @@ export default function CompetenciaClassModal({
 }: Props) {
   type Mode = "categoria" | "seleccion" | "preview";
   const [mode, setMode]       = useState<Mode>("categoria");
-  const [categoria, setCategoria] = useState<TipoSesion | null>(null);
+  const [categorias, setCategorias] = useState<TipoSesion[]>([]);
   const [saving, setSaving]   = useState(false);
   const [error, setError]     = useState<string | null>(null);
 
@@ -115,10 +116,14 @@ export default function CompetenciaClassModal({
   const [juegoEdit, setJuegoEdit]     = useState("");
 
   const totalSelected = selectedLibraryIds.size + selectedAiIdx.size;
-  const catInfo = CATEGORIAS.find((c) => c.value === categoria);
+  const catInfos = CATEGORIAS.filter((c) => categorias.includes(c.value));
 
-  async function handleSelectCategoria(cat: TipoSesion) {
-    setCategoria(cat);
+  function toggleCategoria(cat: TipoSesion) {
+    setCategorias((prev) => (prev.includes(cat) ? prev.filter((c) => c !== cat) : [...prev, cat]));
+  }
+
+  async function handleContinuarCategorias() {
+    if (categorias.length === 0) return;
     setMode("seleccion");
     setError(null);
     setSelectedLibraryIds(new Set());
@@ -127,16 +132,16 @@ export default function CompetenciaClassModal({
     setAiDrills([]);
     setAiMeta(null);
 
-    const drillsCat = DRILLS_CATEGORIA[cat];
+    const drillsCats = Array.from(new Set(categorias.map((cat) => DRILLS_CATEGORIA[cat]).filter((c): c is string => !!c)));
 
-    // Fetch library drills and AI suggestions in parallel
-    const libraryPromise = drillsCat
+    // Fetch library drills y sugerencias de IA (una por categoría elegida) en paralelo
+    const libraryPromise = drillsCats.length
       ? (async () => {
           setLoadingLibrary(true);
           const { data } = await supabase
             .from("drills")
             .select("id, titulo, descripcion, posicion_swing, duracion_minutos, repeticiones, rating, veces_usado")
-            .eq("categoria", drillsCat)
+            .in("categoria", drillsCats)
             .eq("aprobado", true)
             .order("rating", { ascending: false })
             .limit(20);
@@ -148,22 +153,30 @@ export default function CompetenciaClassModal({
     const aiPromise = (async () => {
       setLoadingAI(true);
       try {
-        const res = await fetch("/api/suggest-competencia-session", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ categoria: cat, dia_semana: dia }),
-        });
-        const data = await res.json() as {
-          foco_principal?: string; lugar?: string;
-          drills?: AIDrill[]; juego_competitivo?: string; error?: string;
-        };
-        if (!res.ok) throw new Error(data.error ?? "Error IA");
+        const resultados = await Promise.all(
+          categorias.map(async (cat) => {
+            const res = await fetch("/api/suggest-competencia-session", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ categoria: cat, dia_semana: dia }),
+            });
+            const data = await res.json() as {
+              foco_principal?: string; lugar?: string;
+              drills?: Omit<AIDrill, "categoriaOrigen">[]; juego_competitivo?: string; error?: string;
+            };
+            if (!res.ok) throw new Error(data.error ?? "Error IA");
+            return { cat, data };
+          })
+        );
+        const catInfo = (cat: TipoSesion) => CATEGORIAS.find((c) => c.value === cat);
         setAiMeta({
-          foco:  data.foco_principal ?? "",
-          lugar: data.lugar ?? "campo_practica",
-          juego: data.juego_competitivo ?? "",
+          foco: resultados.map(({ cat, data }) => `${catInfo(cat)?.label}: ${data.foco_principal ?? ""}`).join(" · "),
+          lugar: resultados[0]?.data.lugar ?? "campo_practica",
+          juego: resultados.map(({ data }) => data.juego_competitivo).filter(Boolean).join(" · "),
         });
-        setAiDrills((data.drills ?? []).slice(0, 3) as AIDrill[]);
+        setAiDrills(
+          resultados.flatMap(({ cat, data }) => (data.drills ?? []).slice(0, 3).map((d) => ({ ...d, categoriaOrigen: cat })))
+        );
       } catch (err) {
         setError(err instanceof Error ? err.message : "Error de conexión con IA");
       } finally {
@@ -205,7 +218,7 @@ export default function CompetenciaClassModal({
   }
 
   async function handleSave() {
-    if (!categoria) return;
+    if (categorias.length === 0) return;
     setSaving(true); setError(null);
     try {
       // Increment veces_usado for library drills (fire-and-forget)
@@ -219,10 +232,12 @@ export default function CompetenciaClassModal({
         }
       }
 
-      // Insert AI drills into library with aprobado=true (fire-and-forget)
-      const drillsCat = DRILLS_CATEGORIA[categoria];
+      // Insert AI drills into library with aprobado=true (fire-and-forget) —
+      // cada sugerencia usa la categoría de la que realmente salió, no una fija,
+      // porque ahora se puede combinar más de una categoría en la misma sesión.
       for (const idx of selectedAiIdx) {
         const drill = aiDrills[idx];
+        const drillsCat = drill ? DRILLS_CATEGORIA[drill.categoriaOrigen] : null;
         if (drill && drillsCat) {
           supabase.from("drills").insert({
             titulo:          drill.titulo,
@@ -238,7 +253,7 @@ export default function CompetenciaClassModal({
 
       const payload = {
         plan_id: planId, dia_semana: dia, fecha,
-        tipo_sesion: categoria,
+        tipo_sesion: categorias[0],
         lugar: lugarEdit,
         hora_inicio: horaInicio || null,
         hora_fin:    horaFin    || null,
@@ -275,7 +290,7 @@ export default function CompetenciaClassModal({
             <p className="text-xs text-gray-400 font-medium uppercase tracking-wide">Competencia · {diaLabel}</p>
             <p className="text-sm font-bold text-gray-900">
               {mode === "categoria"  ? "Elige la categoría del día"
-                : mode === "seleccion" ? `${catInfo?.icon} ${catInfo?.label} — Seleccionar drills`
+                : mode === "seleccion" ? `${catInfos.map((c) => `${c.icon} ${c.label}`).join(" + ")} — Seleccionar drills`
                 : "Revisa y guarda"}
             </p>
           </div>
@@ -284,22 +299,45 @@ export default function CompetenciaClassModal({
           </button>
         </div>
 
-        {/* ── Categoría ── */}
+        {/* ── Categoría (multi-selección) ── */}
         {mode === "categoria" && (
           <div className="px-5 py-5 space-y-4">
+            <p className="text-xs text-gray-500 -mt-1">Puedes combinar más de una — por ejemplo Tiro largo + Test físico.</p>
             <div className="grid grid-cols-2 gap-3">
-              {CATEGORIAS.map((cat) => (
-                <button
-                  key={cat.value}
-                  onClick={() => handleSelectCategoria(cat.value)}
-                  className="flex items-center gap-3 p-4 rounded-xl border-2 border-gray-200 hover:border-blue-300 hover:bg-blue-50 text-left transition-all"
-                >
-                  <span className="text-2xl">{cat.icon}</span>
-                  <span className="text-sm font-semibold text-gray-800">{cat.label}</span>
-                </button>
-              ))}
+              {CATEGORIAS.map((cat) => {
+                const sel = categorias.includes(cat.value);
+                return (
+                  <button
+                    key={cat.value}
+                    onClick={() => toggleCategoria(cat.value)}
+                    className={`flex items-center gap-3 p-4 rounded-xl border-2 text-left transition-all ${
+                      sel ? "border-blue-400 bg-blue-50" : "border-gray-200 hover:border-blue-300 hover:bg-blue-50"
+                    }`}
+                  >
+                    <span className="text-2xl">{cat.icon}</span>
+                    <span className="text-sm font-semibold text-gray-800 flex-1">{cat.label}</span>
+                    <div className={`w-4 h-4 rounded border-2 flex-shrink-0 flex items-center justify-center transition-all ${
+                      sel ? "border-blue-500 bg-blue-500" : "border-gray-300 bg-white"
+                    }`}>
+                      {sel && (
+                        <svg width="8" height="8" viewBox="0 0 12 12" fill="none">
+                          <path d="M2 6l3 3 5-5" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                        </svg>
+                      )}
+                    </div>
+                  </button>
+                );
+              })}
             </div>
             {error && <p className="text-xs text-red-500 bg-red-50 px-3 py-2 rounded-lg">{error}</p>}
+            <button
+              onClick={handleContinuarCategorias}
+              disabled={categorias.length === 0}
+              className="w-full py-2.5 rounded-xl text-sm font-semibold text-white disabled:opacity-50 hover:brightness-110 transition-all"
+              style={{ background: ACCENT }}
+            >
+              {categorias.length === 0 ? "Elige al menos 1 categoría" : `Continuar (${categorias.length})`}
+            </button>
           </div>
         )}
 
@@ -420,6 +458,11 @@ export default function CompetenciaClassModal({
                             <div className="flex items-center gap-2 flex-wrap">
                               <p className="text-sm font-semibold text-gray-900">{drill.titulo}</p>
                               <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-purple-100 text-purple-700 font-medium">IA</span>
+                              {categorias.length > 1 && (
+                                <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-blue-100 text-blue-700 font-medium">
+                                  {CATEGORIAS.find((c) => c.value === drill.categoriaOrigen)?.icon} {CATEGORIAS.find((c) => c.value === drill.categoriaOrigen)?.label}
+                                </span>
+                              )}
                             </div>
                             <p className="text-xs text-gray-500 mt-0.5 line-clamp-2">{drill.descripcion}</p>
                             <div className="flex items-center gap-3 mt-1">
@@ -443,7 +486,7 @@ export default function CompetenciaClassModal({
 
             <div className="px-5 pb-5 flex gap-2 border-t border-gray-100 pt-4">
               <button
-                onClick={() => { setMode("categoria"); setCategoria(null); }}
+                onClick={() => { setMode("categoria"); setCategorias([]); }}
                 className="px-4 py-2.5 rounded-xl text-sm font-medium border border-gray-200 text-gray-600 hover:bg-gray-50 transition-colors"
               >
                 ← Atrás
@@ -473,8 +516,12 @@ export default function CompetenciaClassModal({
                   {diaLabel} · {new Date(fecha + "T00:00:00").toLocaleDateString("es-CO", { day: "numeric", month: "long" })}
                 </span>
                 {horaInicio && <span>· {horaInicio}–{horaFin}</span>}
-                <span className="ml-auto px-2 py-0.5 rounded-full text-xs font-semibold bg-blue-100 text-blue-700">
-                  {catInfo?.icon} {catInfo?.label}
+                <span className="ml-auto flex flex-wrap gap-1 justify-end">
+                  {catInfos.map((c) => (
+                    <span key={c.value} className="px-2 py-0.5 rounded-full text-xs font-semibold bg-blue-100 text-blue-700">
+                      {c.icon} {c.label}
+                    </span>
+                  ))}
                 </span>
               </div>
 
