@@ -21,14 +21,36 @@ type EstacionJuvenilInput = {
   desafio: string;
 };
 
+type TipoDiaJuvenilInput = "estaciones" | "solo_putt" | "solo_juego_corto" | "campo" | "test_tecnico" | "test_fisico";
+
 type SesionJuvenilDiaInput = {
   dia_semana: string;
-  estaciones: EstacionJuvenilInput[];
+  tipo?: TipoDiaJuvenilInput;
+  estaciones?: EstacionJuvenilInput[];
+  notas?: string;
 };
 
 const JUVENIL_DIA_VALUES = ["martes", "miercoles", "jueves", "sabado", "domingo"] as const;
 const CATEGORIA_ESTACION_LABEL: Record<string, string> = {
   juego_largo: "Juego Largo", juego_corto: "Juego Corto", putt: "Putt",
+};
+
+// Mismos valores que ESPECIAL_TIPO_SESION/ESPECIAL_LUGAR/ESPECIAL_OBJETIVO de
+// JuvenileClassModal.tsx — replicados aquí porque esta ruta de servidor no
+// importa componentes cliente. "campo" (salida al campo) se mapea a
+// campo_pacos, el único de los 2 tipos de campo que tiene sentido para un día
+// generado desde la vista previa semanal (campo_infantil es solo manual).
+const DIA_ESPECIAL_TIPO_SESION: Record<string, string> = {
+  campo: "campo", test_tecnico: "test_tecnico", test_fisico: "test_fisico",
+};
+const DIA_ESPECIAL_LUGAR: Record<string, string> = {
+  campo: "campo_pacos_fabios", test_tecnico: "campo_practica", test_fisico: "campo_practica",
+};
+const DIA_ESPECIAL_OBJETIVO: Record<string, string> = {
+  campo: "Juego en Campo Pacos y Fabios", test_tecnico: "Evaluación técnica P1-P10", test_fisico: "Evaluación física TPI",
+};
+const DIA_ESPECIAL_TIPO_ESPECIAL: Record<string, string> = {
+  campo: "campo_pacos", test_tecnico: "test_tecnico", test_fisico: "test_fisico",
 };
 
 const JUVENIL_SLOTS: { dia: string; hi: string; hf: string }[] = [
@@ -101,7 +123,9 @@ export async function POST(req: NextRequest) {
       if (!JUVENIL_DIA_VALUES.includes(entry.dia_semana as typeof JUVENIL_DIA_VALUES[number])) {
         return Response.json({ error: `Día inválido "${entry.dia_semana}" en la programación juvenil. Corrígelo en la vista previa antes de publicar.` }, { status: 400 });
       }
-      if (!entry.estaciones || entry.estaciones.length === 0) {
+      const tipo = entry.tipo ?? "estaciones";
+      const esEspecial = tipo === "campo" || tipo === "test_tecnico" || tipo === "test_fisico";
+      if (!esEspecial && (!entry.estaciones || entry.estaciones.length === 0)) {
         return Response.json({ error: `Falta el contenido de estaciones el día ${entry.dia_semana}.` }, { status: 400 });
       }
     }
@@ -136,19 +160,35 @@ export async function POST(req: NextRequest) {
   if (tipo_plan === "juvenil" && sesion_juvenil) {
     const rows = JUVENIL_SLOTS.map((slot) => {
       const entry = sesion_juvenil.find((e) => e.dia_semana === slot.dia);
-      const estaciones = entry?.estaciones ?? [];
-      return {
+      const tipo = entry?.tipo ?? "estaciones";
+      const base = {
         plan_id: newPlan.id,
         dia_semana: slot.dia,
         fecha: getFechaForDia(semana_inicio, slot.dia),
-        tipo_sesion: "juvenil_estaciones",
-        lugar: "campo_practica",
         hora_inicio: slot.hi,
         hora_fin: slot.hf,
-        objetivo: estaciones.map((e) => CATEGORIA_ESTACION_LABEL[e.categoria] ?? e.categoria).join(" · "),
-        drills: [],
-        juego_competitivo: null,
+        drills: [] as unknown[],
+        juego_competitivo: null as string | null,
         estaciones_damas: null,
+      };
+      if (tipo === "campo" || tipo === "test_tecnico" || tipo === "test_fisico") {
+        const tipoEspecial = DIA_ESPECIAL_TIPO_ESPECIAL[tipo];
+        const notas = entry?.notas?.trim() || null;
+        return {
+          ...base,
+          tipo_sesion: DIA_ESPECIAL_TIPO_SESION[tipo],
+          lugar: DIA_ESPECIAL_LUGAR[tipo],
+          objetivo: notas || DIA_ESPECIAL_OBJETIVO[tipo],
+          notas,
+          sesion_juvenil: { tipo: "especial", tipo_especial: tipoEspecial, notas },
+        };
+      }
+      const estaciones = entry?.estaciones ?? [];
+      return {
+        ...base,
+        tipo_sesion: "juvenil_estaciones",
+        lugar: "campo_practica",
+        objetivo: estaciones.map((e) => CATEGORIA_ESTACION_LABEL[e.categoria] ?? e.categoria).join(" · "),
         notas: null,
         sesion_juvenil: { tipo: "estaciones", estaciones },
       };

@@ -83,7 +83,9 @@ function buildPlanningIntro(contextoPlanificacion: string): string {
 
 En cuanto tengas la información que falta (estaciones/enfoque físico esta semana, aspecto técnico prioritario, y para Competencia si hay torneo próximo, o para Damas si es día de campo y si incluye bunker), genera la programación completa de la semana llamando a la herramienta proponer_programacion_semana — esto la muestra automáticamente en el panel de vista previa del profesor, editable antes de publicar. Respeta siempre la estructura fija de cada grupo: Juvenil (martes si el lunes no es festivo, miércoles y jueves 4:30-5:30pm, sábado y domingo dos horarios cada uno) con estaciones y drills conectados a los protocolos P1–P10; Competencia sigue su estructura día por día (martes tiro largo, miércoles putt y campo, jueves juego corto, sábado siempre campo de práctica); Damas es viernes con 3 estaciones rotativas, o día de campo si el profesor lo indica. Nunca uses el término driving range — siempre campo de práctica. Usa los drills de la librería disponible cuando haya opciones relevantes.
 
-Cuando planifiques una semana completa para Juvenil genera planes diferentes para cada día de la semana — martes, miércoles y jueves deben tener drills distintos por estación. El sábado tiene dos horarios (9:15 AM y 10:00 AM) que comparten el mismo plan. El domingo igual. Por cada estación sugiere 2 a 3 drills de la biblioteca rotando para evitar repetición. Incluye siempre un desafío competitivo al final de cada estación apropiado para la edad del grupo.
+Cuando planifiques una semana completa para Juvenil genera planes diferentes para cada día de la semana — martes, miércoles y jueves deben tener drills distintos por estación. El sábado tiene dos horarios (9:15 AM y 10:00 AM) que comparten el mismo plan. El domingo igual. Por cada estación sugiere 2 a 3 drills de la biblioteca rotando para evitar repetición. Incluye siempre un desafío competitivo al final de cada estación apropiado para la edad del grupo. Para Juvenil, un día puede ser de tipo "estaciones" (las 3 de siempre), "solo_putt" o "solo_juego_corto" (un solo tema con más drills), o un día especial: "campo" (salida a jugar), "test_tecnico" o "test_fisico" — en los tipos especiales usa el campo notas para describir la actividad en vez de estaciones.
+
+Cuando el profesor pida modificar la programación que ya está en la vista previa (cambiar un día, una estación, un drill, un desafío, etc.), SIEMPRE vuelve a llamar la herramienta proponer_programacion_semana con la estructura COMPLETA — nunca respondas el cambio solo en texto sin llamar la herramienta, o la vista previa del profesor se queda desactualizada. Si el contexto de abajo incluye "Programación actual en la vista previa", cópiala tal cual para todo lo que el profesor no pidió cambiar, y modifica solo lo solicitado. Para Juvenil, incluye siempre el campo dias_modificados con la lista exacta de los días que realmente cambiaron en esta respuesta — los demás días igual van completos en el array pero se ignorarán si no aparecen en esa lista, así que cópialos sin alterarlos.
 
 Junto con la llamada a la herramienta, responde también en texto con un resumen breve de la semana y cierra con la sección "Materiales necesarios". No le digas al profesor que ya la publicaste ni le preguntes si quiere publicarla por chat — la programación queda en el panel de vista previa para que la revise, edite y publique él mismo con el botón de esa pantalla.
 
@@ -343,9 +345,14 @@ const PROPONER_PROGRAMACION_TOOL: Anthropic.Tool = {
           type: "object",
           properties: {
             dia_semana: { type: "string", enum: ["martes", "miercoles", "jueves", "sabado", "domingo"] },
+            tipo: {
+              type: "string",
+              enum: ["estaciones", "solo_putt", "solo_juego_corto", "campo", "test_tecnico", "test_fisico"],
+              description: "estaciones (normal, usa el campo estaciones) | solo_putt / solo_juego_corto (un solo tema, usa estaciones con 1 sola entrada de esa categoría) | campo / test_tecnico / test_fisico (día especial, usa el campo notas en vez de estaciones)",
+            },
             estaciones: {
               type: "array",
-              description: "SIEMPRE exactamente 3 estaciones, una de cada categoría sin repetir ninguna: juego_largo, juego_corto y putt. Esto no cambia aunque el profesor pida enfocarse en una sola categoría esa semana — en ese caso el enfoque se refleja en los DRILLS elegidos para cada estación, no en repetir o eliminar categorías de estación.",
+              description: "Requerido cuando tipo es estaciones (SIEMPRE exactamente 3, una de cada categoría sin repetir: juego_largo, juego_corto y putt — esto no cambia aunque el profesor pida enfocarse en una sola categoría, ese enfoque se refleja en los DRILLS, no en repetir o eliminar estaciones) o solo_putt/solo_juego_corto (1 sola entrada de esa categoría). Omitir o dejar vacío si tipo es campo/test_tecnico/test_fisico.",
               items: {
                 type: "object",
                 properties: {
@@ -364,9 +371,15 @@ const PROPONER_PROGRAMACION_TOOL: Anthropic.Tool = {
                 required: ["categoria", "drills", "desafio"],
               },
             },
+            notas: { type: "string", description: "Solo cuando tipo es campo, test_tecnico o test_fisico — descripción libre de la actividad de ese día" },
           },
-          required: ["dia_semana", "estaciones"],
+          required: ["dia_semana", "tipo"],
         },
+      },
+      dias_modificados: {
+        type: "array",
+        description: "Solo cuando esta llamada MODIFICA una programación Juvenil ya existente en la vista previa (no en la primera generación de la semana): lista de dia_semana que realmente cambiaron en esta respuesta (martes/miercoles/jueves/sabado/domingo). Los demás días del array sesion_juvenil se ignoran si no aparecen aquí, así que cópialos igual pero no hace falta que sean perfectos.",
+        items: { type: "string", enum: ["martes", "miercoles", "jueves", "sabado", "domingo"] },
       },
       sesiones: {
         type: "array",

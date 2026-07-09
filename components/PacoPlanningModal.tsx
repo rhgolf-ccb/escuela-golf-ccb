@@ -38,10 +38,19 @@ type Message = {
 };
 
 type JuvenilDiaSemana = "martes" | "miercoles" | "jueves" | "sabado" | "domingo";
-type SesionJuvenilDiaPreview = { dia_semana: JuvenilDiaSemana; estaciones: EstacionJuvenil[] };
+type TipoDiaJuvenil = "estaciones" | "solo_putt" | "solo_juego_corto" | "campo" | "test_tecnico" | "test_fisico";
+type SesionJuvenilDiaPreview = { dia_semana: JuvenilDiaSemana; tipo: TipoDiaJuvenil; estaciones: EstacionJuvenil[]; notas: string };
 const JUVENIL_HORARIOS_COMPARTIDOS: Record<string, string> = {
   sabado: "Aplica para ambos horarios: 9:15 AM y 10:00 AM",
   domingo: "Aplica para ambos horarios: 9:15 AM y 10:00 AM",
+};
+const TIPO_DIA_JUVENIL_LABEL: Record<TipoDiaJuvenil, string> = {
+  estaciones: "3 estaciones",
+  solo_putt: "Solo putt",
+  solo_juego_corto: "Solo juego corto",
+  campo: "Salida al campo",
+  test_tecnico: "Test técnico",
+  test_fisico: "Test físico",
 };
 
 type Preview = { descripcion_tema: string; sesiones: PreviewSesion[]; sesion_juvenil?: SesionJuvenilDiaPreview[] | null };
@@ -52,7 +61,21 @@ type RawPlanSesion = {
   drills?: Drill[]; juego_competitivo?: string | null;
   estaciones_damas?: EstacionDamas[] | null; notas?: string | null;
 };
-type RawPlan = { descripcion_tema?: string; sesion_juvenil?: SesionJuvenilDiaPreview[] | null; sesiones?: RawPlanSesion[] };
+type RawPlan = {
+  descripcion_tema?: string;
+  sesion_juvenil?: SesionJuvenilDiaPreview[] | null;
+  dias_modificados?: string[];
+  sesiones?: RawPlanSesion[];
+};
+
+function normalizeDiaJuvenil(d: Partial<SesionJuvenilDiaPreview> & { dia_semana: JuvenilDiaSemana }): SesionJuvenilDiaPreview {
+  return {
+    dia_semana: d.dia_semana,
+    tipo: d.tipo ?? "estaciones",
+    estaciones: d.estaciones ?? [],
+    notas: d.notas ?? "",
+  };
+}
 
 function buildPreviewFromPlan(semana: Date, plan: RawPlan): Preview {
   const sesiones: PreviewSesion[] = (plan.sesiones ?? []).map((s) => ({
@@ -68,7 +91,50 @@ function buildPreviewFromPlan(semana: Date, plan: RawPlan): Preview {
     estaciones_damas: s.estaciones_damas ?? null,
     notas: s.notas ?? null,
   }));
-  return { descripcion_tema: plan.descripcion_tema ?? "", sesiones, sesion_juvenil: plan.sesion_juvenil ?? null };
+  const sesionJuvenil = plan.sesion_juvenil ? plan.sesion_juvenil.map(normalizeDiaJuvenil) : null;
+  return { descripcion_tema: plan.descripcion_tema ?? "", sesiones, sesion_juvenil: sesionJuvenil };
+}
+
+// Fusiona una respuesta nueva de Paco con la vista previa actual. Para Juvenil,
+// si ya había una vista previa (no es la primera generación) y la respuesta
+// declara qué días cambiaron (dias_modificados), solo esos días se reemplazan
+// — el resto de la vista previa (incluyendo ediciones manuales del profesor)
+// queda intacto en vez de perderse por una regeneración completa. Si el campo
+// viene vacío (el modelo lo olvidó), se cae al reemplazo total de siempre para
+// no reintroducir el bug de "la vista previa no se actualiza".
+function mergePlanPreview(semana: Date, plan: RawPlan, prev: Preview | null, tipoPlan: TipoPlan): Preview {
+  const candidato = buildPreviewFromPlan(semana, plan);
+  if (tipoPlan !== "juvenil" || !prev || !prev.sesion_juvenil || !candidato.sesion_juvenil) return candidato;
+  const modificados = plan.dias_modificados;
+  if (!modificados || modificados.length === 0) return candidato;
+
+  const base = [...prev.sesion_juvenil];
+  for (const dia of modificados) {
+    const nuevo = candidato.sesion_juvenil.find((d) => d.dia_semana === dia);
+    if (!nuevo) continue;
+    const idx = base.findIndex((d) => d.dia_semana === dia);
+    if (idx >= 0) base[idx] = nuevo;
+    else base.push(nuevo);
+  }
+  return { ...prev, descripcion_tema: candidato.descripcion_tema || prev.descripcion_tema, sesion_juvenil: base };
+}
+
+// Resumen en texto plano del estado actual de la vista previa Juvenil, para que
+// Paco sepa exactamente qué hay ya generado (incluyendo ediciones manuales del
+// profesor) y pueda modificar solo lo pedido en vez de adivinar o regenerar todo.
+function resumenPreviewJuvenil(preview: Preview): string {
+  if (!preview.sesion_juvenil || preview.sesion_juvenil.length === 0) return "";
+  const partes = preview.sesion_juvenil.map((dia) => {
+    const label = DIA_LABEL[dia.dia_semana];
+    if (dia.tipo !== "estaciones" && dia.tipo !== "solo_putt" && dia.tipo !== "solo_juego_corto") {
+      return `${label}: día especial (${TIPO_DIA_JUVENIL_LABEL[dia.tipo]}) — notas: ${dia.notas || "(sin notas)"}`;
+    }
+    const estaciones = dia.estaciones
+      .map((e) => `${CATEGORIA_ESTACION_LABEL[e.categoria] ?? e.categoria} [${e.drills.map((d) => d.titulo).join(", ")}] · desafío: ${e.desafio || "(sin desafío)"}`)
+      .join(" | ");
+    return `${label}: ${estaciones || "(sin estaciones)"}`;
+  });
+  return `Programación actual en la vista previa (cópiala tal cual salvo lo que el profesor pida cambiar):\n${partes.join("\n")}`;
 }
 
 const WELCOME_BY_TIPO: Record<TipoPlan, string> = {
@@ -288,6 +354,7 @@ export default function PacoPlanningModal({
   const [isLoading, setIsLoading] = useState(false);
   const [toolStatus, setToolStatus] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
 
   const [opciones, setOpciones] = useState<OpcionesEstado>(OPCIONES_INICIALES);
 
@@ -297,6 +364,8 @@ export default function PacoPlanningModal({
   const [publishError, setPublishError] = useState<string | null>(null);
   const [showConfirmReplace, setShowConfirmReplace] = useState(false);
   const [pickerFor, setPickerFor] = useState<{ diaIdx: number; estIdx: number } | null>(null);
+  const [editingDiaIdx, setEditingDiaIdx] = useState<number | null>(null);
+  const [tipoPendiente, setTipoPendiente] = useState<TipoDiaJuvenil | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -327,6 +396,8 @@ export default function PacoPlanningModal({
     setToolStatus(null);
 
     const history = nextMessages.filter((m) => !m.isWelcome).slice(-MAX_HISTORY).map((m) => ({ role: m.role, content: m.content }));
+    const resumenActual = tipoPlan === "juvenil" && preview ? resumenPreviewJuvenil(preview) : "";
+    const contextoConPreview = resumenActual ? `${planningContext}\n\n${resumenActual}` : planningContext;
 
     let finalText: string | null = null;
     let usedWebSearch = false;
@@ -334,9 +405,9 @@ export default function PacoPlanningModal({
     let limitReached = false;
 
     try {
-      await streamAsesorChat({ messages: history, planningContext }, (evt) => {
+      await streamAsesorChat({ messages: history, planningContext: contextoConPreview }, (evt) => {
         if (evt.type === "tool_status" && evt.tool) setToolStatus(evt.tool);
-        else if (evt.type === "plan_preview" && evt.plan) setPreview(buildPreviewFromPlan(semana, evt.plan as RawPlan));
+        else if (evt.type === "plan_preview" && evt.plan) setPreview((prev) => mergePlanPreview(semana, evt.plan as RawPlan, prev, tipoPlan));
         else if (evt.type === "done") {
           finalText = evt.text ?? "";
           usedWebSearch = !!evt.usedWebSearch;
@@ -471,6 +542,61 @@ export default function PacoPlanningModal({
       dias[diaIdx] = { ...dias[diaIdx], estaciones };
       return { ...prev, sesion_juvenil: dias };
     });
+  }
+
+  function updateJuvenilNotas(diaIdx: number, value: string) {
+    setPreview((prev) => {
+      if (!prev || !prev.sesion_juvenil) return prev;
+      const dias = [...prev.sesion_juvenil];
+      dias[diaIdx] = { ...dias[diaIdx], notas: value };
+      return { ...prev, sesion_juvenil: dias };
+    });
+  }
+
+  function abrirEditorDia(diaIdx: number) {
+    const dia = preview?.sesion_juvenil?.[diaIdx];
+    setEditingDiaIdx(diaIdx);
+    setTipoPendiente(dia?.tipo ?? "estaciones");
+  }
+
+  function cerrarEditorDia() {
+    setEditingDiaIdx(null);
+    setTipoPendiente(null);
+  }
+
+  function estacionesIniciales(tipo: TipoDiaJuvenil): EstacionJuvenil[] {
+    if (tipo === "solo_putt") return [{ categoria: "putt", drills: [], desafio: "" }];
+    if (tipo === "solo_juego_corto") return [{ categoria: "juego_corto", drills: [], desafio: "" }];
+    if (tipo === "estaciones") {
+      return (["juego_largo", "juego_corto", "putt"] as CategoriaEstacion[]).map((categoria) => ({ categoria, drills: [], desafio: "" }));
+    }
+    return [];
+  }
+
+  function guardarTipoDia(diaIdx: number) {
+    if (!tipoPendiente) return;
+    setPreview((prev) => {
+      if (!prev || !prev.sesion_juvenil) return prev;
+      const dias = [...prev.sesion_juvenil];
+      const actual = dias[diaIdx];
+      if (actual.tipo === tipoPendiente) return prev;
+      dias[diaIdx] = {
+        ...actual,
+        tipo: tipoPendiente,
+        estaciones: estacionesIniciales(tipoPendiente),
+        notas: "",
+      };
+      return { ...prev, sesion_juvenil: dias };
+    });
+    cerrarEditorDia();
+  }
+
+  function pedirAPaco(diaIdx: number) {
+    const dia = preview?.sesion_juvenil?.[diaIdx];
+    if (!dia) return;
+    cerrarEditorDia();
+    setInput(`Para el ${DIA_LABEL[dia.dia_semana]}: `);
+    requestAnimationFrame(() => inputRef.current?.focus());
   }
 
   async function doPublish() {
@@ -704,6 +830,7 @@ export default function PacoPlanningModal({
 
           <div className="flex items-center gap-2 px-4 py-3 border-t border-gray-100 shrink-0">
             <input
+              ref={inputRef}
               type="text"
               value={input}
               onChange={(e) => setInput(e.target.value)}
@@ -729,10 +856,18 @@ export default function PacoPlanningModal({
         <div className="flex-1 flex flex-col min-w-0">
           <div className="flex items-center justify-between px-5 py-3.5 border-b border-gray-100 shrink-0">
             <p className="text-sm font-semibold text-gray-900">Vista previa</p>
-            {preview && <span className="text-xs text-gray-400">Editable antes de publicar</span>}
+            {preview && (
+              isLoading ? (
+                <span className="text-xs font-medium flex items-center gap-1.5 animate-pulse" style={{ color: eventColor }}>
+                  🔄 Actualizando...
+                </span>
+              ) : (
+                <span className="text-xs text-gray-400">Editable antes de publicar</span>
+              )
+            )}
           </div>
 
-          <div className="flex-1 overflow-y-auto px-5 py-4">
+          <div className={`flex-1 overflow-y-auto px-5 py-4 ${isLoading && preview ? "animate-pulse" : ""}`} style={isLoading && preview ? { boxShadow: `inset 0 0 0 2px ${eventColor}33` } : undefined}>
             {!preview ? (
               <div className="h-full flex flex-col items-center justify-center text-center text-gray-400">
                 <p className="text-sm">Responde las preguntas de Paco en el chat — en cuanto tenga suficiente información, la programación aparece aquí lista para editar.</p>
@@ -743,12 +878,70 @@ export default function PacoPlanningModal({
 
                 {tipoPlan === "juvenil" && preview.sesion_juvenil?.map((diaPlan, diaIdx) => (
                   <div key={diaPlan.dia_semana} className="rounded-xl border border-gray-100 overflow-hidden">
-                    <div className="px-4 py-2.5" style={{ backgroundColor: eventColor }}>
-                      <span className="text-white font-semibold text-sm">{DIA_LABEL[diaPlan.dia_semana]}</span>
-                      {JUVENIL_HORARIOS_COMPARTIDOS[diaPlan.dia_semana] && (
-                        <p className="text-white/70 text-[11px] mt-0.5">{JUVENIL_HORARIOS_COMPARTIDOS[diaPlan.dia_semana]}</p>
-                      )}
+                    <div className="px-4 py-2.5 flex items-start justify-between gap-2" style={{ backgroundColor: eventColor }}>
+                      <div>
+                        <span className="text-white font-semibold text-sm">{DIA_LABEL[diaPlan.dia_semana]}</span>
+                        <span className="text-white/70 text-[11px] ml-2">{TIPO_DIA_JUVENIL_LABEL[diaPlan.tipo]}</span>
+                        {JUVENIL_HORARIOS_COMPARTIDOS[diaPlan.dia_semana] && (
+                          <p className="text-white/70 text-[11px] mt-0.5">{JUVENIL_HORARIOS_COMPARTIDOS[diaPlan.dia_semana]}</p>
+                        )}
+                      </div>
+                      <button
+                        onClick={() => (editingDiaIdx === diaIdx ? cerrarEditorDia() : abrirEditorDia(diaIdx))}
+                        aria-label={`Editar ${DIA_LABEL[diaPlan.dia_semana]}`}
+                        className="text-white/80 hover:text-white shrink-0 p-1"
+                      >
+                        <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                      </button>
                     </div>
+
+                    {editingDiaIdx === diaIdx && (
+                      <div className="p-3 space-y-2.5 bg-gray-50 border-b border-gray-100">
+                        <p className="text-[11px] font-bold text-gray-500 uppercase tracking-wide">Tipo de día</p>
+                        <div className="flex flex-wrap gap-1.5">
+                          {(Object.keys(TIPO_DIA_JUVENIL_LABEL) as TipoDiaJuvenil[]).map((t) => (
+                            <Pill key={t} active={tipoPendiente === t} onClick={() => setTipoPendiente(t)}>{TIPO_DIA_JUVENIL_LABEL[t]}</Pill>
+                          ))}
+                        </div>
+                        <div className="flex gap-2 pt-1">
+                          <button onClick={cerrarEditorDia} className="px-3 py-1.5 rounded-lg text-xs font-medium border border-gray-200 text-gray-600 hover:bg-white">
+                            Cancelar
+                          </button>
+                          <button
+                            onClick={() => guardarTipoDia(diaIdx)}
+                            disabled={tipoPendiente === diaPlan.tipo}
+                            className="px-3 py-1.5 rounded-lg text-xs font-semibold text-white disabled:opacity-40"
+                            style={{ backgroundColor: eventColor }}
+                          >
+                            Guardar cambio
+                          </button>
+                          <button
+                            onClick={() => pedirAPaco(diaIdx)}
+                            className="ml-auto px-3 py-1.5 rounded-lg text-xs font-medium text-purple-700 border border-purple-200 hover:bg-purple-50"
+                          >
+                            🦅 Pedir a Paco
+                          </button>
+                        </div>
+                        {tipoPendiente && tipoPendiente !== diaPlan.tipo && (
+                          <p className="text-[11px] text-amber-700 bg-amber-50 rounded px-2 py-1.5">
+                            Guardar reemplaza el contenido actual de este día por uno vacío del nuevo tipo.
+                          </p>
+                        )}
+                      </div>
+                    )}
+
+                    {diaPlan.tipo === "campo" || diaPlan.tipo === "test_tecnico" || diaPlan.tipo === "test_fisico" ? (
+                      <div className="p-4">
+                        <label className="text-[11px] font-bold text-gray-500 uppercase tracking-wide block mb-1">Notas</label>
+                        <textarea
+                          value={diaPlan.notas}
+                          onChange={(e) => updateJuvenilNotas(diaIdx, e.target.value)}
+                          rows={3}
+                          placeholder="Describe la actividad de este día..."
+                          className="w-full text-xs border border-gray-200 rounded-lg px-2.5 py-1.5 resize-none"
+                        />
+                      </div>
+                    ) : (
                     <div className="p-4 space-y-3">
                       {diaPlan.estaciones.map((est, estIdx) => (
                         <div key={`${est.categoria}-${estIdx}`} className="border border-gray-100 rounded-lg p-3 space-y-2">
@@ -801,6 +994,7 @@ export default function PacoPlanningModal({
                         </div>
                       ))}
                     </div>
+                    )}
                   </div>
                 ))}
 
@@ -878,11 +1072,12 @@ export default function PacoPlanningModal({
               {publishError && <p className="text-xs text-red-600 bg-red-50 px-3 py-2 rounded-lg">{publishError}</p>}
               <button
                 onClick={handlePublicarClick}
-                disabled={publishing}
+                disabled={publishing || isLoading}
+                title={isLoading ? "Esperando actualización de Paco" : undefined}
                 className="w-full py-2.5 rounded-xl text-sm font-semibold text-white disabled:opacity-50"
                 style={{ backgroundColor: "#1a3a2a" }}
               >
-                {publishing ? "Publicando..." : "Publicar en calendario"}
+                {publishing ? "Publicando..." : isLoading ? "Esperando actualización de Paco..." : "Publicar en calendario"}
               </button>
             </div>
           )}

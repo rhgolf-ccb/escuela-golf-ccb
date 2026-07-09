@@ -361,7 +361,11 @@ function sesionesToEstaciones(diaySesiones: SesionSemana[], tipoPlan: TipoPlan):
         });
       } else if (jdAny.tipo === "especial") {
         const esp = sesion.sesion_juvenil as SesionJuvenilEspecial;
-        views.push({ nombre: ESPECIAL_LABEL_MAP[esp.tipo_especial] ?? esp.tipo_especial, lugar, horario, drills: [] });
+        views.push({
+          nombre: ESPECIAL_LABEL_MAP[esp.tipo_especial] ?? esp.tipo_especial,
+          lugar, horario,
+          drills: esp.notas ? [{ nombre: "Notas", descripcion: esp.notas }] : [],
+        });
       } else {
         const leg = sesion.sesion_juvenil as SesionJuvenilLegacy;
         views.push({

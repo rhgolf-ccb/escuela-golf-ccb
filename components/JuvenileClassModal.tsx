@@ -30,6 +30,7 @@ export interface SesionJuvenilEstaciones {
 export interface SesionJuvenilEspecial {
   tipo: "especial";
   tipo_especial: TipoEspecial;
+  notas?: string | null;
 }
 
 // Legacy format — solo lectura, para semanas ya publicadas antes de este cambio
