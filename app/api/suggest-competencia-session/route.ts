@@ -39,7 +39,16 @@ export async function POST(req: NextRequest) {
   const esTrabajoFisico = categoria === "trabajo_fisico";
 
   const instruccionCategoria = esTrabajoFisico
-    ? `Esta es una estación de TRABAJO FÍSICO — ejercicios de preparación física, NO drills técnicos de swing y NO es una evaluación (eso es test_fisico, un protocolo TPI distinto). Genera 2-3 ejercicios físicos concretos, con series/repeticiones, enfocados específicamente en: ${enfoque_fisico?.length ? enfoque_fisico.join(", ") : "una combinación general de movilidad, estabilidad y potencia apropiada para un adolescente de 13-17 años en desarrollo"}. Usa el equipo típico disponible (bandas elásticas, balones medicinales, conos, escalera de agilidad).`
+    ? `Esta es una estación de TRABAJO FÍSICO — ejercicios de entrenamiento basados en el framework TPI (Titleist Performance Institute), NO drills técnicos de swing y NO es una evaluación (eso es test_fisico, un protocolo de screening TPI distinto — aquí ya sabemos qué trabajar, esto es la sesión de entrenamiento en sí).
+
+Genera 2-3 ejercicios físicos concretos, con series/repeticiones, conectados explícitamente a la lógica TPI (qué screen o cualidad física de golf mejora cada ejercicio y por qué), enfocados específicamente en: ${enfoque_fisico?.length ? enfoque_fisico.join(", ") : "una combinación general de movilidad, estabilidad y potencia apropiada para un adolescente de 13-17 años en desarrollo"}.
+
+EQUIPO DISPONIBLE — la escuela SOLO tiene estos tres elementos, no inventes ni sugieras otros (sin cajones, kettlebells, TRX, etc.):
+- Bandas elásticas: activación muscular, movilidad articular, ejercicios de resistencia y prehabilitación
+- Balones medicinales: potencia rotacional, ejercicios de core y patrones de transferencia de fuerza tipo golpe de golf
+- Palos de entrenamiento de velocidad (swing speed sticks / overspeed training): potencia y velocidad de swing
+
+Elige el equipo más apropiado según el enfoque pedido (ej. Movilidad → bandas elásticas; Potencia → balones medicinales y/o palos de velocidad; Estabilidad/Core → bandas y balones medicinales).`
     : `Genera plan de sesión con drills GENERALES (no hiper-específicos), claros y ejecutables.
 - tiro_largo/juego_corto/putt: 2-3 drills prácticos con foco técnico claro.
 - campo: actividad de juego (4-6 hoyos, objetivo de score/puntos).

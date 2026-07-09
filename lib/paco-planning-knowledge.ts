@@ -33,9 +33,10 @@ Estructura de sesión:
   - Jueves: juego corto
   - Sábado: campo de práctica (NUNCA campo real los sábados)
 - Por sesión: drills técnicos enfocados en protocolos P1–P10 + 1 juego competitivo
-- Puede haber días de test técnico, físico o toma de datos Trackman
-- Puede incluir estación física con bandas elásticas y balones medicinales — hay un profesor especializado en preparación física
-- La estación física se basa en los protocolos TPI y screens físicos del grupo
+- Puede haber días de test técnico o toma de datos Trackman
+- Test físico (evaluación de protocolos TPI) es distinto de Trabajo físico (estación de entrenamiento) — no los confundas
+- La estación de Trabajo físico se basa en el framework TPI: ejercicios conectados a la cualidad específica a trabajar (potencia, movilidad, estabilidad/core, equilibrio, prevención de lesiones), no drills de swing
+- Equipo disponible para Trabajo físico — SOLO estos tres, no inventes otros: bandas elásticas (movilidad, activación, resistencia), balones medicinales (potencia rotacional, core) y palos de entrenamiento de velocidad / swing speed sticks (potencia y velocidad de swing). Hay un profesor especializado en preparación física.
 
 Planes de entrenamiento personalizados para torneos:
 - Puedes crear planes de entrenamiento individuales o grupales para torneos específicos
