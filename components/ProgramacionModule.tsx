@@ -1447,9 +1447,20 @@ export default function ProgramacionModule({ currentRol }: { currentRol: Rol | n
                 const btnClass = "flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-gray-200 text-xs font-medium text-gray-600 hover:bg-gray-50 transition-colors";
 
                 function openEditDia() {
-                  if (activeTab === "juvenil") openJuvModal(dia, fecha, primeraSesion);
-                  else if (activeTab === "competencia") openCompModal(dia, fecha, primeraSesion);
-                  else openEditSesion(dia, primeraSesion);
+                  // Si ya existe una sesión para este día, usa siempre el editor genérico:
+                  // pre-llena directamente desde las columnas de sesiones_semana (tipo_sesion,
+                  // lugar, horas, objetivo, drills, juego_competitivo), así que funciona sin
+                  // importar qué flujo la haya creado originalmente — el wizard de Paco (tool
+                  // proponer_programacion_semana), el asistente especializado de Juvenil/
+                  // Competencia, o el formulario manual. Los wizards especializados de
+                  // Juvenil/Competencia asumen formas específicas (estaciones/juegos) que no
+                  // siempre calzan con lo que generó Paco, y por eso "editar" parecía no
+                  // funcionar. Sin sesión existente, se mantiene el asistente guiado normal
+                  // para crear contenido nuevo.
+                  if (primeraSesion) openEditSesion(dia, primeraSesion);
+                  else if (activeTab === "juvenil") openJuvModal(dia, fecha, null);
+                  else if (activeTab === "competencia") openCompModal(dia, fecha, null);
+                  else openEditSesion(dia, null);
                 }
 
                 return (
@@ -1486,7 +1497,7 @@ export default function ProgramacionModule({ currentRol }: { currentRol: Rol | n
                     </div>
 
                     <div className="flex-1 overflow-y-auto px-5 py-4">
-                      {estaciones.length === 0 ? (
+                      {diaySesiones.length === 0 ? (
                         <div className="flex flex-col items-center justify-center py-16 text-center">
                           <p className="text-sm font-semibold text-gray-600 mb-1">No hay programación para este día</p>
                           <p className="text-xs text-gray-400 mb-4">Paco puede generarla, o puedes agregarla manualmente.</p>
@@ -1501,6 +1512,14 @@ export default function ProgramacionModule({ currentRol }: { currentRol: Rol | n
                         </div>
                       ) : (
                         <div className="space-y-3">
+                          {estaciones.length === 0 && (
+                            <div className="text-center py-6">
+                              <p className="text-xs text-gray-400 mb-2">Esta sesión todavía no tiene drills o detalle cargado.</p>
+                              <button onClick={openEditDia} className="text-xs font-medium text-gray-500 hover:text-gray-700 underline">
+                                Editar para agregar contenido
+                              </button>
+                            </div>
+                          )}
                           {estaciones.map((est, i) => (
                             <div key={i} className="border border-gray-100 rounded-xl p-4">
                               <div className="flex items-center gap-2 mb-2.5 flex-wrap">
