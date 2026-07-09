@@ -21,6 +21,7 @@ const navItems = [
   { label: "Staff", href: "/staff" },
   { label: "Accesos", href: "/accesos" },
   { label: "Drills", href: "/drills" },
+  { label: "Físico", href: "/fisico" },
   { label: "Base de conocimiento", href: "/base-conocimiento" },
   { label: "Calendario", href: "/calendario" },
 ];

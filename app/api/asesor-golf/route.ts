@@ -136,12 +136,15 @@ Tienes acceso a la base de datos real de la Escuela de Golf CCB. Puedes consulta
 - Estado de grupos completos
 - Programación semanal
 - Biblioteca de drills
+- Biblioteca de ejercicios físicos
 
 Cuando el usuario pregunte sobre un alumno específico, búscalo primero con buscar_alumno y luego consulta sus datos con el id que obtengas.
 
 Cuando el usuario pida análisis de un grupo, usa obtener_grupo para ver todos los alumnos y luego analiza patrones.
 
 Cuando el usuario pida planificación semanal, consulta las sesiones con obtener_sesiones_semana y los drills disponibles con obtener_drills, luego propone un plan concreto.
+
+Cuando planifiques una estación física consulta la biblioteca de ejercicios físicos disponible con obtener_ejercicios_fisicos. Filtra por el grupo que se está trabajando y por los screens TPI con resultados bajos si están disponibles. Sugiere 2-3 ejercicios por estación física con sus series, repeticiones y materiales necesarios.
 
 Si una consulta a la base de datos no devuelve resultados, dilo claramente en vez de inventar datos.
 
@@ -272,6 +275,20 @@ const CCB_TOOLS: Anthropic.Tool[] = [
         categoria: { type: "string", description: "Categoría del drill" },
         grupo: { type: "string", description: "Grupo al que aplica" },
         busqueda: { type: "string", description: "Texto libre para buscar en el título" },
+      },
+    },
+  },
+  {
+    name: "obtener_ejercicios_fisicos",
+    description:
+      "Busca ejercicios físicos en la biblioteca (movilidad, fuerza y estabilidad, potencia, calentamiento) para planificar una estación de Trabajo físico. Filtra por grupo y/o screen TPI vinculado.",
+    input_schema: {
+      type: "object",
+      properties: {
+        categoria: { type: "string", description: "Movilidad | Fuerza y estabilidad | Potencia | Calentamiento" },
+        grupo: { type: "string", description: "Grupo al que aplica: Birdies, Águilas, Albatros, Competencia o Damas" },
+        screen_vinculado: { type: "string", description: "Screen TPI relacionado (ej. S5, S16, PB2) para priorizar ejercicios correctivos de una restricción específica" },
+        busqueda: { type: "string", description: "Texto libre para buscar en el nombre" },
       },
     },
   },
@@ -530,6 +547,20 @@ async function obtenerDrills(admin: SupabaseClient, categoria?: string, grupo?: 
   return { drills: data };
 }
 
+async function obtenerEjerciciosFisicos(admin: SupabaseClient, categoria?: string, grupo?: string, screenVinculado?: string, busqueda?: string) {
+  let query = admin
+    .from("ejercicios_fisicos")
+    .select("nombre, categoria, grupo_muscular, grupos, materiales, instrucciones, series_repeticiones, progresion, screen_vinculado, duracion_minutos");
+  if (categoria) query = query.ilike("categoria", `%${categoria}%`);
+  if (grupo) query = query.contains("grupos", [grupo]);
+  if (screenVinculado) query = query.ilike("screen_vinculado", `%${screenVinculado}%`);
+  if (busqueda) query = query.ilike("nombre", `%${busqueda}%`);
+  const { data, error } = await query.order("nombre").limit(10);
+  if (error) return { error: error.message };
+  if (!data.length) return { ejercicios: [], mensaje: "No se encontraron ejercicios físicos con esos criterios." };
+  return { ejercicios: data };
+}
+
 async function crearEventoCalendario(admin: SupabaseClient, nombre: string, fechaInicio: string, fechaFin?: string, descripcion?: string, tipo?: string) {
   if (!nombre || !fechaInicio) return { error: "Falta nombre o fecha_inicio." };
   const { data, error } = await admin
@@ -569,6 +600,8 @@ async function ejecutarTool(admin: SupabaseClient, name: string, input: Record<s
         return await obtenerSesionesSemana(admin, input.grupo as string | undefined, input.fecha as string | undefined);
       case "obtener_drills":
         return await obtenerDrills(admin, input.categoria as string | undefined, input.grupo as string | undefined, input.busqueda as string | undefined);
+      case "obtener_ejercicios_fisicos":
+        return await obtenerEjerciciosFisicos(admin, input.categoria as string | undefined, input.grupo as string | undefined, input.screen_vinculado as string | undefined, input.busqueda as string | undefined);
       case "crear_evento_calendario":
         return await crearEventoCalendario(admin, String(input.nombre ?? ""), String(input.fecha_inicio ?? ""), input.fecha_fin as string | undefined, input.descripcion as string | undefined, input.tipo as string | undefined);
       case "marcar_dias_sin_escuela":
