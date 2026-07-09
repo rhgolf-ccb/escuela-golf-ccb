@@ -197,7 +197,6 @@ export default function CompetenciaClassModal({
             foco_principal?: string; lugar?: string;
             drills?: Omit<AIDrill, "categoriaOrigen">[]; juego_competitivo?: string; error?: string;
           };
-          console.log(`[suggest-competencia-session] ${cat}: status=${res.status} drills=${data.drills?.length ?? "undefined"}`, data);
           if (!res.ok) throw new Error(data.error ?? "Error IA");
           if (!data.drills?.length) throw new Error("La IA no generó sugerencias");
           return { cat, data };
@@ -207,7 +206,6 @@ export default function CompetenciaClassModal({
       const catInfo = (cat: TipoSesion) => CATEGORIAS.find((c) => c.value === cat);
       const ok = settled.flatMap((r) => (r.status === "fulfilled" ? [r.value] : []));
       const failed = cats.filter((_, i) => settled[i].status === "rejected");
-      console.log("[fetchAISuggestions] cats=", cats, "ok=", ok.map((o) => o.cat), "failed=", failed);
 
       if (ok.length > 0) {
         setAiMeta((prev) => {
@@ -534,47 +532,60 @@ export default function CompetenciaClassModal({
                 ) : aiDrills.length === 0 ? (
                   !error && aiFailedCategorias.length === 0 && <p className="text-xs text-gray-400 italic py-2 px-1">No se generaron sugerencias.</p>
                 ) : (
-                  <div className="space-y-2">
-                    {aiDrills.map((drill, idx) => {
-                      const sel = selectedAiIdx.has(idx);
+                  <div className="space-y-4">
+                    {categorias.map((cat) => {
+                      const items = aiDrills
+                        .map((drill, idx) => ({ drill, idx }))
+                        .filter(({ drill }) => drill.categoriaOrigen === cat);
+                      if (items.length === 0) return null;
+                      const info = CATEGORIAS.find((c) => c.value === cat);
                       return (
-                        <button
-                          key={idx}
-                          onClick={() => toggleAI(idx)}
-                          className={`w-full text-left rounded-xl border-2 p-3 transition-all flex items-start gap-3 ${
-                            sel ? "border-purple-400 bg-purple-50" : "border-gray-200 hover:border-gray-300 bg-gray-50"
-                          }`}
-                        >
-                          <div className={`w-4 h-4 rounded border-2 flex-shrink-0 mt-0.5 flex items-center justify-center transition-all ${
-                            sel ? "border-purple-500 bg-purple-500" : "border-gray-300 bg-white"
-                          }`}>
-                            {sel && (
-                              <svg width="8" height="8" viewBox="0 0 12 12" fill="none">
-                                <path d="M2 6l3 3 5-5" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-                              </svg>
-                            )}
+                        <div key={cat}>
+                          {categorias.length > 1 && (
+                            <p className="text-xs font-semibold text-gray-700 mb-1.5 flex items-center gap-1">
+                              {info?.icon} {info?.label}
+                            </p>
+                          )}
+                          <div className="space-y-2">
+                            {items.map(({ drill, idx }) => {
+                              const sel = selectedAiIdx.has(idx);
+                              return (
+                                <button
+                                  key={idx}
+                                  onClick={() => toggleAI(idx)}
+                                  className={`w-full text-left rounded-xl border-2 p-3 transition-all flex items-start gap-3 ${
+                                    sel ? "border-purple-400 bg-purple-50" : "border-gray-200 hover:border-gray-300 bg-gray-50"
+                                  }`}
+                                >
+                                  <div className={`w-4 h-4 rounded border-2 flex-shrink-0 mt-0.5 flex items-center justify-center transition-all ${
+                                    sel ? "border-purple-500 bg-purple-500" : "border-gray-300 bg-white"
+                                  }`}>
+                                    {sel && (
+                                      <svg width="8" height="8" viewBox="0 0 12 12" fill="none">
+                                        <path d="M2 6l3 3 5-5" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                                      </svg>
+                                    )}
+                                  </div>
+                                  <div className="flex-1 min-w-0">
+                                    <div className="flex items-center gap-2 flex-wrap">
+                                      <p className="text-sm font-semibold text-gray-900">{drill.titulo}</p>
+                                      <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-purple-100 text-purple-700 font-medium">IA</span>
+                                    </div>
+                                    <p className="text-xs text-gray-500 mt-0.5 line-clamp-2">{drill.descripcion}</p>
+                                    <div className="flex items-center gap-3 mt-1">
+                                      {drill.duracion_min > 0 && (
+                                        <span className="text-[10px] text-gray-400">{drill.duracion_min} min</span>
+                                      )}
+                                      {sel && (
+                                        <span className="text-[10px] text-purple-600 font-medium">Se guardará en la biblioteca</span>
+                                      )}
+                                    </div>
+                                  </div>
+                                </button>
+                              );
+                            })}
                           </div>
-                          <div className="flex-1 min-w-0">
-                            <div className="flex items-center gap-2 flex-wrap">
-                              <p className="text-sm font-semibold text-gray-900">{drill.titulo}</p>
-                              <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-purple-100 text-purple-700 font-medium">IA</span>
-                              {categorias.length > 1 && (
-                                <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-blue-100 text-blue-700 font-medium">
-                                  {CATEGORIAS.find((c) => c.value === drill.categoriaOrigen)?.icon} {CATEGORIAS.find((c) => c.value === drill.categoriaOrigen)?.label}
-                                </span>
-                              )}
-                            </div>
-                            <p className="text-xs text-gray-500 mt-0.5 line-clamp-2">{drill.descripcion}</p>
-                            <div className="flex items-center gap-3 mt-1">
-                              {drill.duracion_min > 0 && (
-                                <span className="text-[10px] text-gray-400">{drill.duracion_min} min</span>
-                              )}
-                              {sel && (
-                                <span className="text-[10px] text-purple-600 font-medium">Se guardará en la biblioteca</span>
-                              )}
-                            </div>
-                          </div>
-                        </button>
+                        </div>
                       );
                     })}
                   </div>
