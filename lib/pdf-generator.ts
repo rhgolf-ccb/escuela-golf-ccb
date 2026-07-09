@@ -52,10 +52,12 @@ function parseTableRow(line: string): string[] {
 class PdfWriter {
   doc: jsPDF;
   y: number;
+  dense: boolean;
 
-  constructor() {
+  constructor(dense = false) {
     this.doc = new jsPDF({ unit: "mm", format: "a4" });
     this.y = MARGIN;
+    this.dense = dense;
   }
 
   private ensureSpace(lineHeight: number) {
@@ -129,10 +131,11 @@ class PdfWriter {
     if (!rows.length) return;
     const cols = rows[0].length;
     const colWidth = CONTENT_W / cols;
-    const cellPadding = 1.5;
-    const lineHeight = 4.5;
+    const cellPadding = this.dense ? 0.8 : 1.5;
+    const lineHeight = this.dense ? 3.6 : 4.5;
+    const fontSize = this.dense ? 8 : 9;
 
-    this.doc.setFontSize(9);
+    this.doc.setFontSize(fontSize);
     rows.forEach((row, rIdx) => {
       this.doc.setFont("helvetica", rIdx === 0 ? "bold" : "normal");
       const cellLines = row.map((cell) => this.doc.splitTextToSize(cell, colWidth - cellPadding * 2) as string[]);
@@ -152,7 +155,7 @@ class PdfWriter {
         }
         this.doc.setDrawColor(...BORDER_COLOR);
         this.doc.rect(x, this.y, colWidth, rowHeight, "FD");
-        this.doc.text(cellLines[cIdx], x + cellPadding, this.y + cellPadding + 3);
+        this.doc.text(cellLines[cIdx], x + cellPadding, this.y + cellPadding + (this.dense ? 2.4 : 3));
         x += colWidth;
       });
       this.y += rowHeight;
@@ -165,8 +168,8 @@ class PdfWriter {
  * Estándar de PDF de la Escuela de Golf CCB. Toda generación de PDF de la app
  * (notas, programación, análisis de Paco, reportes) pasa por esta función.
  */
-export function generateCCBPdf(markdown: string, options?: { documentName?: string; filenamePrefix?: string }) {
-  const writer = new PdfWriter();
+export function generateCCBPdf(markdown: string, options?: { documentName?: string; filenamePrefix?: string; dense?: boolean }) {
+  const writer = new PdfWriter(!!options?.dense);
   const doc = writer.doc;
 
   doc.setFont("helvetica", "bold");

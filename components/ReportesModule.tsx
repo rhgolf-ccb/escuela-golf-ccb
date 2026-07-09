@@ -1,6 +1,6 @@
-"use client";
+﻿"use client";
 
-import { useState, useEffect, useRef, useCallback, type ReactNode } from "react";
+import { useState, useEffect, useRef, useCallback, type ReactNode, Fragment } from "react";
 import { createClient } from "@supabase/supabase-js";
 import * as XLSX from "xlsx";
 
@@ -11,11 +11,10 @@ const supabase = createClient(
 
 // ── Constants ────────────────────────────────────────────────────────────────
 
-type Tab = "asistencia" | "cobros" | "tests" | "progreso" | "estadisticas" | "edades" | "live";
+type Tab = "asistencia" | "tests" | "progreso" | "estadisticas" | "edades" | "live";
 
 const TABS: { id: Tab; label: string }[] = [
   { id: "asistencia", label: "Asistencia" },
-  { id: "cobros", label: "Cobros" },
   { id: "tests", label: "Tests" },
   { id: "progreso", label: "Progreso" },
   { id: "estadisticas", label: "Estadísticas" },
@@ -29,7 +28,6 @@ const GROUP_COLOR: Record<string, { bg: string; text: string; border: string }> 
   damas:        { bg: "#4a107018", text: "#4a1070", border: "#4a107025" },
 };
 
-const DIAS_ES = ["Dom", "Lun", "Mar", "Mié", "Jue", "Vie", "Sáb"];
 const MESES_ES = ["enero","febrero","marzo","abril","mayo","junio","julio","agosto","septiembre","octubre","noviembre","diciembre"];
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -80,13 +78,6 @@ function grupoTipo(g: string | null): "juvenil" | "competencia" | "damas" | null
   if (g === "Competencia") return "competencia";
   if (g === "Damas") return "damas";
   return null;
-}
-
-function tipoLabel(tipo: string | null): string {
-  if (tipo === "juvenil") return "Juvenil";
-  if (tipo === "competencia") return "Competencia";
-  if (tipo === "damas") return "Damas";
-  return "—";
 }
 
 function pct(n: number, d: number): number {
@@ -248,31 +239,6 @@ function GrupoTabs({ value, onChange }: { value: GrupoFilter; onChange: (v: Grup
   );
 }
 
-function TalegaCell({ value, studentId, onSaved }: { value: string | null; studentId: string; onSaved: (id: string, val: string | null) => void }) {
-  const [open, setOpen] = useState(false);
-  const [saving, setSaving] = useState(false);
-  async function save(v: string) {
-    setSaving(true);
-    const val = v === "" ? null : v;
-    await supabase.from("students").update({ tiene_talega: val }).eq("id", studentId);
-    onSaved(studentId, val);
-    setSaving(false);
-    setOpen(false);
-  }
-  if (open) return (
-    <select autoFocus value={value ?? ""} onChange={(e) => save(e.target.value)} onBlur={() => setOpen(false)} disabled={saving} className="text-xs border border-gray-300 rounded px-1 py-0.5 bg-white">
-      <option value="">—</option>
-      <option value="Sí">Sí</option>
-      <option value="No">No</option>
-    </select>
-  );
-  return (
-    <button onClick={() => setOpen(true)} className="text-xs px-2 py-0.5 rounded hover:bg-gray-100 border border-transparent hover:border-gray-200 transition-colors">
-      {value ?? "—"}
-    </button>
-  );
-}
-
 function AsistioCell({ value, reservaId, onSaved }: { value: boolean | null; reservaId: string; onSaved: (id: string, v: boolean | null) => void }) {
   const [saving, setSaving] = useState(false);
   async function toggle() {
@@ -314,53 +280,32 @@ type Student = {
   grupo_activo: string | null; status: string; tiene_talega: string | null;
 };
 
-type Cobro = {
-  id: string; estudiante_id: string; semana_inicio: string;
-  sesiones_inscritas: number; sesiones_asistidas: number;
-  estado: string; observacion: string | null;
-};
-
 // ── Export helpers ───────────────────────────────────────────────────────────
 
 async function exportPDF(title: string, headers: string[], rows: string[][], subtitle?: string) {
-  const { default: jsPDF } = await import("jspdf");
-  const doc = new jsPDF({ orientation: rows.length > 0 && headers.length > 6 ? "landscape" : "portrait", unit: "mm", format: "a4" });
-  const W = doc.internal.pageSize.getWidth();
-  const M = 14;
-  let y = 18;
-  doc.setFillColor(27, 77, 46);
-  doc.rect(0, 0, W, 12, "F");
-  doc.setFontSize(9); doc.setFont("helvetica", "bold"); doc.setTextColor(212, 175, 55);
-  doc.text("CCB · Escuela de Golf", M, 8);
-  doc.setTextColor(255, 255, 255);
-  doc.text(`Generado ${new Date().toLocaleDateString("es-CO")}`, W - M, 8, { align: "right" });
-  y = 22;
-  doc.setFont("helvetica", "bold"); doc.setFontSize(14); doc.setTextColor(27, 77, 46);
-  doc.text(title, M, y); y += 6;
-  if (subtitle) { doc.setFontSize(9); doc.setFont("helvetica", "normal"); doc.setTextColor(120,120,120); doc.text(subtitle, M, y); y += 6; }
-  doc.setDrawColor(200,200,200); doc.setLineWidth(0.3); doc.line(M, y, W - M, y); y += 5;
-  const colW = (W - M * 2) / headers.length;
-  doc.setFillColor(245, 247, 245); doc.rect(M, y - 4, W - M * 2, 7, "F");
-  doc.setFontSize(7.5); doc.setFont("helvetica", "bold"); doc.setTextColor(60,60,60);
-  headers.forEach((h, i) => doc.text(h, M + i * colW + 1, y));
-  y += 4;
-  doc.setFont("helvetica", "normal"); doc.setFontSize(7.5);
-  rows.forEach((row, ri) => {
-    if (y > doc.internal.pageSize.getHeight() - 15) { doc.addPage(); y = 15; }
-    if (ri % 2 === 0) { doc.setFillColor(250,252,250); doc.rect(M, y - 3.5, W - M * 2, 6, "F"); }
-    doc.setTextColor(40,40,40);
-    row.forEach((cell, ci) => {
-      const txt = doc.splitTextToSize(String(cell ?? ""), colW - 2);
-      doc.text(txt[0] ?? "", M + ci * colW + 1, y);
-    });
-    y += 6;
+  const { generateCCBPdf } = await import("@/lib/pdf-generator");
+  const esc = (v: unknown) => String(v ?? "—").replace(/\|/g, "/").replace(/\n/g, " ");
+  const headerRow = `| ${headers.map(esc).join(" | ")} |`;
+  const sepRow = `| ${headers.map(() => "---").join(" | ")} |`;
+  const dataRows = rows.map((r) => `| ${r.map(esc).join(" | ")} |`);
+  const markdown = [headerRow, sepRow, ...dataRows].join("\n");
+  generateCCBPdf(markdown, {
+    documentName: subtitle ? `${title} — ${subtitle}` : title,
+    filenamePrefix: title,
+    dense: true,
   });
-  doc.save(`${title.replace(/\s+/g, "_")}_${toISO(new Date())}.pdf`);
 }
 
+// Excel compacto: fila mínima (14px) y anchos de columna ajustados al contenido,
+// para maximizar registros visibles por hoja (estándar de descargables de Reportes).
 function exportExcel(title: string, headers: string[], rows: (string | number)[][], subtitle?: string) {
   const aoa: (string | number)[][] = subtitle ? [[title], [subtitle], [], headers, ...rows] : [headers, ...rows];
   const ws = XLSX.utils.aoa_to_sheet(aoa);
+  ws["!rows"] = aoa.map(() => ({ hpx: 14 }));
+  ws["!cols"] = headers.map((h, i) => {
+    const maxLen = Math.max(h.length, ...rows.map((r) => String(r[i] ?? "").length));
+    return { wch: Math.min(Math.max(maxLen + 2, 8), 40) };
+  });
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, title.slice(0, 31));
   XLSX.writeFile(wb, `${title.replace(/\s+/g, "_")}_${toISO(new Date())}.xlsx`);
@@ -619,263 +564,6 @@ function TabAsistencia() {
                 </tr>
               </tfoot>
             )}
-          </table>
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ── Tab 2: COBROS ────────────────────────────────────────────────────────────
-
-function TabCobros() {
-  const [monday, setMonday] = useState<Date>(() => getMondayOf(new Date()));
-  const [periodMode, setPeriodMode] = useState<PeriodMode>("semana");
-  const [rangeFrom, setRangeFrom] = useState<string>(() => toISO(getMondayOf(new Date())));
-  const [rangeTo, setRangeTo] = useState<string>(() => toISO(addDays(getMondayOf(new Date()), 6)));
-  const [grupo, setGrupo] = useState<GrupoFilter>("todos");
-  const [cobros, setCobros] = useState<Cobro[]>([]);
-  const [students, setStudents] = useState<Student[]>([]);
-  const [reservas, setReservas] = useState<{ estudiante_id: string; sesion_id: string; asistio: boolean | null }[]>([]);
-  const [sesiones, setSesiones] = useState<{ id: string; fecha: string }[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [editingCobro, setEditingCobro] = useState<{ id: string; field: "estado" | "observacion" } | null>(null);
-
-  const sunday = addDays(monday, 6);
-  const effFrom = periodMode === "semana" ? monday : new Date(rangeFrom + "T12:00:00");
-  const effTo = periodMode === "semana" ? sunday : new Date(rangeTo + "T12:00:00");
-  const effFromISO = toISO(effFrom);
-  const effToISO = toISO(effTo);
-  const periodoLabel = periodoSubtitle(effFrom, effTo);
-
-  useEffect(() => {
-    async function load() {
-      setLoading(true);
-      const [{ data: sts }, { data: ses }] = await Promise.all([
-        supabase.from("students").select("id,full_name,birth_date,grupo_activo,status,tiene_talega").eq("status", "activo").order("full_name"),
-        supabase.from("sesiones_semana").select("id,fecha").gte("fecha", effFromISO).lte("fecha", effToISO),
-      ]);
-      setStudents((sts ?? []) as Student[]);
-      setSesiones(ses ?? []);
-      const sesIds = (ses ?? []).map((s: { id: string }) => s.id);
-      const [{ data: rv }, { data: cb }] = await Promise.all([
-        sesIds.length > 0 ? supabase.from("reservas").select("estudiante_id,sesion_id,asistio").in("sesion_id", sesIds) : Promise.resolve({ data: [] }),
-        periodMode === "semana"
-          ? supabase.from("cobros").select("*").eq("semana_inicio", effFromISO)
-          : supabase.from("cobros").select("*").gte("semana_inicio", effFromISO).lte("semana_inicio", effToISO),
-      ]);
-      setReservas(rv ?? []);
-      setCobros((cb ?? []) as Cobro[]);
-      setLoading(false);
-    }
-    load();
-  }, [periodMode, monday, rangeFrom, rangeTo]);
-
-  async function updateCobro(estudianteId: string, patch: Partial<Cobro>) {
-    const semanaInicio = toISO(monday);
-    const existing = cobros.find((c) => c.estudiante_id === estudianteId);
-    if (existing) {
-      const { data } = await supabase.from("cobros").update(patch).eq("id", existing.id).select().single();
-      if (data) setCobros((prev) => prev.map((c) => c.id === existing.id ? { ...c, ...data } : c));
-    } else {
-      const inscritas = reservas.filter((r) => r.estudiante_id === estudianteId).length;
-      const asistidas = reservas.filter((r) => r.estudiante_id === estudianteId && r.asistio === true).length;
-      const { data } = await supabase.from("cobros").insert({
-        estudiante_id: estudianteId, semana_inicio: semanaInicio,
-        sesiones_inscritas: inscritas, sesiones_asistidas: asistidas,
-        ...patch,
-      }).select().single();
-      if (data) setCobros((prev) => [...prev, data as Cobro]);
-    }
-    setEditingCobro(null);
-  }
-
-  const studentsFiltrados = students.filter((s) => {
-    const tieneReserva = reservas.some((r) => r.estudiante_id === s.id);
-    if (!tieneReserva) return false;
-    if (grupo === "todos") return true;
-    return grupoTipo(s.grupo_activo) === grupo;
-  });
-
-  const pagados = cobros.filter((c) => c.estado === "pagado").length;
-  const pendientes = cobros.filter((c) => c.estado === "pendiente" || !c.estado).length;
-  const exonerados = cobros.filter((c) => c.estado === "exonerado").length;
-
-  // Vista por semana: fila editable por alumno. Vista por periodo: solo lectura, una fila por (semana, alumno) — evita ambigüedad de a qué semana pertenece una edición.
-  const filasPeriodo = periodMode === "periodo" ? weeksInRange(effFrom, effTo).flatMap((w) => {
-    const wIni = toISO(w.inicio), wFin = toISO(w.fin);
-    const sesIdsSemana = sesiones.filter((s) => s.fecha >= wIni && s.fecha <= wFin).map((s) => s.id);
-    return studentsFiltrados
-      .filter((st) => reservas.some((r) => r.estudiante_id === st.id && sesIdsSemana.includes(r.sesion_id)))
-      .map((st) => {
-        const rvSemana = reservas.filter((r) => r.estudiante_id === st.id && sesIdsSemana.includes(r.sesion_id));
-        const cobro = cobros.find((c) => c.estudiante_id === st.id && c.semana_inicio === wIni);
-        return {
-          semanaInicio: wIni,
-          semanaLabel: fmtRango(w.inicio, w.fin),
-          student: st,
-          inscritas: rvSemana.length,
-          asistidas: rvSemana.filter((r) => r.asistio === true).length,
-          estado: cobro?.estado ?? "pendiente",
-          observacion: cobro?.observacion ?? null,
-        };
-      });
-  }) : [];
-
-  function doExportPDF() {
-    if (periodMode === "periodo") {
-      const rows = filasPeriodo.map((f) => [f.semanaLabel, f.student.full_name, f.student.grupo_activo ?? "—", String(f.inscritas), String(f.asistidas), f.estado, f.observacion ?? ""]);
-      exportPDF("Cobros", ["Semana","Nombre","Grupo","Inscritas","Asistidas","Estado","Observación"], rows, periodoLabel);
-      return;
-    }
-    const rows = studentsFiltrados.map((st) => {
-      const inscritas = reservas.filter((r) => r.estudiante_id === st.id).length;
-      const asistidas = reservas.filter((r) => r.estudiante_id === st.id && r.asistio === true).length;
-      const cobro = cobros.find((c) => c.estudiante_id === st.id);
-      return [st.full_name, st.grupo_activo ?? "—", String(inscritas), String(asistidas), cobro?.estado ?? "pendiente", cobro?.observacion ?? ""];
-    });
-    exportPDF("Cobros", ["Nombre","Grupo","Inscritas","Asistidas","Estado","Observación"], rows, periodoLabel);
-  }
-
-  function doExportExcel() {
-    if (periodMode === "periodo") {
-      const rows = filasPeriodo.map((f) => [f.semanaLabel, f.student.full_name, f.student.grupo_activo ?? "—", f.inscritas, f.asistidas, f.estado, f.observacion ?? ""]);
-      exportExcel("Cobros", ["Semana","Nombre","Grupo","Inscritas","Asistidas","Estado","Observación"], rows, periodoLabel);
-      return;
-    }
-    const rows = studentsFiltrados.map((st) => {
-      const inscritas = reservas.filter((r) => r.estudiante_id === st.id).length;
-      const asistidas = reservas.filter((r) => r.estudiante_id === st.id && r.asistio === true).length;
-      const cobro = cobros.find((c) => c.estudiante_id === st.id);
-      return [st.full_name, st.grupo_activo ?? "—", inscritas, asistidas, cobro?.estado ?? "pendiente", cobro?.observacion ?? ""];
-    });
-    exportExcel("Cobros", ["Nombre","Grupo","Inscritas","Asistidas","Estado","Observación"], rows, periodoLabel);
-  }
-
-  function doExportWhatsApp() {
-    const lines = [periodoLabel, `Pagados: ${pagados} | Pendientes: ${pendientes} | Exonerados: ${exonerados}`, "",
-      ...studentsFiltrados.slice(0, 30).map((st) => {
-        const cobro = cobros.find((c) => c.estudiante_id === st.id);
-        return `• ${st.full_name}: ${cobro?.estado ?? "pendiente"}`;
-      })];
-    exportWhatsApp(`Cobros – ${fmtRango(effFrom, effTo)}`, lines);
-  }
-
-  return (
-    <div>
-      <div className="flex flex-wrap items-start gap-3 mb-5">
-        <PeriodSelector
-          mode={periodMode}
-          onModeChange={setPeriodMode}
-          from={rangeFrom}
-          to={rangeTo}
-          onApply={(f, t) => { setRangeFrom(f); setRangeTo(t); }}
-          weekSlot={<WeekNav monday={monday} onChange={setMonday} />}
-        />
-        <GrupoTabs value={grupo} onChange={setGrupo} />
-        <div className="ml-auto flex gap-2">
-          <ExportBtn label="PDF" onClick={doExportPDF} />
-          <ExportBtn label="Excel" onClick={doExportExcel} />
-          <ExportBtn label="WhatsApp" onClick={doExportWhatsApp} green />
-        </div>
-      </div>
-      <div className="grid grid-cols-4 gap-3 mb-5">
-        <MetricCard label="Pagados" value={pagados} />
-        <MetricCard label="Pendientes" value={pendientes} />
-        <MetricCard label="Exonerados" value={exonerados} />
-        <MetricCard label="Total alumnos" value={studentsFiltrados.length} />
-      </div>
-      {loading ? <Loading /> : periodMode === "periodo" ? (
-        filasPeriodo.length === 0 ? <EmptyState msg="No hay alumnos inscritos en el periodo." /> : (
-          <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-gray-100 bg-gray-50">
-                  <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500">Semana</th>
-                  <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500">Nombre</th>
-                  <th className="text-left px-3 py-3 text-xs font-semibold text-gray-500">Grupo</th>
-                  <th className="text-center px-3 py-3 text-xs font-semibold text-gray-500">Inscritas</th>
-                  <th className="text-center px-3 py-3 text-xs font-semibold text-gray-500">Asistidas</th>
-                  <th className="text-center px-3 py-3 text-xs font-semibold text-gray-500">Estado pago</th>
-                  <th className="text-left px-3 py-3 text-xs font-semibold text-gray-500">Observación</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filasPeriodo.map((f, i) => (
-                  <tr key={`${f.semanaInicio}-${f.student.id}`} className={i % 2 === 0 ? "bg-white" : "bg-gray-50/50"}>
-                    <td className="px-4 py-2.5 text-xs text-gray-500 whitespace-nowrap">{f.semanaLabel}</td>
-                    <td className="px-4 py-2.5 font-medium text-gray-800">{f.student.full_name}</td>
-                    <td className="px-3 py-2.5">
-                      {f.student.grupo_activo && <span className="text-xs px-1.5 py-0.5 rounded-full font-medium" style={(() => { const t = grupoTipo(f.student.grupo_activo); return t ? { backgroundColor: GROUP_COLOR[t].bg, color: GROUP_COLOR[t].text } : {}; })()}>{f.student.grupo_activo}</span>}
-                    </td>
-                    <td className="text-center px-3 py-2.5 text-gray-600">{f.inscritas}</td>
-                    <td className="text-center px-3 py-2.5 text-gray-600">{f.asistidas}</td>
-                    <td className="text-center px-3 py-2.5"><Badge label={f.estado} color={f.estado === "pagado" ? "green" : f.estado === "exonerado" ? "gray" : "yellow"} /></td>
-                    <td className="px-3 py-2.5 text-xs text-gray-500 max-w-[200px] truncate">{f.observacion ?? <span className="text-gray-300 italic">—</span>}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )
-      ) : studentsFiltrados.length === 0 ? (
-        <EmptyState msg="No hay alumnos inscritos esta semana." />
-      ) : (
-        <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-gray-100 bg-gray-50">
-                <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500">Nombre</th>
-                <th className="text-left px-3 py-3 text-xs font-semibold text-gray-500">Grupo</th>
-                <th className="text-center px-3 py-3 text-xs font-semibold text-gray-500">Inscritas</th>
-                <th className="text-center px-3 py-3 text-xs font-semibold text-gray-500">Asistidas</th>
-                <th className="text-center px-3 py-3 text-xs font-semibold text-gray-500">Estado pago</th>
-                <th className="text-left px-3 py-3 text-xs font-semibold text-gray-500">Observación</th>
-              </tr>
-            </thead>
-            <tbody>
-              {studentsFiltrados.map((st, i) => {
-                const inscritas = reservas.filter((r) => r.estudiante_id === st.id).length;
-                const asistidas = reservas.filter((r) => r.estudiante_id === st.id && r.asistio === true).length;
-                const cobro = cobros.find((c) => c.estudiante_id === st.id);
-                const estado = cobro?.estado ?? "pendiente";
-                return (
-                  <tr key={st.id} className={i % 2 === 0 ? "bg-white" : "bg-gray-50/50"}>
-                    <td className="px-4 py-2.5 font-medium text-gray-800">{st.full_name}</td>
-                    <td className="px-3 py-2.5">
-                      {st.grupo_activo && <span className="text-xs px-1.5 py-0.5 rounded-full font-medium" style={(() => { const t = grupoTipo(st.grupo_activo); return t ? { backgroundColor: GROUP_COLOR[t].bg, color: GROUP_COLOR[t].text } : {}; })()}>{st.grupo_activo}</span>}
-                    </td>
-                    <td className="text-center px-3 py-2.5 text-gray-600">{inscritas}</td>
-                    <td className="text-center px-3 py-2.5 text-gray-600">{asistidas}</td>
-                    <td className="text-center px-3 py-2.5">
-                      {editingCobro?.id === st.id && editingCobro.field === "estado" ? (
-                        <select autoFocus defaultValue={estado} className="text-xs border border-gray-300 rounded px-1 py-0.5 bg-white"
-                          onChange={(e) => updateCobro(st.id, { estado: e.target.value })} onBlur={() => setEditingCobro(null)}>
-                          <option value="pendiente">pendiente</option>
-                          <option value="pagado">pagado</option>
-                          <option value="exonerado">exonerado</option>
-                        </select>
-                      ) : (
-                        <button onClick={() => setEditingCobro({ id: st.id, field: "estado" })} className="inline-flex items-center">
-                          <Badge label={estado} color={estado === "pagado" ? "green" : estado === "exonerado" ? "gray" : "yellow"} />
-                        </button>
-                      )}
-                    </td>
-                    <td className="px-3 py-2.5 text-xs text-gray-500 max-w-[200px]">
-                      {editingCobro?.id === st.id && editingCobro.field === "observacion" ? (
-                        <input autoFocus defaultValue={cobro?.observacion ?? ""} className="w-full text-xs border border-gray-300 rounded px-1.5 py-0.5"
-                          onBlur={(e) => updateCobro(st.id, { observacion: e.target.value || null })}
-                          onKeyDown={(e) => { if (e.key === "Enter") { updateCobro(st.id, { observacion: (e.target as HTMLInputElement).value || null }); } if (e.key === "Escape") setEditingCobro(null); }} />
-                      ) : (
-                        <button onClick={() => setEditingCobro({ id: st.id, field: "observacion" })} className="text-left w-full hover:text-gray-700 truncate block">
-                          {cobro?.observacion ?? <span className="text-gray-300 italic">Agregar nota...</span>}
-                        </button>
-                      )}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
           </table>
         </div>
       )}
@@ -1338,120 +1026,213 @@ function TabEstadisticas() {
 
 // ── Tab 6: EDADES ────────────────────────────────────────────────────────────
 
-const RANGOS_GRUPO = [
-  { label: "4–5 años (Birdies)", min: 4, max: 5 },
-  { label: "6–8 años (Águilas)", min: 6, max: 8 },
-  { label: "9–12 años (Albatros)", min: 9, max: 12 },
-  { label: "13–17 años", min: 13, max: 17 },
-];
+const GRUPOS_EDADES = ["Birdies", "Águilas", "Albatros", "+14", "Competencia", "Damas"] as const;
+type GrupoEdad = typeof GRUPOS_EDADES[number];
+type EstadoFilter = "todos" | "activos" | "inactivos";
+
+function colorHexForGrupo(g: string): string {
+  const t = grupoTipo(g);
+  if (t === "competencia") return "#7d5a00";
+  if (t === "damas") return "#4a1070";
+  return "#1a3a2a";
+}
+
+function GrupoChip({ label, active, colorHex, onClick }: { label: string; active: boolean; colorHex: string; onClick: () => void }) {
+  return (
+    <button
+      onClick={onClick}
+      className="px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors border"
+      style={active ? { backgroundColor: colorHex, color: "#fff", borderColor: colorHex } : { backgroundColor: "#fff", color: "#6b7280", borderColor: "#e5e7eb" }}
+    >{label}</button>
+  );
+}
 
 function TabEdades() {
-  const [edadSel, setEdadSel] = useState<number | null>(null);
+  const [grupoSel, setGrupoSel] = useState<GrupoEdad>("Birdies");
+  const [estadoFilter, setEstadoFilter] = useState<EstadoFilter>("todos");
+  const [edadFilter, setEdadFilter] = useState<number | "todas">("todas");
   const [students, setStudents] = useState<Student[]>([]);
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
     async function load() {
       setLoading(true);
-      const { data } = await supabase.from("students").select("id,full_name,birth_date,grupo_activo,status,tiene_talega").eq("status", "activo").order("full_name");
+      const { data } = await supabase.from("students").select("id,full_name,birth_date,grupo_activo,status,tiene_talega").order("full_name");
       setStudents((data ?? []) as Student[]);
       setLoading(false);
     }
     load();
   }, []);
 
-  function updateTalega(id: string, val: string | null) {
-    setStudents((prev) => prev.map((s) => s.id === id ? { ...s, tiene_talega: val } : s));
+  function selectGrupo(g: GrupoEdad) {
+    setGrupoSel(g);
+    setEdadFilter("todas");
   }
 
-  const filtered = students.filter((s) => {
-    const edad = calcEdad(s.birth_date);
-    if (edadSel === null) return true;
-    return edad === edadSel;
+  const showEdadDropdown = grupoSel === "Birdies" || grupoSel === "Águilas" || grupoSel === "Albatros";
+  const colorHex = colorHexForGrupo(grupoSel);
+
+  const porGrupoYEstado = students.filter((s) => {
+    if (s.grupo_activo !== grupoSel) return false;
+    if (estadoFilter === "activos") return s.status === "activo";
+    if (estadoFilter === "inactivos") return s.status === "inactivo";
+    return true;
   });
 
-  const conGrupo = filtered.filter((s) => s.grupo_activo).length;
-  const sinGrupo = filtered.filter((s) => !s.grupo_activo).length;
-  const conTalega = filtered.filter((s) => s.tiene_talega === "Sí").length;
+  const edadesDisponibles = Array.from(
+    new Set(porGrupoYEstado.map((s) => calcEdad(s.birth_date)).filter((e): e is number => e !== null))
+  ).sort((a, b) => a - b);
 
-  function setRango(min: number, max: number) {
-    setEdadSel(edadSel !== null && edadSel >= min && edadSel <= max ? null : min);
-  }
+  const filtered = porGrupoYEstado
+    .filter((s) => {
+      if (!showEdadDropdown || edadFilter === "todas") return true;
+      return calcEdad(s.birth_date) === edadFilter;
+    })
+    .sort((a, b) => {
+      const ea = calcEdad(a.birth_date) ?? 999, eb = calcEdad(b.birth_date) ?? 999;
+      if (ea !== eb) return ea - eb;
+      return a.full_name.localeCompare(b.full_name);
+    });
+
+  const edadesFiltradas = filtered.map((s) => calcEdad(s.birth_date)).filter((e): e is number => e !== null);
+  const promedioEdad = edadesFiltradas.length > 0 ? Math.round((edadesFiltradas.reduce((a, b) => a + b, 0) / edadesFiltradas.length) * 10) / 10 : null;
+  const menorEdad = edadesFiltradas.length > 0 ? Math.min(...edadesFiltradas) : null;
+  const mayorEdad = edadesFiltradas.length > 0 ? Math.max(...edadesFiltradas) : null;
+
+  const agrupadoPorEdad = showEdadDropdown && edadFilter === "todas";
+
+  type GrupoEdadRow = { edad: number | null; items: Student[] };
+  const grupos: GrupoEdadRow[] = agrupadoPorEdad
+    ? Array.from(
+        filtered.reduce((acc, s) => {
+          const e = calcEdad(s.birth_date);
+          const key = e === null ? "sinfecha" : String(e);
+          if (!acc.has(key)) acc.set(key, { edad: e, items: [] });
+          acc.get(key)!.items.push(s);
+          return acc;
+        }, new Map<string, GrupoEdadRow>()).values()
+      ).sort((a, b) => (a.edad ?? 999) - (b.edad ?? 999))
+    : [{ edad: null, items: filtered }];
 
   function doExportPDF() {
-    const rows = filtered.map((s) => [s.full_name, String(calcEdad(s.birth_date) ?? "—"), s.tiene_talega ?? "—"]);
-    exportPDF("Talegas", ["Nombre","Edad","Talega"], rows, edadSel !== null ? `Edad: ${edadSel} años` : "Todos los alumnos");
+    const parts: string[] = [];
+    let n = 0;
+    grupos.forEach((g) => {
+      if (agrupadoPorEdad) parts.push(`### ${g.edad !== null ? `${g.edad} años` : "Sin fecha de nacimiento"} — ${g.items.length} alumno${g.items.length === 1 ? "" : "s"}`);
+      parts.push(`| # | Nombre | Fecha de nacimiento | Edad | Estado |`);
+      parts.push(`| --- | --- | --- | --- | --- |`);
+      g.items.forEach((s) => {
+        n++;
+        parts.push(`| ${n} | ${s.full_name} | ${fmtFecha(s.birth_date)} | ${calcEdad(s.birth_date) ?? "—"} | ${s.status === "activo" ? "Activo" : "Inactivo"} |`);
+      });
+    });
+    import("@/lib/pdf-generator").then(({ generateCCBPdf }) => {
+      generateCCBPdf(parts.join("\n"), { documentName: `Listado de edades — ${grupoSel}`, filenamePrefix: `Edades-${grupoSel}`, dense: true });
+    });
   }
+
   function doExportExcel() {
-    const rows = filtered.map((s) => [s.full_name, s.grupo_activo ?? "—", s.tiene_talega ?? "—", String(calcEdad(s.birth_date) ?? "—")]);
-    exportExcel("Edades", ["Nombre","Grupo","Talega","Edad"], rows);
-  }
-  function doExportWhatsApp() {
-    const lines = [edadSel !== null ? `Edad: ${edadSel} años` : "Todos", `Total: ${filtered.length} | Con talega: ${conTalega}`, "",
-      ...filtered.slice(0, 40).map((s) => `• ${s.full_name} (${calcEdad(s.birth_date) ?? "?"}): ${s.tiene_talega ?? "—"}`)];
-    exportWhatsApp("Talegas por edad", lines);
+    const rows: (string | number)[][] = [];
+    let n = 0;
+    grupos.forEach((g) => {
+      if (agrupadoPorEdad) rows.push([`${g.edad !== null ? `${g.edad} años` : "Sin fecha"} — ${g.items.length} alumnos`, "", "", "", ""]);
+      g.items.forEach((s) => {
+        n++;
+        rows.push([n, s.full_name, fmtFecha(s.birth_date), calcEdad(s.birth_date) ?? "—", s.status === "activo" ? "Activo" : "Inactivo"]);
+      });
+    });
+    exportExcel(`Edades — ${grupoSel}`, ["#", "Nombre", "Fecha de nacimiento", "Edad", "Estado"], rows);
   }
 
   return (
     <div>
-      <div className="space-y-2 mb-4">
-        <div className="flex flex-wrap gap-1.5">
-          {Array.from({ length: 14 }, (_, i) => i + 4).map((edad) => (
-            <button key={edad} onClick={() => setEdadSel(edadSel === edad ? null : edad)}
-              className={`w-9 h-9 rounded-full text-sm font-semibold border transition-colors ${edadSel === edad ? "bg-[#1B4D2E] text-white border-[#1B4D2E]" : "bg-white text-gray-600 border-gray-200 hover:border-gray-400"}`}>
-              {edad}
+      <div className="flex flex-wrap gap-1.5 mb-3">
+        {GRUPOS_EDADES.map((g) => (
+          <GrupoChip key={g} label={g} active={grupoSel === g} colorHex={colorHexForGrupo(g)} onClick={() => selectGrupo(g)} />
+        ))}
+      </div>
+
+      <div className="flex flex-wrap items-center gap-3 mb-4">
+        <div className="flex gap-1 bg-gray-100 rounded-lg p-1">
+          {(["todos", "activos", "inactivos"] as EstadoFilter[]).map((e) => (
+            <button key={e} onClick={() => setEstadoFilter(e)}
+              className={`px-3 py-1 rounded-md text-xs font-semibold transition-colors ${estadoFilter === e ? "bg-white text-gray-800 shadow-sm" : "text-gray-500"}`}>
+              {e === "todos" ? "Todos" : e === "activos" ? "Solo activos" : "Inactivos"}
             </button>
           ))}
         </div>
-        <div className="flex flex-wrap gap-1.5">
-          {RANGOS_GRUPO.map((r) => {
-            const active = edadSel !== null && edadSel >= r.min && edadSel <= r.max;
-            return (
-              <button key={r.label} onClick={() => setRango(r.min, r.max)}
-                className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition-colors ${active ? "bg-[#1B4D2E] text-white border-[#1B4D2E]" : "bg-white text-gray-600 border-gray-200 hover:border-gray-400"}`}>
-                {r.label}
-              </button>
-            );
-          })}
-        </div>
-      </div>
-      <div className="flex flex-wrap items-center gap-3 mb-5">
+        {showEdadDropdown && (
+          <select
+            value={edadFilter === "todas" ? "todas" : String(edadFilter)}
+            onChange={(e) => setEdadFilter(e.target.value === "todas" ? "todas" : Number(e.target.value))}
+            className="text-xs border border-gray-200 rounded-lg px-2 py-1.5 bg-white text-gray-700"
+          >
+            <option value="todas">Todas las edades</option>
+            {edadesDisponibles.map((e) => <option key={e} value={e}>{e} años</option>)}
+          </select>
+        )}
         <div className="ml-auto flex gap-2">
           <ExportBtn label="PDF" onClick={doExportPDF} />
           <ExportBtn label="Excel" onClick={doExportExcel} />
-          <ExportBtn label="WhatsApp" onClick={doExportWhatsApp} green />
         </div>
       </div>
-      <div className="grid grid-cols-4 gap-3 mb-5">
-        <MetricCard label={edadSel ? `Alumnos ${edadSel} años` : "Total alumnos"} value={filtered.length} />
-        <MetricCard label="Con grupo asignado" value={conGrupo} />
-        <MetricCard label="Sin grupo" value={sinGrupo} />
-        <MetricCard label="Con talega" value={conTalega} />
+
+      <div className="flex items-center gap-2 mb-3">
+        <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: colorHex }} />
+        <h3 className="text-sm font-bold text-gray-800">{grupoSel}</h3>
+        <span className="text-xs text-gray-400">({filtered.length} alumno{filtered.length === 1 ? "" : "s"})</span>
       </div>
+
+      <div className="grid grid-cols-4 gap-3 mb-4">
+        <MetricCard label="Total alumnos" value={filtered.length} />
+        <MetricCard label="Edad promedio" value={promedioEdad ?? "—"} />
+        <MetricCard label="Menor edad" value={menorEdad ?? "—"} />
+        <MetricCard label="Mayor edad" value={mayorEdad ?? "—"} />
+      </div>
+
       {loading ? <Loading /> : filtered.length === 0 ? <EmptyState msg="No hay alumnos para este filtro." /> : (
         <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-gray-100 bg-gray-50">
-                <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500">Nombre</th>
-                <th className="text-center px-3 py-3 text-xs font-semibold text-gray-500">Edad</th>
-                <th className="text-left px-3 py-3 text-xs font-semibold text-gray-500">Grupo</th>
-                <th className="text-center px-3 py-3 text-xs font-semibold text-gray-500">Talega</th>
-                <th className="text-center px-3 py-3 text-xs font-semibold text-gray-500">Estado</th>
-                <th className="text-left px-3 py-3 text-xs font-semibold text-gray-500">Nacimiento</th>
+                <th className="text-center px-2 py-1.5 text-[11px] font-semibold text-gray-500 w-10">#</th>
+                <th className="text-left px-2 py-1.5 text-[11px] font-semibold text-gray-500">Nombre</th>
+                <th className="text-left px-2 py-1.5 text-[11px] font-semibold text-gray-500">Fecha de nacimiento</th>
+                <th className="text-center px-2 py-1.5 text-[11px] font-semibold text-gray-500 w-16">Edad</th>
+                <th className="text-center px-2 py-1.5 text-[11px] font-semibold text-gray-500 w-20">Estado</th>
               </tr>
             </thead>
             <tbody>
-              {filtered.map((st, i) => (
-                <tr key={st.id} className={i % 2 === 0 ? "bg-white" : "bg-gray-50/50"}>
-                  <td className="px-4 py-2.5 font-medium text-gray-800">{st.full_name}</td>
-                  <td className="text-center px-3 py-2.5 text-gray-700">{calcEdad(st.birth_date) ?? "—"}</td>
-                  <td className="px-3 py-2.5">{st.grupo_activo ? <span className="text-xs px-1.5 py-0.5 rounded-full font-medium" style={(() => { const t = grupoTipo(st.grupo_activo); return t ? { backgroundColor: GROUP_COLOR[t].bg, color: GROUP_COLOR[t].text } : {}; })()}>{st.grupo_activo}</span> : <span className="text-xs text-gray-300">—</span>}</td>
-                  <td className="text-center px-3 py-2.5"><TalegaCell value={st.tiene_talega} studentId={st.id} onSaved={updateTalega} /></td>
-                  <td className="text-center px-3 py-2.5"><Badge label={st.status} color={st.status === "activo" ? "green" : "gray"} /></td>
-                  <td className="px-3 py-2.5 text-xs text-gray-500">{fmtFecha(st.birth_date)}</td>
-                </tr>
-              ))}
+              {(() => {
+                let n = 0;
+                return grupos.map((g) => (
+                  <Fragment key={g.edad ?? "sinfecha"}>
+                    {agrupadoPorEdad && (
+                      <tr>
+                        <td colSpan={5} className="px-2 py-1 bg-gray-50 text-[11px] font-semibold text-gray-600 border-t border-b border-gray-100">
+                          {g.edad !== null ? `${g.edad} años` : "Sin fecha"} — {g.items.length} alumno{g.items.length === 1 ? "" : "s"}
+                        </td>
+                      </tr>
+                    )}
+                    {g.items.map((s, i) => {
+                      n++;
+                      return (
+                        <tr key={s.id} className={i % 2 === 0 ? "bg-white" : "bg-gray-50/50"}>
+                          <td className="text-center px-2 py-[3px] text-[11px] text-gray-400">{n}</td>
+                          <td className="px-2 py-[3px] text-[11px] font-medium text-gray-800">{s.full_name}</td>
+                          <td className="px-2 py-[3px] text-[11px] text-gray-500">{fmtFecha(s.birth_date)}</td>
+                          <td className="text-center px-2 py-[3px]">
+                            <span className="text-[10px] px-1.5 py-0.5 rounded-full font-semibold" style={{ backgroundColor: `${colorHex}18`, color: colorHex }}>
+                              {calcEdad(s.birth_date) ?? "—"}
+                            </span>
+                          </td>
+                          <td className="text-center px-2 py-[3px]"><Badge label={s.status} color={s.status === "activo" ? "green" : "gray"} /></td>
+                        </tr>
+                      );
+                    })}
+                  </Fragment>
+                ));
+              })()}
             </tbody>
           </table>
         </div>
@@ -1460,158 +1241,212 @@ function TabEdades() {
   );
 }
 
-// ── Tab 7: RESERVA LIVE ──────────────────────────────────────────────────────
+// ── Tab 7: RESERVAS LIVE ─────────────────────────────────────────────────────
+
+const GRUPOS_LIVE = [
+  { id: "juvenil" as const, label: "Juvenil", color: "#1a3a2a", dias: ["martes", "miercoles", "jueves", "sabado", "domingo"] },
+  { id: "competencia" as const, label: "Competencia", color: "#7d5a00", dias: ["martes", "miercoles", "jueves", "sabado"] },
+  { id: "damas" as const, label: "Damas", color: "#4a1070", dias: ["viernes"] },
+];
+
+const DIA_LABEL: Record<string, string> = { martes: "Martes", miercoles: "Miércoles", jueves: "Jueves", viernes: "Viernes", sabado: "Sábado", domingo: "Domingo" };
+const DIA_OFFSET: Record<string, number> = { lunes: 0, martes: 1, miercoles: 2, jueves: 3, viernes: 4, sabado: 5, domingo: 6 };
+
+function TalegaChip({ propia }: { propia: boolean }) {
+  return (
+    <span
+      className="shrink-0 text-[9px] font-semibold px-1.5 py-0.5 rounded-full"
+      style={propia ? { backgroundColor: "#16a34a18", color: "#16a34a" } : { backgroundColor: "#9ca3af20", color: "#6b7280" }}
+    >{propia ? "Propia" : "Escuela"}</span>
+  );
+}
+
+function DayColumn({
+  diaLabel, fecha, sesionesDia, reservasBySesion, colorHex,
+}: {
+  diaLabel: string; fecha: string; sesionesDia: Sesion[];
+  reservasBySesion: Record<string, Reserva[]>; colorHex: string;
+}) {
+  const totalReservas = sesionesDia.reduce((sum, s) => sum + (reservasBySesion[s.id]?.length ?? 0), 0);
+  return (
+    <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden flex flex-col min-w-0">
+      <div className="px-3 py-2 border-b border-gray-100" style={{ backgroundColor: `${colorHex}10` }}>
+        <div className="flex items-baseline justify-between gap-1">
+          <span className="text-xs font-bold truncate" style={{ color: colorHex }}>{diaLabel}</span>
+          <span className="text-[10px] text-gray-400 shrink-0">{fecha}</span>
+        </div>
+        <div className="flex items-center justify-between mt-0.5">
+          {sesionesDia.length === 1 ? (
+            <span className="text-[10px] text-gray-500">{fmtHora(sesionesDia[0].hora_inicio)} – {fmtHora(sesionesDia[0].hora_fin)}</span>
+          ) : sesionesDia.length > 1 ? (
+            <span className="text-[10px] text-gray-400">{sesionesDia.length} horarios</span>
+          ) : <span className="text-[10px] text-gray-300">Sin sesión</span>}
+          <span className="text-[10px] font-semibold text-gray-600">{totalReservas}</span>
+        </div>
+      </div>
+      <div className="p-2 space-y-2 flex-1">
+        {sesionesDia.length === 0 ? (
+          <p className="text-[11px] text-gray-300 text-center py-4">Sin sesión</p>
+        ) : sesionesDia.map((s) => {
+          const rv = reservasBySesion[s.id] ?? [];
+          return (
+            <div key={s.id}>
+              {sesionesDia.length > 1 && (
+                <p className="text-[10px] font-semibold text-gray-500 mb-1">{fmtHora(s.hora_inicio)} – {fmtHora(s.hora_fin)}</p>
+              )}
+              {rv.length === 0 ? (
+                <p className="text-[10px] text-gray-300 italic mb-1">Sin inscritos</p>
+              ) : (
+                <div className="space-y-1">
+                  {rv.map((r, i) => (
+                    <div
+                      key={r.id}
+                      className="flex items-center justify-between gap-1.5 border border-gray-100"
+                      style={{ padding: "5px", borderRadius: "6px", fontSize: "11px" }}
+                    >
+                      <span className="text-gray-700 truncate flex items-center gap-1 min-w-0">
+                        <span className="text-gray-400 shrink-0">{i + 1}.</span>
+                        <span className="truncate">{r.students?.full_name ?? "—"}</span>
+                      </span>
+                      <TalegaChip propia={r.students?.tiene_talega === "Sí"} />
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
 
 function TabReservaLive() {
+  const [grupoSel, setGrupoSel] = useState<"juvenil" | "competencia" | "damas">("juvenil");
+  const [monday, setMonday] = useState<Date>(() => getMondayOf(new Date()));
   const [sesiones, setSesiones] = useState<Sesion[]>([]);
-  const [sesionSel, setSesionSel] = useState<Sesion | null>(null);
   const [reservas, setReservas] = useState<Reserva[]>([]);
   const [lastUpdate, setLastUpdate] = useState<Date>(new Date());
   const [loading, setLoading] = useState(false);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  const monday = getMondayOf(new Date());
+  const grupoCfg = GRUPOS_LIVE.find((g) => g.id === grupoSel)!;
   const sunday = addDays(monday, 6);
 
-  useEffect(() => {
-    async function loadSesiones() {
-      const { data } = await supabase.from("sesiones_semana")
-        .select("id,dia_semana,fecha,hora_inicio,hora_fin,tipo_sesion,lugar,objetivo,cupo_maximo,planes_semanales(tipo_plan)")
-        .gte("fecha", toISO(monday)).lte("fecha", toISO(sunday)).order("fecha").order("hora_inicio");
-      setSesiones((data ?? []) as unknown as Sesion[]);
-      if (data && data.length > 0 && !sesionSel) setSesionSel(data[0] as unknown as Sesion);
-    }
-    loadSesiones();
-  }, []);
-
-  const fetchReservas = useCallback(async (id: string) => {
+  const fetchAll = useCallback(async () => {
     setLoading(true);
-    const { data } = await supabase.from("reservas")
+    const { data: ses } = await supabase.from("sesiones_semana")
+      .select("id,dia_semana,fecha,hora_inicio,hora_fin,tipo_sesion,lugar,objetivo,cupo_maximo,planes_semanales(tipo_plan)")
+      .gte("fecha", toISO(monday)).lte("fecha", toISO(addDays(monday, 6))).order("fecha").order("hora_inicio");
+    const sesArr = ((ses ?? []) as unknown as Sesion[]).filter((s) => (s.planes_semanales as { tipo_plan: string } | null)?.tipo_plan === grupoSel);
+    setSesiones(sesArr);
+    const ids = sesArr.map((s) => s.id);
+    if (ids.length === 0) { setReservas([]); setLastUpdate(new Date()); setLoading(false); return; }
+    const { data: rv } = await supabase.from("reservas")
       .select("id,sesion_id,estudiante_id,estado,posicion_espera,created_at,asistio,students!reservas_estudiante_id_fkey(id,full_name,grupo_activo,tiene_talega)")
-      .eq("sesion_id", id).order("estado").order("posicion_espera", { ascending: true, nullsFirst: false }).order("created_at");
-    setReservas(((data ?? []) as unknown as Reserva[]).map((r) => ({ ...r, students: Array.isArray(r.students) ? r.students[0] : r.students })));
+      .in("sesion_id", ids).eq("estado", "confirmado").order("created_at");
+    setReservas(((rv ?? []) as unknown as Reserva[]).map((r) => ({ ...r, students: Array.isArray(r.students) ? r.students[0] : r.students })));
     setLastUpdate(new Date());
     setLoading(false);
-  }, []);
+  }, [grupoSel, monday]);
 
   useEffect(() => {
-    if (!sesionSel) return;
-    fetchReservas(sesionSel.id);
-    timerRef.current = setInterval(() => fetchReservas(sesionSel.id), 30000);
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- fetch-on-mount + poll pattern
+    fetchAll();
+    timerRef.current = setInterval(fetchAll, 30000);
     return () => { if (timerRef.current) clearInterval(timerRef.current); };
-  }, [sesionSel, fetchReservas]);
+  }, [fetchAll]);
 
-  function updateTalega(id: string, val: string | null) {
-    setReservas((prev) => prev.map((r) => r.estudiante_id === id ? { ...r, students: r.students ? { ...r.students, tiene_talega: val } : r.students } : r));
-  }
-
-  const confirmados = reservas.filter((r) => r.estado === "confirmado");
-  const conTalega = reservas.filter((r) => r.students?.tiene_talega === "Sí").length;
-  const sinTalega = reservas.filter((r) => r.students?.tiene_talega === "No" || r.students?.tiene_talega === null).length;
-  const cupo = sesionSel?.cupo_maximo ?? 15;
-  const disponibles = Math.max(0, cupo - confirmados.length);
-
+  const totalReservas = reservas.length;
+  const conTalegaPropia = reservas.filter((r) => r.students?.tiene_talega === "Sí").length;
+  const talegaEscuela = totalReservas - conTalegaPropia;
   const secsAgo = Math.floor((new Date().getTime() - lastUpdate.getTime()) / 1000);
 
+  const reservasBySesion: Record<string, Reserva[]> = {};
+  reservas.forEach((r) => { (reservasBySesion[r.sesion_id] ??= []).push(r); });
+
+  const columnas = grupoCfg.dias.map((dia) => {
+    const fechaDia = addDays(monday, DIA_OFFSET[dia]);
+    const sesionesDia = sesiones.filter((s) => s.dia_semana === dia).sort((a, b) => (a.hora_inicio ?? "").localeCompare(b.hora_inicio ?? ""));
+    return { dia, label: DIA_LABEL[dia], fecha: fechaDia, sesionesDia };
+  });
+
   function doExportPDF() {
-    if (!sesionSel) return;
-    const tipo = (sesionSel.planes_semanales as { tipo_plan: string } | null)?.tipo_plan;
-    const rows = reservas.map((r, i) => [String(i + 1), r.students?.full_name ?? "—", r.students?.tiene_talega ?? "—", r.estado === "confirmado" ? "Confirmado" : "En espera", new Date(r.created_at).toLocaleTimeString("es-CO")]);
-    exportPDF("Reserva Live", ["#","Nombre","Talega","Estado","Inscrito"], rows, `${tipoLabel(tipo ?? null)} — ${DIAS_ES[new Date(sesionSel.fecha + "T12:00:00").getDay()]} ${fmtFecha(sesionSel.fecha)} ${fmtHora(sesionSel.hora_inicio)}`);
+    const rows: string[][] = [];
+    columnas.forEach((col) => {
+      col.sesionesDia.forEach((s) => {
+        (reservasBySesion[s.id] ?? []).forEach((r, i) => {
+          rows.push([col.label, `${fmtHora(s.hora_inicio)}–${fmtHora(s.hora_fin)}`, String(i + 1), r.students?.full_name ?? "—", r.students?.tiene_talega === "Sí" ? "Propia" : "Escuela"]);
+        });
+      });
+    });
+    exportPDF("Reservas Live", ["Día", "Horario", "#", "Nombre", "Talega"], rows, `${grupoCfg.label} — ${fmtRango(monday, sunday)}`);
   }
   function doExportExcel() {
-    const rows = reservas.map((r, i) => [i + 1, r.students?.full_name ?? "—", r.students?.tiene_talega ?? "—", r.estado, new Date(r.created_at).toLocaleTimeString("es-CO")]);
-    exportExcel("Reserva Live", ["#","Nombre","Talega","Estado","Inscrito"], rows);
+    const rows: (string | number)[][] = [];
+    columnas.forEach((col) => {
+      col.sesionesDia.forEach((s) => {
+        (reservasBySesion[s.id] ?? []).forEach((r, i) => {
+          rows.push([col.label, `${fmtHora(s.hora_inicio)}–${fmtHora(s.hora_fin)}`, i + 1, r.students?.full_name ?? "—", r.students?.tiene_talega === "Sí" ? "Propia" : "Escuela"]);
+        });
+      });
+    });
+    exportExcel("Reservas Live", ["Día", "Horario", "#", "Nombre", "Talega"], rows, `${grupoCfg.label} — ${fmtRango(monday, sunday)}`);
   }
   function doExportWhatsApp() {
-    if (!sesionSel) return;
-    const tipo = (sesionSel.planes_semanales as { tipo_plan: string } | null)?.tipo_plan;
-    const lines = [`${tipoLabel(tipo ?? null)} — ${DIAS_ES[new Date(sesionSel.fecha + "T12:00:00").getDay()]} ${fmtFecha(sesionSel.fecha)} ${fmtHora(sesionSel.hora_inicio)}`,
-      `Confirmados: ${confirmados.length}/${cupo} | Con talega: ${conTalega}`, "",
-      "*Lista de talegas:*",
-      ...reservas.filter((r) => r.estado === "confirmado").map((r) => `• ${r.students?.full_name ?? "—"}: ${r.students?.tiene_talega ?? "—"}`)];
-    exportWhatsApp("Reserva Live — Talegas", lines);
+    const lines = [`${grupoCfg.label} — ${fmtRango(monday, sunday)}`, `Total: ${totalReservas} | Talega propia: ${conTalegaPropia} | Talega escuela: ${talegaEscuela}`, ""];
+    columnas.forEach((col) => {
+      const total = col.sesionesDia.reduce((sum, s) => sum + (reservasBySesion[s.id]?.length ?? 0), 0);
+      if (total === 0) return;
+      lines.push(`*${col.label}* (${total})`);
+      col.sesionesDia.forEach((s) => {
+        (reservasBySesion[s.id] ?? []).forEach((r) => lines.push(`• ${r.students?.full_name ?? "—"} — ${r.students?.tiene_talega === "Sí" ? "Propia" : "Escuela"}`));
+      });
+    });
+    exportWhatsApp("Reservas Live", lines);
   }
 
   return (
     <div>
-      <div className="flex flex-wrap gap-2 mb-4">
-        {sesiones.map((s) => {
-          const tipo = (s.planes_semanales as { tipo_plan: string } | null)?.tipo_plan;
-          const t = tipo ? (tipo === "juvenil" ? "juvenil" : tipo === "competencia" ? "competencia" : "damas") : null;
-          const sel = sesionSel?.id === s.id;
-          return (
-            <button key={s.id} onClick={() => setSesionSel(s)}
-              className={`flex flex-col items-start px-4 py-3 rounded-xl border text-left transition-all ${sel ? "shadow-md border-transparent" : "bg-white border-gray-200 hover:border-gray-300"}`}
-              style={sel && t ? { backgroundColor: GROUP_COLOR[t].bg, borderColor: GROUP_COLOR[t].border } : {}}>
-              <span className="text-xs font-semibold" style={sel && t ? { color: GROUP_COLOR[t].text } : { color: "#374151" }}>{tipoLabel(tipo ?? null)}</span>
-              <span className="text-[11px] text-gray-500 mt-0.5">{DIAS_ES[new Date(s.fecha + "T12:00:00").getDay()]} {s.fecha.slice(5)} · {fmtHora(s.hora_inicio)}</span>
-            </button>
-          );
-        })}
+      <div className="flex flex-wrap items-center gap-3 mb-4">
+        <div className="flex gap-1.5">
+          {GRUPOS_LIVE.map((g) => (
+            <GrupoChip key={g.id} label={g.label} active={grupoSel === g.id} colorHex={g.color} onClick={() => setGrupoSel(g.id)} />
+          ))}
+        </div>
+        <WeekNav monday={monday} onChange={setMonday} />
+        <div className="ml-auto flex items-center gap-3">
+          <span className="flex items-center gap-1.5 text-xs text-gray-400">
+            <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
+            En vivo · hace {secsAgo}s
+          </span>
+          <div className="flex gap-2">
+            <ExportBtn label="PDF" onClick={doExportPDF} />
+            <ExportBtn label="Excel" onClick={doExportExcel} />
+            <ExportBtn label="WhatsApp" onClick={doExportWhatsApp} green />
+          </div>
+        </div>
       </div>
 
-      {sesionSel && (
-        <>
-          <div className="flex items-center gap-4 mb-4 bg-white rounded-xl border border-gray-100 shadow-sm px-4 py-3">
-            <div className="text-center">
-              <p className="text-xs text-gray-400">Confirmados</p>
-              <p className="text-lg font-bold text-gray-900">{confirmados.length}/{cupo}</p>
-            </div>
-            <div className="text-center">
-              <p className="text-xs text-gray-400">Disponibles</p>
-              <p className="text-lg font-bold" style={{ color: disponibles > 0 ? "#16a34a" : "#dc2626" }}>{disponibles}</p>
-            </div>
-            <div className="text-center">
-              <p className="text-xs text-gray-400">Con talega</p>
-              <p className="text-lg font-bold text-gray-900">{conTalega}</p>
-            </div>
-            <div className="text-center">
-              <p className="text-xs text-gray-400">Sin talega / —</p>
-              <p className="text-lg font-bold text-gray-900">{sinTalega}</p>
-            </div>
-            <div className="ml-auto flex items-center gap-1.5 text-xs text-gray-400">
-              <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
-              En vivo · actualizado hace {secsAgo}s
-            </div>
-            <div className="flex gap-2">
-              <ExportBtn label="PDF" onClick={doExportPDF} />
-              <ExportBtn label="Excel" onClick={doExportExcel} />
-              <ExportBtn label="WhatsApp" onClick={doExportWhatsApp} green />
-            </div>
-          </div>
+      <div className="grid grid-cols-3 gap-3 mb-4">
+        <MetricCard label="Total reservas" value={totalReservas} />
+        <MetricCard label="Con talega propia" value={conTalegaPropia} />
+        <MetricCard label="Con talega escuela" value={talegaEscuela} />
+      </div>
 
-          {loading ? <Loading /> : reservas.length === 0 ? <EmptyState msg="Sin inscritos en esta sesión." /> : (
-            <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-gray-100 bg-gray-50">
-                    <th className="text-center px-3 py-3 text-xs font-semibold text-gray-500 w-10">#</th>
-                    <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500">Nombre</th>
-                    <th className="text-center px-3 py-3 text-xs font-semibold text-gray-500">Talega</th>
-                    <th className="text-center px-3 py-3 text-xs font-semibold text-gray-500">Estado</th>
-                    <th className="text-left px-3 py-3 text-xs font-semibold text-gray-500">Hora inscripción</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {reservas.map((r, i) => (
-                    <tr key={r.id} className={i % 2 === 0 ? "bg-white" : "bg-gray-50/50"}>
-                      <td className="text-center px-3 py-2.5 text-gray-400 text-xs">{i + 1}</td>
-                      <td className="px-4 py-2.5 font-medium text-gray-800">{r.students?.full_name ?? "—"}</td>
-                      <td className="text-center px-3 py-2.5">
-                        {r.students ? <TalegaCell value={r.students.tiene_talega} studentId={r.estudiante_id} onSaved={updateTalega} /> : "—"}
-                      </td>
-                      <td className="text-center px-3 py-2.5">
-                        <Badge label={r.estado === "confirmado" ? "Confirmado" : "En espera"} color={r.estado === "confirmado" ? "green" : "yellow"} />
-                      </td>
-                      <td className="px-3 py-2.5 text-xs text-gray-500">{new Date(r.created_at).toLocaleTimeString("es-CO", { hour: "2-digit", minute: "2-digit" })}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </>
+      {loading && sesiones.length === 0 ? <Loading /> : (
+        <div className="grid gap-3" style={{ gridTemplateColumns: `repeat(${columnas.length}, minmax(0, 1fr))` }}>
+          {columnas.map((col) => (
+            <DayColumn
+              key={col.dia}
+              diaLabel={col.label}
+              fecha={`${col.fecha.getDate()} ${MESES_ES[col.fecha.getMonth()].slice(0, 3)}`}
+              sesionesDia={col.sesionesDia}
+              reservasBySesion={reservasBySesion}
+              colorHex={grupoCfg.color}
+            />
+          ))}
+        </div>
       )}
     </div>
   );
@@ -1660,7 +1495,6 @@ export default function ReportesModule() {
 
         <div>
           {activeTab === "asistencia" && <TabAsistencia />}
-          {activeTab === "cobros" && <TabCobros />}
           {activeTab === "tests" && <TabTests />}
           {activeTab === "progreso" && <TabProgreso />}
           {activeTab === "estadisticas" && <TabEstadisticas />}
