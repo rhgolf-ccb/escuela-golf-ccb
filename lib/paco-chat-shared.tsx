@@ -19,6 +19,22 @@ export function todayISODate(): string {
 
 export const PACO_LIMIT_MESSAGE = "Has alcanzado tu límite diario de consultas. Vuelve mañana 🦅";
 
+export type PlanKind = "torneo" | "festival" | null;
+
+// Detecta planes de torneo/festival por el título fijo que el system prompt
+// le exige a Paco (ver PACO_ADVANCED_PLANNING) — permite ofrecer WhatsApp/tag
+// de notas sin depender de heurísticas de contenido más frágiles.
+export function detectPlanKind(content: string): PlanKind {
+  if (/^#{0,3}\s*plan de preparaci[oó]n\s*—/im.test(content)) return "torneo";
+  if (/^#{0,3}\s*festival\s*—/im.test(content)) return "festival";
+  return null;
+}
+
+export function extractPlanTitle(content: string): string {
+  const firstLine = content.split("\n").find((l) => l.trim().length > 0) ?? "";
+  return firstLine.replace(/^#+\s*/, "").replace(/\*\*/g, "").trim();
+}
+
 // Estándar visual de contenido de Paco (chat flotante, modal de perfil de
 // alumno, análisis grupal, planificación de programación).
 export const MARKDOWN_COMPONENTS = {

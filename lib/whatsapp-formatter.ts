@@ -1,4 +1,4 @@
-export type WhatsAppDocType = "analisis_grupal" | "programacion_semanal" | "reporte_alumno" | "plan_drills" | "actividad_especial";
+export type WhatsAppDocType = "analisis_grupal" | "programacion_semanal" | "reporte_alumno" | "plan_drills" | "actividad_especial" | "plan_torneo" | "festival";
 
 const TITLE_EMOJI: Record<WhatsAppDocType, string> = {
   analisis_grupal: "🏌️",
@@ -6,6 +6,8 @@ const TITLE_EMOJI: Record<WhatsAppDocType, string> = {
   reporte_alumno: "👤",
   plan_drills: "🎯",
   actividad_especial: "🌟",
+  plan_torneo: "🏆",
+  festival: "🎪",
 };
 
 const HEADING_EMOJI: Record<WhatsAppDocType, { pattern: RegExp; emoji: string }[]> = {
@@ -35,6 +37,18 @@ const HEADING_EMOJI: Record<WhatsAppDocType, { pattern: RegExp; emoji: string }[
     { pattern: /ubicaci|lugar|campo|cancha/i, emoji: "📍" },
     { pattern: /estaci[oó]n/i, emoji: "🎯" },
     { pattern: /grupo/i, emoji: "👥" },
+  ],
+  plan_torneo: [
+    { pattern: /objetivo/i, emoji: "🎯" },
+    { pattern: /m[eé]trica|seguimiento/i, emoji: "📊" },
+    { pattern: /recordatorio|[aá]nimo|motiv/i, emoji: "💪" },
+    { pattern: /f[ií]sico/i, emoji: "🏋️" },
+  ],
+  festival: [
+    { pattern: /horario|hora|orden del d[ií]a/i, emoji: "🕐" },
+    { pattern: /ubicaci|lugar|campo|cancha/i, emoji: "📍" },
+    { pattern: /premio/i, emoji: "🏅" },
+    { pattern: /puntuaci[oó]n|puntaje/i, emoji: "📊" },
   ],
 };
 

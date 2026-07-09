@@ -5,7 +5,8 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { supabase } from "@/lib/supabase";
 import { shouldOfferPdf } from "@/lib/pdf-generator";
-import { TOOL_STATUS_LABELS, formatTime, MARKDOWN_COMPONENTS, streamAsesorChat, todayISODate, PACO_LIMIT_MESSAGE, type PacoUsage } from "@/lib/paco-chat-shared";
+import { TOOL_STATUS_LABELS, formatTime, MARKDOWN_COMPONENTS, streamAsesorChat, todayISODate, detectPlanKind, extractPlanTitle, PACO_LIMIT_MESSAGE, type PacoUsage } from "@/lib/paco-chat-shared";
+import { formatWhatsAppMessage, openWhatsApp } from "@/lib/whatsapp-formatter";
 import { pacoLimitFor, type Rol } from "@/lib/roles";
 
 type Message = {
@@ -132,6 +133,12 @@ export default function AsesorGolfChat({ rol }: { rol: Rol | null }) {
     generateCCBPdf(content, { documentName: "Consulta a Paco" });
   }
 
+  function handleSendWhatsApp(content: string) {
+    const kind = detectPlanKind(content);
+    const docType = kind === "torneo" ? "plan_torneo" : "festival";
+    openWhatsApp(formatWhatsAppMessage(content, docType, extractPlanTitle(content)));
+  }
+
   const hasUserSentMessage = messages.some((m) => m.role === "user");
   const limitReached = usage !== null && usage.limit !== null && usage.count >= usage.limit;
 
@@ -205,13 +212,25 @@ export default function AsesorGolfChat({ rol }: { rol: Rol | null }) {
                     <span className="whitespace-pre-wrap">{m.content}</span>
                   )}
                 </div>
-                {m.role === "assistant" && !m.isError && shouldOfferPdf(m.content) && (
-                  <button
-                    onClick={() => handleDownloadPdf(m.content)}
-                    className="flex items-center gap-1 mt-1 text-[11px] font-medium px-2 py-1 rounded-md border border-gray-200 text-gray-600 hover:bg-gray-50 transition-colors"
-                  >
-                    <i className="ti ti-file-type-pdf" style={{ fontSize: 12 }} /> Descargar PDF
-                  </button>
+                {m.role === "assistant" && !m.isError && (shouldOfferPdf(m.content) || detectPlanKind(m.content)) && (
+                  <div className="flex flex-wrap items-center gap-1.5 mt-1">
+                    {shouldOfferPdf(m.content) && (
+                      <button
+                        onClick={() => handleDownloadPdf(m.content)}
+                        className="flex items-center gap-1 text-[11px] font-medium px-2 py-1 rounded-md border border-gray-200 text-gray-600 hover:bg-gray-50 transition-colors"
+                      >
+                        <i className="ti ti-file-type-pdf" style={{ fontSize: 12 }} /> Descargar PDF
+                      </button>
+                    )}
+                    {detectPlanKind(m.content) && (
+                      <button
+                        onClick={() => handleSendWhatsApp(m.content)}
+                        className="flex items-center gap-1 text-[11px] font-medium px-2 py-1 rounded-md border border-gray-200 text-gray-600 hover:bg-gray-50 transition-colors"
+                      >
+                        <i className="ti ti-brand-whatsapp" style={{ fontSize: 12 }} /> Enviar por WhatsApp
+                      </button>
+                    )}
+                  </div>
                 )}
                 <div className="flex items-center gap-1.5 mt-0.5 px-1">
                   {m.usedWebSearch && (

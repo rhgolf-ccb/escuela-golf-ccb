@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { supabase } from "@/lib/supabase";
-import { TOOL_STATUS_LABELS, formatTime, MARKDOWN_COMPONENTS, streamAsesorChat, PACO_LIMIT_MESSAGE } from "@/lib/paco-chat-shared";
+import { TOOL_STATUS_LABELS, formatTime, MARKDOWN_COMPONENTS, streamAsesorChat, detectPlanKind, extractPlanTitle, PACO_LIMIT_MESSAGE } from "@/lib/paco-chat-shared";
 import { formatWhatsAppMessage, openWhatsApp } from "@/lib/whatsapp-formatter";
 
 type Message = {
@@ -159,12 +159,13 @@ export default function PacoContextChat({
     try {
       const fecha = new Date().toISOString().split("T")[0];
       const fechaLegible = new Date().toLocaleDateString("es-CO", { day: "2-digit", month: "long", year: "numeric" });
+      const esTorneo = detectPlanKind(content) === "torneo";
       const { error } = await supabase.from("notas_profesor").insert({
         alumno_id: studentId,
-        contenido: `Análisis Paco — ${fechaLegible}\n\n${content}`,
+        contenido: `${esTorneo ? "Plan de torneo" : "Análisis"} Paco — ${fechaLegible}\n\n${content}`,
         fecha,
         profesor_nombre: "Robert Instructor",
-        origen: "paco",
+        origen: esTorneo ? "plan-torneo" : "paco",
       });
       if (error) throw error;
       setMessages((prev) => prev.map((m, i) => (i === idx ? { ...m, savedToNotes: true } : m)));
@@ -179,8 +180,12 @@ export default function PacoContextChat({
     generateCCBPdf(content, { documentName: `Análisis Paco — ${studentName}`, filenamePrefix: studentName });
   }
 
-  function handleSendWhatsApp(content: string) {
-    openWhatsApp(formatWhatsAppMessage(content, "plan_drills", `Plan para casa — ${studentName.split(" ")[0]}`));
+  function handleSendWhatsApp(content: string, isHomePlan: boolean) {
+    if (isHomePlan) {
+      openWhatsApp(formatWhatsAppMessage(content, "plan_drills", `Plan para casa — ${studentName.split(" ")[0]}`));
+      return;
+    }
+    openWhatsApp(formatWhatsAppMessage(content, "plan_torneo", extractPlanTitle(content)));
   }
 
   async function handleSaveDrills(idx: number, content: string) {
@@ -256,9 +261,9 @@ export default function PacoContextChat({
                       >
                         <i className="ti ti-file-type-pdf" style={{ fontSize: 12 }} /> Descargar PDF
                       </button>
-                      {m.isHomePlan && (
+                      {(m.isHomePlan || detectPlanKind(m.content)) && (
                         <button
-                          onClick={() => handleSendWhatsApp(m.content)}
+                          onClick={() => handleSendWhatsApp(m.content, !!m.isHomePlan)}
                           className="flex items-center gap-1 text-[11px] font-medium px-2 py-1 rounded-md border border-gray-200 text-gray-600 hover:bg-gray-50"
                         >
                           <i className="ti ti-brand-whatsapp" style={{ fontSize: 12 }} /> Enviar por WhatsApp
