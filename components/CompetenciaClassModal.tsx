@@ -105,6 +105,7 @@ export default function CompetenciaClassModal({
   const [enfoqueFisico, setEnfoqueFisico] = useState<string[]>([]);
   const [saving, setSaving]   = useState(false);
   const [error, setError]     = useState<string | null>(null);
+  const [aiFailedCategorias, setAiFailedCategorias] = useState<TipoSesion[]>([]);
 
   // Library drills
   const [libraryDrills, setLibraryDrills]         = useState<LibraryDrill[]>([]);
@@ -168,45 +169,65 @@ export default function CompetenciaClassModal({
         })()
       : Promise.resolve();
 
-    const aiPromise = (async () => {
-      setLoadingAI(true);
-      try {
-        const resultados = await Promise.all(
-          categorias.map(async (cat) => {
-            const res = await fetch("/api/suggest-competencia-session", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                categoria: cat,
-                dia_semana: dia,
-                enfoque_fisico: cat === "trabajo_fisico" ? enfoqueFisico : undefined,
-              }),
-            });
-            const data = await res.json() as {
-              foco_principal?: string; lugar?: string;
-              drills?: Omit<AIDrill, "categoriaOrigen">[]; juego_competitivo?: string; error?: string;
-            };
-            if (!res.ok) throw new Error(data.error ?? "Error IA");
-            return { cat, data };
-          })
-        );
-        const catInfo = (cat: TipoSesion) => CATEGORIAS.find((c) => c.value === cat);
-        setAiMeta({
-          foco: resultados.map(({ cat, data }) => `${catInfo(cat)?.label}: ${data.foco_principal ?? ""}`).join(" · "),
-          lugar: resultados[0]?.data.lugar ?? "campo_practica",
-          juego: resultados.map(({ data }) => data.juego_competitivo).filter(Boolean).join(" · "),
-        });
-        setAiDrills(
-          resultados.flatMap(({ cat, data }) => (data.drills ?? []).slice(0, 3).map((d) => ({ ...d, categoriaOrigen: cat })))
-        );
-      } catch (err) {
-        setError(err instanceof Error ? err.message : "Error de conexión con IA");
-      } finally {
-        setLoadingAI(false);
-      }
-    })();
+    const aiPromise = fetchAISuggestions(categorias);
 
     await Promise.all([libraryPromise, aiPromise]);
+  }
+
+  // Pide sugerencias de IA por categoría. Usa allSettled a propósito: si una
+  // categoría falla (o la IA responde sin drills), NO debe borrar los
+  // resultados de las demás categorías ya obtenidos — antes, un solo fallo en
+  // (por ejemplo) Trabajo físico hacía desaparecer también los de Juego corto.
+  async function fetchAISuggestions(cats: TipoSesion[]) {
+    setLoadingAI(true);
+    setAiFailedCategorias([]);
+    try {
+      const settled = await Promise.allSettled(
+        cats.map(async (cat) => {
+          const res = await fetch("/api/suggest-competencia-session", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              categoria: cat,
+              dia_semana: dia,
+              enfoque_fisico: cat === "trabajo_fisico" ? enfoqueFisico : undefined,
+            }),
+          });
+          const data = await res.json() as {
+            foco_principal?: string; lugar?: string;
+            drills?: Omit<AIDrill, "categoriaOrigen">[]; juego_competitivo?: string; error?: string;
+          };
+          if (!res.ok) throw new Error(data.error ?? "Error IA");
+          if (!data.drills?.length) throw new Error("La IA no generó sugerencias");
+          return { cat, data };
+        })
+      );
+
+      const catInfo = (cat: TipoSesion) => CATEGORIAS.find((c) => c.value === cat);
+      const ok = settled.flatMap((r) => (r.status === "fulfilled" ? [r.value] : []));
+      const failed = cats.filter((_, i) => settled[i].status === "rejected");
+
+      if (ok.length > 0) {
+        setAiMeta((prev) => {
+          const focoNuevo = ok.map(({ cat, data }) => `${catInfo(cat)?.label}: ${data.foco_principal ?? ""}`).join(" · ");
+          const juegoNuevo = ok.map(({ data }) => data.juego_competitivo).filter(Boolean).join(" · ");
+          return {
+            foco: prev ? [prev.foco, focoNuevo].filter(Boolean).join(" · ") : focoNuevo,
+            lugar: prev?.lugar ?? ok[0].data.lugar ?? "campo_practica",
+            juego: prev ? [prev.juego, juegoNuevo].filter(Boolean).join(" · ") : juegoNuevo,
+          };
+        });
+        setAiDrills((prev) => [
+          ...prev.filter((d) => !cats.includes(d.categoriaOrigen)),
+          ...ok.flatMap(({ cat, data }) => (data.drills ?? []).slice(0, 3).map((d) => ({ ...d, categoriaOrigen: cat }))),
+        ]);
+      }
+      setAiFailedCategorias(failed);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Error de conexión con IA");
+    } finally {
+      setLoadingAI(false);
+    }
   }
 
   function toggleLibrary(id: string) {
@@ -486,6 +507,20 @@ export default function CompetenciaClassModal({
                   )}
                 </p>
 
+                {!loadingAI && aiFailedCategorias.length > 0 && (
+                  <div className="flex items-center justify-between gap-2 mb-2 px-3 py-2 rounded-lg bg-amber-50 border border-amber-200">
+                    <p className="text-xs text-amber-700">
+                      No se generaron sugerencias para: {aiFailedCategorias.map((c) => CATEGORIAS.find((x) => x.value === c)?.label ?? c).join(", ")}.
+                    </p>
+                    <button
+                      onClick={() => fetchAISuggestions(aiFailedCategorias)}
+                      className="text-xs font-semibold text-amber-800 hover:underline whitespace-nowrap shrink-0"
+                    >
+                      🔄 Reintentar
+                    </button>
+                  </div>
+                )}
+
                 {loadingAI ? (
                   <div className="flex items-center gap-2 text-xs text-gray-400 py-3">
                     <svg className="animate-spin h-3.5 w-3.5" fill="none" viewBox="0 0 24 24">
@@ -495,7 +530,7 @@ export default function CompetenciaClassModal({
                     Generando sugerencias con IA... (5–10 seg)
                   </div>
                 ) : aiDrills.length === 0 ? (
-                  !error && <p className="text-xs text-gray-400 italic py-2 px-1">No se generaron sugerencias.</p>
+                  !error && aiFailedCategorias.length === 0 && <p className="text-xs text-gray-400 italic py-2 px-1">No se generaron sugerencias.</p>
                 ) : (
                   <div className="space-y-2">
                     {aiDrills.map((drill, idx) => {
@@ -549,7 +584,7 @@ export default function CompetenciaClassModal({
 
             <div className="px-5 pb-5 flex gap-2 border-t border-gray-100 pt-4">
               <button
-                onClick={() => { setMode("categoria"); setCategorias([]); setEnfoqueFisico([]); }}
+                onClick={() => { setMode("categoria"); setCategorias([]); setEnfoqueFisico([]); setAiFailedCategorias([]); }}
                 className="px-4 py-2.5 rounded-xl text-sm font-medium border border-gray-200 text-gray-600 hover:bg-gray-50 transition-colors"
               >
                 ← Atrás
