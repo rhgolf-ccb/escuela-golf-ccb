@@ -4,7 +4,7 @@ import { createSupabaseAdminClient } from "@/lib/supabase-admin";
 const TIPO_PLAN_VALUES = ["juvenil", "competencia", "damas"] as const;
 const DIA_VALUES = ["martes", "miercoles", "jueves", "viernes", "sabado", "domingo"] as const;
 const TIPO_SESION_VALUES = [
-  "tiro_largo", "juego_corto", "putt", "campo", "test_tecnico", "test_fisico",
+  "tiro_largo", "juego_corto", "putt", "campo", "test_tecnico", "test_fisico", "trabajo_fisico",
   "competencia", "damas_estaciones", "juvenil_estaciones", "especial", "campo_pacos", "campo_infantil",
 ] as const;
 const LUGAR_VALUES = ["campo_practica", "putting_green", "campo_infantil", "campo_pacos_fabios", "campo_completo"] as const;

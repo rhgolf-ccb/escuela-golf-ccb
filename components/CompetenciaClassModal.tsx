@@ -4,7 +4,7 @@ import { useState } from "react";
 import { supabase } from "@/lib/supabase";
 
 type DiaSemana = "martes" | "miercoles" | "jueves" | "viernes" | "sabado" | "domingo";
-type TipoSesion = "tiro_largo" | "juego_corto" | "putt" | "campo" | "test_tecnico" | "test_fisico";
+type TipoSesion = "tiro_largo" | "juego_corto" | "putt" | "campo" | "test_tecnico" | "test_fisico" | "trabajo_fisico";
 type Lugar = "campo_practica" | "putting_green" | "campo_pacos_fabios" | "campo_infantil" | "campo_completo";
 
 interface ExistingSesion {
@@ -48,23 +48,30 @@ interface AIDrill {
 interface DrillEdit { titulo: string; descripcion: string }
 
 const CATEGORIAS: { value: TipoSesion; icon: string; label: string }[] = [
-  { value: "tiro_largo",   icon: "🏌️", label: "Tiro largo" },
-  { value: "juego_corto",  icon: "⛳", label: "Juego corto" },
-  { value: "putt",         icon: "🎯", label: "Putt" },
-  { value: "campo",        icon: "🌿", label: "Campo" },
-  { value: "test_tecnico", icon: "📋", label: "Test técnico" },
-  { value: "test_fisico",  icon: "💪", label: "Test físico" },
+  { value: "tiro_largo",     icon: "🏌️", label: "Tiro largo" },
+  { value: "juego_corto",    icon: "⛳", label: "Juego corto" },
+  { value: "putt",           icon: "🎯", label: "Putt" },
+  { value: "campo",          icon: "🌿", label: "Campo" },
+  { value: "test_tecnico",   icon: "📋", label: "Test técnico" },
+  { value: "test_fisico",    icon: "🩺", label: "Test físico" },
+  { value: "trabajo_fisico", icon: "💪", label: "Trabajo físico" },
 ];
 
 // TipoSesion → drills table categoria column value
 const DRILLS_CATEGORIA: Record<TipoSesion, string | null> = {
-  tiro_largo:   "tecnico",
-  juego_corto:  "juego_corto",
-  putt:         "putting",
-  campo:        "campo",
-  test_tecnico: "tecnico",
-  test_fisico:  null,
+  tiro_largo:     "tecnico",
+  juego_corto:    "juego_corto",
+  putt:           "putting",
+  campo:          "campo",
+  test_tecnico:   "tecnico",
+  test_fisico:    null,
+  trabajo_fisico: null,
 };
+
+// Opciones de enfoque para la estación de Trabajo Físico — a diferencia de Test
+// Físico (evaluación de protocolos TPI), esta es una estación de entrenamiento
+// con ejercicios concretos según la cualidad física a trabajar.
+const ENFOQUE_FISICO_OPCIONES = ["Potencia", "Movilidad", "Estabilidad / Core", "Equilibrio", "Prevención de lesiones"];
 
 const LUGAR_LABEL: Record<string, string> = {
   campo_practica:     "Campo de práctica",
@@ -92,9 +99,10 @@ function StarRating({ rating }: { rating: number | null }) {
 export default function CompetenciaClassModal({
   planId, dia, diaLabel, fecha, horaInicio, horaFin, sesionExistente, onClose, onSaved,
 }: Props) {
-  type Mode = "categoria" | "seleccion" | "preview";
+  type Mode = "categoria" | "enfoque_fisico" | "seleccion" | "preview";
   const [mode, setMode]       = useState<Mode>("categoria");
   const [categorias, setCategorias] = useState<TipoSesion[]>([]);
+  const [enfoqueFisico, setEnfoqueFisico] = useState<string[]>([]);
   const [saving, setSaving]   = useState(false);
   const [error, setError]     = useState<string | null>(null);
 
@@ -120,6 +128,16 @@ export default function CompetenciaClassModal({
 
   function toggleCategoria(cat: TipoSesion) {
     setCategorias((prev) => (prev.includes(cat) ? prev.filter((c) => c !== cat) : [...prev, cat]));
+  }
+
+  function toggleEnfoqueFisico(op: string) {
+    setEnfoqueFisico((prev) => (prev.includes(op) ? prev.filter((o) => o !== op) : [...prev, op]));
+  }
+
+  function handleContinuarDesdeCategorias() {
+    if (categorias.length === 0) return;
+    if (categorias.includes("trabajo_fisico")) setMode("enfoque_fisico");
+    else handleContinuarCategorias();
   }
 
   async function handleContinuarCategorias() {
@@ -158,7 +176,11 @@ export default function CompetenciaClassModal({
             const res = await fetch("/api/suggest-competencia-session", {
               method: "POST",
               headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ categoria: cat, dia_semana: dia }),
+              body: JSON.stringify({
+                categoria: cat,
+                dia_semana: dia,
+                enfoque_fisico: cat === "trabajo_fisico" ? enfoqueFisico : undefined,
+              }),
             });
             const data = await res.json() as {
               foco_principal?: string; lugar?: string;
@@ -289,8 +311,9 @@ export default function CompetenciaClassModal({
           <div>
             <p className="text-xs text-gray-400 font-medium uppercase tracking-wide">Competencia · {diaLabel}</p>
             <p className="text-sm font-bold text-gray-900">
-              {mode === "categoria"  ? "Elige la categoría del día"
-                : mode === "seleccion" ? `${catInfos.map((c) => `${c.icon} ${c.label}`).join(" + ")} — Seleccionar drills`
+              {mode === "categoria"       ? "Elige la categoría del día"
+                : mode === "enfoque_fisico" ? "¿Qué enfoque físico?"
+                : mode === "seleccion"     ? `${catInfos.map((c) => `${c.icon} ${c.label}`).join(" + ")} — Seleccionar drills`
                 : "Revisa y guarda"}
             </p>
           </div>
@@ -331,13 +354,53 @@ export default function CompetenciaClassModal({
             </div>
             {error && <p className="text-xs text-red-500 bg-red-50 px-3 py-2 rounded-lg">{error}</p>}
             <button
-              onClick={handleContinuarCategorias}
+              onClick={handleContinuarDesdeCategorias}
               disabled={categorias.length === 0}
               className="w-full py-2.5 rounded-xl text-sm font-semibold text-white disabled:opacity-50 hover:brightness-110 transition-all"
               style={{ background: ACCENT }}
             >
               {categorias.length === 0 ? "Elige al menos 1 categoría" : `Continuar (${categorias.length})`}
             </button>
+          </div>
+        )}
+
+        {/* ── Enfoque físico (solo si se eligió Trabajo físico) ── */}
+        {mode === "enfoque_fisico" && (
+          <div className="px-5 py-5 space-y-4">
+            <p className="text-xs text-gray-500 -mt-1">
+              Trabajo físico es una estación de ejercicios de entrenamiento — distinta de Test físico, que es la evaluación de protocolos TPI. Elige la cualidad a trabajar (puedes marcar varias).
+            </p>
+            <div className="flex flex-wrap gap-2">
+              {ENFOQUE_FISICO_OPCIONES.map((op) => {
+                const sel = enfoqueFisico.includes(op);
+                return (
+                  <button
+                    key={op}
+                    onClick={() => toggleEnfoqueFisico(op)}
+                    className="text-xs font-medium px-3 py-1.5 rounded-full border transition-all"
+                    style={sel ? { background: ACCENT, color: "#fff", borderColor: ACCENT } : { color: "#6b7280", borderColor: "#e5e7eb", background: "#fff" }}
+                  >
+                    {op}
+                  </button>
+                );
+              })}
+            </div>
+            {error && <p className="text-xs text-red-500 bg-red-50 px-3 py-2 rounded-lg">{error}</p>}
+            <div className="flex gap-2 pt-2">
+              <button
+                onClick={() => setMode("categoria")}
+                className="px-4 py-2.5 rounded-xl text-sm font-medium border border-gray-200 text-gray-600 hover:bg-gray-50 transition-colors"
+              >
+                ← Atrás
+              </button>
+              <button
+                onClick={handleContinuarCategorias}
+                className="flex-1 py-2.5 rounded-xl text-sm font-semibold text-white hover:brightness-110 transition-all"
+                style={{ background: ACCENT }}
+              >
+                {enfoqueFisico.length === 0 ? "Continuar (enfoque general)" : `Continuar (${enfoqueFisico.length})`}
+              </button>
+            </div>
           </div>
         )}
 
@@ -486,7 +549,7 @@ export default function CompetenciaClassModal({
 
             <div className="px-5 pb-5 flex gap-2 border-t border-gray-100 pt-4">
               <button
-                onClick={() => { setMode("categoria"); setCategorias([]); }}
+                onClick={() => { setMode("categoria"); setCategorias([]); setEnfoqueFisico([]); }}
                 className="px-4 py-2.5 rounded-xl text-sm font-medium border border-gray-200 text-gray-600 hover:bg-gray-50 transition-colors"
               >
                 ← Atrás

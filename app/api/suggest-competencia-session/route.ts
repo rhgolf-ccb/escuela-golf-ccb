@@ -2,21 +2,23 @@ import type { NextRequest } from "next/server";
 import { PACO_PLANNING_KNOWLEDGE } from "@/lib/paco-planning-knowledge";
 
 const CATEGORIA_LABEL: Record<string, string> = {
-  tiro_largo:   "Tiro Largo — swing en campo de práctica",
-  juego_corto:  "Juego Corto — chipping, approach y bunker",
-  putt:         "Putting — control de distancia y dirección",
-  campo:        "Día de campo — juego real en Pacos y Fabios",
-  test_tecnico: "Test Técnico P1-P10",
-  test_fisico:  "Test Físico TPI",
+  tiro_largo:     "Tiro Largo — swing en campo de práctica",
+  juego_corto:    "Juego Corto — chipping, approach y bunker",
+  putt:           "Putting — control de distancia y dirección",
+  campo:          "Día de campo — juego real en Pacos y Fabios",
+  test_tecnico:   "Test Técnico P1-P10",
+  test_fisico:    "Test Físico TPI (evaluación de protocolos)",
+  trabajo_fisico: "Trabajo Físico — estación de ejercicios de preparación física",
 };
 
 const LUGAR_DEFAULT: Record<string, string> = {
-  tiro_largo:   "campo_practica",
-  juego_corto:  "campo_practica",
-  putt:         "putting_green",
-  campo:        "campo_pacos_fabios",
-  test_tecnico: "campo_practica",
-  test_fisico:  "campo_practica",
+  tiro_largo:     "campo_practica",
+  juego_corto:    "campo_practica",
+  putt:           "putting_green",
+  campo:          "campo_pacos_fabios",
+  test_tecnico:   "campo_practica",
+  test_fisico:    "campo_practica",
+  trabajo_fisico: "campo_practica",
 };
 
 function parseJSON(raw: string): unknown {
@@ -29,19 +31,24 @@ function parseJSON(raw: string): unknown {
 }
 
 export async function POST(req: NextRequest) {
-  const body = await req.json() as { categoria: string; dia_semana: string };
-  const { categoria, dia_semana } = body;
+  const body = await req.json() as { categoria: string; dia_semana: string; enfoque_fisico?: string[] };
+  const { categoria, dia_semana, enfoque_fisico } = body;
 
   const categoriaLabel = CATEGORIA_LABEL[categoria] ?? categoria;
   const lugar = LUGAR_DEFAULT[categoria] ?? "campo_practica";
+  const esTrabajoFisico = categoria === "trabajo_fisico";
+
+  const instruccionCategoria = esTrabajoFisico
+    ? `Esta es una estación de TRABAJO FÍSICO — ejercicios de preparación física, NO drills técnicos de swing y NO es una evaluación (eso es test_fisico, un protocolo TPI distinto). Genera 2-3 ejercicios físicos concretos, con series/repeticiones, enfocados específicamente en: ${enfoque_fisico?.length ? enfoque_fisico.join(", ") : "una combinación general de movilidad, estabilidad y potencia apropiada para un adolescente de 13-17 años en desarrollo"}. Usa el equipo típico disponible (bandas elásticas, balones medicinales, conos, escalera de agilidad).`
+    : `Genera plan de sesión con drills GENERALES (no hiper-específicos), claros y ejecutables.
+- tiro_largo/juego_corto/putt: 2-3 drills prácticos con foco técnico claro.
+- campo: actividad de juego (4-6 hoyos, objetivo de score/puntos).
+- test_tecnico/test_fisico: protocolo de evaluación simple.`;
 
   const system = `Entrenador golf junior Competencia CCB (13-17 años, swing en construcción).
 CATEGORÍA: ${categoriaLabel} | DÍA: ${dia_semana} | LUGAR: ${lugar}
 
-Genera plan de sesión con drills GENERALES (no hiper-específicos), claros y ejecutables.
-- tiro_largo/juego_corto/putt: 2-3 drills prácticos con foco técnico claro.
-- campo: actividad de juego (4-6 hoyos, objetivo de score/puntos).
-- test: protocolo de evaluación simple.
+${instruccionCategoria}
 
 Devuelve SOLO JSON válido:
 {

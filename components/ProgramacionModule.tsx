@@ -20,7 +20,7 @@ import { formatWhatsAppMessage, openWhatsApp } from "@/lib/whatsapp-formatter";
 // ── Types ─────────────────────────────────────────────────────────────────────
 export type TipoPlan   = "juvenil" | "competencia" | "damas";
 export type DiaSemana  = "martes" | "miercoles" | "jueves" | "viernes" | "sabado" | "domingo";
-export type TipoSesion = "tiro_largo" | "juego_corto" | "putt" | "campo" | "test_tecnico" | "test_fisico" | "competencia" | "damas_estaciones" | "juvenil_estaciones";
+export type TipoSesion = "tiro_largo" | "juego_corto" | "putt" | "campo" | "test_tecnico" | "test_fisico" | "trabajo_fisico" | "competencia" | "damas_estaciones" | "juvenil_estaciones";
 export type Lugar      = "campo_practica" | "putting_green" | "campo_infantil" | "campo_pacos_fabios" | "campo_completo";
 type ViewMode   = "plan" | "semana" | "mes";
 
@@ -162,7 +162,7 @@ const DIA_OFFSET: Record<DiaSemana, number> = {
 
 export const TIPO_SESION_LABEL: Record<TipoSesion, string> = {
   tiro_largo: "Tiro Largo", juego_corto: "Juego Corto", putt: "Putt",
-  campo: "Campo", test_tecnico: "Test Técnico", test_fisico: "Test Físico",
+  campo: "Campo", test_tecnico: "Test Técnico", test_fisico: "Test Físico", trabajo_fisico: "Trabajo Físico",
   competencia: "Competencia", damas_estaciones: "Estaciones", juvenil_estaciones: "3 Estaciones",
 };
 
@@ -173,6 +173,7 @@ const TIPO_SESION_COLOR: Record<TipoSesion, { bg: string; text: string }> = {
   campo:           { bg: "#f0fdf4", text: "#15803d" },
   test_tecnico:    { bg: "#fce7f3", text: "#9d174d" },
   test_fisico:     { bg: "#ede9fe", text: "#6d28d9" },
+  trabajo_fisico:  { bg: "#fee2e2", text: "#991b1b" },
   competencia:     { bg: "#fff7ed", text: "#9a3412" },
   damas_estaciones:    { bg: "#fdf2f8", text: "#86198f" },
   juvenil_estaciones:  { bg: "#f0faf2", text: "#1B4D2E" },

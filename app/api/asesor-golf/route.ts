@@ -350,7 +350,7 @@ const PROPONER_PROGRAMACION_TOOL: Anthropic.Tool = {
           type: "object",
           properties: {
             dia_semana: { type: "string", description: "martes | miercoles | jueves | viernes | sabado | domingo" },
-            tipo_sesion: { type: "string", description: "tiro_largo | juego_corto | putt | campo | test_tecnico | test_fisico | competencia | damas_estaciones" },
+            tipo_sesion: { type: "string", description: "tiro_largo | juego_corto | putt | campo | test_tecnico | test_fisico | trabajo_fisico | competencia | damas_estaciones. trabajo_fisico es una estación de ejercicios físicos (potencia, movilidad, etc.) — distinta de test_fisico, que es la evaluación de protocolos TPI." },
             lugar: { type: "string", description: "campo_practica | putting_green | campo_infantil | campo_pacos_fabios | campo_completo" },
             hora_inicio: { type: "string", description: "HH:MM" },
             hora_fin: { type: "string", description: "HH:MM" },
