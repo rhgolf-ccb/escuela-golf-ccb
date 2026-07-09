@@ -43,6 +43,24 @@ export interface Drill {
 export interface EstacionDamas { nombre: string; lugar: string; duracion_min: number; descripcion: string; }
 
 export interface DrillLibre { titulo: string; descripcion: string; }
+
+// Un drill/ejercicio dentro de una estación de Competencia — series_repeticiones
+// solo aplica a ejercicios de Trabajo físico (vienen de ejercicios_fisicos, no
+// de la biblioteca de drills técnicos).
+export interface DrillEstacionCompetencia extends DrillLibre {
+  series_repeticiones?: string | null;
+}
+
+// Estación individual dentro de una sesión de Competencia con más de una
+// categoría combinada (ej. Juego corto + Trabajo físico el mismo día) —
+// cada una guarda su propio lugar, foco, drills/ejercicios y reto, por separado.
+export interface EstacionCompetencia {
+  categoria: TipoSesion;
+  objetivo: string;
+  lugar: Lugar;
+  drills: DrillEstacionCompetencia[];
+  juego_competitivo: string | null;
+}
 export interface EstacionLibre { nombre: string; lugar: string; horario: string; drills: DrillLibre[]; }
 
 export type CategoriaEstacionEspecial = "juego_largo" | "juego_corto" | "putt";
@@ -108,6 +126,7 @@ export interface SesionSemana {
   hora_inicio: string | null; hora_fin: string | null;
   objetivo: string; drills: Drill[];
   juego_competitivo: string | null; estaciones_damas: EstacionDamas[] | null;
+  estaciones_competencia?: EstacionCompetencia[] | null;
   notas: string | null; asistencia_registrada: boolean;
   sesion_juvenil?: SesionJuvenilData | null;
 }
@@ -286,6 +305,8 @@ export type EstacionView = {
   nombre: string;
   lugar: string | null;
   horario: string | null;
+  numero?: number;
+  reto?: string | null;
   drills: { nombre: string; descripcion: string; repeticiones?: string | null; dificultad?: string | null }[];
 };
 
@@ -302,6 +323,20 @@ function sesionesToEstaciones(diaySesiones: SesionSemana[], tipoPlan: TipoPlan):
           lugar: est.lugar,
           horario: `${est.duracion_min} min`,
           drills: [{ nombre: "Actividad principal", descripcion: est.descripcion }],
+        });
+      });
+      continue;
+    }
+
+    if (sesion.estaciones_competencia && sesion.estaciones_competencia.length > 0) {
+      sesion.estaciones_competencia.forEach((est, idx) => {
+        views.push({
+          nombre: TIPO_SESION_LABEL[est.categoria] ?? est.categoria,
+          lugar: LUGAR_LABEL[est.lugar] ?? est.lugar ?? lugar,
+          horario,
+          numero: idx + 1,
+          reto: est.juego_competitivo ?? null,
+          drills: est.drills.map((d) => ({ nombre: d.titulo, descripcion: d.descripcion, repeticiones: d.series_repeticiones ?? null })),
         });
       });
       continue;
@@ -746,6 +781,8 @@ export default function ProgramacionModule({ currentRol }: { currentRol: Rol | n
       const endHour = Math.min(hour + 1, 18);
       const endStr = `${endHour.toString().padStart(2, "0")}:00`;
       openJuvModal(dia, getFechaForDia(semana, dia), null, { hi: hourStr, hf: endStr });
+    } else if (activeTab === "competencia") {
+      openCompModal(dia, getFechaForDia(semana, dia), null, { hi: hourStr });
     } else {
       openEditSesion(dia, null, hourStr);
     }
@@ -1452,15 +1489,18 @@ export default function ProgramacionModule({ currentRol }: { currentRol: Rol | n
                   // pre-llena directamente desde las columnas de sesiones_semana (tipo_sesion,
                   // lugar, horas, objetivo, drills, juego_competitivo), así que funciona sin
                   // importar qué flujo la haya creado originalmente — el wizard de Paco (tool
-                  // proponer_programacion_semana), el asistente especializado de Juvenil/
-                  // Competencia, o el formulario manual. Los wizards especializados de
-                  // Juvenil/Competencia asumen formas específicas (estaciones/juegos) que no
-                  // siempre calzan con lo que generó Paco, y por eso "editar" parecía no
-                  // funcionar. Sin sesión existente, se mantiene el asistente guiado normal
-                  // para crear contenido nuevo.
-                  if (primeraSesion) openEditSesion(dia, primeraSesion);
+                  // proponer_programacion_semana), el asistente especializado de Juvenil, o el
+                  // formulario manual. El wizard especializado de Juvenil asume una forma
+                  // específica (estaciones/juegos) que no siempre calza con lo que generó
+                  // Paco, y por eso "editar" parecía no funcionar. Competencia es la excepción:
+                  // siempre usa su asistente propio (incluso editando) porque es el único que
+                  // sabe combinar varias categorías en estaciones separadas — el editor
+                  // genérico solo entiende una tipo_sesion por fila y colapsaría la
+                  // combinación a una sola. Sin sesión existente, se mantiene el asistente
+                  // guiado normal para crear contenido nuevo.
+                  if (activeTab === "competencia") openCompModal(dia, fecha, primeraSesion);
+                  else if (primeraSesion) openEditSesion(dia, primeraSesion);
                   else if (activeTab === "juvenil") openJuvModal(dia, fecha, null);
-                  else if (activeTab === "competencia") openCompModal(dia, fecha, null);
                   else openEditSesion(dia, null);
                 }
 
@@ -1525,7 +1565,12 @@ export default function ProgramacionModule({ currentRol }: { currentRol: Rol | n
                             <div key={i} className="border border-gray-100 rounded-xl p-4">
                               <div className="flex items-center gap-2 mb-2.5 flex-wrap">
                                 <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: groupColor }} />
-                                <p className="text-sm font-bold text-gray-900">{est.nombre}</p>
+                                <p className="text-sm font-bold text-gray-900">
+                                  {estaciones.length > 1 && est.numero && (
+                                    <span style={{ color: groupColor }}>Estación {est.numero} — </span>
+                                  )}
+                                  {est.nombre}
+                                </p>
                                 {est.horario && <span className="text-xs text-gray-400">{est.horario}</span>}
                                 {est.lugar && (
                                   <span className="flex items-center gap-1 text-xs text-gray-400">
@@ -1551,6 +1596,12 @@ export default function ProgramacionModule({ currentRol }: { currentRol: Rol | n
                                       </div>
                                     </div>
                                   ))}
+                                </div>
+                              )}
+                              {est.reto && (
+                                <div className="mt-3 flex items-start gap-1.5 rounded-lg px-2.5 py-2" style={{ backgroundColor: `${groupColor}12` }}>
+                                  <span className="text-xs shrink-0">🏆</span>
+                                  <p className="text-xs font-medium" style={{ color: groupColor }}>{est.reto}</p>
                                 </div>
                               )}
                             </div>
@@ -1823,6 +1874,12 @@ export default function ProgramacionModule({ currentRol }: { currentRol: Rol | n
                     setViewMode("plan");
                     if (calEventDetail.tipo_plan === "juvenil") {
                       setTimeout(() => openJuvModal(calEventDetail.dia_semana, calEventDetail.fecha, calEventDetail as unknown as SesionSemana), 100);
+                    } else if (calEventDetail.tipo_plan === "competencia") {
+                      // Igual que en openEditDia: Competencia siempre usa su asistente
+                      // propio (aunque venga de este popup del calendario semana/mes),
+                      // porque es el único que sabe combinar categorías en estaciones
+                      // separadas — el editor genérico las colapsaría a una sola.
+                      setTimeout(() => openCompModal(calEventDetail.dia_semana, calEventDetail.fecha, calEventDetail as unknown as SesionSemana), 100);
                     } else {
                       setTimeout(() => openEditSesion(calEventDetail.dia_semana, calEventDetail), 100);
                     }

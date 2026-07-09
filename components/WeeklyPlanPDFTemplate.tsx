@@ -6,6 +6,7 @@ interface Drill {
   descripcion: string;
 }
 interface EstacionDamas { nombre: string; lugar: string; duracion_min: number; descripcion: string; }
+interface EstacionCompetencia { categoria: string; objetivo: string; lugar?: string; drills: Drill[]; juego_competitivo: string | null; }
 interface JuegoJuvenil { nombre: string; como_se_juega: string; }
 interface EstacionJuvenil { categoria: string; juego: JuegoJuvenil; }
 interface SesionJuvenilEstaciones { tipo: "estaciones"; estaciones: EstacionJuvenil[]; }
@@ -16,6 +17,7 @@ interface SesionSemana {
   hora_inicio: string | null; hora_fin: string | null;
   objetivo: string; drills: Drill[];
   juego_competitivo: string | null; estaciones_damas: EstacionDamas[] | null;
+  estaciones_competencia?: EstacionCompetencia[] | null;
   sesion_juvenil?: unknown;
   notas: string | null; asistencia_registrada: boolean;
 }
@@ -98,6 +100,10 @@ const ESPECIAL_LABEL: Record<string, string> = {
   test_fisico: "Test Físico TPI",
   campo_pacos: "Campo Pacos y Fabios",
   campo_infantil: "Campo Infantil",
+};
+const TIPO_SESION_LABEL_PDF: Record<string, string> = {
+  tiro_largo: "Tiro Largo", juego_corto: "Juego Corto", putt: "Putt", campo: "Campo",
+  test_tecnico: "Test Técnico", test_fisico: "Test Físico", trabajo_fisico: "Trabajo Físico",
 };
 
 // ── Columna de un día ─────────────────────────────────────────────────────────
@@ -242,6 +248,50 @@ function DayColumn({ sesion }: { sesion: SesionSemana }) {
                     </p>
                   )}
                 </div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Estaciones Competencia (más de una categoría combinada el mismo día) */}
+        {sesion.estaciones_competencia && sesion.estaciones_competencia.length > 0 && (
+          <div style={{ marginBottom: 10 }}>
+            {sesion.estaciones_competencia.map((est, eIdx) => (
+              <div key={eIdx} style={{ marginBottom: 9 }}>
+                <p style={{ margin: "0 0 2px", color: "#c8a84b", fontWeight: 800, fontSize: 11, textTransform: "uppercase", letterSpacing: "0.05em" }}>
+                  Estación {eIdx + 1} — {TIPO_SESION_LABEL_PDF[est.categoria] ?? est.categoria}:
+                </p>
+                {est.lugar && (
+                  <p style={{ margin: "0 0 6px", fontSize: 9.5, color: "#666" }}>
+                    📍 {LUGAR_LABEL[est.lugar] ?? est.lugar}
+                  </p>
+                )}
+                {est.drills.slice(0, 3).map((drill, idx) => (
+                  <div key={idx} style={{ display: "flex", gap: 8, marginBottom: 7, alignItems: "flex-start" }}>
+                    <div style={{
+                      width: 18, height: 18, background: "#1a3a2a", borderRadius: "50%",
+                      display: "flex", alignItems: "center", justifyContent: "center",
+                      flexShrink: 0, marginTop: 1,
+                    }}>
+                      <span style={{ color: "#ffffff", fontSize: 9, fontWeight: 800, lineHeight: 1 }}>{idx + 1}</span>
+                    </div>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <p style={{ margin: "0 0 1px", fontWeight: 700, fontSize: 10.5, color: "#1a1a1a", lineHeight: 1.3 }}>
+                        {drill.titulo}
+                      </p>
+                      {drill.descripcion && (
+                        <p style={{ margin: 0, fontSize: 9.5, color: "#555555", lineHeight: 1.35 }}>
+                          {drill.descripcion.slice(0, 90)}{drill.descripcion.length > 90 ? "…" : ""}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                ))}
+                {est.juego_competitivo && (
+                  <p style={{ margin: "2px 0 0", fontSize: 9.5, color: "#555555", fontStyle: "italic" }}>
+                    🎮 {est.juego_competitivo}
+                  </p>
+                )}
               </div>
             ))}
           </div>
