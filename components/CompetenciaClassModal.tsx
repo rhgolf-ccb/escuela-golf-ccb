@@ -197,6 +197,7 @@ export default function CompetenciaClassModal({
             foco_principal?: string; lugar?: string;
             drills?: Omit<AIDrill, "categoriaOrigen">[]; juego_competitivo?: string; error?: string;
           };
+          console.log(`[suggest-competencia-session] ${cat}: status=${res.status} drills=${data.drills?.length ?? "undefined"}`, data);
           if (!res.ok) throw new Error(data.error ?? "Error IA");
           if (!data.drills?.length) throw new Error("La IA no generó sugerencias");
           return { cat, data };
@@ -206,6 +207,7 @@ export default function CompetenciaClassModal({
       const catInfo = (cat: TipoSesion) => CATEGORIAS.find((c) => c.value === cat);
       const ok = settled.flatMap((r) => (r.status === "fulfilled" ? [r.value] : []));
       const failed = cats.filter((_, i) => settled[i].status === "rejected");
+      console.log("[fetchAISuggestions] cats=", cats, "ok=", ok.map((o) => o.cat), "failed=", failed);
 
       if (ok.length > 0) {
         setAiMeta((prev) => {
