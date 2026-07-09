@@ -1,4 +1,5 @@
 import type { NextRequest } from "next/server";
+import { PACO_PLANNING_KNOWLEDGE } from "@/lib/paco-planning-knowledge";
 
 const CATEGORIA_LABEL: Record<string, string> = {
   tiro_largo:   "Tiro Largo — swing en campo de práctica",
@@ -50,7 +51,9 @@ Devuelve SOLO JSON válido:
     { "titulo": "string", "descripcion": "string (2 líneas)", "duracion_min": 20, "repeticiones": "string" }
   ],
   "juego_competitivo": "string o null"
-}`;
+}
+
+${PACO_PLANNING_KNOWLEDGE}`;
 
   const nonce = Math.random().toString(36).slice(2, 8);
   const aiRes = await fetch("https://api.anthropic.com/v1/messages", {

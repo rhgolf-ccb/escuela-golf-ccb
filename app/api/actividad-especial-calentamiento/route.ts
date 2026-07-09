@@ -1,4 +1,5 @@
 import type { NextRequest } from "next/server";
+import { PACO_PLANNING_KNOWLEDGE } from "@/lib/paco-planning-knowledge";
 
 const GRUPOS_LABEL: Record<string, string> = {
   juvenil: "Juvenil (Birdies/Águilas/Albatros/+14, niños de 4 a 14 años)",
@@ -47,7 +48,9 @@ Devuelve SOLO este JSON sin texto extra ni backticks, con la suma de las duracio
     { "nombre": "string", "duracion_min": 2, "descripcion": "string breve" }
   ]
 }
-El array "ejercicios" debe tener entre 4 y 6 elementos.`;
+El array "ejercicios" debe tener entre 4 y 6 elementos.
+
+${PACO_PLANNING_KNOWLEDGE}`;
 
   const user = `Genera el calentamiento de ${duracion_min} minutos.`;
 

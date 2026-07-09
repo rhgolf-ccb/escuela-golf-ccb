@@ -1,4 +1,5 @@
 import type { NextRequest } from "next/server";
+import { PACO_PLANNING_KNOWLEDGE } from "@/lib/paco-planning-knowledge";
 
 const CATEGORIA_LABEL: Record<string, string> = {
   juego_largo: "Juego Largo (tiro largo, drives, hierros)",
@@ -73,7 +74,9 @@ Devuelve SOLO este JSON sin texto extra ni backticks:
     }
   ]
 }
-El array "opciones" debe tener exactamente 3 elementos.`;
+El array "opciones" debe tener exactamente 3 elementos.
+
+${PACO_PLANNING_KNOWLEDGE}`;
 
   const user = `Genera 3 opciones de juego para la estación de ${CATEGORIA_LABEL[categoria]}.`;
 

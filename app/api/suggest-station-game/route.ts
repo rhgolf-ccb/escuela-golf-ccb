@@ -1,5 +1,6 @@
 import type { NextRequest } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { PACO_PLANNING_KNOWLEDGE } from "@/lib/paco-planning-knowledge";
 
 const CATEGORIA_LABEL: Record<string, string> = {
   juego_largo: "Juego Largo (swing)",
@@ -65,7 +66,9 @@ export async function POST(req: NextRequest) {
 ESTACIÓN: ${categoriaLabel}${usadosLine}
 Sugiere 3 juegos distintos. Cada uno: nombre creativo corto, cómo se juega (2 líneas), adaptación fácil (Birdies), adaptación retadora (Albatros).
 Devuelve SOLO JSON:
-{"opciones":[{"nombre":"","como_se_juega":"","adaptacion_facil":"","adaptacion_retadora":""}]}`;
+{"opciones":[{"nombre":"","como_se_juega":"","adaptacion_facil":"","adaptacion_retadora":""}]}
+
+${PACO_PLANNING_KNOWLEDGE}`;
 
   const nonce = Math.random().toString(36).slice(2, 8);
   const aiRes = await fetch("https://api.anthropic.com/v1/messages", {

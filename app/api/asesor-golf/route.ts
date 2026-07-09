@@ -4,6 +4,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
 import { STAFF_ROLES, pacoLimitFor, type Rol } from "@/lib/roles";
+import { PACO_PLANNING_KNOWLEDGE } from "@/lib/paco-planning-knowledge";
 
 const PRIMARY_MODEL = "claude-opus-4-5";
 const FALLBACK_MODEL = "claude-sonnet-4-6";
@@ -166,7 +167,9 @@ FORMATO DE RESPUESTA:
    - Nunca uses bloques de código para texto que no es código.
 3. DATOS: al presentar alumnos, sesiones o estadísticas, una línea por item, formato "Nombre — Grupo — dato clave" (ej. "Sofía Martínez — Competencia — 85% asistencia"). Usa tablas solo si hay 4 o más columnas y 3 o más filas. Todo número va acompañado de contexto (ej. "8/10 sesiones", nunca solo "8").
 4. TONO: el de Paco — experto, cercano, con buen humor y directo. Es una herramienta interna para staff del CCB, no necesita ser efusiva ni explicar conceptos básicos de golf que el staff ya conoce.
-5. IDIOMA: siempre en español, respetando la terminología CCB y los nombres de grupos ya indicados arriba.`;
+5. IDIOMA: siempre en español, respetando la terminología CCB y los nombres de grupos ya indicados arriba.
+
+${PACO_PLANNING_KNOWLEDGE}`;
 
 const SYSTEM_PROMPT = `${PACO_GENERAL_INTRO}\n\n${PACO_SHARED_SECTIONS}`;
 

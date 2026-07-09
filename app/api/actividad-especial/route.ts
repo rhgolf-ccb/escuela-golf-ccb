@@ -1,4 +1,5 @@
 import type { NextRequest } from "next/server";
+import { PACO_PLANNING_KNOWLEDGE } from "@/lib/paco-planning-knowledge";
 
 function parseAI(raw: string): unknown {
   try { return JSON.parse(raw.trim()); } catch { /* */ }
@@ -50,7 +51,9 @@ Devuelve SOLO este JSON sin texto extra ni backticks:
     { "nombre": "string", "lugar": "string", "horario": "ej: 30 min o 09:00-09:30", "drills": [{"titulo": "string", "descripcion": "string"}] }
   ],
   "notas": "notas adicionales relevantes o null"
-}`;
+}
+
+${PACO_PLANNING_KNOWLEDGE}`;
 
   const user = `Planifica esta actividad especial: ${descripcion.trim()}`;
 

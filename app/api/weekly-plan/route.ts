@@ -1,4 +1,5 @@
 import type { NextRequest } from "next/server";
+import { PACO_PLANNING_KNOWLEDGE } from "@/lib/paco-planning-knowledge";
 
 // Horarios reales de la escuela (sábado y domingo juvenil tienen 2 sesiones)
 const HORARIOS: Record<string, Record<string, { hi: string; hf: string }[]>> = {
@@ -62,7 +63,9 @@ Devuelve SOLO este JSON sin texto extra:
     }
   ],
   "actividad_estrella": "string"
-}`;
+}
+
+${PACO_PLANNING_KNOWLEDGE}`;
     const user = `Genera la clase para el tema: ${tema}`;
     return { system, user };
   }
@@ -208,7 +211,9 @@ TORNEO: ${torneoStr} | POSICIONES: ${posicionesStr} | PRIMER DÍA: ${primerDia}$
 ${modo === "construccion" ? `CONSTRUCCIÓN: Día1=campo_practica tiro largo, 3 opciones (id1 Trackman/filmación, id2 drills ${posicionesStr}, id3 potencia/velocidad). Día2=putting_green o campo_pacos_fabios${hayTorneo ? " (prioriza campo)" : ""}. Día3=campo_practica tiro largo o juego corto. Sáb=campo_practica.
 Drills DEBEN incluir: posicion_objetivo, descripcion, error_comun, sensacion, repeticiones, metrica_exito.` : `PREPARACIÓN: Día1=campo_practica juego corto 4 opciones. Día2=campo_pacos_fabios juego real. Día3=putting_green presión. Sáb=campo_practica repaso.`}
 
-Devuelve SOLO JSON válido comenzando con { sin backticks ni texto adicional.`;
+Devuelve SOLO JSON válido comenzando con { sin backticks ni texto adicional.
+
+${PACO_PLANNING_KNOWLEDGE}`;
 
     const user = `Genera el plan semanal COMPETENCIA para la semana del ${semanaInicio}.
 Modo: ${modo === "construccion" ? "Construcción de swing" : "Preparación para competencia"}
@@ -243,7 +248,9 @@ REGLAS:
 - Lenguaje simple, sin jerga técnica innecesaria
 - Cada estación tiene descripción clara con objetivo específico
 
-Devuelve SOLO JSON válido comenzando con { sin backticks ni texto adicional.`;
+Devuelve SOLO JSON válido comenzando con { sin backticks ni texto adicional.
+
+${PACO_PLANNING_KNOWLEDGE}`;
 
   const user = `Genera el plan DAMAS del viernes para la semana del ${semanaInicio}.
 Tema: ${tema}
