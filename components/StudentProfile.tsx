@@ -704,7 +704,6 @@ export default function StudentProfile({ studentId, currentRol }: { studentId: s
   const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
   const [downloadingPDF, setDownloadingPDF] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
-  const [deleteConfirmText, setDeleteConfirmText] = useState("");
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
 
@@ -3131,7 +3130,7 @@ posPayload[`${key}_score`] = rawScore !== null ? Math.round(rawScore) : null;
       {currentRol && isStaff(currentRol) && DIRECTOR_COORD_ROLES.includes(currentRol) && student && (
         <div className="mt-10 pt-6 border-t border-gray-100 flex justify-center">
           <button
-            onClick={() => { setDeleteConfirmText(""); setDeleteError(null); setShowDeleteModal(true); }}
+            onClick={() => { setDeleteError(null); setShowDeleteModal(true); }}
             className="flex items-center gap-1.5 text-xs text-gray-400 hover:text-red-600 transition-colors"
           >
             <svg width="13" height="13" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m3 0-1 14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2L4 6h16Z"/></svg>
@@ -3153,26 +3152,13 @@ posPayload[`${key}_score`] = rawScore !== null ? Math.round(rawScore) : null;
               <p className="text-sm text-gray-600">
                 ¿Estás seguro de que quieres eliminar a <span className="font-semibold text-gray-900">{student.full_name}</span>? Esta acción no se puede deshacer y eliminará todos sus datos incluyendo tests, notas y asistencia.
               </p>
-              <div>
-                <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">
-                  Escribe &quot;{student.full_name}&quot; para confirmar
-                </label>
-                <input
-                  type="text"
-                  value={deleteConfirmText}
-                  onChange={(e) => setDeleteConfirmText(e.target.value)}
-                  disabled={deleting}
-                  autoFocus
-                  className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm focus:outline-none focus:border-red-400"
-                />
-              </div>
               {deleteError && <p className="text-sm text-red-600 bg-red-50 border border-red-100 rounded-lg px-3 py-2">Error: {deleteError}</p>}
             </div>
             <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-gray-100">
               <button onClick={() => setShowDeleteModal(false)} disabled={deleting} className="px-4 py-2 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-100 disabled:opacity-50">Cancelar</button>
               <button
                 onClick={handleDeleteStudent}
-                disabled={deleting || deleteConfirmText !== student.full_name}
+                disabled={deleting}
                 className="flex items-center gap-2 px-5 py-2 rounded-lg text-sm font-medium text-white disabled:opacity-40"
                 style={{ backgroundColor: "#dc2626" }}
               >
