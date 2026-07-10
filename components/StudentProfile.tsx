@@ -6,7 +6,7 @@ import { supabase } from "@/lib/supabase";
 import ParentReportModal from "./ParentReportModal";
 import PacoContextChat from "./PacoContextChat";
 import PlanParaCasaModal from "./PlanParaCasaModal";
-import { isStaff, type Rol } from "@/lib/roles";
+import { isStaff, DIRECTOR_COORD_ROLES, type Rol } from "@/lib/roles";
 
 type Tab = "datos" | "tecnicos" | "fisicos" | "hitos" | "notas";
 type CritValue = "cumple" | "progreso" | "no" | null;
@@ -703,6 +703,35 @@ export default function StudentProfile({ studentId, currentRol }: { studentId: s
   const [editingNotaId, setEditingNotaId] = useState<string | null>(null);
   const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
   const [downloadingPDF, setDownloadingPDF] = useState(false);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [deleteConfirmText, setDeleteConfirmText] = useState("");
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+
+  async function handleDeleteStudent() {
+    if (!student) return;
+    setDeleting(true);
+    setDeleteError(null);
+    try {
+      const res = await fetch("/api/delete-student", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ studentId }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setDeleteError(data.error ?? "No se pudo eliminar el alumno.");
+        setDeleting(false);
+        return;
+      }
+      setShowDeleteModal(false);
+      setPhotoToast("Alumno eliminado correctamente");
+      setTimeout(() => router.push("/alumnos"), 1200);
+    } catch {
+      setDeleteError("Error de conexión. Intenta de nuevo.");
+      setDeleting(false);
+    }
+  }
 
   useEffect(() => {
     supabase.from("physical_evaluations")
@@ -3097,6 +3126,62 @@ posPayload[`${key}_score`] = rawScore !== null ? Math.round(rawScore) : null;
           parentPhone={student.parent_phone}
           onClose={() => setShowPlanCasa(false)}
         />
+      )}
+
+      {currentRol && isStaff(currentRol) && DIRECTOR_COORD_ROLES.includes(currentRol) && student && (
+        <div className="mt-10 pt-6 border-t border-gray-100 flex justify-center">
+          <button
+            onClick={() => { setDeleteConfirmText(""); setDeleteError(null); setShowDeleteModal(true); }}
+            className="flex items-center gap-1.5 text-xs text-gray-400 hover:text-red-600 transition-colors"
+          >
+            <svg width="13" height="13" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m3 0-1 14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2L4 6h16Z"/></svg>
+            Eliminar alumno
+          </button>
+        </div>
+      )}
+
+      {showDeleteModal && student && (
+        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4" onClick={() => !deleting && setShowDeleteModal(false)}>
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center gap-3 px-6 py-4 border-b border-gray-100">
+              <div className="w-9 h-9 rounded-lg flex items-center justify-center bg-red-50 shrink-0">
+                <svg width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="#dc2626" strokeWidth={2}><path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m3 0-1 14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2L4 6h16Z"/></svg>
+              </div>
+              <h2 className="font-bold text-gray-900 text-base">Eliminar alumno</h2>
+            </div>
+            <div className="px-6 py-5 space-y-4">
+              <p className="text-sm text-gray-600">
+                ¿Estás seguro de que quieres eliminar a <span className="font-semibold text-gray-900">{student.full_name}</span>? Esta acción no se puede deshacer y eliminará todos sus datos incluyendo tests, notas y asistencia.
+              </p>
+              <div>
+                <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">
+                  Escribe &quot;{student.full_name}&quot; para confirmar
+                </label>
+                <input
+                  type="text"
+                  value={deleteConfirmText}
+                  onChange={(e) => setDeleteConfirmText(e.target.value)}
+                  disabled={deleting}
+                  autoFocus
+                  className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm focus:outline-none focus:border-red-400"
+                />
+              </div>
+              {deleteError && <p className="text-sm text-red-600 bg-red-50 border border-red-100 rounded-lg px-3 py-2">Error: {deleteError}</p>}
+            </div>
+            <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-gray-100">
+              <button onClick={() => setShowDeleteModal(false)} disabled={deleting} className="px-4 py-2 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-100 disabled:opacity-50">Cancelar</button>
+              <button
+                onClick={handleDeleteStudent}
+                disabled={deleting || deleteConfirmText !== student.full_name}
+                className="flex items-center gap-2 px-5 py-2 rounded-lg text-sm font-medium text-white disabled:opacity-40"
+                style={{ backgroundColor: "#dc2626" }}
+              >
+                {deleting && <svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"/></svg>}
+                {deleting ? "Eliminando..." : "Eliminar definitivamente"}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
