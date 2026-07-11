@@ -294,7 +294,7 @@ function StaffCard({ member, onEdit }: { member: StaffMember; onEdit: () => void
               style={{
                 width: "100%",
                 height: "100%",
-                objectFit: "cover",
+                objectFit: "contain",
                 objectPosition: "center center",
                 borderRadius: "50%",
                 display: "block",
@@ -353,7 +353,7 @@ function StaffModal({
                 style={{
                   width: "100%",
                   height: "100%",
-                  objectFit: "cover",
+                  objectFit: "contain",
                   objectPosition: "center center",
                   borderRadius: "50%",
                   display: "block",
