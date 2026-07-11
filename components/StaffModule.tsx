@@ -137,6 +137,21 @@ export default function StaffModule() {
     }
   }
 
+  async function removeFoto() {
+    if (!form) return;
+    setUploading(true);
+    try {
+      const path = `${form.id}.jpg`;
+      const { error } = await supabase.storage.from("staff-fotos").remove([path]);
+      if (error) throw new Error(error.message);
+      setForm((f) => (f ? { ...f, foto_url: null } : f));
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "Error al eliminar la foto");
+    } finally {
+      setUploading(false);
+    }
+  }
+
   async function handleSave() {
     if (!form) return;
     if (!form.nombre.trim() || !form.rol.trim()) {
@@ -214,6 +229,7 @@ export default function StaffModule() {
           uploading={uploading}
           onChange={(patch) => setForm((f) => (f ? { ...f, ...patch } : f))}
           onUploadFoto={uploadFoto}
+          onRemoveFoto={removeFoto}
           onCancel={closeModal}
           onSave={handleSave}
         />
@@ -306,11 +322,12 @@ function StaffCard({ member, onEdit }: { member: StaffMember; onEdit: () => void
 }
 
 function StaffModal({
-  form, isNew, saving, uploading, onChange, onUploadFoto, onCancel, onSave,
+  form, isNew, saving, uploading, onChange, onUploadFoto, onRemoveFoto, onCancel, onSave,
 }: {
   form: StaffForm; isNew: boolean; saving: boolean; uploading: boolean;
   onChange: (patch: Partial<StaffForm>) => void;
   onUploadFoto: (file: File) => void;
+  onRemoveFoto: () => void;
   onCancel: () => void;
   onSave: () => void;
 }) {
@@ -346,20 +363,32 @@ function StaffModal({
               getInitials(form.nombre || "??")
             )}
           </div>
-          <label className="text-xs text-blue-600 hover:underline cursor-pointer">
-            {uploading ? "Subiendo..." : "Subir foto"}
-            <input
-              type="file"
-              accept="image/*"
-              className="hidden"
-              disabled={uploading}
-              onChange={(e) => {
-                const f = e.target.files?.[0];
-                if (f) onUploadFoto(f);
-                e.target.value = "";
-              }}
-            />
-          </label>
+          <div className="flex flex-col items-start gap-1">
+            <label className="text-xs text-blue-600 hover:underline cursor-pointer">
+              {uploading ? "Subiendo..." : "Subir foto"}
+              <input
+                type="file"
+                accept="image/*"
+                className="hidden"
+                disabled={uploading}
+                onChange={(e) => {
+                  const f = e.target.files?.[0];
+                  if (f) onUploadFoto(f);
+                  e.target.value = "";
+                }}
+              />
+            </label>
+            {form.foto_url && (
+              <button
+                type="button"
+                onClick={onRemoveFoto}
+                disabled={uploading}
+                className="text-xs text-red-600 hover:underline disabled:opacity-50"
+              >
+                Quitar foto
+              </button>
+            )}
+          </div>
         </div>
 
         <div className="space-y-3">
