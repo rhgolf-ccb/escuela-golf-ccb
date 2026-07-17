@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { supabase, type Student } from "@/lib/supabase";
 import { isStaff, type Rol } from "@/lib/roles";
 import GroupAnalysisModal from "./GroupAnalysisModal";
+import { Search, X, Trophy, Users } from "lucide-react";
 
 type StatusFilter = "todos" | "activo" | "inactivo";
 type GroupFilter = "todos" | "Birdies" | "Águilas" | "Albatros" | "+14" | "Damas" | "Competencia";
@@ -126,14 +127,20 @@ export default function StudentsModule({ currentRol }: { currentRol: Rol | null 
 
   return (
     <div className="max-w-7xl mx-auto w-full px-4 sm:px-6 lg:px-8 py-8">
+      {/* HEADER */}
       <div className="mb-6 flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold" style={{ color: "#1B4D2E" }}>Alumnos</h1>
-          <p className="text-sm text-gray-500 mt-0.5">Gestión de alumnos de la Escuela de Golf</p>
+        <div className="flex items-center gap-3">
+          <div className="w-11 h-11 rounded-xl bg-ccb-green flex items-center justify-center shrink-0">
+            <Users size={22} className="text-white" />
+          </div>
+          <div>
+            <h1 className="text-2xl font-bold text-ccb-green">Alumnos</h1>
+            <p className="text-sm text-(--text-muted) mt-0.5">Gestión de alumnos de la Escuela de Golf</p>
+          </div>
         </div>
         <div className="hidden sm:flex items-center gap-3 text-sm">
           <span className="flex items-center gap-1.5 text-gray-600">
-            <span className="inline-block w-2 h-2 rounded-full" style={{ backgroundColor: "#1B4D2E" }} />
+            <span className="inline-block w-2 h-2 rounded-full bg-ccb-green" />
             {counts.activo} activos
           </span>
           <span className="text-gray-300">·</span>
@@ -144,31 +151,30 @@ export default function StudentsModule({ currentRol }: { currentRol: Rol | null 
         </div>
       </div>
 
-      <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4 mb-3 flex flex-col sm:flex-row gap-3 items-stretch sm:items-center">
+      {/* BARRA BÚSQUEDA + FILTROS */}
+      <div className="bg-white rounded-xl shadow-sm border border-(--border) p-4 mb-3 flex flex-col sm:flex-row gap-3 items-stretch sm:items-center">
         <div className="relative flex-1">
-          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none">
-            <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><circle cx="11" cy="11" r="8" /><path d="m21 21-4.35-4.35" /></svg>
-          </span>
+          <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
           <input
             type="text"
             placeholder="Buscar por nombre..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="w-full pl-9 pr-3 py-2 rounded-lg border border-gray-200 text-sm focus:outline-none transition"
-            onFocus={(e) => { e.target.style.borderColor = "#C9A84C"; e.target.style.boxShadow = "0 0 0 2px #C9A84C33"; }}
-            onBlur={(e) => { e.target.style.borderColor = ""; e.target.style.boxShadow = ""; }}
+            className="w-full pl-9 pr-3 py-2 rounded-lg border border-gray-200 text-sm focus:outline-none focus:border-ccb-gold focus:ring-2 focus:ring-ccb-gold/20 transition"
           />
           {search && (
             <button onClick={() => setSearch("")} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
-              <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path d="M18 6 6 18M6 6l12 12" /></svg>
+              <X size={14} />
             </button>
           )}
         </div>
 
         <div className="flex gap-1 bg-gray-100 rounded-lg p-1 self-start sm:self-auto shrink-0">
           {(["todos", "activo", "inactivo"] as StatusFilter[]).map((s) => (
-            <button key={s} onClick={() => setStatusFilter(s)} className="px-3 py-1.5 rounded-md text-xs font-medium capitalize transition-colors"
-              style={statusFilter === s ? { backgroundColor: "#1B4D2E", color: "white" } : { color: "#4b5563" }}>
+            <button key={s} onClick={() => setStatusFilter(s)}
+              className={`px-3 py-1.5 rounded-md text-xs font-medium capitalize transition-colors ${
+                statusFilter === s ? "bg-ccb-green text-white" : "text-gray-600 hover:text-gray-900"
+              }`}>
               {s === "todos" ? `Todos (${counts.todos})` : s === "activo" ? `Activos (${counts.activo})` : `Inactivos (${counts.inactivo})`}
             </button>
           ))}
@@ -176,41 +182,41 @@ export default function StudentsModule({ currentRol }: { currentRol: Rol | null 
 
         <button
           onClick={() => setSoloTalegaPropia((v) => !v)}
-          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors self-start sm:self-auto shrink-0 border"
-          style={soloTalegaPropia
-            ? { backgroundColor: "#1B4D2E", color: "white", borderColor: "#1B4D2E" }
-            : { color: "#4b5563", borderColor: "#e5e7eb", backgroundColor: "white" }}
+          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors self-start sm:self-auto shrink-0 border ${
+            soloTalegaPropia
+              ? "bg-ccb-green text-white border-ccb-green"
+              : "text-gray-600 border-gray-200 bg-white hover:border-gray-300"
+          }`}
         >
           Talega propia ({counts.talegaPropia})
         </button>
       </div>
 
-      <div className="bg-white rounded-xl shadow-sm border border-gray-100 px-4 py-3 mb-4 flex flex-col sm:flex-row gap-3 sm:items-center sm:justify-between">
+      {/* CHIPS DE GRUPO */}
+      <div className="bg-white rounded-xl shadow-sm border border-(--border) px-4 py-3 mb-4 flex flex-col sm:flex-row gap-3 sm:items-center sm:justify-between">
         <div className="flex gap-2 overflow-x-auto scrollbar-hide">
           {GROUPS.map(({ label, value, isSpecial }) => {
             const active = groupFilter === value;
             const count = groupCounts[value];
             return (
               <button key={value} onClick={() => setGroupFilter(value)}
-                className="flex items-center gap-1.5 px-4 py-2 rounded-full text-sm font-medium whitespace-nowrap transition-all shrink-0"
-                style={active
-                  ? { backgroundColor: isSpecial ? "#C9A84C" : "#1B4D2E", color: isSpecial ? "#1B4D2E" : "white", boxShadow: "0 1px 4px rgba(0,0,0,0.15)" }
-                  : isSpecial
-                  ? { color: "#92400e", backgroundColor: "#fef3c720", border: "1px solid #C9A84C55" }
-                  : { color: "#374151", backgroundColor: "transparent", border: "1px solid #e5e7eb" }}>
-                {isSpecial && (
-                  <svg width="13" height="13" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-                    <path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"/><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"/>
-                    <path d="M4 22h16"/><path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22"/>
-                    <path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22"/><path d="M18 2H6v7a6 6 0 0 0 12 0V2Z"/>
-                  </svg>
-                )}
+                className={`flex items-center gap-1.5 px-4 py-2 rounded-full text-sm font-medium whitespace-nowrap transition-all shrink-0 border ${
+                  active && isSpecial
+                    ? "bg-ccb-gold text-ccb-green border-transparent shadow"
+                    : active
+                    ? "bg-ccb-green text-white border-transparent shadow"
+                    : isSpecial
+                    ? "text-amber-800 bg-amber-50/50 border-ccb-gold/40"
+                    : "text-gray-700 bg-transparent border-gray-200 hover:border-gray-300"
+                }`}>
+                {isSpecial && <Trophy size={13} />}
                 {label}
                 {value !== "todos" && (
-                  <span className="text-xs rounded-full px-1.5 py-0.5 font-semibold"
-                    style={active
-                      ? { backgroundColor: isSpecial ? "#1B4D2E22" : "#ffffff33", color: isSpecial ? "#1B4D2E" : "white" }
-                      : { backgroundColor: "#f3f4f6", color: "#6b7280" }}>
+                  <span className={`text-xs rounded-full px-1.5 py-0.5 font-semibold ${
+                    active
+                      ? isSpecial ? "bg-ccb-green/15 text-ccb-green" : "bg-white/20 text-white"
+                      : "bg-gray-100 text-gray-500"
+                  }`}>
                     {count}
                   </span>
                 )}
@@ -224,15 +230,15 @@ export default function StudentsModule({ currentRol }: { currentRol: Rol | null 
             onClick={() => groupFilter !== "todos" && setShowGroupAnalysis(true)}
             disabled={groupFilter === "todos"}
             title={groupFilter === "todos" ? "Selecciona un grupo primero" : undefined}
-            className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium shrink-0 disabled:opacity-50 disabled:cursor-not-allowed transition-opacity"
-            style={{ backgroundColor: "#1a3a2a", color: "white" }}
+            className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium shrink-0 disabled:opacity-50 disabled:cursor-not-allowed transition-opacity bg-[#1a3a2a] text-white hover:bg-[#245038]"
           >
             Análisis grupal con Paco 🦅
           </button>
         )}
       </div>
 
-      <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+      {/* TABLA */}
+      <div className="bg-white rounded-xl shadow-sm border border-(--border) overflow-hidden">
         {loading ? (
           <div className="flex items-center justify-center py-20 text-gray-400">
             <svg className="animate-spin mr-3 h-5 w-5" fill="none" viewBox="0 0 24 24">
@@ -242,7 +248,7 @@ export default function StudentsModule({ currentRol }: { currentRol: Rol | null 
             Cargando alumnos...
           </div>
         ) : error ? (
-          <div className="flex flex-col items-center justify-center py-20 gap-2" style={{ color: "#dc2626" }}>
+          <div className="flex flex-col items-center justify-center py-20 gap-2 text-red-600">
             <p className="text-sm">Error al cargar los datos: {error}</p>
           </div>
         ) : (
@@ -250,11 +256,11 @@ export default function StudentsModule({ currentRol }: { currentRol: Rol | null 
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
-                  <tr style={{ backgroundColor: "#1B4D2E", color: "white" }}>
-                    <th className="text-left px-5 py-3.5 font-semibold tracking-wide text-xs uppercase opacity-90">Nombre</th>
-                    <th className="text-left px-5 py-3.5 font-semibold tracking-wide text-xs uppercase opacity-90">Fecha de nacimiento</th>
-                    <th className="text-left px-5 py-3.5 font-semibold tracking-wide text-xs uppercase opacity-90">Grupo</th>
-                    <th className="text-left px-5 py-3.5 font-semibold tracking-wide text-xs uppercase opacity-90">Estado</th>
+                  <tr className="bg-gray-50 border-b border-gray-200">
+                    <th className="text-left px-5 py-3 font-semibold tracking-wide text-xs uppercase text-gray-500">Nombre</th>
+                    <th className="text-left px-5 py-3 font-semibold tracking-wide text-xs uppercase text-gray-500">Fecha de nacimiento</th>
+                    <th className="text-left px-5 py-3 font-semibold tracking-wide text-xs uppercase text-gray-500">Grupo</th>
+                    <th className="text-left px-5 py-3 font-semibold tracking-wide text-xs uppercase text-gray-500">Estado</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -265,40 +271,34 @@ export default function StudentsModule({ currentRol }: { currentRol: Rol | null 
                       </td>
                     </tr>
                   ) : (
-                    filtered.map((student, idx) => {
+                    filtered.map((student) => {
                       const grupoMostrar = calcularGrupo(student.birth_date, student.gender, student.grupo_activo);
                       const isCompetencia = student.grupo_activo === "Competencia";
                       return (
                         <tr
                           key={student.id}
-                          className="border-t border-gray-50 transition-colors"
-                          style={{ backgroundColor: idx % 2 === 0 ? "white" : "#f9fafb80", cursor: "pointer" }}
+                          className="border-t border-gray-50 cursor-pointer transition-colors hover:bg-ccb-gold/[0.06]"
                           onClick={() => router.push(`/alumnos/${student.id}`)}
-                          onMouseEnter={(e) => { (e.currentTarget as HTMLTableRowElement).style.backgroundColor = "#C9A84C0A"; }}
-                          onMouseLeave={(e) => { (e.currentTarget as HTMLTableRowElement).style.backgroundColor = idx % 2 === 0 ? "white" : "#f9fafb80"; }}
                         >
-                          <td className="px-5 py-3.5 font-medium text-gray-800">
+                          <td className="px-5 py-3 font-medium text-gray-800">
                             <div className="flex items-center gap-2.5">
-                              <span className="inline-flex items-center justify-center w-8 h-8 rounded-full text-xs font-bold shrink-0" style={{ backgroundColor: "#1B4D2E1A", color: "#1B4D2E" }}>
+                              <span className="inline-flex items-center justify-center w-8 h-8 rounded-full text-xs font-bold shrink-0 bg-ccb-green/10 text-ccb-green">
                                 {initiales(student.full_name)}
                               </span>
                               <span>{student.full_name}</span>
                               {isCompetencia && (
-                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold" style={{ backgroundColor: "#C9A84C22", color: "#92400e", border: "1px solid #C9A84C55" }}>
-                                  <svg width="10" height="10" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-                                    <path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"/><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"/>
-                                    <path d="M4 22h16"/><path d="M18 2H6v7a6 6 0 0 0 12 0V2Z"/>
-                                  </svg>
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-ccb-gold/15 text-amber-800 border border-ccb-gold/40">
+                                  <Trophy size={10} />
                                   Competencia
                                 </span>
                               )}
                             </div>
                           </td>
-                          <td className="px-5 py-3.5 text-gray-600">{formatFecha(student.birth_date)}</td>
-                          <td className="px-5 py-3.5">
-                            {grupoMostrar ? <GroupBadge grupo={grupoMostrar} /> : <span className="text-gray-300">��</span>}
+                          <td className="px-5 py-3 text-gray-600">{formatFecha(student.birth_date)}</td>
+                          <td className="px-5 py-3">
+                            {grupoMostrar ? <GroupBadge grupo={grupoMostrar} /> : <span className="text-gray-300">—</span>}
                           </td>
-                          <td className="px-5 py-3.5">
+                          <td className="px-5 py-3">
                             <StatusBadge status={student.status} />
                           </td>
                         </tr>
@@ -312,10 +312,10 @@ export default function StudentsModule({ currentRol }: { currentRol: Rol | null 
               <div className="px-5 py-3 border-t border-gray-100 text-xs text-gray-400">
                 Mostrando {filtered.length} de {students.length} alumnos
                 {groupFilter !== "todos" && (
-                  <span className="ml-1">· filtro: <span style={{ color: "#1B4D2E" }} className="font-medium">{groupFilter}</span></span>
+                  <span className="ml-1">· filtro: <span className="text-ccb-green font-medium">{groupFilter}</span></span>
                 )}
                 {soloTalegaPropia && (
-                  <span className="ml-1">· <span style={{ color: "#1B4D2E" }} className="font-medium">talega propia</span></span>
+                  <span className="ml-1">· <span className="text-ccb-green font-medium">talega propia</span></span>
                 )}
               </div>
             )}
@@ -337,7 +337,7 @@ export default function StudentsModule({ currentRol }: { currentRol: Rol | null 
 
 function GroupBadge({ grupo }: { grupo: string }) {
   return (
-    <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium" style={{ backgroundColor: "#1B4D2E15", color: "#1B4D2E", border: "1px solid #1B4D2E25" }}>
+    <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-ccb-green/[0.08] text-ccb-green border border-ccb-green/20">
       {grupo}
     </span>
   );
