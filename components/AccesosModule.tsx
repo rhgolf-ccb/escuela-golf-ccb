@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { Shield } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { ROLE_ALLOW, STAFF_ROLES, type Rol } from "@/lib/roles";
 
@@ -209,8 +210,15 @@ export default function AccesosModule({ currentUserId, initialSessionDays }: { c
         </div>
       )}
 
-      <h1 className="text-2xl font-bold text-gray-900 mb-1">Accesos</h1>
-      <p className="text-sm text-gray-400 mb-6">Gestión de usuarios, roles y registro de actividad</p>
+      <div className="mb-6 flex items-center gap-3">
+        <div className="w-11 h-11 rounded-xl bg-ccb-green flex items-center justify-center shrink-0">
+          <Shield size={22} className="text-white" />
+        </div>
+        <div>
+          <h1 className="text-2xl font-bold text-ccb-green">Accesos</h1>
+          <p className="text-sm text-(--text-muted)">Gestión de usuarios, roles y registro de actividad</p>
+        </div>
+      </div>
 
       <div className="flex gap-1 mb-6 border-b border-gray-100">
         {([
@@ -222,7 +230,7 @@ export default function AccesosModule({ currentUserId, initialSessionDays }: { c
             key={t.id}
             onClick={() => setTab(t.id)}
             className="px-4 py-2 text-sm font-semibold border-b-2 transition-colors"
-            style={tab === t.id ? { borderColor: "#1a3a2a", color: "#1a3a2a" } : { borderColor: "transparent", color: "#9ca3af" }}
+            style={tab === t.id ? { borderColor: "#1B4D2E", color: "#1B4D2E" } : { borderColor: "transparent", color: "#9ca3af" }}
           >
             {t.label}
           </button>
@@ -252,7 +260,7 @@ export default function AccesosModule({ currentUserId, initialSessionDays }: { c
             <button
               onClick={() => setShowInvite(true)}
               className="px-4 py-2 rounded-lg text-sm font-semibold text-white"
-              style={{ background: "#1a3a2a" }}
+              style={{ background: "#1B4D2E" }}
             >
               + Invitar usuario
             </button>
@@ -426,7 +434,7 @@ export default function AccesosModule({ currentUserId, initialSessionDays }: { c
                 onClick={handleInvite}
                 disabled={inviteSaving || !inviteEmail.trim()}
                 className="flex-1 py-2.5 rounded-xl text-sm font-semibold text-white disabled:opacity-50"
-                style={{ background: "#1a3a2a" }}
+                style={{ background: "#1B4D2E" }}
               >
                 {inviteSaving ? "Invitando..." : "Invitar"}
               </button>
@@ -488,7 +496,7 @@ export default function AccesosModule({ currentUserId, initialSessionDays }: { c
                 onClick={handleSetPassword}
                 disabled={pwdSaving || pwdValue.length < 8}
                 className="flex-1 py-2.5 rounded-xl text-sm font-semibold text-white disabled:opacity-50"
-                style={{ background: "#1a3a2a" }}
+                style={{ background: "#1B4D2E" }}
               >
                 {pwdSaving ? "Guardando..." : "Guardar"}
               </button>
