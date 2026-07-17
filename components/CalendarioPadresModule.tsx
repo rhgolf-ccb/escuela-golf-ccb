@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { CalendarDays } from "lucide-react";
 
 type TipoPlan = "juvenil" | "competencia" | "damas";
 
@@ -27,7 +28,7 @@ const LUGAR_LABEL: Record<string, string> = {
   campo_infantil: "Campo Infantil", campo_pacos_fabios: "Pacos/Fabios", campo_completo: "Campo Completo",
 };
 const TIPO_PLAN_LABEL: Record<TipoPlan, string> = { juvenil: "Juvenil", competencia: "Competencia", damas: "Damas" };
-const GROUP_COLOR: Record<TipoPlan, string> = { juvenil: "#1a3a2a", competencia: "#7d5a00", damas: "#4a1070" };
+const GROUP_COLOR: Record<TipoPlan, string> = { juvenil: "#1B4D2E", competencia: "#7d5a00", damas: "#4a1070" };
 
 function tipoPlanForGrupo(grupo: string | null): TipoPlan | null {
   if (grupo === "Competencia") return "competencia";
@@ -96,8 +97,15 @@ export default function CalendarioPadresModule({
 
   return (
     <div className="max-w-3xl mx-auto px-4 sm:px-6 py-8">
-      <h1 className="text-2xl font-bold text-gray-900 mb-1">Calendario</h1>
-      <p className="text-sm text-gray-400 mb-5">Programación y eventos de la escuela</p>
+      <div className="mb-5 flex items-center gap-3">
+        <div className="w-11 h-11 rounded-xl bg-ccb-green flex items-center justify-center shrink-0">
+          <CalendarDays size={22} className="text-white" />
+        </div>
+        <div>
+          <h1 className="text-2xl font-bold text-ccb-green">Calendario</h1>
+          <p className="text-sm text-(--text-muted)">Programación y eventos de la escuela</p>
+        </div>
+      </div>
 
       {estudiantes.length > 1 && (
         <div className="flex gap-2 mb-5 flex-wrap">
@@ -106,7 +114,7 @@ export default function CalendarioPadresModule({
               key={e.id}
               onClick={() => setSelectedId(e.id)}
               className="flex items-center gap-2 px-3 py-2 rounded-xl border transition-colors"
-              style={selectedId === e.id ? { background: "#1a3a2a", color: "#fff", borderColor: "#1a3a2a" } : { background: "#fff", color: "#374151", borderColor: "#e5e7eb" }}
+              style={selectedId === e.id ? { background: "#1B4D2E", color: "#fff", borderColor: "#1B4D2E" } : { background: "#fff", color: "#374151", borderColor: "#e5e7eb" }}
             >
               <span className="w-6 h-6 rounded-full bg-white/20 flex items-center justify-center text-[10px] font-bold">{initiales(e.full_name)}</span>
               <span className="text-sm font-medium">{e.full_name}</span>
