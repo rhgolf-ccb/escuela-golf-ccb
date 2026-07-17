@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
-import { createSupabaseServerClient } from "@/lib/supabase-server";
-import { DIRECTOR_COORD_ROLES, type Rol } from "@/lib/roles";
+import { getCurrentAppUser } from "@/lib/current-user";
+import { DIRECTOR_COORD_ROLES } from "@/lib/roles";
 import PacoKnowledgeModule from "@/components/PacoKnowledgeModule";
 
 export const metadata = {
@@ -8,12 +8,9 @@ export const metadata = {
 };
 
 export default async function BaseConocimientoPage() {
-  const supabase = await createSupabaseServerClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) redirect("/login");
-
-  const { data: appUser } = await supabase.from("app_users").select("rol").eq("id", user.id).maybeSingle();
-  if (!appUser || !DIRECTOR_COORD_ROLES.includes(appUser.rol as Rol)) redirect("/");
+  const currentUser = await getCurrentAppUser();
+  if (!currentUser) redirect("/login");
+  if (!DIRECTOR_COORD_ROLES.includes(currentUser.rol)) redirect("/");
 
   return <PacoKnowledgeModule />;
 }

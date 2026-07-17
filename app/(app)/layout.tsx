@@ -1,26 +1,22 @@
 import Navbar from "@/components/Navbar";
 import AsesorGolfChat from "@/components/AsesorGolfChat";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
+import { getCurrentAppUser } from "@/lib/current-user";
 import { isStaff, type Rol } from "@/lib/roles";
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
-  const supabase = await createSupabaseServerClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  const currentUser = await getCurrentAppUser();
 
-  let role: Rol | null = null;
-  let nombre: string | null = null;
-  let email: string | null = null;
+  const role: Rol | null = currentUser?.rol ?? null;
+  const nombre: string | null = currentUser?.nombre ?? null;
+  const email: string | null = currentUser?.email ?? null;
   let fotoUrl: string | null = null;
-  if (user) {
-    const { data } = await supabase.from("app_users").select("rol, nombre, email").eq("id", user.id).maybeSingle();
-    role = (data?.rol as Rol) ?? null;
-    nombre = data?.nombre ?? null;
-    email = data?.email ?? null;
-
+  if (currentUser) {
+    const supabase = await createSupabaseServerClient();
     const { data: staffRow } = await supabase
       .from("staff_directorio")
       .select("foto_url")
-      .eq("user_id", user.id)
+      .eq("user_id", currentUser.id)
       .maybeSingle();
     fotoUrl = staffRow?.foto_url ?? null;
   }

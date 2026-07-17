@@ -1,8 +1,9 @@
 import Link from "next/link";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
+import { getCurrentAppUser } from "@/lib/current-user";
 import { Users, Calendar, UserCheck, CalendarCheck, Clock, Trophy, CalendarOff, Star, Pin, ChartBar } from "lucide-react";
 
-export const metadata = { title: "Dashboard | Escuela de Golf CCB" };
+export const metadata = { title: "Inicio | Escuela de Golf CCB" };
 
 // Copiados de ProgramacionModule.tsx (mismos valores) — se duplican en vez de
 // importarse porque ese módulo es "use client" y arrastra el cliente de
@@ -58,13 +59,8 @@ const ATTENDANCE_ORDER = ["presente", "justificado", "ausente", "sin_reserva"];
 
 export default async function DashboardPage() {
   const supabase = await createSupabaseServerClient();
-  const { data: { user } } = await supabase.auth.getUser();
-
-  let nombre = "Director";
-  if (user) {
-    const { data } = await supabase.from("app_users").select("nombre").eq("id", user.id).maybeSingle();
-    nombre = data?.nombre?.split(" ")[0] ?? "Director";
-  }
+  const currentUser = await getCurrentAppUser();
+  const nombre = currentUser?.nombre?.split(" ")[0] ?? "Director";
 
   const hoy = new Intl.DateTimeFormat("en-CA", {
     timeZone: "America/Bogota", year: "numeric", month: "2-digit", day: "2-digit",

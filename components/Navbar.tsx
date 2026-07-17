@@ -17,7 +17,7 @@ function initiales(name: string): string {
 }
 
 const navItems = [
-  { label: "Dashboard",           href: "/dashboard",          icon: Activity },
+  { label: "Inicio",              href: "/dashboard",          icon: Activity },
   { label: "Alumnos",             href: "/alumnos",            icon: Users },
   { label: "Programación",        href: "/programacion",       icon: Calendar },
   { label: "Reservas",            href: "/reservas",           icon: CalendarDays },

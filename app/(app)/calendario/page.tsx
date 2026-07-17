@@ -1,7 +1,8 @@
 import { redirect } from "next/navigation";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
-import { isStaff, type Rol } from "@/lib/roles";
+import { getCurrentAppUser } from "@/lib/current-user";
+import { isStaff } from "@/lib/roles";
 import CalendarioPadresModule, {
   type DiaPrograma, type EventoCalPadre, type DiaSinEscuelaPadre, type ActividadEspecialPadre, type EstudianteVinculado,
 } from "@/components/CalendarioPadresModule";
@@ -62,35 +63,30 @@ function getMonday(d: Date): Date {
 function addDays(d: Date, n: number): Date { const r = new Date(d); r.setDate(r.getDate() + n); return r; }
 
 export default async function CalendarioPage() {
+  const currentUser = await getCurrentAppUser();
+  if (!currentUser) redirect("/login");
+  if (isStaff(currentUser.rol)) redirect("/programacion");
+
   const supabase = await createSupabaseServerClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) redirect("/login");
+  const admin = createSupabaseAdminClient();
 
-  const { data: appUser } = await supabase.from("app_users").select("rol").eq("id", user.id).maybeSingle();
-  if (!appUser) redirect("/login");
-  const rol = appUser.rol as Rol;
-  if (isStaff(rol)) redirect("/programacion");
-
-  const { data: vinculos } = await supabase
-    .from("user_estudiantes")
-    .select("students(id, full_name, grupo_activo)")
-    .eq("user_id", user.id);
+  // Las tres consultas son independientes entre sí — van en paralelo en vez
+  // de en cadena (eventos/días sin escuela son institucionales, no dependen
+  // del alumno vinculado).
+  const [{ data: vinculos }, { data: eventosRaw }, { data: diasSinEscuelaRaw }] = await Promise.all([
+    supabase.from("user_estudiantes").select("students(id, full_name, grupo_activo)").eq("user_id", currentUser.id),
+    admin.from("eventos_calendario").select("id, nombre, fecha_inicio, fecha_fin, descripcion, tipo"),
+    admin.from("dias_sin_escuela").select("id, fecha_inicio, fecha_fin, motivo"),
+  ]);
 
   const estudiantes: EstudianteVinculado[] = (vinculos ?? [])
     .map((v) => (Array.isArray(v.students) ? v.students[0] : v.students))
     .filter((s): s is EstudianteVinculado => !!s);
 
-  const eventosBase: EventoCalPadre[] = [];
-  const diasSinEscuelaBase: DiaSinEscuelaPadre[] = [];
+  const eventosBase = (eventosRaw ?? []) as EventoCalPadre[];
+  const diasSinEscuelaBase = (diasSinEscuelaRaw ?? []) as DiaSinEscuelaPadre[];
   let dias: DiaPrograma[] = [];
   let actividades: ActividadEspecialPadre[] = [];
-
-  const admin = createSupabaseAdminClient();
-
-  const { data: eventosRaw } = await admin.from("eventos_calendario").select("id, nombre, fecha_inicio, fecha_fin, descripcion, tipo");
-  eventosBase.push(...((eventosRaw ?? []) as EventoCalPadre[]));
-  const { data: diasSinEscuelaRaw } = await admin.from("dias_sin_escuela").select("id, fecha_inicio, fecha_fin, motivo");
-  diasSinEscuelaBase.push(...((diasSinEscuelaRaw ?? []) as DiaSinEscuelaPadre[]));
 
   const tipos = Array.from(new Set(estudiantes.map((e) => tipoPlanForGrupo(e.grupo_activo)).filter((t): t is TipoPlan => !!t)));
 
@@ -98,12 +94,20 @@ export default async function CalendarioPage() {
     const inicioVentana = toISODate(addDays(getMonday(new Date()), -14));
     const finVentana = toISODate(addDays(getMonday(new Date()), 35));
 
-    const { data: planes } = await admin
-      .from("planes_semanales")
-      .select("id, tipo_plan")
-      .in("tipo_plan", tipos)
-      .gte("semana_inicio", inicioVentana)
-      .lte("semana_inicio", finVentana);
+    // planes y actividades especiales tampoco dependen entre sí — en paralelo.
+    const [{ data: planes }, { data: actEsp }] = await Promise.all([
+      admin
+        .from("planes_semanales")
+        .select("id, tipo_plan")
+        .in("tipo_plan", tipos)
+        .gte("semana_inicio", inicioVentana)
+        .lte("semana_inicio", finVentana),
+      admin
+        .from("actividades_especiales")
+        .select("id, nombre, grupos, fecha, hora_inicio, hora_fin")
+        .gte("fecha", inicioVentana)
+        .lte("fecha", finVentana),
+    ]);
 
     if (planes?.length) {
       const planMap = Object.fromEntries(planes.map((p) => [p.id, p.tipo_plan as TipoPlan]));
@@ -124,12 +128,6 @@ export default async function CalendarioPage() {
         estaciones: estacionesDeSesion(s),
       }));
     }
-
-    const { data: actEsp } = await admin
-      .from("actividades_especiales")
-      .select("id, nombre, grupos, fecha, hora_inicio, hora_fin")
-      .gte("fecha", inicioVentana)
-      .lte("fecha", finVentana);
 
     actividades = (actEsp ?? [])
       .filter((a) => (a.grupos as string[]).some((g) => tipos.includes(g as TipoPlan)))
