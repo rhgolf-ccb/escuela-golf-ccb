@@ -1483,7 +1483,7 @@ export default function ProgramacionModule({ currentRol }: { currentRol: Rol | n
             )}
           </div>
         ) : (
-          <div className="flex gap-4" style={{ height: "calc(100vh - 300px)", minHeight: 440 }}>
+          <div className="flex flex-col md:flex-row gap-4" style={{ height: "calc(100dvh - 300px)", minHeight: 440 }}>
             {/* ── Columna izquierda: lista de días (220px fija en desktop) ── */}
             <div
               className={`${mobileDetailOpen ? "hidden md:flex" : "flex"} md:w-[220px] w-full shrink-0 flex-col bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden`}
