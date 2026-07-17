@@ -1302,7 +1302,7 @@ export default function ProgramacionModule({ currentRol }: { currentRol: Rol | n
 
   // ── Main render ───────────────────────────────────────────────────────────
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+    <div className="w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
       <div className="mb-6 flex items-center gap-3">
         <div className="w-11 h-11 rounded-xl bg-ccb-green flex items-center justify-center shrink-0">
           <CalendarDays size={22} className="text-white" />
