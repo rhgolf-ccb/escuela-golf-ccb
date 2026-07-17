@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
+import { Dumbbell } from "lucide-react";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 type Categoria = "Movilidad" | "Fuerza y estabilidad" | "Potencia" | "Calentamiento";
@@ -258,9 +259,14 @@ export default function FisicoModule() {
 
       {/* ── Header ── */}
       <div className="flex items-start justify-between mb-8">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">🏋️ Biblioteca de ejercicios físicos</h1>
-          <p className="text-sm text-gray-400 mt-0.5">{total} ejercicio{total !== 1 ? "s" : ""} en total</p>
+        <div className="flex items-center gap-3">
+          <div className="w-11 h-11 rounded-xl bg-ccb-green flex items-center justify-center shrink-0">
+            <Dumbbell size={22} className="text-white" />
+          </div>
+          <div>
+            <h1 className="text-2xl font-bold text-ccb-green">Biblioteca de ejercicios físicos</h1>
+            <p className="text-sm text-(--text-muted) mt-0.5">{total} ejercicio{total !== 1 ? "s" : ""} en total</p>
+          </div>
         </div>
         <button
           onClick={openCreate}
