@@ -2,6 +2,7 @@ import Link from "next/link";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
 import { getCurrentAppUser } from "@/lib/current-user";
 import { Users, Calendar, UserCheck, CalendarCheck, Clock, Trophy, CalendarOff, Star, Pin, ChartBar } from "lucide-react";
+import WeatherChip from "@/components/WeatherChip";
 
 export const metadata = { title: "Inicio | Escuela de Golf CCB" };
 
@@ -114,22 +115,27 @@ export default async function DashboardPage() {
     <div className="flex flex-col min-h-full">
 
       {/* HERO */}
-      <div className="relative h-[150px] sm:h-[200px] overflow-hidden bg-sidebar-bg shrink-0">
-        <img
-          src="/hero-ccb.jpg"
-          alt="Country Club de Bogotá"
-          className="w-full h-full object-cover"
-          style={{ objectPosition: "center 70%" }}
-        />
-        <div
-          className="absolute inset-0"
-          style={{ background: "linear-gradient(180deg, rgba(15,25,35,0.15), rgba(15,25,35,0.75))" }}
-        />
-        <div className="absolute inset-x-0 bottom-0 px-4 sm:px-8 pb-4 sm:pb-5">
-          <h1 className="text-xl sm:text-3xl font-bold text-white drop-shadow">
-            {saludo}, {nombre}
-          </h1>
-          <p className="text-white/80 text-xs sm:text-sm mt-0.5">{fechaLabel}</p>
+      <div className="relative shrink-0">
+        <div className="relative h-[150px] sm:h-[200px] overflow-hidden bg-sidebar-bg">
+          <img
+            src="/hero-ccb.jpg"
+            alt="Country Club de Bogotá"
+            className="w-full h-full object-cover"
+            style={{ objectPosition: "center 70%" }}
+          />
+          <div
+            className="absolute inset-0"
+            style={{ background: "linear-gradient(180deg, rgba(15,25,35,0.15), rgba(15,25,35,0.75))" }}
+          />
+          <div className="absolute inset-x-0 bottom-0 px-4 sm:px-8 pb-4 sm:pb-5">
+            <h1 className="text-xl sm:text-3xl font-bold text-white drop-shadow">
+              {saludo}, {nombre}
+            </h1>
+            <p className="text-white/80 text-xs sm:text-sm mt-0.5">{fechaLabel}</p>
+          </div>
+        </div>
+        <div className="absolute top-3 right-3 sm:top-4 sm:right-4 z-20">
+          <WeatherChip />
         </div>
       </div>
 
