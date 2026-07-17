@@ -2,6 +2,8 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
+import Cropper from "react-easy-crop";
+import type { Area } from "react-easy-crop";
 
 type Categoria = "profesores" | "administrativos";
 
@@ -65,6 +67,42 @@ function Loading() {
   );
 }
 
+// Genera un Blob recortado (cuadrado) a partir de la imagen y el área de recorte
+async function getCroppedImg(imageSrc: string, cropPixels: { x: number; y: number; width: number; height: number }): Promise<Blob> {
+  const image = new Image();
+  image.crossOrigin = "anonymous";
+  image.src = imageSrc;
+  await new Promise((resolve, reject) => {
+    image.onload = resolve;
+    image.onerror = reject;
+  });
+
+  const canvas = document.createElement("canvas");
+  // Tamaño de salida: 400x400 (suficiente para un avatar, mantiene peso bajo)
+  const OUTPUT = 400;
+  canvas.width = OUTPUT;
+  canvas.height = OUTPUT;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) throw new Error("No se pudo procesar la imagen");
+
+  ctx.drawImage(
+    image,
+    cropPixels.x, cropPixels.y, cropPixels.width, cropPixels.height,
+    0, 0, OUTPUT, OUTPUT
+  );
+
+  return new Promise((resolve, reject) => {
+    canvas.toBlob(
+      (blob) => {
+        if (blob) resolve(blob);
+        else reject(new Error("No se pudo generar la imagen recortada"));
+      },
+      "image/jpeg",
+      0.9
+    );
+  });
+}
+
 export default function StaffModule() {
   const [members, setMembers] = useState<StaffMember[]>([]);
   const [loading, setLoading] = useState(false);
@@ -73,6 +111,15 @@ export default function StaffModule() {
   const [isNew, setIsNew] = useState(false);
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
+
+  const [cropSrc, setCropSrc] = useState<string | null>(null);
+  const [crop, setCrop] = useState({ x: 0, y: 0 });
+  const [zoom, setZoom] = useState(1);
+  const [croppedAreaPixels, setCroppedAreaPixels] = useState<Area | null>(null);
+
+  const onCropComplete = useCallback((_: Area, areaPixels: Area) => {
+    setCroppedAreaPixels(areaPixels);
+  }, []);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -150,6 +197,34 @@ export default function StaffModule() {
     } finally {
       setUploading(false);
     }
+  }
+
+  // Cuando el usuario selecciona un archivo, en vez de subir directo, abrimos el cropper
+  function handleFileSelected(file: File) {
+    const url = URL.createObjectURL(file);
+    setCropSrc(url);
+    setZoom(1);
+    setCrop({ x: 0, y: 0 });
+  }
+
+  // Cuando confirma el recorte, generamos el blob y lo subimos con la función existente
+  async function handleCropConfirm() {
+    if (!cropSrc || !croppedAreaPixels) return;
+    try {
+      const blob = await getCroppedImg(cropSrc, croppedAreaPixels);
+      const croppedFile = new File([blob], "foto.jpg", { type: "image/jpeg" });
+      await uploadFoto(croppedFile);
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "Error al recortar la foto");
+    } finally {
+      URL.revokeObjectURL(cropSrc);
+      setCropSrc(null);
+    }
+  }
+
+  function handleCropCancel() {
+    if (cropSrc) URL.revokeObjectURL(cropSrc);
+    setCropSrc(null);
   }
 
   async function handleSave() {
@@ -233,11 +308,65 @@ export default function StaffModule() {
           saving={saving}
           uploading={uploading}
           onChange={(patch) => setForm((f) => (f ? { ...f, ...patch } : f))}
-          onUploadFoto={uploadFoto}
+          onUploadFoto={handleFileSelected}
           onRemoveFoto={removeFoto}
           onCancel={closeModal}
           onSave={handleSave}
         />
+      )}
+
+      {cropSrc && (
+        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-[60] p-4">
+          <div className="bg-white rounded-xl w-full max-w-md p-5">
+            <h3 className="text-sm font-semibold text-gray-900 mb-3">Ajustar foto</h3>
+            <p className="text-xs text-gray-500 mb-4">Arrastra para mover y usa el control para acercar. La foto se recorta en círculo.</p>
+
+            <div className="relative w-full h-64 bg-gray-900 rounded-lg overflow-hidden">
+              <Cropper
+                image={cropSrc}
+                crop={crop}
+                zoom={zoom}
+                aspect={1}
+                cropShape="round"
+                showGrid={false}
+                onCropChange={setCrop}
+                onZoomChange={setZoom}
+                onCropComplete={onCropComplete}
+              />
+            </div>
+
+            <div className="flex items-center gap-3 mt-4">
+              <span className="text-xs text-gray-500 shrink-0">Zoom</span>
+              <input
+                type="range"
+                min={1}
+                max={3}
+                step={0.05}
+                value={zoom}
+                onChange={(e) => setZoom(Number(e.target.value))}
+                className="w-full accent-ccb-green"
+              />
+            </div>
+
+            <div className="flex justify-end gap-2 mt-5">
+              <button
+                onClick={handleCropCancel}
+                disabled={uploading}
+                className="px-4 py-2 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-100"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={handleCropConfirm}
+                disabled={uploading}
+                className="px-4 py-2 rounded-lg text-sm font-medium text-white disabled:opacity-50"
+                style={{ backgroundColor: "#1B4D2E" }}
+              >
+                {uploading ? "Subiendo..." : "Aplicar"}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
