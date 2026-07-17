@@ -105,10 +105,10 @@ export default async function DashboardPage() {
   const pctAsistencia = totalAsistencia > 0 ? Math.round((attendanceCounts.presente / totalAsistencia) * 100) : 0;
 
   const kpis = [
-    { label: "Jugadores Activos", value: totalAlumnos ?? 0, icon: Users, color: KPI_COLORS.verde, bg: "#eaf3ee" },
-    { label: "Clases Hoy", value: clasesHoy ?? 0, icon: Calendar, color: KPI_COLORS.azul, bg: "#e6f1fb" },
-    { label: "Profesores", value: totalStaff ?? 0, icon: UserCheck, color: KPI_COLORS.morado, bg: "#eeedfe" },
-    { label: "Reservas", value: totalReservas ?? 0, icon: CalendarCheck, color: KPI_COLORS.coral, bg: "#faece7" },
+    { label: "Jugadores Activos", value: totalAlumnos ?? 0, icon: Users, color: KPI_COLORS.verde, bg: "#eaf3ee", tint: "rgba(27,77,46,0.15)" },
+    { label: "Clases Hoy", value: clasesHoy ?? 0, icon: Calendar, color: KPI_COLORS.azul, bg: "#e6f1fb", tint: "rgba(55,138,221,0.15)" },
+    { label: "Profesores", value: totalStaff ?? 0, icon: UserCheck, color: KPI_COLORS.morado, bg: "#eeedfe", tint: "rgba(127,119,221,0.15)" },
+    { label: "Reservas", value: totalReservas ?? 0, icon: CalendarCheck, color: KPI_COLORS.coral, bg: "#faece7", tint: "rgba(216,90,48,0.15)" },
   ];
 
   return (
@@ -116,7 +116,7 @@ export default async function DashboardPage() {
 
       {/* HERO */}
       <div className="relative shrink-0">
-        <div className="relative h-[180px] md:h-[300px] overflow-hidden bg-sidebar-bg">
+        <div className="relative h-[180px] md:h-[350px] overflow-hidden bg-sidebar-bg">
           <img
             src="/hero-ccb.jpg"
             alt="Country Club de Bogotá"
@@ -127,11 +127,41 @@ export default async function DashboardPage() {
             className="absolute inset-0"
             style={{ background: "linear-gradient(180deg, rgba(15,25,35,0.15), rgba(15,25,35,0.75))" }}
           />
-          <div className="absolute inset-x-0 bottom-0 px-4 sm:px-8 pb-4 sm:pb-5 md:pb-20">
+          <div className="absolute inset-x-0 bottom-0 md:bottom-auto md:top-20 px-4 sm:px-8 pb-4 sm:pb-5 md:pb-0">
             <h1 className="text-xl sm:text-3xl font-bold text-white drop-shadow">
               {saludo}, {nombre}
             </h1>
             <p className="text-white/80 text-xs sm:text-sm mt-0.5">{fechaLabel}</p>
+          </div>
+
+          {/* KPIs — vidrio sobre la foto (solo desktop) */}
+          <div className="hidden md:grid absolute inset-x-0 bottom-0 z-10 grid-cols-4 gap-3 px-6 lg:px-8 pb-6">
+            {kpis.map((kpi) => {
+              const Icon = kpi.icon;
+              return (
+                <div
+                  key={kpi.label}
+                  className="rounded-[14px] p-3.5"
+                  style={{
+                    background: `linear-gradient(rgba(255,255,255,0.18), rgba(255,255,255,0.18)), linear-gradient(${kpi.tint}, ${kpi.tint})`,
+                    backdropFilter: "blur(12px)",
+                    WebkitBackdropFilter: "blur(12px)",
+                    border: "0.5px solid rgba(255,255,255,0.35)",
+                  }}
+                >
+                  <div
+                    className="w-9 h-9 rounded-[10px] flex items-center justify-center mb-2"
+                    style={{ background: "rgba(255,255,255,0.92)" }}
+                  >
+                    <Icon size={18} style={{ color: kpi.color }} />
+                  </div>
+                  <p className="text-2xl font-bold text-white leading-none" style={{ textShadow: "0 1px 4px rgba(0,0,0,0.4)" }}>
+                    {kpi.value}
+                  </p>
+                  <p className="text-[12px] text-white/90 mt-1">{kpi.label}</p>
+                </div>
+              );
+            })}
           </div>
         </div>
         <div className="absolute top-3 right-3 sm:top-4 sm:right-4 z-20">
@@ -142,89 +172,89 @@ export default async function DashboardPage() {
       {/* CONTENIDO */}
       <div className="flex-1 px-4 sm:px-6 py-5 sm:py-6 space-y-5 sm:space-y-6">
 
-        {/* KPIs */}
-        <div className="relative z-30 grid grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-3 md:-mt-20">
+        {/* KPIs — sólidas debajo del hero (solo móvil) */}
+        <div className="md:hidden grid grid-cols-2 gap-2.5">
           {kpis.map((kpi) => {
             const Icon = kpi.icon;
             return (
               <div
                 key={kpi.label}
-                className="rounded-xl p-3 sm:p-3.5 shadow-sm md:shadow-xl"
+                className="rounded-xl p-3 shadow-sm"
                 style={{ background: kpi.bg }}
               >
                 <div
-                  className="w-9 h-9 sm:w-11 sm:h-11 rounded-[10px] flex items-center justify-center mb-2"
+                  className="w-9 h-9 rounded-[10px] flex items-center justify-center mb-2"
                   style={{ background: kpi.color }}
                 >
                   <Icon size={20} className="text-white" />
                 </div>
                 <p className="text-2xl font-bold text-gray-900 leading-none">{kpi.value}</p>
-                <p className="text-[12px] sm:text-[13px] text-gray-500 mt-1.5">{kpi.label}</p>
+                <p className="text-[12px] text-gray-500 mt-1.5">{kpi.label}</p>
               </div>
             );
           })}
         </div>
 
-        {/* SESIONES DEL DÍA */}
-        <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-4 sm:p-6">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-sm font-semibold text-foreground flex items-center gap-2">
-              <Clock size={15} className="text-ccb-green" />
-              Agenda del día
-            </h2>
-            <span className="text-xs text-gray-400">{fechaLabel}</span>
+        {/* AGENDA + PRÓXIMOS EVENTOS + RESUMEN DE ASISTENCIA */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+
+          {/* AGENDA DEL DÍA */}
+          <div className="bg-white rounded-xl border border-gray-100 border-t-[3px] shadow-sm p-4 sm:p-6" style={{ borderTopColor: "#1B4D2E" }}>
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-sm font-semibold text-foreground flex items-center gap-2">
+                <Clock size={15} style={{ color: "#1B4D2E" }} />
+                Agenda del día
+              </h2>
+              <span className="text-xs text-gray-400">{fechaLabel}</span>
+            </div>
+
+            {!sesionesHoy || sesionesHoy.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-10 text-gray-400">
+                <Calendar size={28} className="mb-2 opacity-40" />
+                <p className="text-sm">No hay sesiones programadas para hoy</p>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {sesionesHoy.map((s) => {
+                  const planRel = Array.isArray(s.planes_semanales) ? s.planes_semanales[0] : s.planes_semanales;
+                  const tipoPlan = planRel?.tipo_plan as TipoPlan | undefined;
+                  const color = tipoPlan ? TIPO_PLAN_COLOR[tipoPlan] : "#9ca3af";
+                  const dur = duracionMin(s.hora_inicio, s.hora_fin);
+                  return (
+                    <div key={s.id} className="flex gap-3">
+                      <div className="w-14 shrink-0 text-right">
+                        <p className="text-sm font-bold text-gray-800">{formatHora(s.hora_inicio)}</p>
+                        {dur !== null && <p className="text-[10px] text-gray-400">{dur} min</p>}
+                      </div>
+                      <div className="w-1 rounded-full shrink-0" style={{ background: color }} />
+                      <div className="flex-1 min-w-0 pb-3 border-b border-gray-50 last:border-0 last:pb-0">
+                        <p className="text-sm font-semibold text-gray-900">
+                          {tipoPlan ? `${TIPO_PLAN_LABEL[tipoPlan]} — ` : ""}
+                          {TIPO_SESION_LABEL[s.tipo_sesion] ?? s.tipo_sesion}
+                        </p>
+                        <p className="text-xs text-gray-400 mt-0.5">
+                          {LUGAR_LABEL[s.lugar] ?? s.lugar}
+                          {s.objetivo ? ` · ${s.objetivo}` : ""}
+                        </p>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
+            <Link
+              href="/programacion"
+              className="mt-4 flex items-center justify-center gap-1 text-sm font-semibold text-ccb-green hover:underline"
+            >
+              Ver programación completa →
+            </Link>
           </div>
 
-          {!sesionesHoy || sesionesHoy.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-10 text-gray-400">
-              <Calendar size={28} className="mb-2 opacity-40" />
-              <p className="text-sm">No hay sesiones programadas para hoy</p>
-            </div>
-          ) : (
-            <div className="space-y-3">
-              {sesionesHoy.map((s) => {
-                const planRel = Array.isArray(s.planes_semanales) ? s.planes_semanales[0] : s.planes_semanales;
-                const tipoPlan = planRel?.tipo_plan as TipoPlan | undefined;
-                const color = tipoPlan ? TIPO_PLAN_COLOR[tipoPlan] : "#9ca3af";
-                const dur = duracionMin(s.hora_inicio, s.hora_fin);
-                return (
-                  <div key={s.id} className="flex gap-3">
-                    <div className="w-14 shrink-0 text-right">
-                      <p className="text-sm font-bold text-gray-800">{formatHora(s.hora_inicio)}</p>
-                      {dur !== null && <p className="text-[10px] text-gray-400">{dur} min</p>}
-                    </div>
-                    <div className="w-1 rounded-full shrink-0" style={{ background: color }} />
-                    <div className="flex-1 min-w-0 pb-3 border-b border-gray-50 last:border-0 last:pb-0">
-                      <p className="text-sm font-semibold text-gray-900">
-                        {tipoPlan ? `${TIPO_PLAN_LABEL[tipoPlan]} — ` : ""}
-                        {TIPO_SESION_LABEL[s.tipo_sesion] ?? s.tipo_sesion}
-                      </p>
-                      <p className="text-xs text-gray-400 mt-0.5">
-                        {LUGAR_LABEL[s.lugar] ?? s.lugar}
-                        {s.objetivo ? ` · ${s.objetivo}` : ""}
-                      </p>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-
-          <Link
-            href="/programacion"
-            className="mt-4 flex items-center justify-center gap-1 text-sm font-semibold text-ccb-green hover:underline"
-          >
-            Ver programación completa →
-          </Link>
-        </div>
-
-        {/* PRÓXIMOS EVENTOS + RESUMEN DE ASISTENCIA */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 sm:gap-6">
-
           {/* PRÓXIMOS EVENTOS */}
-          <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-4 sm:p-6">
+          <div className="bg-white rounded-xl border border-gray-100 border-t-[3px] shadow-sm p-4 sm:p-6" style={{ borderTopColor: "#f59e0b" }}>
             <h2 className="text-sm font-semibold text-foreground flex items-center gap-2 mb-4">
-              <Trophy size={15} className="text-ccb-green" />
+              <Trophy size={15} style={{ color: "#f59e0b" }} />
               Próximos eventos
             </h2>
 
@@ -266,10 +296,10 @@ export default async function DashboardPage() {
           </div>
 
           {/* RESUMEN DE ASISTENCIA */}
-          <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-4 sm:p-6">
+          <div className="bg-white rounded-xl border border-gray-100 border-t-[3px] shadow-sm p-4 sm:p-6" style={{ borderTopColor: "#378ADD" }}>
             <div className="mb-4">
               <h2 className="text-sm font-semibold text-foreground flex items-center gap-2">
-                <ChartBar size={15} className="text-ccb-green" />
+                <ChartBar size={15} style={{ color: "#378ADD" }} />
                 Resumen de asistencia
               </h2>
               <p className="text-xs text-gray-400 mt-0.5">Periodo registrado</p>
@@ -300,7 +330,7 @@ export default async function DashboardPage() {
                   })}
                 </div>
 
-                <div className="grid grid-cols-2 gap-x-3 gap-y-2">
+                <div className="grid grid-cols-2 md:grid-cols-1 lg:grid-cols-2 gap-x-3 gap-y-2">
                   {ATTENDANCE_ORDER.map((key) => (
                     <div key={key} className="flex items-center gap-1.5">
                       <span className="w-2 h-2 rounded-full shrink-0" style={{ background: ATTENDANCE_COLOR[key] }} />
