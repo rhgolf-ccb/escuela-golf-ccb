@@ -83,7 +83,7 @@ export default function Navbar({
               COUNTRY CLUB
             </span>
             <span className="text-white text-[10px] tracking-widest uppercase opacity-70">
-              GOLF ACADEMY
+              ESCUELA DE GOLF
             </span>
           </div>
         </div>
@@ -164,7 +164,7 @@ export default function Navbar({
       <header className="lg:hidden flex items-center justify-between px-4 h-14 bg-sidebar-bg sticky top-0 z-40">
         <div className="flex items-center gap-2">
           <Image src="/Paco_transparente.png" alt="Paco" height={30} width={30} className="object-contain" />
-          <span className="text-ccb-gold font-bold text-sm tracking-wide">CCB Golf Academy</span>
+          <span className="text-ccb-gold font-bold text-sm tracking-wide">CCB Escuela de Golf</span>
         </div>
         <button onClick={() => setMobileOpen(!mobileOpen)} className="text-white p-1">
           {mobileOpen ? <X size={22} /> : <Menu size={22} />}

@@ -21,11 +21,15 @@ export default async function DashboardPage() {
   const { count: totalStaff } = await supabase
     .from("staff_directorio").select("*", { count: "exact", head: true });
 
-  const hoy = new Date().toISOString().split("T")[0];
+  const hoy = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/Bogota", year: "numeric", month: "2-digit", day: "2-digit",
+  }).format(new Date());
   const { count: clasesHoy } = await supabase
     .from("sesiones_semana").select("*", { count: "exact", head: true }).eq("fecha", hoy);
 
-  const hora = new Date().getHours();
+  const hora = Number(
+    new Intl.DateTimeFormat("en-US", { timeZone: "America/Bogota", hour: "numeric", hourCycle: "h23" }).format(new Date())
+  );
   const saludo = hora < 12 ? "Buenos días" : hora < 18 ? "Buenas tardes" : "Buenas noches";
   const emoji = hora < 12 ? "☀️" : hora < 18 ? "⛳" : "🌙";
 
@@ -73,7 +77,8 @@ export default async function DashboardPage() {
         <img
           src="/hero-ccb.jpg"
           alt="Country Club de Bogotá"
-          className="w-full h-full object-cover object-center"
+          className="w-full h-full object-cover"
+          style={{ objectPosition: "center 70%" }}
         />
         <div className="absolute inset-0 bg-gradient-to-r from-[#0f1923]/80 via-[#0f1923]/40 to-transparent" />
         <div className="absolute inset-0 flex flex-col justify-center px-8">
