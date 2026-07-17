@@ -36,10 +36,12 @@ export default function Navbar({
   role,
   nombre,
   email,
+  fotoUrl,
 }: {
   role: Rol | null;
   nombre: string | null;
   email: string | null;
+  fotoUrl: string | null;
 }) {
   const pathname = usePathname();
   const router = useRouter();
@@ -117,8 +119,13 @@ export default function Navbar({
           onClick={() => setUserMenuOpen(!userMenuOpen)}
           className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-sidebar-hover transition-colors"
         >
-          <div className="w-8 h-8 rounded-full bg-ccb-green flex items-center justify-center text-white text-xs font-bold shrink-0">
-            {initiales(displayName)}
+          <div className="w-8 h-8 rounded-full bg-ccb-green flex items-center justify-center text-white text-xs font-bold shrink-0 overflow-hidden">
+            {fotoUrl ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={fotoUrl} alt={displayName} className="w-full h-full object-cover" style={{ borderRadius: "50%" }} />
+            ) : (
+              initiales(displayName)
+            )}
           </div>
           <div className="flex-1 text-left min-w-0">
             <p className="text-white text-sm font-medium truncate">{displayName}</p>

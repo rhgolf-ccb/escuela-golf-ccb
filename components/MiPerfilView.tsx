@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { User } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import type { Rol } from "@/lib/roles";
 
@@ -131,10 +132,17 @@ export default function MiPerfilView({ rol, estudiantes }: { rol: Rol; estudiant
 
   return (
     <div className="max-w-3xl mx-auto px-4 sm:px-6 py-8">
-      <h1 className="text-2xl font-bold text-gray-900 mb-1">
-        {selected ? `Perfil de ${selected.full_name}` : "Mi Perfil"}
-      </h1>
-      <p className="text-sm text-gray-400 mb-4">Consulta el progreso y la información de tu(s) alumno(s)</p>
+      <div className="mb-4 flex items-center gap-3">
+        <div className="w-11 h-11 rounded-xl bg-ccb-green flex items-center justify-center shrink-0">
+          <User size={22} className="text-white" />
+        </div>
+        <div>
+          <h1 className="text-2xl font-bold text-ccb-green">
+            {selected ? `Perfil de ${selected.full_name}` : "Mi Perfil"}
+          </h1>
+          <p className="text-sm text-(--text-muted)">Consulta el progreso y la información de tu(s) alumno(s)</p>
+        </div>
+      </div>
 
       {(rol === "padre_competencia" || rol === "alumno_competencia") && (
         <Link
@@ -153,7 +161,7 @@ export default function MiPerfilView({ rol, estudiantes }: { rol: Rol; estudiant
               key={e.id}
               onClick={() => setSelectedId(e.id)}
               className="flex items-center gap-2 px-3 py-2 rounded-xl border transition-colors"
-              style={selectedId === e.id ? { background: "#1a3a2a", color: "#fff", borderColor: "#1a3a2a" } : { background: "#fff", color: "#374151", borderColor: "#e5e7eb" }}
+              style={selectedId === e.id ? { background: "#1B4D2E", color: "#fff", borderColor: "#1B4D2E" } : { background: "#fff", color: "#374151", borderColor: "#e5e7eb" }}
             >
               <span className="w-6 h-6 rounded-full bg-white/20 flex items-center justify-center text-[10px] font-bold">{initiales(e.full_name)}</span>
               <span className="text-sm font-medium">{e.full_name}</span>
@@ -180,7 +188,7 @@ export default function MiPerfilView({ rol, estudiantes }: { rol: Rol; estudiant
                 key={t.id}
                 onClick={() => setTab(t.id)}
                 className="px-4 py-2 text-sm font-semibold border-b-2 transition-colors"
-                style={tab === t.id ? { borderColor: "#1a3a2a", color: "#1a3a2a" } : { borderColor: "transparent", color: "#9ca3af" }}
+                style={tab === t.id ? { borderColor: "#1B4D2E", color: "#1B4D2E" } : { borderColor: "transparent", color: "#9ca3af" }}
               >
                 {t.label}
               </button>
@@ -253,7 +261,7 @@ export default function MiPerfilView({ rol, estudiantes }: { rol: Rol; estudiant
                         <p className="text-xs text-gray-400">{formatFecha(n.fecha)}</p>
                         <div className="flex items-center gap-1.5">
                           {n.video_url && (
-                            <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full text-white" style={{ backgroundColor: "#1a3a2a" }}>
+                            <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full text-white" style={{ backgroundColor: "#1B4D2E" }}>
                               🎥 Video
                             </span>
                           )}
