@@ -895,7 +895,8 @@ export default function ProgramacionModule({ currentRol }: { currentRol: Rol | n
           </div>
         )}
         {!calLoading && (
-          <div>
+          <div className="overflow-x-auto">
+          <div style={{ minWidth: 640 }}>
             {/* Day headers */}
             <div className="grid" style={{ gridTemplateColumns: "60px repeat(6, 1fr)", background: "#e8f0e6", borderBottom: "1px solid #d4e0d2" }}>
               <div style={{ borderRight: "1px solid #d4e0d2" }} />
@@ -1077,6 +1078,7 @@ export default function ProgramacionModule({ currentRol }: { currentRol: Rol | n
               </div>
             </div>
           </div>
+          </div>
         )}
       </div>
     );
@@ -1120,6 +1122,8 @@ export default function ProgramacionModule({ currentRol }: { currentRol: Rol | n
 
         {!calLoading && (
           <>
+            <div className="overflow-x-auto">
+            <div style={{ minWidth: 560 }}>
             {/* Day headers */}
             <div className="grid grid-cols-7" style={{ background: "#e8f0e6", borderBottom: "1px solid #d4e0d2" }}>
               {HEADERS.map((h) => (
@@ -1214,6 +1218,8 @@ export default function ProgramacionModule({ currentRol }: { currentRol: Rol | n
                   </div>
                 );
               })}
+            </div>
+            </div>
             </div>
 
             {/* Selected day detail */}
