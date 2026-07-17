@@ -3,6 +3,8 @@
 import { useCallback, useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { ClipboardList } from "lucide-react";
+import Cropper from "react-easy-crop";
+import type { Area } from "react-easy-crop";
 
 type Benchmark = {
   id: string | null;
@@ -69,6 +71,41 @@ function emptyBenchmark(orden: number): Benchmark {
   return { id: null, criterio: "", descripcion_ok: null, descripcion_progreso: null, descripcion_no: null, edad_min: null, edad_max: null, valor_minimo: null, valor_optimo: null, unidad: null, orden };
 }
 
+// Genera un Blob recortado respetando las dimensiones reales del recorte (no fuerza cuadrado), con tope de 1200px en el lado mayor
+async function getCroppedImg(imageSrc: string, cropPixels: { x: number; y: number; width: number; height: number }): Promise<Blob> {
+  const image = new Image();
+  image.crossOrigin = "anonymous";
+  image.src = imageSrc;
+  await new Promise((resolve, reject) => {
+    image.onload = resolve;
+    image.onerror = reject;
+  });
+
+  const canvas = document.createElement("canvas");
+  const MAX = 1200;
+  let w = cropPixels.width;
+  let h = cropPixels.height;
+  if (Math.max(w, h) > MAX) {
+    const scale = MAX / Math.max(w, h);
+    w = Math.round(w * scale);
+    h = Math.round(h * scale);
+  }
+  canvas.width = w;
+  canvas.height = h;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) throw new Error("No se pudo procesar la imagen");
+
+  ctx.drawImage(image, cropPixels.x, cropPixels.y, cropPixels.width, cropPixels.height, 0, 0, w, h);
+
+  return new Promise((resolve, reject) => {
+    canvas.toBlob(
+      (blob) => { if (blob) resolve(blob); else reject(new Error("No se pudo generar la imagen recortada")); },
+      "image/jpeg",
+      0.9
+    );
+  });
+}
+
 function Loading() {
   return <div className="flex items-center justify-center py-16"><div className="animate-spin rounded-full h-7 w-7 border-2 border-[#1B4D2E] border-t-transparent" /></div>;
 }
@@ -84,6 +121,17 @@ export default function ProtocolosModule() {
   const [saving, setSaving] = useState(false);
   const [draft, setDraft] = useState<TestFull[] | null>(null);
   const [uploadingFor, setUploadingFor] = useState<string | null>(null);
+
+  const [cropSrc, setCropSrc] = useState<string | null>(null);
+  const [cropTargetCodigo, setCropTargetCodigo] = useState<string | null>(null);
+  const [crop, setCrop] = useState({ x: 0, y: 0 });
+  const [zoom, setZoom] = useState(1);
+  const [cropAspect, setCropAspect] = useState<number | undefined>(16 / 9);
+  const [croppedAreaPixels, setCroppedAreaPixels] = useState<Area | null>(null);
+
+  const onCropComplete = useCallback((_: Area, areaPixels: Area) => {
+    setCroppedAreaPixels(areaPixels);
+  }, []);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -158,6 +206,37 @@ export default function ProtocolosModule() {
     } finally {
       setUploadingFor(null);
     }
+  }
+
+  // Intercepta la selección de archivo: abre el cropper en vez de subir directo
+  function handleFileSelected(codigo: string, file: File) {
+    const url = URL.createObjectURL(file);
+    setCropTargetCodigo(codigo);
+    setCropSrc(url);
+    setCrop({ x: 0, y: 0 });
+    setZoom(1);
+    setCropAspect(16 / 9);
+  }
+
+  async function handleCropConfirm() {
+    if (!cropSrc || !croppedAreaPixels || !cropTargetCodigo) return;
+    try {
+      const blob = await getCroppedImg(cropSrc, croppedAreaPixels);
+      const croppedFile = new File([blob], "foto.jpg", { type: "image/jpeg" });
+      await uploadFoto(cropTargetCodigo, croppedFile);
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "Error al recortar la foto");
+    } finally {
+      URL.revokeObjectURL(cropSrc);
+      setCropSrc(null);
+      setCropTargetCodigo(null);
+    }
+  }
+
+  function handleCropCancel() {
+    if (cropSrc) URL.revokeObjectURL(cropSrc);
+    setCropSrc(null);
+    setCropTargetCodigo(null);
   }
 
   async function handleSave() {
@@ -296,7 +375,7 @@ export default function ProtocolosModule() {
                         onBenchmarkChange={(idx, patch) => updateBenchmark(t.codigo, idx, patch)}
                         onAddBenchmark={() => addBenchmark(t.codigo)}
                         onRemoveBenchmark={(idx) => removeBenchmark(t.codigo, idx)}
-                        onUploadFoto={(file) => uploadFoto(t.codigo, file)} />
+                        onUploadFoto={(file) => handleFileSelected(t.codigo, file)} />
                     ))}
                   </div>
                 </div>
@@ -305,6 +384,72 @@ export default function ProtocolosModule() {
           )}
         </div>
       </div>
+
+      {cropSrc && (
+        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-[60] p-4">
+          <div className="bg-white rounded-xl w-full max-w-lg p-5">
+            <h3 className="text-sm font-semibold text-gray-900 mb-3">Ajustar foto de referencia</h3>
+
+            {/* Selector de proporción */}
+            <div className="flex gap-1.5 mb-3">
+              {([
+                { label: "Libre", value: undefined },
+                { label: "Horizontal", value: 16 / 9 },
+                { label: "Cuadrado", value: 1 },
+                { label: "Vertical", value: 3 / 4 },
+              ] as { label: string; value: number | undefined }[]).map((opt) => {
+                const active = cropAspect === opt.value;
+                return (
+                  <button
+                    key={opt.label}
+                    onClick={() => setCropAspect(opt.value)}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors border ${
+                      active
+                        ? "bg-ccb-green text-white border-transparent"
+                        : "text-gray-600 border-gray-200 hover:border-gray-300"
+                    }`}
+                  >
+                    {opt.label}
+                  </button>
+                );
+              })}
+            </div>
+
+            <div className="relative w-full bg-gray-900 rounded-lg overflow-hidden" style={{ height: 320 }}>
+              <Cropper
+                image={cropSrc}
+                crop={crop}
+                zoom={zoom}
+                aspect={cropAspect}
+                cropShape="rect"
+                showGrid={true}
+                onCropChange={setCrop}
+                onZoomChange={setZoom}
+                onCropComplete={onCropComplete}
+              />
+            </div>
+
+            <div className="flex items-center gap-3 mt-4">
+              <span className="text-xs text-gray-500 shrink-0">Zoom</span>
+              <input type="range" min={1} max={3} step={0.05} value={zoom}
+                onChange={(e) => setZoom(Number(e.target.value))}
+                className="w-full accent-ccb-green" />
+            </div>
+
+            <div className="flex justify-end gap-2 mt-5">
+              <button onClick={handleCropCancel} disabled={uploadingFor !== null}
+                className="px-4 py-2 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-100">
+                Cancelar
+              </button>
+              <button onClick={handleCropConfirm} disabled={uploadingFor !== null}
+                className="px-4 py-2 rounded-lg text-sm font-medium text-white disabled:opacity-50"
+                style={{ backgroundColor: "#1B4D2E" }}>
+                {uploadingFor !== null ? "Subiendo..." : "Aplicar"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
