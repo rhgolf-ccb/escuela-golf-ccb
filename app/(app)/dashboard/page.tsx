@@ -116,7 +116,7 @@ export default async function DashboardPage() {
 
       {/* HERO */}
       <div className="relative shrink-0">
-        <div className="relative h-[150px] sm:h-[200px] md:h-[320px] overflow-hidden bg-sidebar-bg">
+        <div className="relative h-[180px] md:h-[300px] overflow-hidden bg-sidebar-bg">
           <img
             src="/hero-ccb.jpg"
             alt="Country Club de Bogotá"
