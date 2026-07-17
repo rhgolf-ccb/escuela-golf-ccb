@@ -693,7 +693,7 @@ export default function DrillsModule() {
               </div>
 
               {/* Categoría + subcategoría */}
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="block text-xs font-semibold text-gray-700 mb-1">Categoría <span className="text-red-400">*</span></label>
                   <select value={form.categoria} onChange={e => { setF("categoria", e.target.value as Categoria); setF("subcategoria", null); setF("posicion_swing", null); }}
@@ -765,7 +765,7 @@ export default function DrillsModule() {
               </div>
 
               {/* Error + sensación */}
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="block text-xs font-semibold text-gray-700 mb-1">Error que corrige</label>
                   <textarea value={form.error_que_corrige ?? ""} onChange={e => setF("error_que_corrige", e.target.value || null)}
@@ -781,7 +781,7 @@ export default function DrillsModule() {
               </div>
 
               {/* Métrica + variante presión */}
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="block text-xs font-semibold text-gray-700 mb-1">Métrica de éxito</label>
                   <input value={form.metrica_exito ?? ""} onChange={e => setF("metrica_exito", e.target.value || null)}
@@ -797,7 +797,7 @@ export default function DrillsModule() {
               </div>
 
               {/* Duración + repeticiones */}
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="block text-xs font-semibold text-gray-700 mb-1">Duración (min)</label>
                   <input type="number" min={1} max={90} value={form.duracion_minutos ?? ""}

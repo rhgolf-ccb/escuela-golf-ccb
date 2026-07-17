@@ -402,7 +402,7 @@ export default function FisicoModule() {
                 <p className="text-sm text-gray-600 leading-relaxed whitespace-pre-line">{detailEjercicio.instrucciones}</p>
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 {detailEjercicio.series_repeticiones && (
                   <div>
                     <p className="text-xs font-semibold text-gray-700 mb-1">Series / repeticiones</p>
@@ -474,7 +474,7 @@ export default function FisicoModule() {
               </div>
 
               {/* Categoría + grupo muscular */}
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="block text-xs font-semibold text-gray-700 mb-1">Categoría <span className="text-red-400">*</span></label>
                   <select value={form.categoria} onChange={e => setF("categoria", e.target.value as Categoria)}
@@ -508,7 +508,7 @@ export default function FisicoModule() {
               </div>
 
               {/* Materiales + screen vinculado */}
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="block text-xs font-semibold text-gray-700 mb-1">Materiales</label>
                   <input value={form.materiales ?? ""} onChange={e => setF("materiales", e.target.value || null)}
@@ -532,7 +532,7 @@ export default function FisicoModule() {
               </div>
 
               {/* Series/repeticiones + progresión */}
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="block text-xs font-semibold text-gray-700 mb-1">Series / repeticiones</label>
                   <input value={form.series_repeticiones ?? ""} onChange={e => setF("series_repeticiones", e.target.value || null)}
