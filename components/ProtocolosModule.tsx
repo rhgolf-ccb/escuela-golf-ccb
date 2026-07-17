@@ -115,6 +115,7 @@ function EmptyState({ msg }: { msg: string }) {
 
 export default function ProtocolosModule() {
   const [activeNav, setActiveNav] = useState<NavItem>(NAV_TECNICO[0]);
+  const [mobileNavOpen, setMobileNavOpen] = useState(true);
   const [testsByGrupo, setTestsByGrupo] = useState<Record<string, TestFull[]>>({});
   const [loading, setLoading] = useState(false);
   const [editing, setEditing] = useState(false);
@@ -307,15 +308,15 @@ export default function ProtocolosModule() {
           <p className="text-sm text-(--text-muted) mt-0.5">Tests técnicos y físicos por grupo</p>
         </div>
       </div>
-      <div className="flex gap-6">
-        <nav className="w-[260px] shrink-0">
+      <div className="flex flex-col md:flex-row gap-6">
+        <nav className={`${mobileNavOpen ? "block" : "hidden md:block"} w-full md:w-[260px] md:shrink-0`}>
           <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2 px-2">Técnico</p>
           <div className="space-y-1 mb-6">
             {NAV_TECNICO.map((item) => {
               const active = activeNav.key === item.key;
               const c = GROUP_COLOR[navTipoColor(item)];
               return (
-                <button key={item.key} onClick={() => setActiveNav(item)}
+                <button key={item.key} onClick={() => { setActiveNav(item); setMobileNavOpen(false); }}
                   className="w-full text-left px-3 py-2 rounded-lg text-sm font-medium transition-colors"
                   style={active ? { backgroundColor: c.bg, color: c.text, borderLeft: `3px solid ${c.text}` } : { color: "#6b7280", borderLeft: "3px solid transparent" }}>
                   {item.label}
@@ -329,7 +330,7 @@ export default function ProtocolosModule() {
               const active = activeNav.key === item.key;
               const c = GROUP_COLOR[navTipoColor(item)];
               return (
-                <button key={item.key} onClick={() => setActiveNav(item)}
+                <button key={item.key} onClick={() => { setActiveNav(item); setMobileNavOpen(false); }}
                   className="w-full text-left px-3 py-2 rounded-lg text-sm font-medium transition-colors"
                   style={active ? { backgroundColor: c.bg, color: c.text, borderLeft: `3px solid ${c.text}` } : { color: "#6b7280", borderLeft: "3px solid transparent" }}>
                   {item.label}
@@ -339,7 +340,14 @@ export default function ProtocolosModule() {
           </div>
         </nav>
 
-        <div className="flex-1 min-w-0">
+        <div className={`${mobileNavOpen ? "hidden md:block" : "block"} flex-1 min-w-0`}>
+          <button
+            onClick={() => setMobileNavOpen(true)}
+            className="md:hidden flex items-center gap-1.5 text-sm font-semibold text-gray-500 hover:text-gray-700 mb-4"
+          >
+            <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path d="M15 18l-6-6 6-6"/></svg>
+            Volver a categorías
+          </button>
           <div className="flex items-center justify-between mb-5 flex-wrap gap-3">
             <div className="flex items-center gap-3">
               <h2 className="text-lg font-semibold text-gray-800">{activeNav.label}</h2>

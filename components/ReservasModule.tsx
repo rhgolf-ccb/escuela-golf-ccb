@@ -373,11 +373,11 @@ export default function ReservasModule() {
         </div>
       </div>
 
-      {/* Two-column layout */}
-      <div className="flex gap-5 items-start">
+      {/* Two-column layout — apilado en móvil (una columna visible a la vez, según sesionSel), lado a lado desde md */}
+      <div className="flex flex-col md:flex-row gap-5 md:items-start">
 
-        {/* ── LEFT COLUMN (280px) ────────────────────────────────────────────── */}
-        <div className="w-72 flex-shrink-0 space-y-3">
+        {/* ── LEFT COLUMN (280px en desktop) ────────────────────────────────── */}
+        <div className={`${sesionSel ? "hidden md:block" : "block"} w-full md:w-72 md:flex-shrink-0 space-y-3`}>
 
           {/* Week navigator + group filter */}
           <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-3 space-y-3">
@@ -512,7 +512,7 @@ export default function ReservasModule() {
         </div>
 
         {/* ── RIGHT COLUMN ──────────────────────────────────────────────────── */}
-        <div className="flex-1 min-w-0">
+        <div className={`${sesionSel ? "block" : "hidden md:block"} flex-1 min-w-0`}>
           {!sesionSel ? (
             <div className="bg-white rounded-xl border border-gray-100 shadow-sm flex flex-col items-center justify-center py-28">
               <div className="w-14 h-14 rounded-2xl bg-gray-50 flex items-center justify-center mb-4">
