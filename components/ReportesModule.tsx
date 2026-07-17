@@ -132,8 +132,8 @@ function PctBadge({ value }: { value: number }) {
 
 function MetricCard({ label, value, sub }: { label: string; value: string | number; sub?: string }) {
   return (
-    <div className="bg-white rounded-xl border border-gray-100 shadow-sm px-5 py-4">
-      <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-1">{label}</p>
+    <div className="bg-white rounded-xl border border-gray-100 shadow-sm px-5 py-4 min-w-0">
+      <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-1 truncate">{label}</p>
       <p className="text-2xl font-bold text-gray-900">{value}</p>
       {sub && <p className="text-xs text-gray-400 mt-0.5">{sub}</p>}
     </div>
@@ -480,7 +480,7 @@ function TabAsistencia() {
         </div>
       </div>
 
-      <div className="grid grid-cols-4 gap-3 mb-5">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-5">
         <MetricCard label="Inscritos" value={totalInscritos} />
         <MetricCard label="Asistieron" value={totalAsistieron} />
         <MetricCard label="Ausencias" value={totalAusentes} />
@@ -983,7 +983,7 @@ function TabEstadisticas() {
 
   return (
     <div className="space-y-6">
-      <div className="grid grid-cols-4 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         <MetricCard label="Alumnos activos" value={stats.totalActivos} />
         <MetricCard label="% Asistencia prom. 4 sem." value={`${stats.pctAsistencia}%`} />
         <MetricCard label="Alumnos Competencia" value={stats.competencia} />
@@ -1184,7 +1184,7 @@ function TabEdades() {
         <span className="text-xs text-gray-400">({filtered.length} alumno{filtered.length === 1 ? "" : "s"})</span>
       </div>
 
-      <div className="grid grid-cols-4 gap-3 mb-4">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
         <MetricCard label="Total alumnos" value={filtered.length} />
         <MetricCard label="Edad promedio" value={promedioEdad ?? "—"} />
         <MetricCard label="Menor edad" value={menorEdad ?? "—"} />
@@ -1429,7 +1429,7 @@ function TabReservaLive() {
         </div>
       </div>
 
-      <div className="grid grid-cols-3 gap-3 mb-4">
+      <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 mb-4">
         <MetricCard label="Total reservas" value={totalReservas} />
         <MetricCard label="Con talega propia" value={conTalegaPropia} />
         <MetricCard label="Con talega escuela" value={talegaEscuela} />
