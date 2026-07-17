@@ -895,6 +895,10 @@ export default function ProgramacionModule({ currentRol }: { currentRol: Rol | n
           </div>
         )}
         {!calLoading && (
+          <div className="relative">
+          <p className="md:hidden text-[11px] font-medium px-3 pt-2 pb-1" style={{ color: "#5f7a63" }}>
+            Desliza para ver más días →
+          </p>
           <div className="overflow-x-auto">
           <div style={{ minWidth: 640 }}>
             {/* Day headers */}
@@ -1079,6 +1083,11 @@ export default function ProgramacionModule({ currentRol }: { currentRol: Rol | n
             </div>
           </div>
           </div>
+          <div
+            className="md:hidden pointer-events-none absolute top-0 bottom-0 right-0 w-6"
+            style={{ background: "linear-gradient(to right, transparent, rgba(15,25,35,0.15))" }}
+          />
+          </div>
         )}
       </div>
     );
@@ -1122,6 +1131,10 @@ export default function ProgramacionModule({ currentRol }: { currentRol: Rol | n
 
         {!calLoading && (
           <>
+            <div className="relative">
+            <p className="md:hidden text-[11px] font-medium px-1 pt-1 pb-1" style={{ color: "#5f7a63" }}>
+              Desliza para ver el mes completo →
+            </p>
             <div className="overflow-x-auto">
             <div style={{ minWidth: 560 }}>
             {/* Day headers */}
@@ -1220,6 +1233,11 @@ export default function ProgramacionModule({ currentRol }: { currentRol: Rol | n
               })}
             </div>
             </div>
+            </div>
+            <div
+              className="md:hidden pointer-events-none absolute top-0 bottom-0 right-0 w-6"
+              style={{ background: "linear-gradient(to right, transparent, rgba(15,25,35,0.15))" }}
+            />
             </div>
 
             {/* Selected day detail */}
