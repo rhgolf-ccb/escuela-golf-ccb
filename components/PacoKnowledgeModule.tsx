@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { BookOpen } from "lucide-react";
 
 type Documento = {
   id: string;
@@ -99,17 +100,22 @@ export default function PacoKnowledgeModule() {
       )}
 
       <div className="flex items-center justify-between mb-6">
-        <div>
-          <h1 className="text-lg font-semibold text-gray-900">Base de conocimiento de Paco</h1>
-          <p className="text-sm text-gray-500 mt-0.5">Documentos que Paco usa como contexto adicional en todas sus respuestas.</p>
+        <div className="flex items-center gap-3">
+          <div className="w-11 h-11 rounded-xl bg-ccb-green flex items-center justify-center shrink-0">
+            <BookOpen size={22} className="text-white" />
+          </div>
+          <div>
+            <h1 className="text-2xl font-bold text-ccb-green">Base de conocimiento de Paco</h1>
+            <p className="text-sm text-(--text-muted)">Documentos que Paco usa como contexto adicional en todas sus respuestas.</p>
+          </div>
         </div>
-        <button onClick={() => setShowUpload(true)} className="px-4 py-2 rounded-lg text-sm font-medium text-white shrink-0" style={{ backgroundColor: "#1a3a2a" }}>
+        <button onClick={() => setShowUpload(true)} className="px-4 py-2 rounded-lg text-sm font-medium text-white shrink-0" style={{ backgroundColor: "#1B4D2E" }}>
           Subir documento
         </button>
       </div>
 
       {loading ? (
-        <div className="flex items-center justify-center py-16"><div className="animate-spin rounded-full h-7 w-7 border-2 border-[#1a3a2a] border-t-transparent" /></div>
+        <div className="flex items-center justify-center py-16"><div className="animate-spin rounded-full h-7 w-7 border-2 border-[#1B4D2E] border-t-transparent" /></div>
       ) : documentos.length === 0 ? (
         <div className="py-16 text-center text-sm text-gray-400">Sin documentos cargados todavía.</div>
       ) : (
@@ -119,7 +125,7 @@ export default function PacoKnowledgeModule() {
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2 flex-wrap">
                   <p className="text-sm font-medium text-gray-800 truncate">{doc.titulo}</p>
-                  {doc.tema && <span className="text-xs font-medium px-2 py-0.5 rounded-full" style={{ backgroundColor: "#1a3a2a18", color: "#1a3a2a" }}>{doc.tema}</span>}
+                  {doc.tema && <span className="text-xs font-medium px-2 py-0.5 rounded-full" style={{ backgroundColor: "#1B4D2E18", color: "#1B4D2E" }}>{doc.tema}</span>}
                 </div>
                 <p className="text-xs text-gray-400 mt-0.5">{formatFecha(doc.created_at)}</p>
               </div>
@@ -151,7 +157,7 @@ export default function PacoKnowledgeModule() {
             {uploadError && <p className="text-xs text-red-600">{uploadError}</p>}
             <div className="flex gap-2 pt-2">
               <button onClick={() => { setShowUpload(false); resetUpload(); }} disabled={uploading} className="flex-1 py-2 rounded-xl text-sm font-medium border border-gray-200 text-gray-600 hover:bg-gray-50">Cancelar</button>
-              <button onClick={handleUpload} disabled={uploading} className="flex-1 py-2 rounded-xl text-sm font-semibold text-white disabled:opacity-50" style={{ backgroundColor: "#1a3a2a" }}>
+              <button onClick={handleUpload} disabled={uploading} className="flex-1 py-2 rounded-xl text-sm font-semibold text-white disabled:opacity-50" style={{ backgroundColor: "#1B4D2E" }}>
                 {uploading ? "Subiendo..." : "Subir"}
               </button>
             </div>
