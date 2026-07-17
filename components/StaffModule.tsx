@@ -34,14 +34,14 @@ function getInitials(name: string): string {
 }
 
 function avatarColor(member: Pick<StaffMember, "rol" | "categoria">): { bg: string; text: string } {
-  if (member.rol === "Coordinador de Escuelas") return { bg: "#e8f5ee", text: "#1a3a2a" };
+  if (member.rol === "Coordinador de Escuelas") return { bg: "#e8f5ee", text: "#1B4D2E" };
   if (member.rol === "Director de Golf") return { bg: "#fdf3e0", text: "#7d5a00" };
-  if (member.categoria === "profesores") return { bg: "#e8f5ee", text: "#1a3a2a" };
+  if (member.categoria === "profesores") return { bg: "#e8f5ee", text: "#1B4D2E" };
   return { bg: "#f3e8fc", text: "#4a1070" };
 }
 
 function badgeColor(member: Pick<StaffMember, "rol" | "categoria">): string | null {
-  if (member.rol === "Coordinador de Escuelas") return "#1a3a2a";
+  if (member.rol === "Coordinador de Escuelas") return "#1B4D2E";
   if (member.rol === "Director de Golf") return "#7d5a00";
   if (member.categoria === "administrativos") return "#4a1070";
   return null;
@@ -60,7 +60,7 @@ function emptyForm(categoria: Categoria, orden: number): StaffForm {
 function Loading() {
   return (
     <div className="flex items-center justify-center py-16">
-      <div className="animate-spin rounded-full h-7 w-7 border-2 border-[#1a3a2a] border-t-transparent" />
+      <div className="animate-spin rounded-full h-7 w-7 border-2 border-[#1B4D2E] border-t-transparent" />
     </div>
   );
 }
@@ -183,14 +183,19 @@ export default function StaffModule() {
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
       <div className="flex items-center justify-between mb-6 flex-wrap gap-3">
-        <div>
-          <h1 className="text-lg font-semibold text-gray-900">Staff</h1>
-          <p className="text-sm text-gray-500">Equipo de la Escuela de Golf — Country Club de Bogotá</p>
+        <div className="flex items-center gap-3">
+          <div className="w-11 h-11 rounded-xl bg-ccb-green flex items-center justify-center shrink-0">
+            <i className="ti ti-users" style={{ fontSize: 22, color: "white" }} />
+          </div>
+          <div>
+            <h1 className="text-2xl font-bold text-ccb-green">Staff</h1>
+            <p className="text-sm text-(--text-muted) mt-0.5">Equipo de la Escuela de Golf — Country Club de Bogotá</p>
+          </div>
         </div>
         <button
           onClick={() => openAdd("profesores")}
           className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium text-white"
-          style={{ backgroundColor: "#1a3a2a" }}
+          style={{ backgroundColor: "#1B4D2E" }}
         >
           <i className="ti ti-plus" style={{ fontSize: 16 }} />
           Agregar miembro
@@ -204,7 +209,7 @@ export default function StaffModule() {
           <StaffSection
             icon="ti-golf"
             iconBg="#e8f5ee"
-            iconColor="#1a3a2a"
+            iconColor="#1B4D2E"
             title="Profesores"
             members={profesores}
             onEdit={openEdit}
@@ -294,7 +299,7 @@ function StaffCard({ member, onEdit }: { member: StaffMember; onEdit: () => void
               style={{
                 width: "100%",
                 height: "100%",
-                objectFit: "contain",
+                objectFit: "cover",
                 objectPosition: "center center",
                 borderRadius: "50%",
                 display: "block",
@@ -446,7 +451,7 @@ function StaffModal({
             onClick={onSave}
             disabled={saving}
             className="px-4 py-2 rounded-lg text-sm font-medium text-white disabled:opacity-50"
-            style={{ backgroundColor: "#1a3a2a" }}
+            style={{ backgroundColor: "#1B4D2E" }}
           >
             {saving ? "Guardando..." : "Guardar"}
           </button>
