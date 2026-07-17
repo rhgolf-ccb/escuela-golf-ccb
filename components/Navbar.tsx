@@ -161,7 +161,7 @@ export default function Navbar({
       </aside>
 
       {/* TOPBAR MOBILE */}
-      <header className="lg:hidden flex items-center justify-between px-4 h-14 bg-sidebar-bg sticky top-0 z-40">
+      <header className="lg:hidden fixed inset-x-0 top-0 flex items-center justify-between px-4 h-14 bg-sidebar-bg z-40">
         <div className="flex items-center gap-2">
           <Image src="/Paco_transparente.png" alt="Paco" height={30} width={30} className="object-contain" />
           <span className="text-ccb-gold font-bold text-sm tracking-wide">CCB Escuela de Golf</span>

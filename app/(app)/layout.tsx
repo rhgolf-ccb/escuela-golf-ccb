@@ -28,7 +28,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   return (
     <div className="flex min-h-screen bg-background">
       <Navbar role={role} nombre={nombre} email={email} fotoUrl={fotoUrl} />
-      <main className="flex-1 flex flex-col min-w-0 overflow-x-hidden">
+      <main className="flex-1 flex flex-col min-w-0 overflow-x-hidden pt-14 lg:pt-0">
         {children}
       </main>
       {role && isStaff(role) && <AsesorGolfChat rol={role} />}
