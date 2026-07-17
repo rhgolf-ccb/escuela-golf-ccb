@@ -150,7 +150,8 @@ export default function AsesorGolfChat({ rol }: { rol: Rol | null }) {
         className="fixed flex items-center justify-center rounded-full shadow-lg transition-all hover:opacity-90 hover:scale-105"
         style={{ bottom: 24, right: 24, width: 52, height: 52, backgroundColor: "#1a3a2a", zIndex: 50 }}
       >
-        <i className="ti ti-robot" style={{ color: "#ffffff", fontSize: 24 }} />
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src="/Paco_transparente.png" alt="Paco" className="w-8 h-8 object-contain" />
       </button>
 
       {isOpen && (
@@ -169,7 +170,8 @@ export default function AsesorGolfChat({ rol }: { rol: Rol | null }) {
         >
           <div className="flex items-center justify-between px-4 py-3 shrink-0" style={{ backgroundColor: "#1a3a2a" }}>
             <div className="flex items-center gap-2.5 min-w-0">
-              <i className="ti ti-robot" style={{ color: "#ffffff", fontSize: 20 }} />
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src="/Paco_transparente.png" alt="Paco" className="w-6 h-6 object-contain shrink-0" />
               <div className="min-w-0">
                 <div className="flex items-center gap-1.5">
                   <p className="text-sm font-semibold text-white truncate">Paco — Asesor de Golf</p>
