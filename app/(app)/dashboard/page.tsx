@@ -116,7 +116,7 @@ export default async function DashboardPage() {
 
       {/* HERO */}
       <div className="relative shrink-0">
-        <div className="relative h-[150px] sm:h-[200px] overflow-hidden bg-sidebar-bg">
+        <div className="relative h-[150px] sm:h-[200px] md:h-[320px] overflow-hidden bg-sidebar-bg">
           <img
             src="/hero-ccb.jpg"
             alt="Country Club de Bogotá"
@@ -127,7 +127,7 @@ export default async function DashboardPage() {
             className="absolute inset-0"
             style={{ background: "linear-gradient(180deg, rgba(15,25,35,0.15), rgba(15,25,35,0.75))" }}
           />
-          <div className="absolute inset-x-0 bottom-0 px-4 sm:px-8 pb-4 sm:pb-5">
+          <div className="absolute inset-x-0 bottom-0 px-4 sm:px-8 pb-4 sm:pb-5 md:pb-20">
             <h1 className="text-xl sm:text-3xl font-bold text-white drop-shadow">
               {saludo}, {nombre}
             </h1>
@@ -143,13 +143,13 @@ export default async function DashboardPage() {
       <div className="flex-1 px-4 sm:px-6 py-5 sm:py-6 space-y-5 sm:space-y-6">
 
         {/* KPIs */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-3">
+        <div className="relative z-30 grid grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-3 md:-mt-20">
           {kpis.map((kpi) => {
             const Icon = kpi.icon;
             return (
               <div
                 key={kpi.label}
-                className="rounded-xl p-3 sm:p-3.5 shadow-sm"
+                className="rounded-xl p-3 sm:p-3.5 shadow-sm md:shadow-xl"
                 style={{ background: kpi.bg }}
               >
                 <div
