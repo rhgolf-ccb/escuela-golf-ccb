@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
+import { ClipboardList } from "lucide-react";
 
 type Benchmark = {
   id: string | null;
@@ -49,7 +50,7 @@ const NAV_FISICO: NavItem[] = [
 ];
 
 const GROUP_COLOR: Record<"juvenil" | "competencia" | "damas", { bg: string; text: string }> = {
-  juvenil: { bg: "#1a3a2a18", text: "#1a3a2a" },
+  juvenil: { bg: "#1B4D2E18", text: "#1B4D2E" },
   competencia: { bg: "#7d5a0018", text: "#7d5a00" },
   damas: { bg: "#4a107018", text: "#4a1070" },
 };
@@ -218,6 +219,15 @@ export default function ProtocolosModule() {
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+      <div className="mb-6 flex items-center gap-3">
+        <div className="w-11 h-11 rounded-xl bg-ccb-green flex items-center justify-center shrink-0">
+          <ClipboardList size={22} className="text-white" />
+        </div>
+        <div>
+          <h1 className="text-2xl font-bold text-ccb-green">Protocolos</h1>
+          <p className="text-sm text-(--text-muted) mt-0.5">Tests técnicos y físicos por grupo</p>
+        </div>
+      </div>
       <div className="flex gap-6">
         <nav className="w-[260px] shrink-0">
           <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2 px-2">Técnico</p>
@@ -253,7 +263,7 @@ export default function ProtocolosModule() {
         <div className="flex-1 min-w-0">
           <div className="flex items-center justify-between mb-5 flex-wrap gap-3">
             <div className="flex items-center gap-3">
-              <h1 className="text-lg font-semibold text-gray-900">{activeNav.label}</h1>
+              <h2 className="text-lg font-semibold text-gray-800">{activeNav.label}</h2>
               <span className="text-xs font-medium px-2 py-0.5 rounded-full" style={{ backgroundColor: color.bg, color: color.text }}>
                 {activeNav.tipo === "tecnico" ? "Técnico" : "Físico"}
               </span>
