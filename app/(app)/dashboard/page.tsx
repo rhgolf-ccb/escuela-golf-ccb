@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
-import { Users, Calendar, UserCheck, CalendarCheck, Clock } from "lucide-react";
+import { Users, Calendar, UserCheck, CalendarCheck, Clock, Trophy, CalendarOff, Star, Pin, ChartBar } from "lucide-react";
 
 export const metadata = { title: "Dashboard | Escuela de Golf CCB" };
 
@@ -35,7 +35,26 @@ function duracionMin(inicio: string | null, fin: string | null): number | null {
   return h2 * 60 + m2 - (h1 * 60 + m1);
 }
 
+// Ancla a mediodía para que el día calendario no se corra por la zona
+// horaria del proceso que renderiza (mismo problema que ya resolvimos
+// para el saludo y "hoy" — aquí además se fija explícitamente Bogotá).
+function formatFechaEventoCorta(fecha: string): { dia: string; mes: string } {
+  const d = new Date(`${fecha}T12:00:00`);
+  const dia = new Intl.DateTimeFormat("es-CO", { timeZone: "America/Bogota", day: "numeric" }).format(d);
+  const mes = new Intl.DateTimeFormat("es-CO", { timeZone: "America/Bogota", month: "short" })
+    .format(d).replace(".", "").toUpperCase();
+  return { dia, mes };
+}
+
 const KPI_COLORS = { verde: "#1B4D2E", azul: "#378ADD", morado: "#7F77DD", coral: "#D85A30" };
+
+const ATTENDANCE_LABEL: Record<string, string> = {
+  presente: "Presente", justificado: "Justificado", ausente: "Ausente", sin_reserva: "Sin reserva",
+};
+const ATTENDANCE_COLOR: Record<string, string> = {
+  presente: "#16a34a", justificado: "#378ADD", ausente: "#dc2626", sin_reserva: "#9ca3af",
+};
+const ATTENDANCE_ORDER = ["presente", "justificado", "ausente", "sin_reserva"];
 
 export default async function DashboardPage() {
   const supabase = await createSupabaseServerClient();
@@ -72,6 +91,21 @@ export default async function DashboardPage() {
     .select("id, hora_inicio, hora_fin, tipo_sesion, lugar, objetivo, planes_semanales(tipo_plan)")
     .eq("fecha", hoy)
     .order("hora_inicio", { ascending: true });
+
+  const { data: eventosProximos } = await supabase
+    .from("eventos_calendario")
+    .select("id, nombre, fecha_inicio, fecha_fin, descripcion, tipo")
+    .gte("fecha_inicio", hoy)
+    .order("fecha_inicio", { ascending: true })
+    .limit(5);
+
+  const { data: attendanceRows } = await supabase.from("attendance").select("status");
+  const attendanceCounts: Record<string, number> = { presente: 0, justificado: 0, ausente: 0, sin_reserva: 0 };
+  for (const row of attendanceRows ?? []) {
+    if (row.status && row.status in attendanceCounts) attendanceCounts[row.status]++;
+  }
+  const totalAsistencia = Object.values(attendanceCounts).reduce((a, b) => a + b, 0);
+  const pctAsistencia = totalAsistencia > 0 ? Math.round((attendanceCounts.presente / totalAsistencia) * 100) : 0;
 
   const kpis = [
     { label: "Jugadores Activos", value: totalAlumnos ?? 0, icon: Users, color: KPI_COLORS.verde, bg: "#eaf3ee" },
@@ -180,6 +214,103 @@ export default async function DashboardPage() {
           >
             Ver programación completa →
           </Link>
+        </div>
+
+        {/* PRÓXIMOS EVENTOS + RESUMEN DE ASISTENCIA */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 sm:gap-6">
+
+          {/* PRÓXIMOS EVENTOS */}
+          <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-4 sm:p-6">
+            <h2 className="text-sm font-semibold text-foreground flex items-center gap-2 mb-4">
+              <Trophy size={15} className="text-ccb-green" />
+              Próximos eventos
+            </h2>
+
+            {!eventosProximos || eventosProximos.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-10 text-gray-400 text-center">
+                <CalendarOff size={28} className="mb-2 opacity-40" />
+                <p className="text-sm">No hay eventos próximos programados</p>
+                <p className="text-xs text-gray-300 mt-1">Los eventos que agregues en Programación aparecerán aquí</p>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {eventosProximos.map((e) => {
+                  const { dia, mes } = formatFechaEventoCorta(e.fecha_inicio);
+                  const esEspecial = e.tipo === "especial";
+                  return (
+                    <div key={e.id} className="flex gap-3">
+                      <div className="w-12 shrink-0 text-center rounded-lg py-1.5 bg-gray-50">
+                        <p className="text-base font-bold text-gray-800 leading-none">{dia}</p>
+                        <p className="text-[10px] font-semibold text-gray-400 mt-0.5">{mes}</p>
+                      </div>
+                      <div className="flex-1 min-w-0 pb-3 border-b border-gray-50 last:border-0 last:pb-0">
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <p className="text-sm font-semibold text-gray-900">{e.nombre}</p>
+                          <span
+                            className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full inline-flex items-center gap-0.5 shrink-0"
+                            style={esEspecial ? { background: "#fef3c7", color: "#92400e" } : { background: "#dbeafe", color: "#1e40af" }}
+                          >
+                            {esEspecial ? <Star size={9} /> : <Pin size={9} />}
+                            {esEspecial ? "Especial" : "Institucional"}
+                          </span>
+                        </div>
+                        {e.descripcion && <p className="text-xs text-gray-400 mt-1 line-clamp-2">{e.descripcion}</p>}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
+          {/* RESUMEN DE ASISTENCIA */}
+          <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-4 sm:p-6">
+            <div className="mb-4">
+              <h2 className="text-sm font-semibold text-foreground flex items-center gap-2">
+                <ChartBar size={15} className="text-ccb-green" />
+                Resumen de asistencia
+              </h2>
+              <p className="text-xs text-gray-400 mt-0.5">Periodo registrado</p>
+            </div>
+
+            {totalAsistencia === 0 ? (
+              <div className="flex flex-col items-center justify-center py-10 text-gray-400 text-center">
+                <ChartBar size={28} className="mb-2 opacity-40" />
+                <p className="text-sm">Aún no hay registros de asistencia</p>
+              </div>
+            ) : (
+              <>
+                <div className="mb-4">
+                  <p className="text-3xl font-bold text-gray-900 leading-none">{pctAsistencia}%</p>
+                  <p className="text-xs text-gray-400 mt-1">Asistencia</p>
+                </div>
+
+                <div className="flex h-2.5 rounded-full overflow-hidden mb-4 bg-gray-100">
+                  {ATTENDANCE_ORDER.map((key) => {
+                    const count = attendanceCounts[key];
+                    if (count === 0) return null;
+                    return (
+                      <div
+                        key={key}
+                        style={{ width: `${Math.round((count / totalAsistencia) * 100)}%`, background: ATTENDANCE_COLOR[key] }}
+                      />
+                    );
+                  })}
+                </div>
+
+                <div className="grid grid-cols-2 gap-x-3 gap-y-2">
+                  {ATTENDANCE_ORDER.map((key) => (
+                    <div key={key} className="flex items-center gap-1.5">
+                      <span className="w-2 h-2 rounded-full shrink-0" style={{ background: ATTENDANCE_COLOR[key] }} />
+                      <span className="text-xs text-gray-600">{ATTENDANCE_LABEL[key]}</span>
+                      <span className="text-xs text-gray-400 ml-auto">{attendanceCounts[key]}</span>
+                    </div>
+                  ))}
+                </div>
+              </>
+            )}
+          </div>
+
         </div>
 
       </div>
