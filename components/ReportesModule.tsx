@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef, useCallback, type ReactNode, Fragment } from "react";
 import { createClient } from "@supabase/supabase-js";
 import * as XLSX from "xlsx";
+import { BarChart3 } from "lucide-react";
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -23,7 +24,7 @@ const TABS: { id: Tab; label: string }[] = [
 ];
 
 const GROUP_COLOR: Record<string, { bg: string; text: string; border: string }> = {
-  juvenil:      { bg: "#1a3a2a18", text: "#1a3a2a", border: "#1a3a2a25" },
+  juvenil:      { bg: "#1B4D2E18", text: "#1B4D2E", border: "#1B4D2E25" },
   competencia:  { bg: "#7d5a0018", text: "#7d5a00", border: "#7d5a0025" },
   damas:        { bg: "#4a107018", text: "#4a1070", border: "#4a107025" },
 };
@@ -216,7 +217,7 @@ type GrupoFilter = "todos" | "juvenil" | "competencia" | "damas";
 function GrupoTabs({ value, onChange }: { value: GrupoFilter; onChange: (v: GrupoFilter) => void }) {
   const opts: { id: GrupoFilter; label: string; color?: string }[] = [
     { id: "todos", label: "Todos" },
-    { id: "juvenil", label: "Juvenil", color: "#1a3a2a" },
+    { id: "juvenil", label: "Juvenil", color: "#1B4D2E" },
     { id: "competencia", label: "Competencia", color: "#7d5a00" },
     { id: "damas", label: "Damas", color: "#4a1070" },
   ];
@@ -250,7 +251,7 @@ function AsistioCell({ value, reservaId, onSaved }: { value: boolean | null; res
     setSaving(false);
   }
   if (value === true) return (
-    <button onClick={toggle} disabled={saving} title="Asistió — clic para cambiar" className="w-2 h-2 rounded-full mx-auto block transition-transform hover:scale-110" style={{ backgroundColor: "#1a3a2a" }} />
+    <button onClick={toggle} disabled={saving} title="Asistió — clic para cambiar" className="w-2 h-2 rounded-full mx-auto block transition-transform hover:scale-110" style={{ backgroundColor: "#1B4D2E" }} />
   );
   if (value === false) return (
     <button onClick={toggle} disabled={saving} title="Ausente — clic para cambiar" className="w-2 h-2 rounded-full mx-auto block transition-transform hover:scale-110" style={{ backgroundColor: "#e24b4a" }} />
@@ -1034,7 +1035,7 @@ function colorHexForGrupo(g: string): string {
   const t = grupoTipo(g);
   if (t === "competencia") return "#7d5a00";
   if (t === "damas") return "#4a1070";
-  return "#1a3a2a";
+  return "#1B4D2E";
 }
 
 function GrupoChip({ label, active, colorHex, onClick }: { label: string; active: boolean; colorHex: string; onClick: () => void }) {
@@ -1244,7 +1245,7 @@ function TabEdades() {
 // ── Tab 7: RESERVAS LIVE ─────────────────────────────────────────────────────
 
 const GRUPOS_LIVE = [
-  { id: "juvenil" as const, label: "Juvenil", color: "#1a3a2a", dias: ["martes", "miercoles", "jueves", "sabado", "domingo"] },
+  { id: "juvenil" as const, label: "Juvenil", color: "#1B4D2E", dias: ["martes", "miercoles", "jueves", "sabado", "domingo"] },
   { id: "competencia" as const, label: "Competencia", color: "#7d5a00", dias: ["martes", "miercoles", "jueves", "sabado"] },
   { id: "damas" as const, label: "Damas", color: "#4a1070", dias: ["viernes"] },
 ];
@@ -1478,9 +1479,14 @@ export default function ReportesModule() {
   return (
     <div className="min-h-screen bg-gray-50">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div className="mb-6">
-          <h1 className="text-2xl font-bold text-gray-900">Reportes</h1>
-          <p className="text-sm text-gray-500 mt-0.5">Coordinador · Profesores</p>
+        <div className="mb-6 flex items-center gap-3">
+          <div className="w-11 h-11 rounded-xl bg-ccb-green flex items-center justify-center shrink-0">
+            <BarChart3 size={22} className="text-white" />
+          </div>
+          <div>
+            <h1 className="text-2xl font-bold text-ccb-green">Reportes</h1>
+            <p className="text-sm text-(--text-muted) mt-0.5">Coordinador · Profesores</p>
+          </div>
         </div>
 
         <div className="flex gap-1 bg-white rounded-xl border border-gray-100 shadow-sm p-1 mb-6 overflow-x-auto">
