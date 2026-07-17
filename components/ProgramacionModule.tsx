@@ -16,6 +16,7 @@ import PacoPlanWizard from "./PacoPlanWizard";
 import EventoDiaSinEscuelaModal from "./EventoDiaSinEscuelaModal";
 import { isStaff, type Rol } from "@/lib/roles";
 import { formatWhatsAppMessage, openWhatsApp } from "@/lib/whatsapp-formatter";
+import { CalendarDays } from "lucide-react";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 export type TipoPlan   = "juvenil" | "competencia" | "damas";
@@ -215,12 +216,12 @@ const TIPO_PLAN_COLOR: Record<TipoPlan, string> = {
 // Colores de marca por grupo — usados en la vista de dos columnas (día/detalle).
 // Distintos de TIPO_PLAN_COLOR (que sigue controlando las tabs existentes).
 const GROUP_COLOR_HEX: Record<TipoPlan, string> = {
-  juvenil: "#1a3a2a", competencia: "#7d5a00", damas: "#4a1070",
+  juvenil: "#1B4D2E", competencia: "#7d5a00", damas: "#4a1070",
 };
 
 // Calendar event colours — dark solid backgrounds with white text
 const CAL_COLOR: Record<TipoPlan, { bg: string; border: string; text: string; dot: string }> = {
-  juvenil:     { bg: "#2d5a27", border: "#1a3a18", text: "#ffffff", dot: "#2d5a27" },
+  juvenil:     { bg: "#1B4D2E", border: "#1B4D2E", text: "#ffffff", dot: "#1B4D2E" },
   competencia: { bg: "#b7950b", border: "#8a6f08", text: "#ffffff", dot: "#b7950b" },
   damas:       { bg: "#6a1b9a", border: "#4a1070", text: "#ffffff", dot: "#6a1b9a" },
 };
@@ -233,7 +234,7 @@ const CAL_THIN_H     = 16;  // px for collapsed empty-hour rows
 const CAL_HOURS      = Array.from({ length: CAL_HOUR_END - CAL_HOUR_START }, (_, i) => CAL_HOUR_START + i);
 // Event colors (dark/solid for contrast)
 export const CAL_EVENT: Record<string, { bg: string; text: string }> = {
-  juvenil:     { bg: "#1a3a2a", text: "#ffffff" },
+  juvenil:     { bg: "#1B4D2E", text: "#ffffff" },
   competencia: { bg: "#7d5a00", text: "#ffffff" },
   damas:       { bg: "#4a1070", text: "#ffffff" },
 };
@@ -888,7 +889,7 @@ export default function ProgramacionModule({ currentRol }: { currentRol: Rol | n
     return (
       <div className="rounded-xl overflow-hidden shadow-sm" style={{ background: "#f0f5f0" }}>
         {calLoading && (
-          <div className="flex items-center justify-center py-12" style={{ color: "#5a7a5a" }}>
+          <div className="flex items-center justify-center py-12" style={{ color: "#5f7a63" }}>
             <svg className="animate-spin h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"/></svg>
             Cargando...
           </div>
@@ -905,7 +906,7 @@ export default function ProgramacionModule({ currentRol }: { currentRol: Rol | n
                   <div key={dia} className="py-2.5 text-center" style={{ borderRight: "1px solid #d4e0d2" }}>
                     <p className="text-xs font-bold" style={{ color: "#1a3a1a" }}>{DIA_LABEL_SHORT[dia]}</p>
                     {isToday ? (
-                      <span className="text-xs font-bold rounded-full px-1.5 inline-block mt-0.5" style={{ background: "#1a3a2a", color: "#ffffff" }}>
+                      <span className="text-xs font-bold rounded-full px-1.5 inline-block mt-0.5" style={{ background: "#1B4D2E", color: "#ffffff" }}>
                         {formatDiaFecha(fecha)}
                       </span>
                     ) : (
@@ -942,7 +943,7 @@ export default function ProgramacionModule({ currentRol }: { currentRol: Rol | n
             {(calSesiones.some((s) => !s.hora_inicio) || calEspeciales.some((e) => !e.hora_inicio)) && (
               <div className="grid" style={{ gridTemplateColumns: "60px repeat(6, 1fr)", background: "#f5f8f4", borderBottom: "1px solid #d4e0d2" }}>
                 <div style={{ borderRight: "1px solid #d4e0d2", display: "flex", alignItems: "center", justifyContent: "flex-end", paddingRight: 6, paddingBlock: 4 }}>
-                  <span style={{ fontSize: 10, fontWeight: 600, color: "#6a8a6a", writingMode: "vertical-rl", transform: "rotate(180deg)" }}>sin hora</span>
+                  <span style={{ fontSize: 10, fontWeight: 600, color: "#5f7a63", writingMode: "vertical-rl", transform: "rotate(180deg)" }}>sin hora</span>
                 </div>
                 {CAL_DIAS.map((dia) => {
                   const fechaDia = getFechaForDia(semana, dia);
@@ -988,7 +989,7 @@ export default function ProgramacionModule({ currentRol }: { currentRol: Rol | n
                       display: "flex", alignItems: "flex-start", justifyContent: "flex-end",
                       paddingRight: 6, paddingTop: 4,
                     }}>
-                      <span style={{ fontSize: 11, fontWeight: 600, color: "#3a5a3a" }}>{fmtCalHour(h)}</span>
+                      <span style={{ fontSize: 11, fontWeight: 600, color: "#5f7a63" }}>{fmtCalHour(h)}</span>
                     </div>
                   ))}
                 </div>
@@ -1100,22 +1101,22 @@ export default function ProgramacionModule({ currentRol }: { currentRol: Rol | n
       <div className="rounded-xl overflow-hidden shadow-sm" style={{ background: "#f0f5f0" }}>
         {/* Month nav */}
         <div className="flex items-center justify-between px-5 py-3" style={{ background: "#e8f0e6", borderBottom: "1px solid #d4e0d2" }}>
-          <button onClick={prevMonth} className="p-1.5 rounded-lg transition-colors" style={{ color: "#3a5a3a" }}
+          <button onClick={prevMonth} className="p-1.5 rounded-lg transition-colors" style={{ color: "#5f7a63" }}
             onMouseEnter={(e) => (e.currentTarget.style.background = "#d4e8d0")}
             onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}>
             <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path d="M15 18l-6-6 6-6"/></svg>
           </button>
-          <h3 className="font-bold capitalize" style={{ color: "#1a3a2a" }}>
+          <h3 className="font-bold capitalize" style={{ color: "#1B4D2E" }}>
             {firstDay.toLocaleDateString("es-CO", { month: "long", year: "numeric" })}
           </h3>
-          <button onClick={nextMonth} className="p-1.5 rounded-lg transition-colors" style={{ color: "#3a5a3a" }}
+          <button onClick={nextMonth} className="p-1.5 rounded-lg transition-colors" style={{ color: "#5f7a63" }}
             onMouseEnter={(e) => (e.currentTarget.style.background = "#d4e8d0")}
             onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}>
             <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path d="M9 18l6-6-6-6"/></svg>
           </button>
         </div>
 
-        {calLoading && <div className="py-12 text-center text-sm" style={{ color: "#5a7a5a" }}>Cargando...</div>}
+        {calLoading && <div className="py-12 text-center text-sm" style={{ color: "#5f7a63" }}>Cargando...</div>}
 
         {!calLoading && (
           <>
@@ -1163,7 +1164,7 @@ export default function ProgramacionModule({ currentRol }: { currentRol: Rol | n
                       width: 24, height: 24,
                       display: "flex", alignItems: "center", justifyContent: "center",
                       borderRadius: "50%",
-                      background: isToday ? "#1a3a2a" : "transparent",
+                      background: isToday ? "#1B4D2E" : "transparent",
                       color: isToday ? "#ffffff" : "#1a3a1a",
                       fontSize: 12, fontWeight: 700, marginBottom: 4,
                     }}>
@@ -1195,7 +1196,7 @@ export default function ProgramacionModule({ currentRol }: { currentRol: Rol | n
                         );
                       })}
                       {daySes.length > 3 && (
-                        <div style={{ fontSize: 10, color: "#5a7a5a", paddingLeft: 2, fontWeight: 600 }}>
+                        <div style={{ fontSize: 10, color: "#5f7a63", paddingLeft: 2, fontWeight: 600 }}>
                           +{daySes.length - 3} más
                         </div>
                       )}
@@ -1219,10 +1220,10 @@ export default function ProgramacionModule({ currentRol }: { currentRol: Rol | n
             {selectedCalDate && (
               <div style={{ borderTop: "1px solid #d4e0d2", padding: "16px 20px" }}>
                 <div className="flex items-center justify-between mb-3">
-                  <h4 className="text-sm font-bold capitalize" style={{ color: "#1a3a2a" }}>
+                  <h4 className="text-sm font-bold capitalize" style={{ color: "#1B4D2E" }}>
                     {new Date(selectedCalDate + "T00:00:00").toLocaleDateString("es-CO", { weekday: "long", day: "numeric", month: "long" })}
                   </h4>
-                  <button onClick={() => setSelectedCalDate(null)} className="text-xs" style={{ color: "#5a7a5a" }}>✕</button>
+                  <button onClick={() => setSelectedCalDate(null)} className="text-xs" style={{ color: "#5f7a63" }}>✕</button>
                 </div>
                 {selectedDayEspeciales.length > 0 && (
                   <div className="space-y-2 mb-2">
@@ -1232,7 +1233,7 @@ export default function ProgramacionModule({ currentRol }: { currentRol: Rol | n
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2 flex-wrap mb-1">
                             <span className="text-xs font-bold" style={{ color: "#b45309" }}>🌟 {esp.nombre}</span>
-                            {esp.hora_inicio && <span className="text-[10px]" style={{ color: "#5a7a5a" }}>{formatHora(esp.hora_inicio)}–{formatHora(esp.hora_fin)}</span>}
+                            {esp.hora_inicio && <span className="text-[10px]" style={{ color: "#5f7a63" }}>{formatHora(esp.hora_inicio)}–{formatHora(esp.hora_fin)}</span>}
                           </div>
                           <p className="text-xs" style={{ color: "#8a5a1a" }}>{esp.grupos.map((g) => TIPO_PLAN_LABEL[g]).join(", ")}</p>
                         </div>
@@ -1241,7 +1242,7 @@ export default function ProgramacionModule({ currentRol }: { currentRol: Rol | n
                   </div>
                 )}
                 {selectedDaySesiones.length === 0 && selectedDayEspeciales.length === 0
-                  ? <p className="text-xs italic" style={{ color: "#5a7a5a" }}>Sin sesiones de {TIPO_PLAN_LABEL[activeTab]} este día</p>
+                  ? <p className="text-xs italic" style={{ color: "#5f7a63" }}>Sin sesiones de {TIPO_PLAN_LABEL[activeTab]} este día</p>
                   : selectedDaySesiones.length > 0 && (
                     <div className="space-y-2">
                       {selectedDaySesiones.map((ses) => {
@@ -1253,10 +1254,10 @@ export default function ProgramacionModule({ currentRol }: { currentRol: Rol | n
                               <div className="flex items-center gap-2 flex-wrap mb-1">
                                 <span className="text-xs font-bold" style={{ color: c.bg }}>{TIPO_PLAN_LABEL[ses.tipo_plan]}</span>
                                 <span className="px-1.5 py-0.5 rounded-full text-[10px] font-semibold" style={{ background: tc.bg, color: tc.text }}>{TIPO_SESION_LABEL[ses.tipo_sesion]}</span>
-                                <span className="text-[10px]" style={{ color: "#5a7a5a" }}>{LUGAR_LABEL[ses.lugar]}</span>
-                                {ses.hora_inicio && <span className="text-[10px]" style={{ color: "#5a7a5a" }}>{formatHora(ses.hora_inicio)}–{formatHora(ses.hora_fin)}</span>}
+                                <span className="text-[10px]" style={{ color: "#5f7a63" }}>{LUGAR_LABEL[ses.lugar]}</span>
+                                {ses.hora_inicio && <span className="text-[10px]" style={{ color: "#5f7a63" }}>{formatHora(ses.hora_inicio)}–{formatHora(ses.hora_fin)}</span>}
                               </div>
-                              {ses.objetivo && <p className="text-xs line-clamp-2" style={{ color: "#2a4a2a" }}>{ses.objetivo}</p>}
+                              {ses.objetivo && <p className="text-xs line-clamp-2" style={{ color: "#5f7a63" }}>{ses.objetivo}</p>}
                             </div>
                             <button onClick={() => router.push(`/programacion/sesion/${ses.id}`)} className="text-[10px] font-semibold shrink-0" style={{ color: c.bg }}>
                               Asistencia →
@@ -1278,6 +1279,16 @@ export default function ProgramacionModule({ currentRol }: { currentRol: Rol | n
   // ── Main render ───────────────────────────────────────────────────────────
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <div className="mb-6 flex items-center gap-3">
+        <div className="w-11 h-11 rounded-xl bg-ccb-green flex items-center justify-center shrink-0">
+          <CalendarDays size={22} className="text-white" />
+        </div>
+        <div>
+          <h1 className="text-2xl font-bold text-ccb-green">Programación</h1>
+          <p className="text-sm text-(--text-muted) mt-0.5">Planificación de clases y calendario de la Escuela</p>
+        </div>
+      </div>
+
       {/* Toast */}
       {toast && (
         <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-2 bg-gray-900 text-white text-sm font-medium px-5 py-3 rounded-xl shadow-lg pointer-events-none">
@@ -1294,7 +1305,7 @@ export default function ProgramacionModule({ currentRol }: { currentRol: Rol | n
             <button
               key={mode}
               onClick={() => setViewMode(mode)}
-              className={`px-4 py-1.5 rounded-lg text-sm font-semibold transition-all ${viewMode === mode ? "bg-white shadow-sm text-gray-900" : "text-gray-500 hover:text-gray-700"}`}
+              className={`px-4 py-1.5 rounded-lg text-sm font-semibold transition-all ${viewMode === mode ? "bg-ccb-green text-white" : "text-gray-600 hover:text-gray-900"}`}
             >
               {label}
             </button>
@@ -1349,7 +1360,7 @@ export default function ProgramacionModule({ currentRol }: { currentRol: Rol | n
             <button
               onClick={() => setShowWizard(true)}
               className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium text-white"
-              style={{ backgroundColor: "#1a3a2a" }}
+              style={{ backgroundColor: "#1B4D2E" }}
             >
               Planificar con Paco 🦅
             </button>
@@ -1397,7 +1408,7 @@ export default function ProgramacionModule({ currentRol }: { currentRol: Rol | n
       {viewMode === "semana" && (
         <div className="mb-5">
           <div className="flex items-center gap-2 mb-2">
-            <span className="flex items-center gap-1.5 text-xs font-semibold" style={{ color: "#1a3a2a" }}>
+            <span className="flex items-center gap-1.5 text-xs font-semibold" style={{ color: "#1B4D2E" }}>
               <span className="w-2.5 h-2.5 rounded-full inline-block" style={{ background: CAL_EVENT[activeTab]?.bg ?? "#334" }} />
               {TIPO_PLAN_LABEL[activeTab]}
             </span>
@@ -1410,7 +1421,7 @@ export default function ProgramacionModule({ currentRol }: { currentRol: Rol | n
       {viewMode === "mes" && (
         <div className="mb-5">
           <div className="flex items-center gap-2 mb-2">
-            <span className="flex items-center gap-1.5 text-xs font-semibold" style={{ color: "#1a3a2a" }}>
+            <span className="flex items-center gap-1.5 text-xs font-semibold" style={{ color: "#1B4D2E" }}>
               <span className="w-2.5 h-2.5 rounded-full inline-block" style={{ background: CAL_EVENT[activeTab]?.bg ?? "#334" }} />
               {TIPO_PLAN_LABEL[activeTab]}
             </span>
@@ -1559,7 +1570,7 @@ export default function ProgramacionModule({ currentRol }: { currentRol: Rol | n
                           <p className="text-sm font-semibold text-gray-600 mb-1">No hay programación para este día</p>
                           <p className="text-xs text-gray-400 mb-4">Paco puede generarla, o puedes agregarla manualmente.</p>
                           <div className="flex items-center gap-3">
-                            <button onClick={() => setShowPacoPlanning(true)} className="px-4 py-2 rounded-lg text-sm font-medium text-white" style={{ backgroundColor: "#1a3a2a" }}>
+                            <button onClick={() => setShowPacoPlanning(true)} className="px-4 py-2 rounded-lg text-sm font-medium text-white" style={{ backgroundColor: "#1B4D2E" }}>
                               Pedir a Paco que la genere
                             </button>
                             <button onClick={openEditDia} className="text-xs font-medium text-gray-500 hover:text-gray-700 underline">
@@ -1824,7 +1835,7 @@ export default function ProgramacionModule({ currentRol }: { currentRol: Rol | n
                         className="h-full rounded-full"
                         style={{
                           width: `${Math.min((calEventReservas.confirmados.length / calEventReservas.cupoMaximo) * 100, 100)}%`,
-                          background: calEventReservas.confirmados.length >= calEventReservas.cupoMaximo ? "#dc2626" : calEventReservas.confirmados.length / calEventReservas.cupoMaximo >= 0.8 ? "#92400e" : "#1a3a2a",
+                          background: calEventReservas.confirmados.length >= calEventReservas.cupoMaximo ? "#dc2626" : calEventReservas.confirmados.length / calEventReservas.cupoMaximo >= 0.8 ? "#92400e" : "#1B4D2E",
                         }}
                       />
                     </div>
