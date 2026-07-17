@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
+import { Dumbbell } from "lucide-react";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 type Categoria = "tecnico" | "juego_corto" | "putting" | "campo";
@@ -462,9 +463,14 @@ export default function DrillsModule() {
 
       {/* ── Header ── */}
       <div className="flex items-start justify-between mb-8">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">Biblioteca de Drills</h1>
-          <p className="text-sm text-gray-400 mt-0.5">{total} drill{total !== 1 ? "s" : ""} en total</p>
+        <div className="flex items-center gap-3">
+          <div className="w-11 h-11 rounded-xl bg-ccb-green flex items-center justify-center shrink-0">
+            <Dumbbell size={22} className="text-white" />
+          </div>
+          <div>
+            <h1 className="text-2xl font-bold text-ccb-green">Biblioteca de Drills</h1>
+            <p className="text-sm text-(--text-muted) mt-0.5">{total} drill{total !== 1 ? "s" : ""} en total</p>
+          </div>
         </div>
         <div className="flex gap-2">
           {!loading && drills.length === 0 && !libraryProgress && (
