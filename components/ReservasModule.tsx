@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { supabase } from "@/lib/supabase";
+import { CalendarCheck } from "lucide-react";
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 type TipoPlan = "juvenil" | "competencia" | "damas";
@@ -64,7 +65,7 @@ const TIPO_PLAN_LABEL: Record<TipoPlan, string> = {
   juvenil: "Juvenil", competencia: "Competencia", damas: "Damas",
 };
 const GROUP_COLOR: Record<TipoPlan, string> = {
-  juvenil: "#1a3a2a", competencia: "#7d5a00", damas: "#4a1070",
+  juvenil: "#1B4D2E", competencia: "#7d5a00", damas: "#4a1070",
 };
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
@@ -92,7 +93,7 @@ function cupoBarColor(confirmados: number, cupoMax: number): string {
   const pct = cupoMax > 0 ? confirmados / cupoMax : 0;
   if (pct >= 1) return "#dc2626";
   if (pct >= 0.8) return "#92400e";
-  return "#1a3a2a";
+  return "#1B4D2E";
 }
 function calcularEdad(birthDate: string | null): string {
   if (!birthDate) return "Edad no registrada";
@@ -362,9 +363,14 @@ export default function ReservasModule() {
       )}
 
       {/* Page header */}
-      <div className="mb-6">
-        <h1 className="text-2xl font-bold text-gray-900">Reservas</h1>
-        <p className="text-sm text-gray-400 mt-0.5">Gestión de inscritos por sesión</p>
+      <div className="mb-6 flex items-center gap-3">
+        <div className="w-11 h-11 rounded-xl bg-ccb-green flex items-center justify-center shrink-0">
+          <CalendarCheck size={22} className="text-white" />
+        </div>
+        <div>
+          <h1 className="text-2xl font-bold text-ccb-green">Reservas</h1>
+          <p className="text-sm text-(--text-muted) mt-0.5">Gestión de inscritos por sesión</p>
+        </div>
       </div>
 
       {/* Two-column layout */}
@@ -402,7 +408,7 @@ export default function ReservasModule() {
                 onClick={() => setFiltroGrupo("todos")}
                 className="px-2.5 py-1 rounded-full text-[11px] font-semibold border transition-all"
                 style={filtroGrupo === "todos"
-                  ? { background: "#1f2937", color: "#fff", borderColor: "#1f2937" }
+                  ? { background: "#1B4D2E", color: "#fff", borderColor: "#1B4D2E" }
                   : { background: "#f9fafb", color: "#6b7280", borderColor: "#e5e7eb" }}
               >
                 Todos
@@ -571,7 +577,7 @@ export default function ReservasModule() {
                   <div>
                     <p
                       className="text-2xl font-bold"
-                      style={{ color: confirmados.length >= sesionSel.cupo_maximo ? "#dc2626" : "#1a3a2a" }}
+                      style={{ color: confirmados.length >= sesionSel.cupo_maximo ? "#dc2626" : "#1B4D2E" }}
                     >
                       {Math.max(sesionSel.cupo_maximo - confirmados.length, 0)}
                     </p>
