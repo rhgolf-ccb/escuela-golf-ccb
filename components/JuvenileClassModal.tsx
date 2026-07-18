@@ -103,6 +103,11 @@ interface Props {
   horaInicio?: string;
   horaFin?: string;
   sesionExistente?: ExistingSesion | null;
+  // Único fallback cuando no llega horaInicio/horaFin ni una sesión existente
+  // con horas propias (ej. al abrir el modal desde el wizard "día específico"
+  // sin sesión previa) — nunca se guarda sin hora, así el NOT NULL de
+  // sesiones_semana no rompe el guardado.
+  horariosDefecto?: { tipo_plan: string; dia_semana: string; hora_inicio: string; hora_fin: string }[];
   onClose: () => void;
   onSaved: () => void;
 }
@@ -155,9 +160,15 @@ function formatFecha(fecha: string) {
 // ── Component ──────────────────────────────────────────────────────────────────
 export default function JuvenileClassModal({
   planId, dia, diaLabel, fecha,
-  horaInicio, horaFin, sesionExistente,
+  horaInicio, horaFin, sesionExistente, horariosDefecto,
   onClose, onSaved,
 }: Props) {
+  const defaultHorario = (horariosDefecto ?? [])
+    .filter((h) => h.tipo_plan === "juvenil" && h.dia_semana === dia)
+    .sort((a, b) => a.hora_inicio.localeCompare(b.hora_inicio))[0];
+  const horaInicioFinal = horaInicio || sesionExistente?.hora_inicio || defaultHorario?.hora_inicio.slice(0, 5) || "";
+  const horaFinFinal = horaFin || sesionExistente?.hora_fin || defaultHorario?.hora_fin.slice(0, 5) || "";
+
   const [mode, setMode] = useState<"tipo" | "estaciones" | "especial">(() => initMode(sesionExistente));
   const [stations, setStations] = useState<StationState[]>(() => initStations(sesionExistente));
   const [tipoEspecial, setTipoEspecial] = useState<TipoEspecial | null>(() => initEspecial(sesionExistente));
@@ -223,7 +234,7 @@ export default function JuvenileClassModal({
           plan_id: planId, dia_semana: dia, fecha,
           tipo_sesion: ESPECIAL_TIPO_SESION[tipoEspecial],
           lugar: ESPECIAL_LUGAR[tipoEspecial],
-          hora_inicio: horaInicio || null, hora_fin: horaFin || null,
+          hora_inicio: horaInicioFinal || null, hora_fin: horaFinFinal || null,
           objetivo: ESPECIAL_OBJETIVO[tipoEspecial],
           drills: [], juego_competitivo: null, estaciones_damas: null, notas: null,
           sesion_juvenil: { tipo: "especial", tipo_especial: tipoEspecial },
@@ -237,7 +248,7 @@ export default function JuvenileClassModal({
           plan_id: planId, dia_semana: dia, fecha,
           tipo_sesion: "juvenil_estaciones",
           lugar: "campo_practica",
-          hora_inicio: horaInicio || null, hora_fin: horaFin || null,
+          hora_inicio: horaInicioFinal || null, hora_fin: horaFinFinal || null,
           objetivo: "Sesión 3 estaciones: Juego Largo · Juego Corto · Putt",
           drills: [], juego_competitivo: null, estaciones_damas: null, notas: null,
           sesion_juvenil: { tipo: "estaciones", estaciones },

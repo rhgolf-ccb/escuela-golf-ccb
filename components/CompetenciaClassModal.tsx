@@ -23,6 +23,11 @@ interface Props {
   horaInicio?: string;
   horaFin?: string;
   sesionExistente?: ExistingSesion | null;
+  // Único fallback cuando no llega horaInicio/horaFin ni una sesión existente
+  // con horas propias (ej. al abrir el modal desde el wizard "día específico"
+  // sin sesión previa) — nunca se guarda sin hora, así el NOT NULL de
+  // sesiones_semana no rompe el guardado.
+  horariosDefecto?: { tipo_plan: string; dia_semana: string; hora_inicio: string; hora_fin: string }[];
   onClose: () => void;
   onSaved: () => void;
 }
@@ -136,8 +141,14 @@ function StarRating({ rating }: { rating: number | null }) {
 }
 
 export default function CompetenciaClassModal({
-  planId, dia, diaLabel, fecha, horaInicio, horaFin, sesionExistente, onClose, onSaved,
+  planId, dia, diaLabel, fecha, horaInicio, horaFin, sesionExistente, horariosDefecto, onClose, onSaved,
 }: Props) {
+  const defaultHorario = (horariosDefecto ?? [])
+    .filter((h) => h.tipo_plan === "competencia" && h.dia_semana === dia)
+    .sort((a, b) => a.hora_inicio.localeCompare(b.hora_inicio))[0];
+  const horaInicioFinal = horaInicio || sesionExistente?.hora_inicio || defaultHorario?.hora_inicio.slice(0, 5) || "";
+  const horaFinFinal = horaFin || sesionExistente?.hora_fin || defaultHorario?.hora_fin.slice(0, 5) || "";
+
   type Mode = "categoria" | "enfoque_fisico" | "seleccion" | "preview";
   const [mode, setMode]       = useState<Mode>("categoria");
   const [categorias, setCategorias] = useState<TipoSesion[]>(() => categoriasDesdeExistente(sesionExistente));
@@ -367,8 +378,8 @@ export default function CompetenciaClassModal({
         plan_id: planId, dia_semana: dia, fecha,
         tipo_sesion: tipoSesionPayload,
         lugar: lugarPayload,
-        hora_inicio: horaInicio || null,
-        hora_fin:    horaFin    || null,
+        hora_inicio: horaInicioFinal || null,
+        hora_fin:    horaFinFinal    || null,
         objetivo:    objetivoPayload,
         drills:      drillsPayload,
         juego_competitivo: juegoPayload,

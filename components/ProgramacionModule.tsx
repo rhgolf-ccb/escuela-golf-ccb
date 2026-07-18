@@ -156,7 +156,7 @@ interface SesionForm {
   estaciones_damas: EstacionDamas[]; notas: string;
 }
 
-interface HorarioDefecto { tipo_plan: TipoPlan; dia_semana: DiaSemana; hora_inicio: string; hora_fin: string; }
+export interface HorarioDefecto { tipo_plan: TipoPlan; dia_semana: DiaSemana; hora_inicio: string; hora_fin: string; }
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 export const DIAS_POR_TIPO: Record<TipoPlan, DiaSemana[]> = {
@@ -673,10 +673,11 @@ export default function ProgramacionModule({ currentRol }: { currentRol: Rol | n
       const { count } = await supabase.from("sesiones_semana").select("id", { count: "exact", head: true }).eq("plan_id", newPlan.id);
       if (!count) for (const dia of DIAS_POR_TIPO["competencia"]) {
         const defaultH = getHD("competencia", dia as DiaSemana);
+        if (!defaultH) throw new Error(`No hay horario por defecto para competencia el ${dia}; defínelo en horarios_defecto.`);
         await supabase.from("sesiones_semana").insert({
           plan_id: newPlan.id, dia_semana: dia, fecha: getFechaForDia(semana, dia as DiaSemana),
           tipo_sesion: "tiro_largo", lugar: "campo_practica", objetivo: "", drills: [],
-          hora_inicio: defaultH?.hi || null, hora_fin: defaultH?.hf || null, estaciones_damas: null,
+          hora_inicio: defaultH.hi, hora_fin: defaultH.hf, estaciones_damas: null,
         });
       }
       showToast("Plan Competencia creado ✓"); await fetchPlan();
@@ -793,7 +794,12 @@ export default function ProgramacionModule({ currentRol }: { currentRol: Rol | n
       const endStr = `${endHour.toString().padStart(2, "0")}:00`;
       openJuvModal(dia, getFechaForDia(semana, dia), null, { hi: hourStr, hf: endStr });
     } else if (activeTab === "competencia") {
-      openCompModal(dia, getFechaForDia(semana, dia), null, { hi: hourStr });
+      // El horario de Competencia sale de horarios_defecto, no de la celda
+      // clickeada — evita crear sesiones con hora_fin en null (rompería el
+      // NOT NULL de sesiones_semana) y respeta el horario fijo del grupo.
+      const defaultH = getDefaultHoras("competencia", dia, []);
+      const endHour = Math.min(hour + 1, 18);
+      openCompModal(dia, getFechaForDia(semana, dia), null, defaultH ?? { hi: hourStr, hf: `${endHour.toString().padStart(2, "0")}:00` });
     } else {
       openEditSesion(dia, null, hourStr);
     }
@@ -2022,6 +2028,7 @@ export default function ProgramacionModule({ currentRol }: { currentRol: Rol | n
           horaInicio={juvClassCtx.horaInicio}
           horaFin={juvClassCtx.horaFin}
           sesionExistente={juvClassCtx.sesion ?? undefined}
+          horariosDefecto={horariosDefecto}
           onClose={() => setJuvClassCtx(null)}
           onSaved={async () => {
             setJuvClassCtx(null);
@@ -2042,6 +2049,7 @@ export default function ProgramacionModule({ currentRol }: { currentRol: Rol | n
           horaInicio={compClassCtx.horaInicio}
           horaFin={compClassCtx.horaFin}
           sesionExistente={compClassCtx.sesion ?? undefined}
+          horariosDefecto={horariosDefecto}
           onClose={() => setCompClassCtx(null)}
           onSaved={async () => {
             setCompClassCtx(null);
@@ -2059,6 +2067,7 @@ export default function ProgramacionModule({ currentRol }: { currentRol: Rol | n
           semana={semana}
           planExistente={plan}
           sesionesExistentes={sesiones}
+          horariosDefecto={horariosDefecto}
           onClose={() => setShowPacoPlanning(false)}
           onPublished={async () => {
             setShowPacoPlanning(false);

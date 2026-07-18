@@ -83,6 +83,8 @@ function buildPlanningIntro(contextoPlanificacion: string): string {
 
 En cuanto tengas la información que falta (estaciones/enfoque físico esta semana, aspecto técnico prioritario, y para Competencia si hay torneo próximo, o para Damas si es día de campo y si incluye bunker), genera la programación completa de la semana llamando a la herramienta proponer_programacion_semana — esto la muestra automáticamente en el panel de vista previa del profesor, editable antes de publicar. Respeta siempre la estructura fija de cada grupo: Juvenil (martes si el lunes no es festivo, miércoles y jueves 4:30-5:30pm, sábado y domingo dos horarios cada uno) con estaciones y drills conectados a los protocolos P1–P10; Competencia sigue su estructura día por día (martes tiro largo, miércoles putt y campo, jueves juego corto, sábado siempre campo de práctica); Damas es viernes con 3 estaciones rotativas, o día de campo si el profesor lo indica. Nunca uses el término driving range — siempre campo de práctica. Usa los drills de la librería disponible cuando haya opciones relevantes.
 
+Las horas (hora_inicio/hora_fin) de cada sesión de Competencia o Damas NO las definas tú: se completan automáticamente desde horarios_defecto al publicar (Competencia martes/miércoles/jueves 16:00-17:30 y sábado 08:30-09:30; Damas viernes 10:30-12:00) — omite esos campos en tu llamada a proponer_programacion_semana. La única excepción es un día de campo de Damas si el profesor pidió explícitamente una hora distinta a la clase normal (ej. una salida más temprano) — ahí sí incluye la hora que él te dio, nunca una inventada por ti.
+
 Cuando planifiques una semana completa para Juvenil genera planes diferentes para cada día de la semana — martes, miércoles y jueves deben tener drills distintos por estación. El sábado tiene dos horarios (9:15 AM y 10:00 AM) que comparten el mismo plan. El domingo igual. Por cada estación sugiere 2 a 3 drills de la biblioteca rotando para evitar repetición. Incluye siempre un desafío competitivo al final de cada estación apropiado para la edad del grupo. Para Juvenil, un día puede ser de tipo "estaciones" (las 3 de siempre), "solo_putt" o "solo_juego_corto" (un solo tema con más drills), o un día especial: "campo" (salida a jugar), "test_tecnico" o "test_fisico" — en los tipos especiales usa el campo notas para describir la actividad en vez de estaciones.
 
 Cuando el profesor pida modificar la programación que ya está en la vista previa (cambiar un día, una estación, un drill, un desafío, etc.), SIEMPRE vuelve a llamar la herramienta proponer_programacion_semana con la estructura COMPLETA — nunca respondas el cambio solo en texto sin llamar la herramienta, o la vista previa del profesor se queda desactualizada. Si el contexto de abajo incluye "Programación actual en la vista previa", cópiala tal cual para todo lo que el profesor no pidió cambiar, y modifica solo lo solicitado. Para Juvenil, incluye siempre el campo dias_modificados con la lista exacta de los días que realmente cambiaron en esta respuesta — los demás días igual van completos en el array pero se ignorarán si no aparecen en esa lista, así que cópialos sin alterarlos.
@@ -152,8 +154,11 @@ Cuando planifiques una estación física consulta la biblioteca de ejercicios f�
 
 Si una consulta a la base de datos no devuelve resultados, dilo claramente en vez de inventar datos.
 
+PROGRAMAR LA ESCUELA (Juvenil, Competencia, Damas) vs. CALENDARIO DE EVENTOS — son dos cosas distintas, no las mezcles:
+"Programar la escuela" (el horario semanal de clases) SIEMPRE significa crear sesiones reales en sesiones_semana, con horas tomadas de horarios_defecto — nunca inventadas. La grilla de Programación solo dibuja una sesión si tiene hora_inicio y hora_fin, así que si te piden armar/programar la escuela de una semana, la única forma correcta es a través del asistente de planificación semanal ("Planificar con Paco" dentro del módulo Programación, para el grupo correspondiente) — NUNCA con crear_evento_calendario. Si te piden programar la escuela desde este chat general (fuera de esa planificación semanal), no lo hagas aquí: dile al profesor que abra "Planificar con Paco" en Programación para el grupo que quiere programar.
+
 CALENDARIO — EVENTOS Y DÍAS SIN ESCUELA:
-Cuando el profesor mencione un evento, fecha de torneo, festival u otro evento institucional, ofrece agregarlo al calendario con nombre, fecha y descripción. Al confirmar publícalo directamente en la tabla de eventos del calendario usando crear_evento_calendario.
+Cuando el profesor mencione un evento, fecha de torneo, festival u otro evento institucional puntual (no una clase regular de la escuela), ofrece agregarlo al calendario con nombre, fecha y descripción. Al confirmar publícalo directamente en la tabla de eventos del calendario usando crear_evento_calendario.
 
 Cuando el profesor indique un rango de fechas sin escuela (ej. "del 20 al 25 de julio no hay escuela", vacaciones, festivo, receso), confirma el rango y el motivo, y al confirmar regístralo con marcar_dias_sin_escuela.
 
@@ -298,7 +303,7 @@ const CCB_TOOLS: Anthropic.Tool[] = [
   },
   {
     name: "crear_evento_calendario",
-    description: "Crea un evento en el calendario general de la escuela (torneo, festival, día institucional, etc.). Úsala solo después de que el profesor confirme explícitamente que quiere agregarlo.",
+    description: "Crea un evento en el calendario general de la escuela (torneo, festival, día institucional, etc.). NUNCA la uses para programar clases regulares de Juvenil, Competencia o Damas — eso es sesiones_semana, no un evento de calendario, y se hace exclusivamente en 'Planificar con Paco' dentro de Programación. Úsala solo después de que el profesor confirme explícitamente que quiere agregar un evento puntual.",
     input_schema: {
       type: "object",
       properties: {
@@ -383,15 +388,15 @@ const PROPONER_PROGRAMACION_TOOL: Anthropic.Tool = {
       },
       sesiones: {
         type: "array",
-        description: "Solo si el grupo es Competencia o Damas — una entrada por sesión de la semana",
+        description: "Solo si el grupo es Competencia o Damas — una entrada por sesión de la semana. No incluyas hora_inicio/hora_fin salvo excepción explícita del profesor: el horario real siempre se resuelve automáticamente desde horarios_defecto al publicar.",
         items: {
           type: "object",
           properties: {
             dia_semana: { type: "string", description: "martes | miercoles | jueves | viernes | sabado | domingo" },
             tipo_sesion: { type: "string", description: "tiro_largo | juego_corto | putt | campo | test_tecnico | test_fisico | trabajo_fisico | competencia | damas_estaciones. trabajo_fisico es una estación de ejercicios físicos (potencia, movilidad, etc.) — distinta de test_fisico, que es la evaluación de protocolos TPI." },
             lugar: { type: "string", description: "campo_practica | putting_green | campo_infantil | campo_pacos_fabios | campo_completo" },
-            hora_inicio: { type: "string", description: "HH:MM" },
-            hora_fin: { type: "string", description: "HH:MM" },
+            hora_inicio: { type: "string", description: "HH:MM — OMÍTELO: el horario real de Competencia y Damas sale siempre de horarios_defecto al publicar. Solo inclúyelo si el profesor pidió explícitamente una hora distinta a la fija (ej. un día de campo de Damas que arranca más temprano que la clase normal)." },
+            hora_fin: { type: "string", description: "HH:MM — mismo criterio que hora_inicio: OMÍTELO salvo que el profesor haya pedido una hora distinta a la fija de horarios_defecto." },
             objetivo: { type: "string" },
             drills: {
               type: "array",
@@ -414,7 +419,7 @@ const PROPONER_PROGRAMACION_TOOL: Anthropic.Tool = {
             },
             notas: { type: "string" },
           },
-          required: ["dia_semana", "tipo_sesion", "lugar", "hora_inicio", "hora_fin", "objetivo"],
+          required: ["dia_semana", "tipo_sesion", "lugar", "objetivo"],
         },
       },
     },

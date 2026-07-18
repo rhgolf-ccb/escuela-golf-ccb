@@ -1,4 +1,5 @@
 import type { NextRequest } from "next/server";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
 
 const TIPO_PLAN_VALUES = ["juvenil", "competencia", "damas"] as const;
@@ -9,11 +10,23 @@ const TIPO_SESION_VALUES = [
 ] as const;
 const LUGAR_VALUES = ["campo_practica", "putting_green", "campo_infantil", "campo_pacos_fabios", "campo_completo"] as const;
 
+// hora_inicio/hora_fin del cliente solo se respetan cuando vienen completos y
+// válidos (ej. el día de campo de Damas, que sí puede tener una hora distinta
+// al horario fijo de horarios_defecto). Si faltan o vienen vacíos — el bug
+// típico de Paco al proponer Competencia — se resuelven siempre desde
+// horarios_defecto (ver cargarHorariosDefecto/resolverSlots), nunca quedan en
+// NULL. "fecha" tampoco se confía del cliente: se calcula desde
+// semana_inicio + dia_semana.
 type SesionInput = {
-  dia_semana: string; fecha: string; tipo_sesion: string; lugar: string;
-  hora_inicio?: string | null; hora_fin?: string | null; objetivo?: string | null;
-  drills?: unknown; juego_competitivo?: string | null; estaciones_damas?: unknown; notas?: string | null;
+  dia_semana: string; tipo_sesion: string; lugar: string;
+  hora_inicio?: string | null; hora_fin?: string | null;
+  objetivo?: string | null; drills?: unknown; juego_competitivo?: string | null;
+  estaciones_damas?: unknown; notas?: string | null;
 };
+
+function esHoraValida(v: unknown): v is string {
+  return typeof v === "string" && /^\d{2}:\d{2}/.test(v);
+}
 
 type EstacionJuvenilInput = {
   categoria: string;
@@ -53,21 +66,34 @@ const DIA_ESPECIAL_TIPO_ESPECIAL: Record<string, string> = {
   campo: "campo_pacos", test_tecnico: "test_tecnico", test_fisico: "test_fisico",
 };
 
-const JUVENIL_SLOTS: { dia: string; hi: string; hf: string }[] = [
-  { dia: "martes", hi: "16:30", hf: "17:30" },
-  { dia: "miercoles", hi: "16:30", hf: "17:30" },
-  { dia: "jueves", hi: "16:30", hf: "17:30" },
-  { dia: "sabado", hi: "09:15", hf: "10:00" },
-  { dia: "sabado", hi: "10:00", hf: "11:00" },
-  { dia: "domingo", hi: "09:15", hf: "10:00" },
-  { dia: "domingo", hi: "10:00", hf: "11:00" },
-];
-
 function getFechaForDia(semanaInicio: string, dia: string): string {
   const offset: Record<string, number> = { martes: 1, miercoles: 2, jueves: 3, viernes: 4, sabado: 5, domingo: 6 };
   const d = new Date(semanaInicio + "T00:00:00");
   d.setDate(d.getDate() + (offset[dia] ?? 0));
   return d.toISOString().split("T")[0];
+}
+
+interface HorarioSlot { hora_inicio: string; hora_fin: string }
+
+// Única fuente de verdad para las horas de cada sesión — horarios_defecto.
+// Se carga una sola vez por publicación y se agrupa por "tipo_plan:dia_semana"
+// porque juvenil sábado/domingo tienen 2 bloques cada uno.
+async function cargarHorariosDefecto(admin: SupabaseClient): Promise<Map<string, HorarioSlot[]>> {
+  const { data, error } = await admin.from("horarios_defecto").select("tipo_plan, dia_semana, hora_inicio, hora_fin");
+  if (error) throw new Error(`No se pudieron cargar los horarios por defecto: ${error.message}`);
+  const mapa = new Map<string, HorarioSlot[]>();
+  for (const row of data ?? []) {
+    const key = `${row.tipo_plan}:${row.dia_semana}`;
+    const slots = mapa.get(key) ?? [];
+    slots.push({ hora_inicio: row.hora_inicio, hora_fin: row.hora_fin });
+    mapa.set(key, slots);
+  }
+  for (const slots of mapa.values()) slots.sort((a, b) => a.hora_inicio.localeCompare(b.hora_inicio));
+  return mapa;
+}
+
+function resolverSlots(horarios: Map<string, HorarioSlot[]>, tipoPlan: string, diaSemana: string): HorarioSlot[] {
+  return horarios.get(`${tipoPlan}:${diaSemana}`) ?? [];
 }
 
 export async function POST(req: NextRequest) {
@@ -111,9 +137,6 @@ export async function POST(req: NextRequest) {
       if (!LUGAR_VALUES.includes(s.lugar as typeof LUGAR_VALUES[number])) {
         return Response.json({ error: `Lugar inválido "${s.lugar}" el día ${s.dia_semana}. Corrígelo en la vista previa antes de publicar.` }, { status: 400 });
       }
-      if (!s.fecha) {
-        return Response.json({ error: `Falta la fecha en la sesión del día ${s.dia_semana}.` }, { status: 400 });
-      }
     }
   } else {
     if (!sesion_juvenil || !Array.isArray(sesion_juvenil) || sesion_juvenil.length === 0) {
@@ -132,6 +155,92 @@ export async function POST(req: NextRequest) {
   }
 
   const supabase = createSupabaseAdminClient();
+
+  // Resuelve TODAS las horas desde horarios_defecto antes de escribir nada —
+  // así un tipo_plan/día sin horario configurado nunca produce una sesión con
+  // hora_inicio/hora_fin en NULL, y el profesor ve el error claro de una vez
+  // en vez de un "publicado" que luego no aparece en la grilla.
+  let horariosDefecto: Map<string, HorarioSlot[]>;
+  try {
+    horariosDefecto = await cargarHorariosDefecto(supabase);
+  } catch (err) {
+    return Response.json({ error: err instanceof Error ? err.message : "Error al cargar horarios por defecto" }, { status: 500 });
+  }
+
+  type Row = Record<string, unknown>;
+  let rows: Row[] = [];
+
+  if (tipo_plan === "juvenil" && sesion_juvenil) {
+    for (const dia of JUVENIL_DIA_VALUES) {
+      const slots = resolverSlots(horariosDefecto, "juvenil", dia);
+      if (slots.length === 0) {
+        return Response.json({ error: `No hay horario por defecto para juvenil el ${dia}; defínelo en horarios_defecto.` }, { status: 400 });
+      }
+      const entry = sesion_juvenil.find((e) => e.dia_semana === dia);
+      const tipo = entry?.tipo ?? "estaciones";
+      for (const slot of slots) {
+        const base = {
+          plan_id: null as unknown, // se completa tras crear/actualizar el plan
+          dia_semana: dia,
+          fecha: getFechaForDia(semana_inicio, dia),
+          hora_inicio: slot.hora_inicio,
+          hora_fin: slot.hora_fin,
+          drills: [] as unknown[],
+          juego_competitivo: null as string | null,
+          estaciones_damas: null,
+        };
+        if (tipo === "campo" || tipo === "test_tecnico" || tipo === "test_fisico") {
+          const tipoEspecial = DIA_ESPECIAL_TIPO_ESPECIAL[tipo];
+          const notas = entry?.notas?.trim() || null;
+          rows.push({
+            ...base,
+            tipo_sesion: DIA_ESPECIAL_TIPO_SESION[tipo],
+            lugar: DIA_ESPECIAL_LUGAR[tipo],
+            objetivo: notas || DIA_ESPECIAL_OBJETIVO[tipo],
+            notas,
+            sesion_juvenil: { tipo: "especial", tipo_especial: tipoEspecial, notas },
+          });
+        } else {
+          const estaciones = entry?.estaciones ?? [];
+          rows.push({
+            ...base,
+            tipo_sesion: "juvenil_estaciones",
+            lugar: "campo_practica",
+            objetivo: estaciones.map((e) => CATEGORIA_ESTACION_LABEL[e.categoria] ?? e.categoria).join(" · "),
+            notas: null,
+            sesion_juvenil: { tipo: "estaciones", estaciones },
+          });
+        }
+      }
+    }
+  } else if (sesiones) {
+    for (const s of sesiones) {
+      let horaInicio = esHoraValida(s.hora_inicio) ? s.hora_inicio : null;
+      let horaFin = esHoraValida(s.hora_fin) ? s.hora_fin : null;
+      if (!horaInicio || !horaFin) {
+        const slots = resolverSlots(horariosDefecto, tipo_plan, s.dia_semana);
+        if (slots.length === 0) {
+          return Response.json({ error: `No hay horario por defecto para ${tipo_plan} el ${s.dia_semana}; defínelo en horarios_defecto.` }, { status: 400 });
+        }
+        horaInicio = horaInicio ?? slots[0].hora_inicio;
+        horaFin = horaFin ?? slots[0].hora_fin;
+      }
+      rows.push({
+        plan_id: null,
+        dia_semana: s.dia_semana,
+        fecha: getFechaForDia(semana_inicio, s.dia_semana),
+        tipo_sesion: s.tipo_sesion,
+        lugar: s.lugar,
+        hora_inicio: horaInicio,
+        hora_fin: horaFin,
+        objetivo: s.objetivo || "",
+        drills: s.drills || [],
+        juego_competitivo: s.juego_competitivo || null,
+        estaciones_damas: tipo_plan === "damas" ? (s.estaciones_damas || null) : null,
+        notas: s.notas || null,
+      });
+    }
+  }
 
   const { data: newPlan, error: planErr } = await supabase
     .from("planes_semanales")
@@ -152,67 +261,18 @@ export async function POST(req: NextRequest) {
     return Response.json({ error: `Error al guardar el plan: ${planErr?.message ?? "desconocido"}` }, { status: 500 });
   }
 
+  rows = rows.map((r) => ({ ...r, plan_id: newPlan.id }));
+
   const { error: deleteErr } = await supabase.from("sesiones_semana").delete().eq("plan_id", newPlan.id);
   if (deleteErr) {
     return Response.json({ error: `Error al limpiar la programación anterior: ${deleteErr.message}` }, { status: 500 });
   }
 
-  if (tipo_plan === "juvenil" && sesion_juvenil) {
-    const rows = JUVENIL_SLOTS.map((slot) => {
-      const entry = sesion_juvenil.find((e) => e.dia_semana === slot.dia);
-      const tipo = entry?.tipo ?? "estaciones";
-      const base = {
-        plan_id: newPlan.id,
-        dia_semana: slot.dia,
-        fecha: getFechaForDia(semana_inicio, slot.dia),
-        hora_inicio: slot.hi,
-        hora_fin: slot.hf,
-        drills: [] as unknown[],
-        juego_competitivo: null as string | null,
-        estaciones_damas: null,
-      };
-      if (tipo === "campo" || tipo === "test_tecnico" || tipo === "test_fisico") {
-        const tipoEspecial = DIA_ESPECIAL_TIPO_ESPECIAL[tipo];
-        const notas = entry?.notas?.trim() || null;
-        return {
-          ...base,
-          tipo_sesion: DIA_ESPECIAL_TIPO_SESION[tipo],
-          lugar: DIA_ESPECIAL_LUGAR[tipo],
-          objetivo: notas || DIA_ESPECIAL_OBJETIVO[tipo],
-          notas,
-          sesion_juvenil: { tipo: "especial", tipo_especial: tipoEspecial, notas },
-        };
-      }
-      const estaciones = entry?.estaciones ?? [];
-      return {
-        ...base,
-        tipo_sesion: "juvenil_estaciones",
-        lugar: "campo_practica",
-        objetivo: estaciones.map((e) => CATEGORIA_ESTACION_LABEL[e.categoria] ?? e.categoria).join(" · "),
-        notas: null,
-        sesion_juvenil: { tipo: "estaciones", estaciones },
-      };
-    });
-    const { error: insertErr } = await supabase.from("sesiones_semana").insert(rows);
-    if (insertErr) {
-      return Response.json({ error: `Error al guardar las sesiones: ${insertErr.message}` }, { status: 500 });
-    }
-  } else if (sesiones) {
-    const rows = sesiones.map((s) => ({
-      plan_id: newPlan.id,
-      dia_semana: s.dia_semana,
-      fecha: s.fecha,
-      tipo_sesion: s.tipo_sesion,
-      lugar: s.lugar,
-      hora_inicio: s.hora_inicio || null,
-      hora_fin: s.hora_fin || null,
-      objetivo: s.objetivo || "",
-      drills: s.drills || [],
-      juego_competitivo: s.juego_competitivo || null,
-      estaciones_damas: s.estaciones_damas || null,
-      notas: s.notas || null,
-    }));
-    const { error: insertErr } = await supabase.from("sesiones_semana").insert(rows);
+  if (rows.length > 0) {
+    // upsert (no insert) por defensa adicional: si por una carrera quedó algo
+    // sin borrar en el paso anterior, (plan_id, fecha, hora_inicio) reemplaza
+    // en vez de chocar con el índice único y duplicar la sesión.
+    const { error: insertErr } = await supabase.from("sesiones_semana").upsert(rows, { onConflict: "plan_id,fecha,hora_inicio" });
     if (insertErr) {
       return Response.json({ error: `Error al guardar las sesiones: ${insertErr.message}` }, { status: 500 });
     }

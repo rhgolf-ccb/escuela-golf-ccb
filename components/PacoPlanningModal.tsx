@@ -26,6 +26,7 @@ import {
   type PreviewSesion,
   type PlanSemanal,
   type SesionSemana,
+  type HorarioDefecto,
 } from "./ProgramacionModule";
 
 type Message = {
@@ -77,20 +78,36 @@ function normalizeDiaJuvenil(d: Partial<SesionJuvenilDiaPreview> & { dia_semana:
   };
 }
 
-function buildPreviewFromPlan(semana: Date, plan: RawPlan): Preview {
-  const sesiones: PreviewSesion[] = (plan.sesiones ?? []).map((s) => ({
-    dia_semana: s.dia_semana,
-    fecha: getFechaForDia(semana, s.dia_semana),
-    tipo_sesion: s.tipo_sesion,
-    lugar: s.lugar,
-    hora_inicio: s.hora_inicio ?? "",
-    hora_fin: s.hora_fin ?? "",
-    objetivo: s.objetivo ?? "",
-    drills: s.drills ?? [],
-    juego_competitivo: s.juego_competitivo ?? null,
-    estaciones_damas: s.estaciones_damas ?? null,
-    notas: s.notas ?? null,
-  }));
+// La hora de cada sesión respeta lo que proponga Paco/el profesor cuando es
+// válida (ej. el día de campo de Damas, que sí puede tener una hora distinta
+// al bloque fijo) — pero si Paco la dejó vacía (el bug típico en Competencia)
+// se completa de inmediato con horarios_defecto, para que la vista previa
+// nunca muestre un campo de hora en blanco. Publicar aplica la misma regla
+// como red de seguridad final en el backend.
+function resolverHoraDefecto(horariosDefecto: HorarioDefecto[], tipoPlan: TipoPlan, dia: DiaSemana): { hora_inicio: string; hora_fin: string } {
+  const slot = horariosDefecto
+    .filter((h) => h.tipo_plan === tipoPlan && h.dia_semana === dia)
+    .sort((a, b) => a.hora_inicio.localeCompare(b.hora_inicio))[0];
+  return slot ? { hora_inicio: slot.hora_inicio.slice(0, 5), hora_fin: slot.hora_fin.slice(0, 5) } : { hora_inicio: "", hora_fin: "" };
+}
+
+function buildPreviewFromPlan(semana: Date, plan: RawPlan, tipoPlan: TipoPlan, horariosDefecto: HorarioDefecto[]): Preview {
+  const sesiones: PreviewSesion[] = (plan.sesiones ?? []).map((s) => {
+    const horaDefecto = resolverHoraDefecto(horariosDefecto, tipoPlan, s.dia_semana);
+    return {
+      dia_semana: s.dia_semana,
+      fecha: getFechaForDia(semana, s.dia_semana),
+      tipo_sesion: s.tipo_sesion,
+      lugar: s.lugar,
+      hora_inicio: s.hora_inicio || horaDefecto.hora_inicio,
+      hora_fin: s.hora_fin || horaDefecto.hora_fin,
+      objetivo: s.objetivo ?? "",
+      drills: s.drills ?? [],
+      juego_competitivo: s.juego_competitivo ?? null,
+      estaciones_damas: s.estaciones_damas ?? null,
+      notas: s.notas ?? null,
+    };
+  });
   const sesionJuvenil = plan.sesion_juvenil ? plan.sesion_juvenil.map(normalizeDiaJuvenil) : null;
   return { descripcion_tema: plan.descripcion_tema ?? "", sesiones, sesion_juvenil: sesionJuvenil };
 }
@@ -102,8 +119,8 @@ function buildPreviewFromPlan(semana: Date, plan: RawPlan): Preview {
 // queda intacto en vez de perderse por una regeneración completa. Si el campo
 // viene vacío (el modelo lo olvidó), se cae al reemplazo total de siempre para
 // no reintroducir el bug de "la vista previa no se actualiza".
-function mergePlanPreview(semana: Date, plan: RawPlan, prev: Preview | null, tipoPlan: TipoPlan): Preview {
-  const candidato = buildPreviewFromPlan(semana, plan);
+function mergePlanPreview(semana: Date, plan: RawPlan, prev: Preview | null, tipoPlan: TipoPlan, horariosDefecto: HorarioDefecto[]): Preview {
+  const candidato = buildPreviewFromPlan(semana, plan, tipoPlan, horariosDefecto);
   if (tipoPlan !== "juvenil" || !prev || !prev.sesion_juvenil || !candidato.sesion_juvenil) return candidato;
   const modificados = plan.dias_modificados;
   if (!modificados || modificados.length === 0) return candidato;
@@ -331,6 +348,7 @@ export default function PacoPlanningModal({
   semana,
   planExistente,
   sesionesExistentes,
+  horariosDefecto,
   onClose,
   onPublished,
 }: {
@@ -338,6 +356,7 @@ export default function PacoPlanningModal({
   semana: Date;
   planExistente: PlanSemanal | null;
   sesionesExistentes: SesionSemana[];
+  horariosDefecto: HorarioDefecto[];
   onClose: () => void;
   onPublished: () => void;
 }) {
@@ -407,7 +426,7 @@ export default function PacoPlanningModal({
     try {
       await streamAsesorChat({ messages: history, planningContext: contextoConPreview }, (evt) => {
         if (evt.type === "tool_status" && evt.tool) setToolStatus(evt.tool);
-        else if (evt.type === "plan_preview" && evt.plan) setPreview((prev) => mergePlanPreview(semana, evt.plan as RawPlan, prev, tipoPlan));
+        else if (evt.type === "plan_preview" && evt.plan) setPreview((prev) => mergePlanPreview(semana, evt.plan as RawPlan, prev, tipoPlan, horariosDefecto));
         else if (evt.type === "done") {
           finalText = evt.text ?? "";
           usedWebSearch = !!evt.usedWebSearch;
