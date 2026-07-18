@@ -63,7 +63,7 @@ export const MARKDOWN_COMPONENTS = {
 };
 
 export type PacoUsage = { count: number; limit: number | null };
-export type StreamEvent = { type: string; tool?: string; text?: string; usedWebSearch?: boolean; usage?: PacoUsage; message?: string; plan?: unknown };
+export type StreamEvent = { type: string; tool?: string; text?: string; usedWebSearch?: boolean; usage?: PacoUsage; message?: string; plan?: unknown; debug?: unknown };
 
 export async function streamAsesorChat(body: Record<string, unknown>, onEvent: (evt: StreamEvent) => void): Promise<void> {
   const res = await fetch("/api/asesor-golf", {

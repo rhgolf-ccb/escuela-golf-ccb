@@ -431,10 +431,14 @@ export default function PacoPlanningModal({
           finalText = evt.text ?? "";
           usedWebSearch = !!evt.usedWebSearch;
         } else if (evt.type === "limit_reached") limitReached = true;
-        else if (evt.type === "error") gotError = true;
+        else if (evt.type === "error") {
+          gotError = true;
+          if (evt.debug) console.error("Paco planning error debug:", evt.debug);
+        }
       });
-    } catch {
+    } catch (err) {
       gotError = true;
+      console.error("Paco planning fetch/stream error:", err);
     }
 
     if (limitReached) {

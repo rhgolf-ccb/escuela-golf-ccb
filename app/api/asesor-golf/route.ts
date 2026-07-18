@@ -7,6 +7,10 @@ import { STAFF_ROLES, pacoLimitFor, type Rol } from "@/lib/roles";
 import { PACO_PLANNING_KNOWLEDGE, PACO_ADVANCED_PLANNING } from "@/lib/paco-planning-knowledge";
 import { ANTHROPIC_MODEL } from "@/lib/anthropic-model";
 
+// La planeación semanal (thinking + tool loop + max_tokens 8000) puede tardar
+// bien por encima del límite por defecto de Vercel — sube el límite de la función.
+export const maxDuration = 60;
+
 const MAX_CONTINUATIONS = 3;
 const MAX_TOOL_ITERATIONS = 10;
 const MAX_HISTORY = 10;
@@ -669,14 +673,22 @@ export async function POST(request: NextRequest) {
     return Response.json({ error: "API key no configurada" }, { status: 500 });
   }
 
-  const supabase = await createSupabaseServerClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return Response.json({ error: "unauthorized" }, { status: 401 });
-
-  const { data: caller } = await supabase.from("app_users").select("rol").eq("id", user.id).maybeSingle();
-  const rol = caller?.rol as Rol | undefined;
+  // middleware.ts ya validó sesión + rol para esta request y los deja en
+  // headers de confianza (ver lib/current-user.ts) — evita repetir aquí la
+  // misma consulta a auth.getUser()/app_users. Fallback defensivo por si esta
+  // ruta se invoca alguna vez fuera del matcher de middleware.
+  let userId = request.headers.get("x-ccb-uid");
+  let rol = request.headers.get("x-ccb-rol") as Rol | null;
+  if (!userId || !rol) {
+    const supabase = await createSupabaseServerClient();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) return Response.json({ error: "unauthorized" }, { status: 401 });
+    const { data: caller } = await supabase.from("app_users").select("rol").eq("id", user.id).maybeSingle();
+    userId = user.id;
+    rol = (caller?.rol as Rol | undefined) ?? null;
+  }
   if (!rol || !STAFF_ROLES.includes(rol)) {
     return Response.json({ error: "forbidden" }, { status: 403 });
   }
@@ -689,7 +701,7 @@ export async function POST(request: NextRequest) {
     const { data: usage } = await admin
       .from("paco_usage")
       .select("mensajes_count")
-      .eq("user_id", user.id)
+      .eq("user_id", userId)
       .eq("fecha", hoy)
       .maybeSingle();
     const consumo = usage?.mensajes_count ?? 0;
@@ -723,11 +735,12 @@ export async function POST(request: NextRequest) {
   const tools: Anthropic.ToolUnion[] = body.planningContext ? [...TOOLS, PROPONER_PROGRAMACION_TOOL] : TOOLS;
   const maxTokens = body.planningContext ? 8000 : 2048;
   // Chat normal: sin extended thinking, respuesta inmediata. Planeación
-  // semanal: presupuesto bajo de thinking (1024 tokens) para armar mejor la
+  // semanal: thinking adaptativo con esfuerzo bajo para armar mejor la
   // semana completa sin perder velocidad de forma notoria. Nunca Opus.
-  const thinking: Anthropic.ThinkingConfigParam = body.planningContext
-    ? { type: "enabled", budget_tokens: 1024 }
-    : { type: "disabled" };
+  // Sonnet 5 no soporta thinking.type "enabled" (legado) — solo "adaptive",
+  // que se calibra con output_config.effort en vez de budget_tokens.
+  const thinking: Anthropic.ThinkingConfigParam = body.planningContext ? { type: "adaptive" } : { type: "disabled" };
+  const outputConfig: Anthropic.OutputConfig | undefined = body.planningContext ? { effort: "low" } : undefined;
 
   const client = new Anthropic({ apiKey });
 
@@ -746,6 +759,7 @@ export async function POST(request: NextRequest) {
         while (true) {
           const response = await client.messages.create({
             model: ANTHROPIC_MODEL, max_tokens: maxTokens, system: systemPrompt, tools, thinking, messages: conversation,
+            ...(outputConfig ? { output_config: outputConfig } : {}),
           });
 
           for (const block of response.content) {
@@ -795,16 +809,21 @@ export async function POST(request: NextRequest) {
         if (limite === null) {
           usage = { count: 0, limit: null };
         } else {
-          const { data: nuevoConteo } = await admin.rpc("increment_paco_usage", { p_user_id: user.id, p_fecha: hoy });
+          const { data: nuevoConteo } = await admin.rpc("increment_paco_usage", { p_user_id: userId, p_fecha: hoy });
           usage = { count: typeof nuevoConteo === "number" ? nuevoConteo : limite, limit: limite };
         }
 
         send({ type: "done", text: text.trim(), usedWebSearch, usage });
       } catch (error) {
         const status = error instanceof Anthropic.APIError ? error.status : undefined;
+        const apiError = error instanceof Anthropic.APIError ? error.error : undefined;
         const detail = error instanceof Error ? error.message : String(error);
-        console.error(`Error asesor-golf (status=${status ?? "n/a"}):`, detail);
-        send({ type: "error", message: "No pude conectarme. Intenta de nuevo." });
+        console.error(`Error asesor-golf (status=${status ?? "n/a"}):`, detail, apiError ? JSON.stringify(apiError) : "");
+        send({
+          type: "error",
+          message: "No pude conectarme. Intenta de nuevo.",
+          ...(process.env.NODE_ENV !== "production" ? { debug: { status, detail, apiError } } : {}),
+        });
       } finally {
         controller.close();
       }
