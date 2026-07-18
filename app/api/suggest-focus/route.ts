@@ -1,4 +1,5 @@
 import type { NextRequest } from "next/server";
+import { ANTHROPIC_MODEL } from "@/lib/anthropic-model";
 
 function parseAI(raw: string): unknown {
   try { return JSON.parse(raw.trim()); } catch { /* */ }
@@ -73,7 +74,7 @@ Devuelve SOLO JSON:
       method: "POST",
       headers: { "Content-Type": "application/json", "x-api-key": apiKey, "anthropic-version": "2023-06-01" },
       body: JSON.stringify({
-        model: "claude-haiku-4-5-20251001",
+        model: ANTHROPIC_MODEL,
         max_tokens: 800,
         system,
         messages: [{ role: "user", content: user }],

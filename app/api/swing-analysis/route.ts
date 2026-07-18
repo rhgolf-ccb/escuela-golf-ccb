@@ -1,4 +1,5 @@
 import type { NextRequest } from "next/server";
+import { ANTHROPIC_MODEL } from "@/lib/anthropic-model";
 
 export async function POST(request: NextRequest) {
   const apiKey = process.env.ANTHROPIC_API_KEY;
@@ -130,7 +131,7 @@ ${contextoFisico}`;
         "anthropic-version": "2023-06-01",
       },
       body: JSON.stringify({
-        model: "claude-sonnet-4-6",
+        model: ANTHROPIC_MODEL,
         max_tokens: 1600,
         system: systemPrompt,
         messages: [{ role: "user", content: userMessage }],

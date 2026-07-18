@@ -1,5 +1,6 @@
 import type { NextRequest } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { ANTHROPIC_MODEL } from "@/lib/anthropic-model";
 
 function normalizeLugar(raw: string): string {
   const r = (raw ?? "").toLowerCase().trim();
@@ -81,7 +82,7 @@ async function claudeCall(apiKey: string, prompt: string): Promise<unknown[]> {
     method: "POST",
     headers: { "Content-Type": "application/json", "x-api-key": apiKey, "anthropic-version": "2023-06-01" },
     body: JSON.stringify({
-      model: "claude-sonnet-4-6",
+      model: ANTHROPIC_MODEL,
       max_tokens: 8000,
       system: SYSTEM,
       messages: [{ role: "user", content: prompt }],

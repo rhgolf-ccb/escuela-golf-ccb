@@ -1,4 +1,5 @@
 import type { NextRequest } from "next/server";
+import { ANTHROPIC_MODEL } from "@/lib/anthropic-model";
 
 const DIAS_SESION: Record<string, string[]> = {
   juvenil: ["martes", "jueves", "sabado", "domingo"],
@@ -90,7 +91,7 @@ Elige tipo_sesion y lugar coherentes con el dia y el tema. Opciones tipo_sesion:
     method: "POST",
     headers: { "Content-Type": "application/json", "x-api-key": apiKey, "anthropic-version": "2023-06-01" },
     body: JSON.stringify({
-      model: "claude-sonnet-4-6",
+      model: ANTHROPIC_MODEL,
       max_tokens: 1500,
       system: systemPrompt,
       messages: [{ role: "user", content: userMsg }],

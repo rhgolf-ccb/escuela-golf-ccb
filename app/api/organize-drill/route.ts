@@ -1,5 +1,6 @@
 import type { NextRequest } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { ANTHROPIC_MODEL } from "@/lib/anthropic-model";
 
 function normalizeLugar(raw: string): string {
   const r = (raw ?? "").toLowerCase().trim();
@@ -72,7 +73,7 @@ Devuelve exactamente este JSON:
       method: "POST",
       headers: { "Content-Type": "application/json", "x-api-key": apiKey, "anthropic-version": "2023-06-01" },
       body: JSON.stringify({
-        model: "claude-sonnet-4-6",
+        model: ANTHROPIC_MODEL,
         max_tokens: 1500,
         system,
         messages: [{ role: "user", content: userMsg }],

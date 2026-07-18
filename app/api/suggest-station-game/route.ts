@@ -1,6 +1,7 @@
 import type { NextRequest } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { PACO_PLANNING_KNOWLEDGE } from "@/lib/paco-planning-knowledge";
+import { ANTHROPIC_MODEL } from "@/lib/anthropic-model";
 
 const CATEGORIA_LABEL: Record<string, string> = {
   juego_largo: "Juego Largo (swing)",
@@ -77,7 +78,7 @@ ${PACO_PLANNING_KNOWLEDGE}`;
       "content-type": "application/json",
     },
     body: JSON.stringify({
-      model: "claude-sonnet-4-6",
+      model: ANTHROPIC_MODEL,
       max_tokens: 800,
       system,
       messages: [{ role: "user", content: `Sugiere drills y desafío para: ${categoriaLabel}. [${nonce}]` }],

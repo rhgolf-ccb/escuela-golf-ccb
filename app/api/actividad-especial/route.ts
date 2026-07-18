@@ -1,5 +1,6 @@
 import type { NextRequest } from "next/server";
 import { PACO_PLANNING_KNOWLEDGE } from "@/lib/paco-planning-knowledge";
+import { ANTHROPIC_MODEL } from "@/lib/anthropic-model";
 
 function parseAI(raw: string): unknown {
   try { return JSON.parse(raw.trim()); } catch { /* */ }
@@ -64,7 +65,7 @@ ${PACO_PLANNING_KNOWLEDGE}`;
       method: "POST",
       headers: { "Content-Type": "application/json", "x-api-key": apiKey, "anthropic-version": "2023-06-01" },
       body: JSON.stringify({
-        model: "claude-sonnet-4-6",
+        model: ANTHROPIC_MODEL,
         max_tokens: 3000,
         system,
         messages: [{ role: "user", content: user }],

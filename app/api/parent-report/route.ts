@@ -1,5 +1,6 @@
 import type { NextRequest } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { ANTHROPIC_MODEL } from "@/lib/anthropic-model";
 
 function calcularEdadNum(birthDate: string | null): number | null {
   if (!birthDate) return null;
@@ -183,7 +184,7 @@ Devuelve SOLO un JSON válido sin backticks, sin texto extra, comenzando con {:
     method: "POST",
     headers: { "Content-Type": "application/json", "x-api-key": apiKey, "anthropic-version": "2023-06-01" },
     body: JSON.stringify({
-      model: "claude-sonnet-4-6",
+      model: ANTHROPIC_MODEL,
       max_tokens: 1200,
       system: systemPrompt,
       messages: [{ role: "user", content: `Genera el informe para los padres basado en estos datos:\n\n${contexto}` }],

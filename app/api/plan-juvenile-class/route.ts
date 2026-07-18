@@ -1,5 +1,6 @@
 import type { NextRequest } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { ANTHROPIC_MODEL } from "@/lib/anthropic-model";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 function parseJSON(raw: string): unknown {
@@ -118,7 +119,7 @@ Devuelve SOLO JSON válido, sin texto adicional ni backticks:
       "content-type": "application/json",
     },
     body: JSON.stringify({
-      model: "claude-sonnet-4-6",
+      model: ANTHROPIC_MODEL,
       max_tokens: 1500,
       system,
       messages: [{

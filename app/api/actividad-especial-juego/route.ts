@@ -1,5 +1,6 @@
 import type { NextRequest } from "next/server";
 import { PACO_PLANNING_KNOWLEDGE } from "@/lib/paco-planning-knowledge";
+import { ANTHROPIC_MODEL } from "@/lib/anthropic-model";
 
 const CATEGORIA_LABEL: Record<string, string> = {
   juego_largo: "Juego Largo (tiro largo, drives, hierros)",
@@ -87,7 +88,7 @@ ${PACO_PLANNING_KNOWLEDGE}`;
       method: "POST",
       headers: { "Content-Type": "application/json", "x-api-key": apiKey, "anthropic-version": "2023-06-01" },
       body: JSON.stringify({
-        model: "claude-haiku-4-5",
+        model: ANTHROPIC_MODEL,
         max_tokens: 3000,
         system,
         messages: [{ role: "user", content: user }],

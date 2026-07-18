@@ -1,5 +1,6 @@
 import type { NextRequest } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { ANTHROPIC_MODEL } from "@/lib/anthropic-model";
 
 export async function POST(request: NextRequest) {
   const apiKey = process.env.ANTHROPIC_API_KEY;
@@ -45,7 +46,7 @@ Si un dato no es visible en la imagen, devuelve null para ese campo. Sin texto e
         "anthropic-version": "2023-06-01",
       },
       body: JSON.stringify({
-        model: "claude-sonnet-4-6",
+        model: ANTHROPIC_MODEL,
         max_tokens: 1024,
         system: systemPrompt,
         messages: [

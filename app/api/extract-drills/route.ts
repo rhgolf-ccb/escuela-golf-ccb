@@ -3,11 +3,10 @@ import type { NextRequest } from "next/server";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
 import { STAFF_ROLES, type Rol } from "@/lib/roles";
+import { ANTHROPIC_MODEL } from "@/lib/anthropic-model";
 
 const CATEGORIAS_VALIDAS = ["tecnico", "juego_corto", "putting", "campo"] as const;
 type Categoria = (typeof CATEGORIAS_VALIDAS)[number];
-
-const EXTRACT_MODEL = "claude-haiku-4-5";
 
 const EXTRACT_SYSTEM_PROMPT = `Extraes drills de golf de un texto en español escrito por un asesor para un profesor. Un drill es un ejercicio práctico y repetible con instrucciones concretas — no cuentan observaciones generales, diagnósticos o recomendaciones sin estructura de ejercicio.
 
@@ -48,7 +47,7 @@ export async function POST(request: NextRequest) {
   let extracted: { titulo: string; descripcion: string; categoria: string }[] = [];
   try {
     const response = await client.messages.create({
-      model: EXTRACT_MODEL,
+      model: ANTHROPIC_MODEL,
       max_tokens: 1024,
       system: EXTRACT_SYSTEM_PROMPT,
       messages: [{ role: "user", content: text }],

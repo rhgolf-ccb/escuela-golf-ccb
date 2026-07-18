@@ -2,6 +2,7 @@ import type { NextRequest } from "next/server";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
 import { STAFF_ROLES, type Rol } from "@/lib/roles";
+import { ANTHROPIC_MODEL } from "@/lib/anthropic-model";
 
 type Mensaje = { role: "user" | "assistant"; content: string; timestamp: number };
 
@@ -14,7 +15,7 @@ async function summarize(mensajes: Mensaje[]): Promise<string> {
       method: "POST",
       headers: { "Content-Type": "application/json", "x-api-key": apiKey, "anthropic-version": "2023-06-01" },
       body: JSON.stringify({
-        model: "claude-sonnet-4-6",
+        model: ANTHROPIC_MODEL,
         max_tokens: 300,
         messages: [{ role: "user", content: `Resume en 2-3 oraciones, en español, de qué trató esta conversación entre un profesor de golf y Paco (asesor IA). Sé concreto sobre temas y conclusiones. Devuelve solo el resumen, sin introducción.\n\n${transcript}` }],
       }),

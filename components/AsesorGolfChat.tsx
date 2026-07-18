@@ -175,7 +175,7 @@ export default function AsesorGolfChat({ rol }: { rol: Rol | null }) {
               <div className="min-w-0">
                 <div className="flex items-center gap-1.5">
                   <p className="text-sm font-semibold text-white truncate">Paco — Asesor de Golf</p>
-                  <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded-full bg-white/15 text-white shrink-0">Opus 4</span>
+                  <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded-full bg-white/15 text-white shrink-0">Sonnet 5</span>
                 </div>
                 <p className="text-[11px] text-white/70 truncate">Especialista en TPI · Swing · Pedagogía</p>
               </div>

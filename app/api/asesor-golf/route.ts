@@ -5,9 +5,8 @@ import { createSupabaseServerClient } from "@/lib/supabase-server";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
 import { STAFF_ROLES, pacoLimitFor, type Rol } from "@/lib/roles";
 import { PACO_PLANNING_KNOWLEDGE, PACO_ADVANCED_PLANNING } from "@/lib/paco-planning-knowledge";
+import { ANTHROPIC_MODEL } from "@/lib/anthropic-model";
 
-const PRIMARY_MODEL = "claude-opus-4-5";
-const FALLBACK_MODEL = "claude-sonnet-4-6";
 const MAX_CONTINUATIONS = 3;
 const MAX_TOOL_ITERATIONS = 10;
 const MAX_HISTORY = 10;
@@ -723,6 +722,12 @@ export async function POST(request: NextRequest) {
   const systemPrompt = buildSystemPrompt(body.studentContext, body.planningContext, body.groupContext, body.individualPlanContext, knowledgeContext);
   const tools: Anthropic.ToolUnion[] = body.planningContext ? [...TOOLS, PROPONER_PROGRAMACION_TOOL] : TOOLS;
   const maxTokens = body.planningContext ? 8000 : 2048;
+  // Chat normal: sin extended thinking, respuesta inmediata. Planeación
+  // semanal: presupuesto bajo de thinking (1024 tokens) para armar mejor la
+  // semana completa sin perder velocidad de forma notoria. Nunca Opus.
+  const thinking: Anthropic.ThinkingConfigParam = body.planningContext
+    ? { type: "enabled", budget_tokens: 1024 }
+    : { type: "disabled" };
 
   const client = new Anthropic({ apiKey });
 
@@ -732,7 +737,6 @@ export async function POST(request: NextRequest) {
       const send = (event: Record<string, unknown>) => controller.enqueue(encoder.encode(`data: ${JSON.stringify(event)}\n\n`));
 
       try {
-        let model = PRIMARY_MODEL;
         const conversation: Anthropic.MessageParam[] = history.map((m) => ({ role: m.role, content: m.content }));
         let text = "";
         let usedWebSearch = false;
@@ -740,16 +744,9 @@ export async function POST(request: NextRequest) {
         let toolIterations = 0;
 
         while (true) {
-          let response: Anthropic.Message;
-          try {
-            response = await client.messages.create({ model, max_tokens: maxTokens, system: systemPrompt, tools, messages: conversation });
-          } catch (err) {
-            if (model === PRIMARY_MODEL && err instanceof Anthropic.NotFoundError) {
-              model = FALLBACK_MODEL;
-              continue;
-            }
-            throw err;
-          }
+          const response = await client.messages.create({
+            model: ANTHROPIC_MODEL, max_tokens: maxTokens, system: systemPrompt, tools, thinking, messages: conversation,
+          });
 
           for (const block of response.content) {
             if (block.type === "text") text += block.text;
@@ -804,7 +801,9 @@ export async function POST(request: NextRequest) {
 
         send({ type: "done", text: text.trim(), usedWebSearch, usage });
       } catch (error) {
-        console.error("Error asesor-golf:", error);
+        const status = error instanceof Anthropic.APIError ? error.status : undefined;
+        const detail = error instanceof Error ? error.message : String(error);
+        console.error(`Error asesor-golf (status=${status ?? "n/a"}):`, detail);
         send({ type: "error", message: "No pude conectarme. Intenta de nuevo." });
       } finally {
         controller.close();

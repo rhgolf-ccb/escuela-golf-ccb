@@ -1,5 +1,6 @@
 import type { NextRequest } from "next/server";
 import { PACO_PLANNING_KNOWLEDGE } from "@/lib/paco-planning-knowledge";
+import { ANTHROPIC_MODEL } from "@/lib/anthropic-model";
 
 // Horarios reales de la escuela (sábado y domingo juvenil tienen 2 sesiones)
 const HORARIOS: Record<string, Record<string, { hi: string; hf: string }[]>> = {
@@ -382,7 +383,7 @@ export async function POST(req: NextRequest) {
       method: "POST",
       headers: { "Content-Type": "application/json", "x-api-key": apiKey, "anthropic-version": "2023-06-01" },
       body: JSON.stringify({
-        model: "claude-sonnet-4-6",
+        model: ANTHROPIC_MODEL,
         max_tokens: maxTokens,
         system,
         messages: [{ role: "user", content: user }],

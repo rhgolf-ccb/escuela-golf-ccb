@@ -1,5 +1,6 @@
 import type { NextRequest } from "next/server";
 import { PACO_PLANNING_KNOWLEDGE } from "@/lib/paco-planning-knowledge";
+import { ANTHROPIC_MODEL } from "@/lib/anthropic-model";
 
 const CATEGORIA_LABEL: Record<string, string> = {
   tiro_largo:     "Tiro Largo — swing en campo de práctica",
@@ -81,7 +82,7 @@ ${PACO_PLANNING_KNOWLEDGE}`;
       "content-type": "application/json",
     },
     body: JSON.stringify({
-      model: "claude-sonnet-4-6",
+      model: ANTHROPIC_MODEL,
       max_tokens: 1200,
       system,
       messages: [{ role: "user", content: `Sesión ${dia_semana} — ${categoriaLabel}. [${nonce}]` }],

@@ -1,4 +1,5 @@
 import type { NextRequest } from "next/server";
+import { ANTHROPIC_MODEL } from "@/lib/anthropic-model";
 
 function parseJSON(raw: string): unknown {
   try { return JSON.parse(raw); } catch { /* */ }
@@ -73,7 +74,7 @@ Devuelve SOLO JSON válido, sin texto adicional:
       "content-type": "application/json",
     },
     body: JSON.stringify({
-      model: "claude-haiku-4-5-20251001",
+      model: ANTHROPIC_MODEL,
       max_tokens: 600,
       system,
       messages: [{ role: "user", content: `Fecha de la clase: ${fecha} (${dia_semana}). Sugiere 3 temas.` }],

@@ -1,5 +1,6 @@
 import type { NextRequest } from "next/server";
 import { PACO_PLANNING_KNOWLEDGE } from "@/lib/paco-planning-knowledge";
+import { ANTHROPIC_MODEL } from "@/lib/anthropic-model";
 
 const GRUPOS_LABEL: Record<string, string> = {
   juvenil: "Juvenil (Birdies/Águilas/Albatros/+14, niños de 4 a 14 años)",
@@ -61,7 +62,7 @@ ${PACO_PLANNING_KNOWLEDGE}`;
       method: "POST",
       headers: { "Content-Type": "application/json", "x-api-key": apiKey, "anthropic-version": "2023-06-01" },
       body: JSON.stringify({
-        model: "claude-haiku-4-5",
+        model: ANTHROPIC_MODEL,
         max_tokens: 2000,
         system,
         messages: [{ role: "user", content: user }],

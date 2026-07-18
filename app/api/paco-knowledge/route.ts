@@ -2,6 +2,7 @@ import type { NextRequest } from "next/server";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
 import { DIRECTOR_COORD_ROLES, type Rol } from "@/lib/roles";
+import { ANTHROPIC_MODEL } from "@/lib/anthropic-model";
 
 async function requireDirectorCoord() {
   const supabase = await createSupabaseServerClient();
@@ -23,7 +24,7 @@ async function extractTextFromPdf(base64: string): Promise<string> {
     method: "POST",
     headers: { "Content-Type": "application/json", "x-api-key": apiKey, "anthropic-version": "2023-06-01" },
     body: JSON.stringify({
-      model: "claude-sonnet-4-6",
+      model: ANTHROPIC_MODEL,
       max_tokens: 8000,
       messages: [{
         role: "user",
