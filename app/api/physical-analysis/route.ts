@@ -1,5 +1,5 @@
 import type { NextRequest } from "next/server";
-import { ANTHROPIC_MODEL } from "@/lib/anthropic-model";
+import { ANTHROPIC_MODEL_ANALISIS } from "@/lib/anthropic-model";
 
 function calcularGrupoEfectivo(student: { birth_date?: string | null; grupo_activo?: string | null }): string {
   if (student.grupo_activo === "Competencia") return "Competencia";
@@ -103,7 +103,7 @@ ${evaluation.professor_comment ? `\nOBSERVACIONES DEL PROFESOR: ${evaluation.pro
         "anthropic-version": "2023-06-01",
       },
       body: JSON.stringify({
-        model: ANTHROPIC_MODEL,
+        model: ANTHROPIC_MODEL_ANALISIS,
         max_tokens: 1600,
         system: systemPrompt,
         messages: [{ role: "user", content: userMessage }],
