@@ -1,6 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import * as XLSX from "xlsx";
 import { supabase } from "@/lib/supabase";
 import { Dumbbell } from "lucide-react";
 
@@ -17,6 +18,7 @@ interface Drill {
   subcategoria: string | null;
   posicion_swing: string[] | null;
   nivel_recomendado: string[] | null;
+  material: string[] | null;
   lugar: string;
   duracion_minutos: number | null;
   repeticiones: string | null;
@@ -61,6 +63,24 @@ const NIVEL_LABEL: Record<string,string> = {
   birdies:"Birdies", aguilas:"Águilas", albatros:"Albatros",
   mas14:"+14", competencia:"Competencia", damas:"Damas",
 };
+
+// Foco pedagógico — vocabulario nuevo y universal (aplica a cualquier
+// categoría), independiente de las subcategorías específicas por categoría
+// (chipping/bunker/P1-P10/etc.) que ya usa el formulario de crear/editar. Un
+// drill viejo sin este valor exacto en subcategoria simplemente no aparece al
+// filtrar por Foco — no se migran datos existentes.
+const FOCOS = ["secuencia","potencia_velocidad","transferencia_peso","rotacion_giro","compresion_contacto","finish_balance","coordinacion_juego","calentamiento"];
+const FOCO_LABEL: Record<string,string> = {
+  secuencia: "Secuencia", potencia_velocidad: "Potencia/Velocidad", transferencia_peso: "Transferencia de peso",
+  rotacion_giro: "Rotación/Giro", compresion_contacto: "Compresión/Contacto", finish_balance: "Finish/Balance",
+  coordinacion_juego: "Coordinación de juego", calentamiento: "Calentamiento",
+};
+
+const MATERIALES = ["balon_medicinal","banda","palo_velocidad","conos_escalera","ninguno"];
+const MATERIAL_LABEL: Record<string,string> = {
+  balon_medicinal: "Balón medicinal", banda: "Banda", palo_velocidad: "Palo de velocidad",
+  conos_escalera: "Conos/Escalera", ninguno: "Ninguno",
+};
 const LUGARES = [
   { value: "campo_practica",          label: "Campo de práctica" },
   { value: "putting_green_fundadores", label: "Putting Green Fundadores" },
@@ -68,26 +88,6 @@ const LUGARES = [
   { value: "campo_infantil",           label: "Campo Infantil" },
 ];
 const LUGAR_LABEL: Record<string,string> = Object.fromEntries(LUGARES.map(l => [l.value, l.label]));
-
-const SUBCATS: Record<Categoria, { value: string; label: string }[]> = {
-  tecnico:     POSICIONES.map(p => ({ value: p, label: `${p} — ${POSICION_LABEL[p]}` })),
-  juego_corto: [
-    { value: "chipping", label: "Chipping" },
-    { value: "bunker",   label: "Bunker" },
-    { value: "approach", label: "Approach" },
-    { value: "50-100yds", label: "50-100 yds" },
-  ],
-  putting: [
-    { value: "distancia",  label: "Distancia" },
-    { value: "direccion",  label: "Dirección" },
-    { value: "presion",    label: "Presión" },
-  ],
-  campo: [
-    { value: "skills",    label: "Skills" },
-    { value: "matchplay", label: "Matchplay" },
-    { value: "scramble",  label: "Scramble" },
-  ],
-};
 
 // ── Library generation ────────────────────────────────────────────────────────
 type BatchKey = "tecnico" | "juego_corto" | "putting" | "campo";
@@ -108,7 +108,7 @@ const initBatches = (): Record<BatchKey, BatchState> => ({
 function emptyForm(): DrillForm {
   return {
     titulo: "", descripcion: "", categoria: "tecnico", subcategoria: null,
-    posicion_swing: null, nivel_recomendado: null,
+    posicion_swing: null, nivel_recomendado: null, material: null,
     lugar: "campo_practica", duracion_minutos: null, repeticiones: null,
     error_que_corrige: null, sensacion_buscada: null, metrica_exito: null,
     variante_presion: null, reglas_campo: null,
@@ -150,6 +150,21 @@ export default function DrillsModule() {
   const [activeFilters, setActiveFilters]   = useState<string[]>([]);
   const [collapsed, setCollapsed]           = useState<Set<string>>(new Set());
 
+  // Filtros combinables (independientes de la tab de categoría y entre sí —
+  // AND entre facetas, OR dentro de cada faceta). Usados también, en la misma
+  // forma, por EstacionLibraryPicker en el flujo de planeación.
+  const [filtroGrupo, setFiltroGrupo]       = useState<string[]>([]);
+  const [filtroFoco, setFiltroFoco]         = useState<string[]>([]);
+  const [filtroMaterial, setFiltroMaterial] = useState<string[]>([]);
+  const [filtroPosicion, setFiltroPosicion] = useState<string[]>([]);
+  const hayFiltrosAvanzados = filtroGrupo.length > 0 || filtroFoco.length > 0 || filtroMaterial.length > 0 || filtroPosicion.length > 0;
+  function toggleFacet(setter: (fn: (prev: string[]) => string[]) => void, val: string) {
+    setter(prev => prev.includes(val) ? prev.filter(x => x !== val) : [...prev, val]);
+  }
+  function limpiarFiltrosAvanzados() {
+    setFiltroGrupo([]); setFiltroFoco([]); setFiltroMaterial([]); setFiltroPosicion([]);
+  }
+
   const [showEditModal, setShowEditModal]   = useState(false);
   const [editingId, setEditingId]           = useState<string | null>(null);
   const [form, setForm]                     = useState<DrillForm>(emptyForm());
@@ -164,6 +179,10 @@ export default function DrillsModule() {
 
   const [libraryProgress, setLibraryProgress] = useState<Record<BatchKey, BatchState> | null>(null);
   const [toast, setToast]                   = useState<string | null>(null);
+
+  const [importing, setImporting]           = useState(false);
+  const [importResult, setImportResult]     = useState<{ insertados: number; omitidos: { fila: number; motivo: string }[] } | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const showToast = (msg: string) => { setToast(msg); setTimeout(() => setToast(null), 3000); };
 
@@ -206,6 +225,12 @@ export default function DrillsModule() {
         if (!hasOther) return false;
       }
     }
+
+    if (filtroGrupo.length > 0 && !filtroGrupo.some(g => d.nivel_recomendado?.includes(g))) return false;
+    if (filtroFoco.length > 0 && !(d.subcategoria && filtroFoco.includes(d.subcategoria))) return false;
+    if (filtroMaterial.length > 0 && !filtroMaterial.some(m => d.material?.includes(m))) return false;
+    if (filtroPosicion.length > 0 && !filtroPosicion.some(p => d.posicion_swing?.includes(p))) return false;
+
     return true;
   });
 
@@ -253,7 +278,7 @@ export default function DrillsModule() {
     setForm({
       titulo: d.titulo, descripcion: d.descripcion,
       categoria: d.categoria, subcategoria: d.subcategoria,
-      posicion_swing: d.posicion_swing, nivel_recomendado: d.nivel_recomendado,
+      posicion_swing: d.posicion_swing, nivel_recomendado: d.nivel_recomendado, material: d.material,
       lugar: d.lugar, duracion_minutos: d.duracion_minutos,
       repeticiones: d.repeticiones, error_que_corrige: d.error_que_corrige,
       sensacion_buscada: d.sensacion_buscada, metrica_exito: d.metrica_exito,
@@ -275,6 +300,7 @@ export default function DrillsModule() {
         subcategoria: form.subcategoria || null,
         posicion_swing: form.posicion_swing?.length ? form.posicion_swing : null,
         nivel_recomendado: form.nivel_recomendado?.length ? form.nivel_recomendado : null,
+        material: form.material?.length ? form.material : null,
         reglas_campo: form.reglas_campo?.length ? form.reglas_campo : null,
       };
       if (editingId) {
@@ -350,9 +376,91 @@ export default function DrillsModule() {
     await runBatchSequence(["tecnico", "juego_corto", "putting", "campo"]);
   }
 
+  // ── Importar Excel (Plantilla_Drills_CCB) ─────────────────────────────────────
+  const IMPORT_HEADERS = ["titulo", "descripcion", "categoria", "foco", "posicion_swing", "nivel_recomendado", "material", "lugar", "duracion_minutos", "repeticiones"];
+  const CATEGORIAS_VALIDAS: Categoria[] = ["tecnico", "juego_corto", "putting", "campo"];
+
+  function descargarPlantilla() {
+    const ejemplo = [
+      "Drill de rotación de hombros", "Con un palo cruzado en la espalda, girar hasta P3 sin que caiga.",
+      "tecnico", "rotacion_giro", "P3", "aguilas,albatros", "banda", "campo_practica", "15", "3 series de 10",
+    ];
+    const ws = XLSX.utils.aoa_to_sheet([IMPORT_HEADERS, ejemplo]);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Drills");
+    XLSX.writeFile(wb, "Plantilla_Drills_CCB.xlsx");
+  }
+
+  function tokens(raw: unknown): string[] {
+    if (raw == null) return [];
+    return String(raw).split(",").map(t => t.trim().toLowerCase()).filter(Boolean);
+  }
+
+  async function handleImportFile(file: File) {
+    setImporting(true);
+    setImportResult(null);
+    try {
+      const buffer = await file.arrayBuffer();
+      const wb = XLSX.read(buffer, { type: "array" });
+      const sheet = wb.Sheets[wb.SheetNames[0]];
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const rows = XLSX.utils.sheet_to_json<Record<string, any>>(sheet, { defval: "" });
+
+      const omitidos: { fila: number; motivo: string }[] = [];
+      const payload: Omit<Drill, "id" | "created_at" | "veces_usado">[] = [];
+
+      rows.forEach((row, idx) => {
+        const numFila = idx + 2; // +1 encabezado, +1 base-1
+        const titulo = String(row.titulo ?? "").trim();
+        const descripcion = String(row.descripcion ?? "").trim();
+        const categoriaRaw = String(row.categoria ?? "").trim().toLowerCase();
+        if (!titulo) { omitidos.push({ fila: numFila, motivo: "Falta título" }); return; }
+        if (!descripcion) { omitidos.push({ fila: numFila, motivo: "Falta descripción" }); return; }
+        if (!CATEGORIAS_VALIDAS.includes(categoriaRaw as Categoria)) {
+          omitidos.push({ fila: numFila, motivo: `Categoría inválida "${categoriaRaw}" (debe ser tecnico, juego_corto, putting o campo)` });
+          return;
+        }
+        const lugarRaw = String(row.lugar ?? "").trim();
+        const lugar = LUGARES.some(l => l.value === lugarRaw) ? lugarRaw : "campo_practica";
+        const duracion = row.duracion_minutos !== "" && row.duracion_minutos != null ? parseInt(String(row.duracion_minutos), 10) : null;
+
+        payload.push({
+          titulo: titulo.substring(0, 40),
+          descripcion,
+          categoria: categoriaRaw as Categoria,
+          subcategoria: String(row.foco ?? "").trim().toLowerCase() || null,
+          posicion_swing: tokens(row.posicion_swing).map(t => t.toUpperCase()).filter(Boolean).length ? tokens(row.posicion_swing).map(t => t.toUpperCase()) : null,
+          nivel_recomendado: tokens(row.nivel_recomendado).length ? tokens(row.nivel_recomendado) : null,
+          material: tokens(row.material).length ? tokens(row.material) : null,
+          lugar,
+          duracion_minutos: Number.isFinite(duracion) ? duracion : null,
+          repeticiones: String(row.repeticiones ?? "").trim() || null,
+          error_que_corrige: null, sensacion_buscada: null, metrica_exito: null,
+          variante_presion: null, reglas_campo: null,
+          rating: 3, favorito: false, aprobado: false,
+          generado_por_ia: false, notas_instructor: null,
+        });
+      });
+
+      let insertados = 0;
+      if (payload.length > 0) {
+        const { data, error } = await supabase.from("drills").insert(payload).select("id");
+        if (error) throw new Error(error.message);
+        insertados = data?.length ?? payload.length;
+      }
+
+      setImportResult({ insertados, omitidos });
+      if (insertados > 0) await fetchDrills();
+    } catch (err) {
+      setImportResult({ insertados: 0, omitidos: [{ fila: 0, motivo: err instanceof Error ? err.message : "Error al leer el archivo" }] });
+    } finally {
+      setImporting(false);
+    }
+  }
+
   // ── Update form helpers ───────────────────────────────────────────────────────
   const setF = (k: keyof DrillForm, v: unknown) => setForm(f => ({ ...f, [k]: v }));
-  function toggleChip(field: "posicion_swing" | "nivel_recomendado", val: string) {
+  function toggleChip(field: "posicion_swing" | "nivel_recomendado" | "material", val: string) {
     setForm(f => {
       const cur = (f[field] as string[] | null) ?? [];
       const next = cur.includes(val) ? cur.filter(x => x !== val) : [...cur, val];
@@ -392,10 +500,13 @@ export default function DrillsModule() {
               <span key={p} className="text-[10px] font-bold px-1.5 py-0.5 rounded-full" style={{ background:"#e8f5e9", color:"#2d5a27" }}>{p}</span>
             ))}
             {d.subcategoria && !d.posicion_swing?.length && (
-              <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full" style={{ background:"#e8f5e9", color:"#2d5a27" }}>{d.subcategoria}</span>
+              <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full" style={{ background:"#e8f5e9", color:"#2d5a27" }}>{FOCO_LABEL[d.subcategoria] ?? d.subcategoria}</span>
             )}
             {d.nivel_recomendado?.map(n => (
               <span key={n} className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full" style={{ background:"#e3f2fd", color:"#1565c0" }}>{NIVEL_LABEL[n] ?? n}</span>
+            ))}
+            {d.material?.filter(m => m !== "ninguno").map(m => (
+              <span key={m} className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full" style={{ background:"#ffedd5", color:"#9a3412" }}>🎒 {MATERIAL_LABEL[m] ?? m}</span>
             ))}
             <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full" style={{ background:"#f3e5f5", color:"#6a1b9a" }}>
               📍 {LUGAR_LABEL[d.lugar] ?? d.lugar}
@@ -469,7 +580,10 @@ export default function DrillsModule() {
           </div>
           <div>
             <h1 className="text-2xl font-bold text-ccb-green">Biblioteca de Drills</h1>
-            <p className="text-sm text-(--text-muted) mt-0.5">{total} drill{total !== 1 ? "s" : ""} en total</p>
+            <p className="text-sm text-(--text-muted) mt-0.5">
+              {total} drill{total !== 1 ? "s" : ""} en total ·{" "}
+              <button onClick={descargarPlantilla} className="text-green-700 hover:underline font-medium">Descargar Plantilla_Drills_CCB</button>
+            </p>
           </div>
         </div>
         <div className="flex gap-2">
@@ -487,6 +601,23 @@ export default function DrillsModule() {
           >
             <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path d="M12 5v14M5 12h14"/></svg>
             Agregar drill
+          </button>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".xlsx,.xls"
+            className="hidden"
+            onChange={e => { const f = e.target.files?.[0]; if (f) handleImportFile(f); e.target.value = ""; }}
+          />
+          <button
+            onClick={() => fileInputRef.current?.click()}
+            disabled={importing}
+            className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-semibold bg-white border border-gray-200 text-gray-700 hover:bg-gray-50 shadow-sm transition-colors disabled:opacity-50"
+          >
+            {importing
+              ? <svg className="animate-spin h-3.5 w-3.5" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"/></svg>
+              : <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>}
+            {importing ? "Importando..." : "Importar Excel"}
           </button>
           <button
             onClick={() => { setShowAIModal(true); setAiText(""); setAiPreview(null); setAiError(null); }}
@@ -613,6 +744,64 @@ export default function DrillsModule() {
         </div>
       </div>
 
+      {/* ── Filtros combinables (Grupo / Foco / Material / Posición) ── */}
+      <div className="mb-6 border border-gray-200 rounded-xl p-3.5 space-y-3 bg-gray-50/50">
+        <div className="flex items-center justify-between">
+          <p className="text-xs font-bold text-gray-500 uppercase tracking-wide">Filtros para asignar rápido</p>
+          {hayFiltrosAvanzados && (
+            <button onClick={limpiarFiltrosAvanzados} className="text-xs font-semibold text-red-500 hover:underline">✕ Limpiar filtros</button>
+          )}
+        </div>
+        <div>
+          <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wide mb-1.5">Grupo</p>
+          <div className="flex flex-wrap gap-1.5">
+            {NIVELES.map(n => (
+              <button key={n} onClick={() => toggleFacet(setFiltroGrupo, n)}
+                className="px-2.5 py-1 rounded-full text-xs font-semibold border transition-all"
+                style={filtroGrupo.includes(n) ? { background: "#1565c0", color: "#fff", borderColor: "#1565c0" } : { background: "#fff", color: "#374151", borderColor: "#e5e7eb" }}>
+                {NIVEL_LABEL[n]}
+              </button>
+            ))}
+          </div>
+        </div>
+        <div>
+          <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wide mb-1.5">Foco</p>
+          <div className="flex flex-wrap gap-1.5">
+            {FOCOS.map(f => (
+              <button key={f} onClick={() => toggleFacet(setFiltroFoco, f)}
+                className="px-2.5 py-1 rounded-full text-xs font-semibold border transition-all"
+                style={filtroFoco.includes(f) ? { background: "#1B4D2E", color: "#fff", borderColor: "#1B4D2E" } : { background: "#fff", color: "#374151", borderColor: "#e5e7eb" }}>
+                {FOCO_LABEL[f]}
+              </button>
+            ))}
+          </div>
+        </div>
+        <div>
+          <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wide mb-1.5">Material</p>
+          <div className="flex flex-wrap gap-1.5">
+            {MATERIALES.map(m => (
+              <button key={m} onClick={() => toggleFacet(setFiltroMaterial, m)}
+                className="px-2.5 py-1 rounded-full text-xs font-semibold border transition-all"
+                style={filtroMaterial.includes(m) ? { background: "#9a3412", color: "#fff", borderColor: "#9a3412" } : { background: "#fff", color: "#374151", borderColor: "#e5e7eb" }}>
+                {MATERIAL_LABEL[m]}
+              </button>
+            ))}
+          </div>
+        </div>
+        <div>
+          <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wide mb-1.5">Posición de swing</p>
+          <div className="flex flex-wrap gap-1.5">
+            {POSICIONES.map(p => (
+              <button key={p} onClick={() => toggleFacet(setFiltroPosicion, p)}
+                className="px-2.5 py-1 rounded-full text-xs font-semibold border transition-all"
+                style={filtroPosicion.includes(p) ? { background: "#6d28d9", color: "#fff", borderColor: "#6d28d9" } : { background: "#fff", color: "#374151", borderColor: "#e5e7eb" }}>
+                {p}
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+
       {/* ── Content ── */}
       {loading ? (
         <div className="flex items-center justify-center py-20 text-gray-400">
@@ -621,7 +810,7 @@ export default function DrillsModule() {
         </div>
       ) : filtered.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-20 text-gray-400">
-          <p className="text-lg mb-2">No hay drills{activeFilters.length > 0 || searchText ? " con esos filtros" : " en esta categoría"}</p>
+          <p className="text-lg mb-2">No hay drills{activeFilters.length > 0 || searchText || hayFiltrosAvanzados ? " con esos filtros" : " en esta categoría"}</p>
           <button onClick={openCreate} className="text-sm text-green-700 hover:underline">+ Agregar el primero</button>
         </div>
       ) : activeTab === "tecnico" ? (
@@ -702,11 +891,11 @@ export default function DrillsModule() {
                   </select>
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold text-gray-700 mb-1">Subcategoría</label>
+                  <label className="block text-xs font-semibold text-gray-700 mb-1">Foco pedagógico</label>
                   <select value={form.subcategoria ?? ""} onChange={e => setF("subcategoria", e.target.value || null)}
                     className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-green-600">
-                    <option value="">— Ninguna —</option>
-                    {SUBCATS[form.categoria].map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
+                    <option value="">— Ninguno —</option>
+                    {FOCOS.map(f => <option key={f} value={f}>{FOCO_LABEL[f]}</option>)}
                   </select>
                 </div>
               </div>
@@ -741,6 +930,23 @@ export default function DrillsModule() {
                         className="px-2.5 py-1 rounded-full text-xs font-semibold border transition-all"
                         style={sel ? { background:"#1565c0", color:"#fff", borderColor:"#1565c0" } : { background:"#f9fafb", color:"#374151", borderColor:"#e5e7eb" }}>
                         {NIVEL_LABEL[n]}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Material */}
+              <div>
+                <label className="block text-xs font-semibold text-gray-700 mb-1.5">Material</label>
+                <div className="flex flex-wrap gap-1.5">
+                  {MATERIALES.map(m => {
+                    const sel = form.material?.includes(m) ?? false;
+                    return (
+                      <button key={m} type="button" onClick={() => toggleChip("material", m)}
+                        className="px-2.5 py-1 rounded-full text-xs font-semibold border transition-all"
+                        style={sel ? { background:"#9a3412", color:"#fff", borderColor:"#9a3412" } : { background:"#f9fafb", color:"#374151", borderColor:"#e5e7eb" }}>
+                        {MATERIAL_LABEL[m]}
                       </button>
                     );
                   })}
@@ -966,6 +1172,7 @@ export default function DrillsModule() {
                           categoria: cat,
                           subcategoria: aiPreview.subcategoria ?? null,
                           posicion_swing: aiPreview.posicion_swing ?? null,
+                          material: aiPreview.material ?? null,
                           nivel_recomendado: aiPreview.nivel_recomendado ?? null,
                           lugar: aiPreview.lugar ?? "campo_practica",
                           duracion_minutos: aiPreview.duracion_minutos ?? null,
@@ -989,6 +1196,43 @@ export default function DrillsModule() {
                   </div>
                 </div>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ══ MODAL: Resultado de importación Excel ═══════════════════════════════ */}
+      {importResult && (
+        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4" onClick={() => setImportResult(null)}>
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+              <h2 className="font-bold text-gray-900">Resultado de la importación</h2>
+              <button onClick={() => setImportResult(null)} className="text-gray-400 hover:text-gray-600">
+                <svg width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path d="M18 6L6 18M6 6l12 12"/></svg>
+              </button>
+            </div>
+            <div className="px-6 py-5 space-y-3 max-h-[60vh] overflow-y-auto">
+              <p className="text-sm text-gray-700">
+                <strong className="text-green-700">{importResult.insertados}</strong> drill{importResult.insertados !== 1 ? "s" : ""} importado{importResult.insertados !== 1 ? "s" : ""}
+                {importResult.insertados > 0 && " (pendientes de aprobación)"}.
+              </p>
+              {importResult.omitidos.length > 0 && (
+                <div>
+                  <p className="text-xs font-semibold text-amber-700 mb-1.5">{importResult.omitidos.length} fila{importResult.omitidos.length !== 1 ? "s" : ""} omitida{importResult.omitidos.length !== 1 ? "s" : ""}:</p>
+                  <ul className="space-y-1">
+                    {importResult.omitidos.map((o, i) => (
+                      <li key={i} className="text-xs text-amber-800 bg-amber-50 rounded-lg px-2.5 py-1.5">
+                        {o.fila > 0 ? `Fila ${o.fila}: ` : ""}{o.motivo}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </div>
+            <div className="px-6 pb-6">
+              <button onClick={() => setImportResult(null)} className="w-full py-2.5 rounded-xl text-sm font-semibold text-white" style={{ background: "#1B4D2E" }}>
+                Cerrar
+              </button>
             </div>
           </div>
         </div>

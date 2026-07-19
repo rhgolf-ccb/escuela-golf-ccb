@@ -32,6 +32,11 @@ interface Props {
   // Para ejercicios_fisicos: filtro estricto vía .overlaps("grupos", grupos) —
   // siempre debe venir con al menos un valor.
   grupos: string[];
+  // Foco/Material — solo aplican a fuente "drills" (ejercicios_fisicos no tiene
+  // estas columnas). Elegidos como pasos previos en el flujo guiado
+  // (Foco → Material → Ejercicios), llegan aquí ya decididos.
+  foco?: string | null;
+  material?: string[];
   yaSeleccionados: string[];
   onAdd: (item: EstacionLibraryPick) => void;
   onClose: () => void;
@@ -55,7 +60,7 @@ function StarRating({ rating }: { rating: number | null }) {
 // según `fuente` — para agregar uno a una estación. Reemplaza a
 // BibliotecaDrillPicker (que solo conocía drills técnicos), usado ahora desde
 // JuvenileClassModal, CompetenciaClassModal, DamasClassModal y PacoPlanningModal.
-export default function EstacionLibraryPicker({ fuente, categoriaDrills, grupos, yaSeleccionados, onAdd, onClose }: Props) {
+export default function EstacionLibraryPicker({ fuente, categoriaDrills, grupos, foco, material, yaSeleccionados, onAdd, onClose }: Props) {
   const [items, setItems] = useState<LibraryItem[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -64,20 +69,22 @@ export default function EstacionLibraryPicker({ fuente, categoriaDrills, grupos,
     (async () => {
       setLoading(true);
       if (fuente === "drills") {
-        const { data } = await supabase
+        let query = supabase
           .from("drills")
-          .select("id, titulo, descripcion, rating, veces_usado, nivel_recomendado")
+          .select("id, titulo, descripcion, rating, veces_usado, nivel_recomendado, material")
           .eq("categoria", categoriaDrills ?? "")
           .eq("aprobado", true)
           .order("rating", { ascending: false })
           .limit(30);
+        if (foco) query = query.eq("subcategoria", foco);
+        const { data } = await query;
         if (cancelled) return;
-        type Row = LibraryItem & { nivel_recomendado: string[] | null };
+        type Row = LibraryItem & { nivel_recomendado: string[] | null; material: string[] | null };
         const rows = (data as Row[]) ?? [];
         const filtered = rows.filter((d) => {
-          if (!d.nivel_recomendado || d.nivel_recomendado.length === 0) return true;
-          if (grupos.length === 0) return true;
-          return d.nivel_recomendado.some((n) => grupos.includes(n));
+          if (d.nivel_recomendado && d.nivel_recomendado.length > 0 && grupos.length > 0 && !d.nivel_recomendado.some((n) => grupos.includes(n))) return false;
+          if (material && material.length > 0 && !(d.material && d.material.some((m) => material.includes(m)))) return false;
+          return true;
         });
         setItems(filtered);
       } else {
@@ -107,7 +114,7 @@ export default function EstacionLibraryPicker({ fuente, categoriaDrills, grupos,
     return () => {
       cancelled = true;
     };
-  }, [fuente, categoriaDrills, grupos]);
+  }, [fuente, categoriaDrills, grupos, foco, material]);
 
   const disponibles = items.filter((d) => !yaSeleccionados.includes(d.titulo));
 

@@ -23,6 +23,7 @@ export interface EstacionJuvenil {
   categoria: CategoriaEstacion;
   drills: DrillJuvenilEstacion[]; // 1 a 3
   desafio: string;
+  lugar?: string; // nuevo — sitio de práctica, elegido al final por estación
 }
 
 export interface SesionJuvenilEstaciones {
@@ -76,6 +77,38 @@ export const CATEGORIA_ESTACION_LABEL_JUVENIL: Record<CategoriaEstacion, string>
 // solo conoce drills de golf) — Físico y Campo Infantil se arman siempre a mano
 // desde la biblioteca (ejercicios_fisicos / drills categoría "campo").
 const CATEGORIAS_CON_IA = new Set<CategoriaEstacion>(["juego_largo", "juego_corto", "putt"]);
+
+// Foco/Material — mismo vocabulario que la Biblioteca de Drills (DrillsModule.tsx),
+// usados como filtros previos a mostrar la biblioteca. Solo aplican a
+// categorías que usan drills.categoria — no a "fisico" (biblioteca distinta).
+const FOCOS = ["secuencia", "potencia_velocidad", "transferencia_peso", "rotacion_giro", "compresion_contacto", "finish_balance", "coordinacion_juego", "calentamiento"];
+const FOCO_LABEL: Record<string, string> = {
+  secuencia: "Secuencia", potencia_velocidad: "Potencia/Velocidad", transferencia_peso: "Transferencia de peso",
+  rotacion_giro: "Rotación/Giro", compresion_contacto: "Compresión/Contacto", finish_balance: "Finish/Balance",
+  coordinacion_juego: "Coordinación de juego", calentamiento: "Calentamiento",
+};
+const MATERIALES = ["balon_medicinal", "banda", "palo_velocidad", "conos_escalera", "ninguno"];
+const MATERIAL_LABEL: Record<string, string> = {
+  balon_medicinal: "Balón medicinal", banda: "Banda", palo_velocidad: "Palo de velocidad",
+  conos_escalera: "Conos/Escalera", ninguno: "Ninguno",
+};
+
+const LUGARES_ESTACION: { value: string; label: string }[] = [
+  { value: "campo_practica",    label: "Campo de práctica" },
+  { value: "putting_green",     label: "Putting Green" },
+  { value: "campo_infantil",    label: "Campo Infantil" },
+  { value: "campo_pacos_fabios", label: "Campo Pacos y Fabios" },
+  { value: "campo_completo",    label: "Campo Completo" },
+];
+
+// Sugerencia inicial de lugar según la categoría de la estación — el
+// profesor la ve como punto de partida al llegar al último paso, pero sigue
+// siendo un dropdown editable, nunca se guarda a ciegas.
+function sugerirLugar(categoria: CategoriaEstacion): string {
+  if (categoria === "putt") return "putting_green";
+  if (categoria === "campo_infantil") return "campo_infantil";
+  return "campo_practica";
+}
 
 const ESPECIALES: { value: TipoEspecial; emoji: string; label: string; desc: string }[] = [
   { value: "test_tecnico", emoji: "📋", label: "Test técnico",  desc: "Evaluación P1-P10" },
@@ -134,13 +167,19 @@ interface StationState {
   fetched: boolean; // ya se pidió (o ya traía) contenido — no dispares IA de nuevo al abrir
   loading: boolean;
   failed: boolean;
+  foco: string | null;
+  material: string[];
   drills: DrillJuvenilEstacion[];
   desafio: string;
+  lugar: string;
   showPicker: boolean;
 }
 
 function nuevaEstacion(categoria: CategoriaEstacion): StationState {
-  return { categoria, open: false, fetched: false, loading: false, failed: false, drills: [], desafio: "", showPicker: false };
+  return {
+    categoria, open: false, fetched: false, loading: false, failed: false,
+    foco: null, material: [], drills: [], desafio: "", lugar: sugerirLugar(categoria), showPicker: false,
+  };
 }
 
 const POOL_ORDEN: CategoriaEstacion[] = ["juego_largo", "juego_corto", "putt", "fisico", "campo_infantil"];
@@ -151,7 +190,8 @@ function initStations(sesion?: ExistingSesion | null): StationState[] | null {
     if (est.length >= 2) {
       return est.map((e) => ({
         categoria: e.categoria, open: false, fetched: true, loading: false, failed: false,
-        drills: e.drills ?? [], desafio: e.desafio ?? "", showPicker: false,
+        foco: null, material: [],
+        drills: e.drills ?? [], desafio: e.desafio ?? "", lugar: e.lugar ?? sugerirLugar(e.categoria), showPicker: false,
       }));
     }
   }
@@ -253,6 +293,24 @@ export default function JuvenileClassModal({
     setStations((prev) => prev.map((s, i) => i === stIdx ? { ...s, desafio: value } : s));
   }
 
+  function updateFoco(stIdx: number, value: string) {
+    // Cambiar el foco invalida los ejercicios ya elegidos con el filtro
+    // anterior — evita dejar drills que ya no calzan con el nuevo criterio.
+    setStations((prev) => prev.map((s, i) => i === stIdx ? { ...s, foco: value || null, drills: [], desafio: "", fetched: true } : s));
+  }
+
+  function toggleMaterial(stIdx: number, value: string) {
+    setStations((prev) => prev.map((s, i) => {
+      if (i !== stIdx) return s;
+      const next = s.material.includes(value) ? s.material.filter((m) => m !== value) : [...s.material, value];
+      return { ...s, material: next, drills: [], desafio: "" };
+    }));
+  }
+
+  function updateLugar(stIdx: number, value: string) {
+    setStations((prev) => prev.map((s, i) => i === stIdx ? { ...s, lugar: value } : s));
+  }
+
   function togglePicker(stIdx: number, show: boolean) {
     setStations((prev) => prev.map((s, i) => i === stIdx ? { ...s, showPicker: show } : s));
   }
@@ -286,7 +344,7 @@ export default function JuvenileClassModal({
       } else {
         const estaciones: EstacionJuvenil[] = stations.map((s) => {
           if (s.drills.length === 0) throw new Error(`Falta al menos 1 ejercicio en ${CATEGORIA_ESTACION_LABEL_JUVENIL[s.categoria]}`);
-          return { categoria: s.categoria, drills: s.drills, desafio: s.desafio };
+          return { categoria: s.categoria, drills: s.drills, desafio: s.desafio, lugar: s.lugar };
         });
         payload = {
           tipo_sesion: "juvenil_estaciones",
@@ -418,6 +476,35 @@ export default function JuvenileClassModal({
                           </div>
                         ) : (
                           <>
+                            {/* 1) Foco — solo aplica a estaciones basadas en drills técnicos */}
+                            {st.categoria !== "fisico" && (
+                              <div>
+                                <label className="text-[11px] font-bold text-gray-500 uppercase tracking-wide block mb-1">1 · Foco</label>
+                                <select
+                                  value={st.foco ?? ""}
+                                  onChange={(e) => updateFoco(stIdx, e.target.value)}
+                                  className="w-full text-xs border border-gray-200 rounded-lg px-2.5 py-1.5 bg-white"
+                                >
+                                  <option value="">Cualquiera</option>
+                                  {FOCOS.map((f) => <option key={f} value={f}>{FOCO_LABEL[f]}</option>)}
+                                </select>
+                              </div>
+                            )}
+
+                            {/* 2) Material */}
+                            <div>
+                              <label className="text-[11px] font-bold text-gray-500 uppercase tracking-wide block mb-1">2 · Material</label>
+                              <div className="flex flex-wrap gap-1.5">
+                                {MATERIALES.map((m) => (
+                                  <button key={m} type="button" onClick={() => toggleMaterial(stIdx, m)}
+                                    className="px-2 py-1 rounded-full text-[11px] font-semibold border transition-all"
+                                    style={st.material.includes(m) ? { background: "#9a3412", color: "#fff", borderColor: "#9a3412" } : { background: "#f9fafb", color: "#374151", borderColor: "#e5e7eb" }}>
+                                    {MATERIAL_LABEL[m]}
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+
                             {st.failed && (
                               <div className="flex items-center justify-between gap-2 px-3 py-2 rounded-lg bg-amber-50 border border-amber-200">
                                 <p className="text-xs text-amber-700">No se generaron sugerencias.</p>
@@ -427,22 +514,26 @@ export default function JuvenileClassModal({
                               </div>
                             )}
 
-                            <div className="space-y-2">
-                              {st.drills.map((d, dIdx) => (
-                                <div key={dIdx} className="border border-gray-100 rounded-lg p-2.5 bg-gray-50 flex items-start gap-2">
-                                  <div className="min-w-0 flex-1">
-                                    <p className="text-sm font-semibold text-gray-900">{d.titulo}</p>
-                                    <p className="text-xs text-gray-500 mt-0.5">{d.descripcion}</p>
+                            {/* 3) Ejercicios */}
+                            <div>
+                              <label className="text-[11px] font-bold text-gray-500 uppercase tracking-wide block mb-1">3 · Ejercicios</label>
+                              <div className="space-y-2">
+                                {st.drills.map((d, dIdx) => (
+                                  <div key={dIdx} className="border border-gray-100 rounded-lg p-2.5 bg-gray-50 flex items-start gap-2">
+                                    <div className="min-w-0 flex-1">
+                                      <p className="text-sm font-semibold text-gray-900">{d.titulo}</p>
+                                      <p className="text-xs text-gray-500 mt-0.5">{d.descripcion}</p>
+                                    </div>
+                                    <button
+                                      onClick={() => removeDrill(stIdx, dIdx)}
+                                      disabled={st.drills.length <= 1}
+                                      className="text-gray-300 hover:text-red-500 disabled:opacity-30 disabled:hover:text-gray-300 shrink-0"
+                                    >
+                                      <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path d="M18 6L6 18M6 6l12 12" /></svg>
+                                    </button>
                                   </div>
-                                  <button
-                                    onClick={() => removeDrill(stIdx, dIdx)}
-                                    disabled={st.drills.length <= 1}
-                                    className="text-gray-300 hover:text-red-500 disabled:opacity-30 disabled:hover:text-gray-300 shrink-0"
-                                  >
-                                    <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path d="M18 6L6 18M6 6l12 12" /></svg>
-                                  </button>
-                                </div>
-                              ))}
+                                ))}
+                              </div>
                             </div>
 
                             <div className="flex items-center gap-3">
@@ -473,6 +564,18 @@ export default function JuvenileClassModal({
                                 className="w-full text-xs border border-gray-200 rounded-lg px-2.5 py-1.5 resize-none"
                               />
                             </div>
+
+                            {/* 4) Sitio de práctica — al final, ya con material/ejercicios decididos */}
+                            <div>
+                              <label className="text-[11px] font-bold text-gray-500 uppercase tracking-wide block mb-1">4 · Sitio de práctica</label>
+                              <select
+                                value={st.lugar}
+                                onChange={(e) => updateLugar(stIdx, e.target.value)}
+                                className="w-full text-xs border border-gray-200 rounded-lg px-2.5 py-1.5 bg-white"
+                              >
+                                {LUGARES_ESTACION.map((l) => <option key={l.value} value={l.value}>{l.label}</option>)}
+                              </select>
+                            </div>
                           </>
                         )}
 
@@ -490,6 +593,8 @@ export default function JuvenileClassModal({
                               fuente="drills"
                               categoriaDrills={DRILLS_CATEGORIA_JUVENIL[st.categoria]!}
                               grupos={[]}
+                              foco={st.foco}
+                              material={st.material}
                               yaSeleccionados={st.drills.map((d) => d.titulo)}
                               onAdd={(item) => addDrillFromBiblioteca(stIdx, item)}
                               onClose={() => togglePicker(stIdx, false)}

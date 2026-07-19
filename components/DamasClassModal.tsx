@@ -58,6 +58,32 @@ const DURACION_ESTACION_MIN = 25; // 3 estaciones rotativas de 25 min es el est�
 
 const ACCENT = "#86198f";
 
+// Foco/Material — mismo vocabulario que la Biblioteca de Drills. Solo aplican
+// a categorías basadas en drills.categoria, no a "fisico".
+const FOCOS = ["secuencia", "potencia_velocidad", "transferencia_peso", "rotacion_giro", "compresion_contacto", "finish_balance", "coordinacion_juego", "calentamiento"];
+const FOCO_LABEL: Record<string, string> = {
+  secuencia: "Secuencia", potencia_velocidad: "Potencia/Velocidad", transferencia_peso: "Transferencia de peso",
+  rotacion_giro: "Rotación/Giro", compresion_contacto: "Compresión/Contacto", finish_balance: "Finish/Balance",
+  coordinacion_juego: "Coordinación de juego", calentamiento: "Calentamiento",
+};
+const MATERIALES = ["balon_medicinal", "banda", "palo_velocidad", "conos_escalera", "ninguno"];
+const MATERIAL_LABEL: Record<string, string> = {
+  balon_medicinal: "Balón medicinal", banda: "Banda", palo_velocidad: "Palo de velocidad",
+  conos_escalera: "Conos/Escalera", ninguno: "Ninguno",
+};
+
+const LUGARES_ESTACION: { value: string; label: string }[] = [
+  { value: "campo_practica",    label: "Campo de práctica" },
+  { value: "putting_green",     label: "Putting Green" },
+  { value: "campo_pacos_fabios", label: "Campo Pacos y Fabios" },
+  { value: "campo_completo",    label: "Campo Completo" },
+];
+
+function sugerirLugar(categoria: CategoriaEstacionDamas): string {
+  if (categoria === "putt") return "putting_green";
+  return "campo_practica";
+}
+
 interface ExistingSesion {
   id: string;
   tipo_sesion: string;
@@ -82,12 +108,15 @@ interface Props {
 interface StationState {
   categoria: CategoriaEstacionDamas;
   open: boolean;
+  foco: string | null;
+  material: string[];
   drills: DrillEstacionDamas[];
+  lugar: string;
   showPicker: boolean;
 }
 
 function nuevaEstacion(categoria: CategoriaEstacionDamas): StationState {
-  return { categoria, open: false, drills: [], showPicker: false };
+  return { categoria, open: false, foco: null, material: [], drills: [], lugar: sugerirLugar(categoria), showPicker: false };
 }
 
 const POOL_ORDEN: CategoriaEstacionDamas[] = ["juego_largo", "juego_corto", "putt", "fisico"];
@@ -99,7 +128,11 @@ function esGuiada(e: unknown): e is EstacionDamasGuiada {
 function initStations(sesion?: ExistingSesion | null): StationState[] | null {
   const est = sesion?.estaciones_damas;
   if (est && est.length >= 2 && est.every(esGuiada)) {
-    return (est as EstacionDamasGuiada[]).map((e) => ({ categoria: e.categoria, open: false, drills: e.drills, showPicker: false }));
+    return (est as EstacionDamasGuiada[]).map((e) => ({
+      categoria: e.categoria, open: false, foco: null, material: [], drills: e.drills,
+      lugar: LUGARES_ESTACION.find((l) => l.label === e.lugar)?.value ?? sugerirLugar(e.categoria),
+      showPicker: false,
+    }));
   }
   return null;
 }
@@ -166,6 +199,22 @@ export default function DamasClassModal({
     setStations((prev) => prev.map((s, i) => i === stIdx ? { ...s, drills: [...s.drills, drill].slice(0, 3), showPicker: false } : s));
   }
 
+  function updateFoco(stIdx: number, value: string) {
+    setStations((prev) => prev.map((s, i) => i === stIdx ? { ...s, foco: value || null, drills: [] } : s));
+  }
+
+  function toggleMaterial(stIdx: number, value: string) {
+    setStations((prev) => prev.map((s, i) => {
+      if (i !== stIdx) return s;
+      const next = s.material.includes(value) ? s.material.filter((m) => m !== value) : [...s.material, value];
+      return { ...s, material: next, drills: [] };
+    }));
+  }
+
+  function updateLugar(stIdx: number, value: string) {
+    setStations((prev) => prev.map((s, i) => i === stIdx ? { ...s, lugar: value } : s));
+  }
+
   function togglePicker(stIdx: number, show: boolean) {
     setStations((prev) => prev.map((s, i) => (i === stIdx ? { ...s, showPicker: show } : s)));
   }
@@ -190,7 +239,7 @@ export default function DamasClassModal({
         if (stations.some((s) => s.drills.length === 0)) throw new Error("Falta al menos 1 ejercicio en alguna estación");
         const estaciones: EstacionDamasGuiada[] = stations.map((s) => ({
           nombre: CATEGORIA_LABEL[s.categoria],
-          lugar: "Campo de práctica",
+          lugar: LUGARES_ESTACION.find((l) => l.value === s.lugar)?.label ?? "Campo de práctica",
           duracion_min: DURACION_ESTACION_MIN,
           descripcion: s.drills.map((d) => d.titulo).join(", "),
           categoria: s.categoria,
@@ -309,21 +358,54 @@ export default function DamasClassModal({
 
                     {st.open && (
                       <div className="border-t border-gray-100 p-3 space-y-3">
-                        <div className="space-y-2">
-                          {st.drills.map((d, dIdx) => (
-                            <div key={dIdx} className="border border-gray-100 rounded-lg p-2.5 bg-gray-50 flex items-start gap-2">
-                              <div className="min-w-0 flex-1">
-                                <p className="text-sm font-semibold text-gray-900">{d.titulo}</p>
-                                {d.descripcion && <p className="text-xs text-gray-500 mt-0.5">{d.descripcion}</p>}
-                              </div>
-                              <button
-                                onClick={() => removeDrill(stIdx, dIdx)}
-                                className="text-gray-300 hover:text-red-500 shrink-0"
-                              >
-                                <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path d="M18 6L6 18M6 6l12 12" /></svg>
+                        {/* 1) Foco */}
+                        {st.categoria !== "fisico" && (
+                          <div>
+                            <label className="text-[11px] font-bold text-gray-500 uppercase tracking-wide block mb-1">1 · Foco</label>
+                            <select
+                              value={st.foco ?? ""}
+                              onChange={(e) => updateFoco(stIdx, e.target.value)}
+                              className="w-full text-xs border border-gray-200 rounded-lg px-2.5 py-1.5 bg-white"
+                            >
+                              <option value="">Cualquiera</option>
+                              {FOCOS.map((f) => <option key={f} value={f}>{FOCO_LABEL[f]}</option>)}
+                            </select>
+                          </div>
+                        )}
+
+                        {/* 2) Material */}
+                        <div>
+                          <label className="text-[11px] font-bold text-gray-500 uppercase tracking-wide block mb-1">2 · Material</label>
+                          <div className="flex flex-wrap gap-1.5">
+                            {MATERIALES.map((m) => (
+                              <button key={m} type="button" onClick={() => toggleMaterial(stIdx, m)}
+                                className="px-2 py-1 rounded-full text-[11px] font-semibold border transition-all"
+                                style={st.material.includes(m) ? { background: "#9a3412", color: "#fff", borderColor: "#9a3412" } : { background: "#f9fafb", color: "#374151", borderColor: "#e5e7eb" }}>
+                                {MATERIAL_LABEL[m]}
                               </button>
-                            </div>
-                          ))}
+                            ))}
+                          </div>
+                        </div>
+
+                        {/* 3) Ejercicios */}
+                        <div>
+                          <label className="text-[11px] font-bold text-gray-500 uppercase tracking-wide block mb-1">3 · Ejercicios</label>
+                          <div className="space-y-2">
+                            {st.drills.map((d, dIdx) => (
+                              <div key={dIdx} className="border border-gray-100 rounded-lg p-2.5 bg-gray-50 flex items-start gap-2">
+                                <div className="min-w-0 flex-1">
+                                  <p className="text-sm font-semibold text-gray-900">{d.titulo}</p>
+                                  {d.descripcion && <p className="text-xs text-gray-500 mt-0.5">{d.descripcion}</p>}
+                                </div>
+                                <button
+                                  onClick={() => removeDrill(stIdx, dIdx)}
+                                  className="text-gray-300 hover:text-red-500 shrink-0"
+                                >
+                                  <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path d="M18 6L6 18M6 6l12 12" /></svg>
+                                </button>
+                              </div>
+                            ))}
+                          </div>
                         </div>
 
                         <button
@@ -333,6 +415,18 @@ export default function DamasClassModal({
                         >
                           + Agregar de la biblioteca
                         </button>
+
+                        {/* 4) Sitio de práctica — al final */}
+                        <div>
+                          <label className="text-[11px] font-bold text-gray-500 uppercase tracking-wide block mb-1">4 · Sitio de práctica</label>
+                          <select
+                            value={st.lugar}
+                            onChange={(e) => updateLugar(stIdx, e.target.value)}
+                            className="w-full text-xs border border-gray-200 rounded-lg px-2.5 py-1.5 bg-white"
+                          >
+                            {LUGARES_ESTACION.map((l) => <option key={l.value} value={l.value}>{l.label}</option>)}
+                          </select>
+                        </div>
 
                         {st.showPicker && (
                           st.categoria === "fisico" ? (
@@ -348,6 +442,8 @@ export default function DamasClassModal({
                               fuente="drills"
                               categoriaDrills={DRILLS_CATEGORIA_DAMAS[st.categoria]!}
                               grupos={["damas"]}
+                              foco={st.foco}
+                              material={st.material}
                               yaSeleccionados={st.drills.map((d) => d.titulo)}
                               onAdd={(item) => addDrill(stIdx, item)}
                               onClose={() => togglePicker(stIdx, false)}

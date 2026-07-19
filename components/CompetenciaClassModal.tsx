@@ -37,6 +37,8 @@ interface LibraryDrill {
   titulo: string;
   descripcion: string;
   categoria: string;
+  subcategoria: string | null;
+  material: string[] | null;
   posicion_swing: string[] | null;
   duracion_minutos: number | null;
   repeticiones: string | null;
@@ -103,6 +105,25 @@ const DRILLS_CATEGORIA: Record<TipoSesion, string | null> = {
   test_fisico:    null,
   trabajo_fisico: null,
 };
+
+// Foco/Material — mismo vocabulario que la Biblioteca de Drills. Solo aplican
+// a categorías con biblioteca de drills técnicos (no a trabajo_fisico).
+const FOCOS = ["secuencia", "potencia_velocidad", "transferencia_peso", "rotacion_giro", "compresion_contacto", "finish_balance", "coordinacion_juego", "calentamiento"];
+const FOCO_LABEL: Record<string, string> = {
+  secuencia: "Secuencia", potencia_velocidad: "Potencia/Velocidad", transferencia_peso: "Transferencia de peso",
+  rotacion_giro: "Rotación/Giro", compresion_contacto: "Compresión/Contacto", finish_balance: "Finish/Balance",
+  coordinacion_juego: "Coordinación de juego", calentamiento: "Calentamiento",
+};
+const MATERIALES = ["balon_medicinal", "banda", "palo_velocidad", "conos_escalera", "ninguno"];
+const MATERIAL_LABEL: Record<string, string> = {
+  balon_medicinal: "Balón medicinal", banda: "Banda", palo_velocidad: "Palo de velocidad",
+  conos_escalera: "Conos/Escalera", ninguno: "Ninguno",
+};
+
+function sugerirLugar(cat: TipoSesion): Lugar {
+  if (cat === "putt") return "putting_green";
+  return "campo_practica";
+}
 
 // Al reabrir el asistente para un día que ya tiene sesión guardada, precarga
 // las categorías que ya estaban activas (una sola, o todas las de
@@ -183,6 +204,8 @@ export default function CompetenciaClassModal({
   const [aiFoco, setAiFoco]                        = useState("");
   const [aiJuego, setAiJuego]                      = useState("");
   const [lugarEstacion, setLugarEstacion]          = useState<Lugar>("campo_practica");
+  const [filtroFoco, setFiltroFoco]                = useState<string | null>(null);
+  const [filtroMaterial, setFiltroMaterial]        = useState<string[]>([]);
 
   // Estaciones ya confirmadas (se arman una por una a medida que se avanza)
   const [estacionesEdit, setEstacionesEdit] = useState<EstacionEdit[]>([]);
@@ -190,6 +213,10 @@ export default function CompetenciaClassModal({
   const totalSelected = selectedLibraryIds.size + selectedAiIdx.size;
   const catInfos = CATEGORIAS.filter((c) => categorias.includes(c.value));
   const esMultiple = categorias.length > 1;
+  const libraryDrillsFiltrados = libraryDrills.filter((d) =>
+    (!filtroFoco || d.subcategoria === filtroFoco) &&
+    (filtroMaterial.length === 0 || (d.material && d.material.some((m) => filtroMaterial.includes(m))))
+  );
 
   function handleChooseCount(n: number) {
     setCount(n);
@@ -236,7 +263,9 @@ export default function CompetenciaClassModal({
     setLibraryEjercicios([]);
     setAiSuggestions([]);
     setAiFoco(""); setAiJuego("");
-    setLugarEstacion("campo_practica");
+    setLugarEstacion(sugerirLugar(cat));
+    setFiltroFoco(null);
+    setFiltroMaterial([]);
 
     const libraryPromise = (async () => {
       setLoadingLibrary(true);
@@ -255,7 +284,7 @@ export default function CompetenciaClassModal({
         if (drillsCat) {
           const { data } = await supabase
             .from("drills")
-            .select("id, titulo, descripcion, categoria, posicion_swing, duracion_minutos, repeticiones, rating, veces_usado, nivel_recomendado")
+            .select("id, titulo, descripcion, categoria, subcategoria, material, posicion_swing, duracion_minutos, repeticiones, rating, veces_usado, nivel_recomendado")
             .eq("categoria", drillsCat)
             .eq("aprobado", true)
             .order("rating", { ascending: false })
@@ -597,21 +626,42 @@ export default function CompetenciaClassModal({
           <>
             <div className="px-5 py-5 space-y-6 max-h-[72vh] overflow-y-auto">
 
-              {/* Lugar de esta estación */}
-              <div>
-                <label className="text-xs font-bold text-gray-500 uppercase tracking-wide block mb-1">Lugar de esta estación</label>
-                <select
-                  value={lugarEstacion}
-                  onChange={(e) => setLugarEstacion(e.target.value as Lugar)}
-                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-200"
-                >
-                  {(Object.keys(LUGAR_LABEL) as Lugar[]).map((l) => (
-                    <option key={l} value={l}>{LUGAR_LABEL[l]}</option>
-                  ))}
-                </select>
-              </div>
+              {/* 1) Foco — solo aplica a drills técnicos, no a Trabajo físico */}
+              {!esFisico && (
+                <div>
+                  <label className="text-xs font-bold text-gray-500 uppercase tracking-wide block mb-1">1 · Foco</label>
+                  <select
+                    value={filtroFoco ?? ""}
+                    onChange={(e) => setFiltroFoco(e.target.value || null)}
+                    className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-200"
+                  >
+                    <option value="">Cualquiera</option>
+                    {FOCOS.map((f) => <option key={f} value={f}>{FOCO_LABEL[f]}</option>)}
+                  </select>
+                </div>
+              )}
 
-              {/* SECCIÓN A: Biblioteca (drills técnicos o ejercicios_fisicos) */}
+              {/* 2) Material */}
+              {!esFisico && (
+                <div>
+                  <label className="text-xs font-bold text-gray-500 uppercase tracking-wide block mb-1.5">2 · Material</label>
+                  <div className="flex flex-wrap gap-1.5">
+                    {MATERIALES.map((m) => {
+                      const sel = filtroMaterial.includes(m);
+                      return (
+                        <button key={m} type="button"
+                          onClick={() => setFiltroMaterial((prev) => sel ? prev.filter((x) => x !== m) : [...prev, m])}
+                          className="px-2.5 py-1 rounded-full text-xs font-semibold border transition-all"
+                          style={sel ? { background: "#9a3412", color: "#fff", borderColor: "#9a3412" } : { background: "#f9fafb", color: "#374151", borderColor: "#e5e7eb" }}>
+                          {MATERIAL_LABEL[m]}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* 3) SECCIÓN A: Biblioteca (drills técnicos o ejercicios_fisicos) */}
               <div>
                 <p className="text-[11px] font-bold text-gray-500 uppercase tracking-wide mb-2 flex items-center gap-2">
                   A · {esFisico ? "Elegir ejercicios de la biblioteca" : "Elegir de la biblioteca"}
@@ -673,13 +723,15 @@ export default function CompetenciaClassModal({
                       })}
                     </div>
                   )
-                ) : libraryDrills.length === 0 ? (
+                ) : libraryDrillsFiltrados.length === 0 ? (
                   <p className="text-xs text-gray-400 italic py-2 px-1">
-                    No hay drills en esta categoría aún. Los drills de IA que uses se guardarán en la biblioteca.
+                    {libraryDrills.length === 0
+                      ? "No hay drills en esta categoría aún. Los drills de IA que uses se guardarán en la biblioteca."
+                      : "No hay drills con ese Foco/Material — prueba con otra combinación."}
                   </p>
                 ) : (
                   <div className="space-y-2">
-                    {libraryDrills.map((drill) => {
+                    {libraryDrillsFiltrados.map((drill) => {
                       const sel = selectedLibraryIds.has(drill.id);
                       return (
                         <button
@@ -794,6 +846,20 @@ export default function CompetenciaClassModal({
                     })}
                   </div>
                 )}
+              </div>
+
+              {/* 4) Sitio de práctica — al final, ya con Foco/Material/Ejercicios decididos */}
+              <div>
+                <label className="text-xs font-bold text-gray-500 uppercase tracking-wide block mb-1">4 · Sitio de práctica</label>
+                <select
+                  value={lugarEstacion}
+                  onChange={(e) => setLugarEstacion(e.target.value as Lugar)}
+                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-200"
+                >
+                  {(Object.keys(LUGAR_LABEL) as Lugar[]).map((l) => (
+                    <option key={l} value={l}>{LUGAR_LABEL[l]}</option>
+                  ))}
+                </select>
               </div>
 
               {error && <p className="text-xs text-red-500 bg-red-50 px-3 py-2 rounded-lg">{error}</p>}
