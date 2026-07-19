@@ -65,42 +65,63 @@ export const MARKDOWN_COMPONENTS = {
 export type PacoUsage = { count: number; limit: number | null };
 export type StreamEvent = { type: string; tool?: string; text?: string; usedWebSearch?: boolean; usage?: PacoUsage; message?: string; plan?: unknown; debug?: unknown };
 
+// La planeación semanal (thinking + tool loop) puede tardar 30-40s antes del
+// primer byte real — 90s da margen sin dejar la llamada colgada para siempre
+// si el servidor de verdad se cayó. El servidor manda un heartbeat SSE cada
+// 10s mientras espera a Anthropic, así que esto no debería dispararse en el
+// camino feliz; es la red de seguridad si esos heartbeats no llegan.
+const STREAM_TIMEOUT_MS = 90000;
+
 export async function streamAsesorChat(body: Record<string, unknown>, onEvent: (evt: StreamEvent) => void): Promise<void> {
-  const res = await fetch("/api/asesor-golf", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  });
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), STREAM_TIMEOUT_MS);
 
-  if (res.status === 429) {
-    const data = await res.json().catch(() => null);
-    onEvent({ type: "limit_reached", usage: data?.usage });
-    return;
-  }
+  try {
+    const res = await fetch("/api/asesor-golf", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+      signal: controller.signal,
+    });
 
-  if (!res.ok || !res.body) {
-    onEvent({ type: "error" });
-    return;
-  }
+    if (res.status === 429) {
+      const data = await res.json().catch(() => null);
+      onEvent({ type: "limit_reached", usage: data?.usage });
+      return;
+    }
 
-  const reader = res.body.getReader();
-  const decoder = new TextDecoder();
-  let buffer = "";
+    if (!res.ok || !res.body) {
+      onEvent({ type: "error" });
+      return;
+    }
 
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    buffer += decoder.decode(value, { stream: true });
-    const chunks = buffer.split("\n\n");
-    buffer = chunks.pop() ?? "";
-    for (const chunk of chunks) {
-      const line = chunk.trim();
-      if (!line.startsWith("data:")) continue;
-      try {
-        onEvent(JSON.parse(line.slice(5).trim()));
-      } catch {
-        continue;
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      const chunks = buffer.split("\n\n");
+      buffer = chunks.pop() ?? "";
+      for (const chunk of chunks) {
+        const line = chunk.trim();
+        if (!line.startsWith("data:")) continue;
+        try {
+          onEvent(JSON.parse(line.slice(5).trim()));
+        } catch {
+          continue;
+        }
       }
     }
+  } catch (err) {
+    if (err instanceof DOMException && err.name === "AbortError") {
+      onEvent({ type: "error", debug: { reason: "client_timeout_90s" } });
+      return;
+    }
+    throw err;
+  } finally {
+    clearTimeout(timeoutId);
   }
 }

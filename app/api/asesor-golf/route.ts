@@ -749,6 +749,21 @@ export async function POST(request: NextRequest) {
     async start(controller) {
       const send = (event: Record<string, unknown>) => controller.enqueue(encoder.encode(`data: ${JSON.stringify(event)}\n\n`));
 
+      // La planeación semanal puede pasar 30-40s esperando la primera
+      // respuesta de Anthropic (thinking + tool call) sin enviar ni un byte —
+      // una conexión SSE completamente silenciosa así es justo lo que cortan
+      // los timeouts de idle-connection de proxies/CDN intermedios (visto
+      // fallando ~20s en producción). Un comentario SSE cada 10s mantiene la
+      // conexión viva sin afectar el parseo del cliente (líneas que no
+      // empiezan con "data:" se ignoran en streamAsesorChat).
+      const heartbeat = setInterval(() => {
+        try {
+          controller.enqueue(encoder.encode(": ping\n\n"));
+        } catch {
+          // stream ya cerrado
+        }
+      }, 10000);
+
       try {
         const conversation: Anthropic.MessageParam[] = history.map((m) => ({ role: m.role, content: m.content }));
         let text = "";
@@ -825,12 +840,13 @@ export async function POST(request: NextRequest) {
           ...(process.env.NODE_ENV !== "production" ? { debug: { status, detail, apiError } } : {}),
         });
       } finally {
+        clearInterval(heartbeat);
         controller.close();
       }
     },
   });
 
   return new Response(stream, {
-    headers: { "Content-Type": "text/event-stream", "Cache-Control": "no-cache", Connection: "keep-alive" },
+    headers: { "Content-Type": "text/event-stream", "Cache-Control": "no-cache", Connection: "keep-alive", "X-Accel-Buffering": "no" },
   });
 }
