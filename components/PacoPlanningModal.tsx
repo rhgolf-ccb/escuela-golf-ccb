@@ -6,7 +6,7 @@ import remarkGfm from "remark-gfm";
 import { supabase } from "@/lib/supabase";
 import { TOOL_STATUS_LABELS, formatTime, MARKDOWN_COMPONENTS, streamAsesorChat, PACO_LIMIT_MESSAGE } from "@/lib/paco-chat-shared";
 import { DRILLS_CATEGORIA_JUVENIL, type CategoriaEstacion, type DrillJuvenilEstacion, type EstacionJuvenil } from "./JuvenileClassModal";
-import BibliotecaDrillPicker from "./BibliotecaDrillPicker";
+import EstacionLibraryPicker from "./EstacionLibraryPicker";
 import {
   toISODate,
   getFechaForDia,
@@ -17,6 +17,7 @@ import {
   TIPO_PLAN_LABEL,
   CAL_EVENT,
   CATEGORIA_ESTACION_LABEL,
+  type CategoriaEstacionEspecial,
   type TipoPlan,
   type DiaSemana,
   type TipoSesion,
@@ -147,7 +148,7 @@ function resumenPreviewJuvenil(preview: Preview): string {
       return `${label}: día especial (${TIPO_DIA_JUVENIL_LABEL[dia.tipo]}) — notas: ${dia.notas || "(sin notas)"}`;
     }
     const estaciones = dia.estaciones
-      .map((e) => `${CATEGORIA_ESTACION_LABEL[e.categoria] ?? e.categoria} [${e.drills.map((d) => d.titulo).join(", ")}] · desafío: ${e.desafio || "(sin desafío)"}`)
+      .map((e) => `${CATEGORIA_ESTACION_LABEL[e.categoria as CategoriaEstacionEspecial] ?? e.categoria} [${e.drills.map((d) => d.titulo).join(", ")}] · desafío: ${e.desafio || "(sin desafío)"}`)
       .join(" | ");
     return `${label}: ${estaciones || "(sin estaciones)"}`;
   });
@@ -969,7 +970,7 @@ export default function PacoPlanningModal({
                       {diaPlan.estaciones.map((est, estIdx) => (
                         <div key={`${est.categoria}-${estIdx}`} className="border border-gray-100 rounded-lg p-3 space-y-2">
                           <p className="text-xs font-bold" style={{ color: eventColor }}>
-                            {CATEGORIA_ESTACION_LABEL[est.categoria] ?? est.categoria}
+                            {CATEGORIA_ESTACION_LABEL[est.categoria as CategoriaEstacionEspecial] ?? est.categoria}
                           </p>
                           <div className="space-y-1.5">
                             {est.drills.map((d, di) => (
@@ -1022,8 +1023,10 @@ export default function PacoPlanningModal({
                 ))}
 
                 {pickerFor && preview.sesion_juvenil && (
-                  <BibliotecaDrillPicker
-                    categoriaDrills={DRILLS_CATEGORIA_JUVENIL[preview.sesion_juvenil[pickerFor.diaIdx].estaciones[pickerFor.estIdx].categoria as CategoriaEstacion]}
+                  <EstacionLibraryPicker
+                    fuente="drills"
+                    categoriaDrills={DRILLS_CATEGORIA_JUVENIL[preview.sesion_juvenil[pickerFor.diaIdx].estaciones[pickerFor.estIdx].categoria as CategoriaEstacion] ?? undefined}
+                    grupos={[]}
                     yaSeleccionados={preview.sesion_juvenil[pickerFor.diaIdx].estaciones[pickerFor.estIdx].drills.map((d) => d.titulo)}
                     onAdd={(drill) => { addJuvenilDrillDeBiblioteca(pickerFor.diaIdx, pickerFor.estIdx, drill); setPickerFor(null); }}
                     onClose={() => setPickerFor(null)}

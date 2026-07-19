@@ -63,7 +63,7 @@ interface AISuggestion {
   repeticiones: string;
 }
 
-interface DrillEdit { titulo: string; descripcion: string; series_repeticiones?: string | null }
+interface DrillEdit { titulo: string; descripcion: string; id?: string; series_repeticiones?: string | null }
 
 // Una estación editable de la sesión — cada categoría elegida (Juego corto,
 // Trabajo físico, etc.) tiene su propio lugar, foco, drills/ejercicios y reto,
@@ -80,11 +80,17 @@ const CATEGORIAS: { value: TipoSesion; icon: string; label: string }[] = [
   { value: "tiro_largo",     icon: "🏌️", label: "Tiro largo" },
   { value: "juego_corto",    icon: "⛳", label: "Juego corto" },
   { value: "putt",           icon: "🎯", label: "Putt" },
-  { value: "campo",          icon: "🌿", label: "Campo" },
+  { value: "campo",          icon: "🌿", label: "Salida al campo" },
   { value: "test_tecnico",   icon: "📋", label: "Test técnico" },
   { value: "test_fisico",    icon: "🩺", label: "Test físico" },
-  { value: "trabajo_fisico", icon: "💪", label: "Trabajo físico" },
+  { value: "trabajo_fisico", icon: "💪", label: "Físico" },
 ];
+
+// Planeación manual guiada: al elegir 1 sola estación, el día se vuelve
+// especial (test/salida al campo). Al elegir 2-4, son estaciones normales de
+// entrenamiento — nunca se mezclan los dos pools en la misma sesión.
+const CATEGORIAS_NORMALES: TipoSesion[] = ["tiro_largo", "juego_corto", "putt", "trabajo_fisico"];
+const CATEGORIAS_ESPECIALES: TipoSesion[] = ["test_tecnico", "test_fisico", "campo"];
 
 // TipoSesion → drills table categoria column value (null = no usa la
 // biblioteca de drills técnicos, como Trabajo físico que usa ejercicios_fisicos)
@@ -149,9 +155,11 @@ export default function CompetenciaClassModal({
   const horaInicioFinal = horaInicio || sesionExistente?.hora_inicio || defaultHorario?.hora_inicio.slice(0, 5) || "";
   const horaFinFinal = horaFin || sesionExistente?.hora_fin || defaultHorario?.hora_fin.slice(0, 5) || "";
 
-  type Mode = "categoria" | "enfoque_fisico" | "seleccion" | "preview";
-  const [mode, setMode]       = useState<Mode>("categoria");
-  const [categorias, setCategorias] = useState<TipoSesion[]>(() => categoriasDesdeExistente(sesionExistente));
+  type Mode = "count" | "categoria" | "enfoque_fisico" | "seleccion" | "preview";
+  const categoriasIniciales = categoriasDesdeExistente(sesionExistente);
+  const [mode, setMode]       = useState<Mode>(categoriasIniciales.length > 0 ? "categoria" : "count");
+  const [count, setCount]     = useState<number | null>(categoriasIniciales.length > 0 ? categoriasIniciales.length : null);
+  const [categorias, setCategorias] = useState<TipoSesion[]>(() => categoriasIniciales);
   const [enfoqueFisico, setEnfoqueFisico] = useState<string[]>([]);
   const [saving, setSaving]   = useState(false);
   const [error, setError]     = useState<string | null>(null);
@@ -183,8 +191,19 @@ export default function CompetenciaClassModal({
   const catInfos = CATEGORIAS.filter((c) => categorias.includes(c.value));
   const esMultiple = categorias.length > 1;
 
-  function toggleCategoria(cat: TipoSesion) {
-    setCategorias((prev) => (prev.includes(cat) ? prev.filter((c) => c !== cat) : [...prev, cat]));
+  function handleChooseCount(n: number) {
+    setCount(n);
+    setCategorias(n === 1 ? [] : CATEGORIAS_NORMALES.slice(0, n));
+    setMode("categoria");
+  }
+
+  function setCategoriaAt(idx: number, cat: TipoSesion) {
+    setCategorias((prev) => prev.map((c, i) => (i === idx ? cat : c)));
+  }
+
+  function categoriasNormalesDisponibles(idx: number): TipoSesion[] {
+    const usadasPorOtras = categorias.filter((_, i) => i !== idx);
+    return CATEGORIAS_NORMALES.filter((c) => !usadasPorOtras.includes(c));
   }
 
   function toggleEnfoqueFisico(op: string) {
@@ -236,12 +255,16 @@ export default function CompetenciaClassModal({
         if (drillsCat) {
           const { data } = await supabase
             .from("drills")
-            .select("id, titulo, descripcion, categoria, posicion_swing, duracion_minutos, repeticiones, rating, veces_usado")
+            .select("id, titulo, descripcion, categoria, posicion_swing, duracion_minutos, repeticiones, rating, veces_usado, nivel_recomendado")
             .eq("categoria", drillsCat)
             .eq("aprobado", true)
             .order("rating", { ascending: false })
             .limit(20);
-          setLibraryDrills((data as LibraryDrill[]) ?? []);
+          // Un drill sin nivel_recomendado (la mayoría hoy) se muestra siempre;
+          // uno etiquetado solo se muestra si incluye "competencia".
+          type Row = LibraryDrill & { nivel_recomendado: string[] | null };
+          const rows = (data as Row[]) ?? [];
+          setLibraryDrills(rows.filter((d) => !d.nivel_recomendado || d.nivel_recomendado.length === 0 || d.nivel_recomendado.includes("competencia")));
         }
       }
       setLoadingLibrary(false);
@@ -327,10 +350,10 @@ export default function CompetenciaClassModal({
     const fromLib = esFisico
       ? libraryEjercicios
           .filter((e) => selectedLibraryIds.has(e.id))
-          .map((e) => ({ titulo: e.nombre, descripcion: e.instrucciones ?? "", series_repeticiones: e.series_repeticiones ?? null }))
+          .map((e) => ({ id: e.id, titulo: e.nombre, descripcion: e.instrucciones ?? "", series_repeticiones: e.series_repeticiones ?? null }))
       : libraryDrills
           .filter((d) => selectedLibraryIds.has(d.id))
-          .map((d) => ({ titulo: d.titulo, descripcion: d.descripcion }));
+          .map((d) => ({ id: d.id, titulo: d.titulo, descripcion: d.descripcion }));
     const fromAI = aiSuggestions
       .filter((_, i) => selectedAiIdx.has(i))
       .map((d) => ({ titulo: d.titulo, descripcion: d.descripcion }));
@@ -389,18 +412,14 @@ export default function CompetenciaClassModal({
           objetivo: e.objetivo,
           lugar: e.lugar,
           juego_competitivo: e.juego_competitivo || null,
-          drills: e.drills.map((d) => ({ titulo: d.titulo, descripcion: d.descripcion, series_repeticiones: d.series_repeticiones ?? null })),
+          drills: e.drills.map((d) => ({ id: d.id, titulo: d.titulo, descripcion: d.descripcion, series_repeticiones: d.series_repeticiones ?? null })),
         })),
       };
 
-      if (sesionExistente) {
-        const { error: e } = await supabase.from("sesiones_semana").update(payload).eq("id", sesionExistente.id);
-        if (e) throw new Error(e.message);
-      } else {
-        await supabase.from("sesiones_semana").delete().eq("plan_id", planId).eq("fecha", fecha);
-        const { error: e } = await supabase.from("sesiones_semana").insert(payload);
-        if (e) throw new Error(e.message);
-      }
+      // Upsert por (plan_id, fecha, hora_inicio) — reprogramar este día
+      // reemplaza la fila existente en vez de duplicarla.
+      const { error: e } = await supabase.from("sesiones_semana").upsert(payload, { onConflict: "plan_id,fecha,hora_inicio" });
+      if (e) throw new Error(e.message);
       onSaved();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Error al guardar");
@@ -421,7 +440,8 @@ export default function CompetenciaClassModal({
           <div>
             <p className="text-xs text-gray-400 font-medium uppercase tracking-wide">Competencia · {diaLabel}</p>
             <p className="text-sm font-bold text-gray-900">
-              {mode === "categoria"       ? "Elige la categoría del día"
+              {mode === "count"            ? "¿Cuántas estaciones tiene este día?"
+                : mode === "categoria"       ? (count === 1 ? "Elige el tipo de día especial" : "Elige el tipo de cada estación")
                 : mode === "enfoque_fisico" ? "¿Qué enfoque físico?"
                 : mode === "seleccion"      ? (esMultiple
                     ? `Estación ${stationIndex + 1} de ${categorias.length} — ${stationInfo?.icon} ${stationInfo?.label}`
@@ -434,45 +454,101 @@ export default function CompetenciaClassModal({
           </button>
         </div>
 
-        {/* ── Categoría (multi-selección) ── */}
-        {mode === "categoria" && (
+        {/* ── Paso 1: cuántas estaciones ── */}
+        {mode === "count" && (
           <div className="px-5 py-5 space-y-4">
-            <p className="text-xs text-gray-500 -mt-1">Puedes combinar más de una — cada una queda como su propia estación, ej. Juego corto + Trabajo físico.</p>
-            <div className="grid grid-cols-2 gap-3">
-              {CATEGORIAS.map((cat) => {
-                const sel = categorias.includes(cat.value);
-                return (
-                  <button
-                    key={cat.value}
-                    onClick={() => toggleCategoria(cat.value)}
-                    className={`flex items-center gap-3 p-4 rounded-xl border-2 text-left transition-all ${
-                      sel ? "border-blue-400 bg-blue-50" : "border-gray-200 hover:border-blue-300 hover:bg-blue-50"
-                    }`}
-                  >
-                    <span className="text-2xl">{cat.icon}</span>
-                    <span className="text-sm font-semibold text-gray-800 flex-1">{cat.label}</span>
-                    <div className={`w-4 h-4 rounded border-2 flex-shrink-0 flex items-center justify-center transition-all ${
-                      sel ? "border-blue-500 bg-blue-500" : "border-gray-300 bg-white"
-                    }`}>
-                      {sel && (
-                        <svg width="8" height="8" viewBox="0 0 12 12" fill="none">
-                          <path d="M2 6l3 3 5-5" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-                        </svg>
-                      )}
-                    </div>
-                  </button>
-                );
-              })}
+            <div className="grid grid-cols-4 gap-2">
+              {[1, 2, 3, 4].map((n) => (
+                <button
+                  key={n}
+                  onClick={() => handleChooseCount(n)}
+                  className="flex flex-col items-center justify-center py-4 rounded-xl border-2 border-gray-200 hover:border-blue-400 hover:bg-blue-50 transition-all font-bold text-lg text-gray-800"
+                >
+                  {n}
+                </button>
+              ))}
             </div>
+            <p className="text-xs text-gray-500">
+              <strong>1</strong> convierte el día en especial (test técnico, test físico o salida al campo).{" "}
+              <strong>2 a 4</strong> arma estaciones normales, cada una con su propia biblioteca y reto de cierre.
+            </p>
+          </div>
+        )}
+
+        {/* ── Paso 2: tipo de cada estación (o del día especial) ── */}
+        {mode === "categoria" && count === 1 && (
+          <div className="px-5 py-5 space-y-3">
+            {CATEGORIAS_ESPECIALES.map((catValue) => {
+              const cat = CATEGORIAS.find((c) => c.value === catValue)!;
+              const sel = categorias[0] === catValue;
+              return (
+                <button
+                  key={catValue}
+                  onClick={() => setCategorias([catValue])}
+                  className={`w-full flex items-center gap-3 p-4 rounded-xl border-2 text-left transition-all ${
+                    sel ? "border-blue-400 bg-blue-50" : "border-gray-200 hover:border-blue-300 hover:bg-blue-50"
+                  }`}
+                >
+                  <span className="text-2xl">{cat.icon}</span>
+                  <span className="text-sm font-semibold text-gray-800 flex-1">{cat.label}</span>
+                  {sel && (
+                    <div className="w-5 h-5 rounded-full flex items-center justify-center" style={{ background: ACCENT }}>
+                      <svg width="10" height="10" viewBox="0 0 20 20" fill="none" stroke="#fff" strokeWidth={3}><path d="M3 10l4 4 9-9" /></svg>
+                    </div>
+                  )}
+                </button>
+              );
+            })}
             {error && <p className="text-xs text-red-500 bg-red-50 px-3 py-2 rounded-lg">{error}</p>}
-            <button
-              onClick={handleContinuarDesdeCategorias}
-              disabled={categorias.length === 0}
-              className="w-full py-2.5 rounded-xl text-sm font-semibold text-white disabled:opacity-50 hover:brightness-110 transition-all"
-              style={{ background: ACCENT }}
-            >
-              {categorias.length === 0 ? "Elige al menos 1 categoría" : `Continuar (${categorias.length})`}
-            </button>
+            <div className="flex gap-2 pt-2">
+              <button onClick={() => setMode("count")} className="px-4 py-2.5 rounded-xl text-sm font-medium border border-gray-200 text-gray-600 hover:bg-gray-50 transition-colors">
+                ← Atrás
+              </button>
+              <button
+                onClick={handleContinuarDesdeCategorias}
+                disabled={categorias.length === 0}
+                className="flex-1 py-2.5 rounded-xl text-sm font-semibold text-white disabled:opacity-50 hover:brightness-110 transition-all"
+                style={{ background: ACCENT }}
+              >
+                Continuar
+              </button>
+            </div>
+          </div>
+        )}
+
+        {mode === "categoria" && count !== null && count > 1 && (
+          <div className="px-5 py-5 space-y-3">
+            {categorias.map((catValue, idx) => {
+              const opciones = categoriasNormalesDisponibles(idx);
+              const catInfo = CATEGORIAS.find((c) => c.value === catValue)!;
+              return (
+                <div key={idx} className="flex items-center gap-3 p-3 rounded-xl border border-gray-200">
+                  <span className="text-xl">{catInfo.icon}</span>
+                  <select
+                    value={catValue}
+                    onChange={(e) => setCategoriaAt(idx, e.target.value as TipoSesion)}
+                    className="flex-1 text-sm font-semibold text-gray-800 bg-transparent border-none focus:outline-none focus:ring-1 focus:ring-blue-300 rounded"
+                  >
+                    {opciones.map((o) => (
+                      <option key={o} value={o}>Estación {idx + 1} — {CATEGORIAS.find((c) => c.value === o)?.label}</option>
+                    ))}
+                  </select>
+                </div>
+              );
+            })}
+            {error && <p className="text-xs text-red-500 bg-red-50 px-3 py-2 rounded-lg">{error}</p>}
+            <div className="flex gap-2 pt-2">
+              <button onClick={() => setMode("count")} className="px-4 py-2.5 rounded-xl text-sm font-medium border border-gray-200 text-gray-600 hover:bg-gray-50 transition-colors">
+                ← Atrás
+              </button>
+              <button
+                onClick={handleContinuarDesdeCategorias}
+                className="flex-1 py-2.5 rounded-xl text-sm font-semibold text-white hover:brightness-110 transition-all"
+                style={{ background: ACCENT }}
+              >
+                Continuar
+              </button>
+            </div>
           </div>
         )}
 
@@ -725,7 +801,7 @@ export default function CompetenciaClassModal({
 
             <div className="px-5 pb-5 flex gap-2 border-t border-gray-100 pt-4">
               <button
-                onClick={() => { setMode("categoria"); setCategorias([]); setEnfoqueFisico([]); }}
+                onClick={() => { setMode("categoria"); setEnfoqueFisico([]); }}
                 className="px-4 py-2.5 rounded-xl text-sm font-medium border border-gray-200 text-gray-600 hover:bg-gray-50 transition-colors"
               >
                 ← Atrás

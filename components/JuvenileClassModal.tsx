@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { supabase } from "@/lib/supabase";
-import BibliotecaDrillPicker from "./BibliotecaDrillPicker";
+import EstacionLibraryPicker from "./EstacionLibraryPicker";
 
 // ── Types (exported — used in ProgramacionModule / PacoPlanningModal) ────────
 export interface Actividad {
@@ -11,10 +11,13 @@ export interface Actividad {
   como_se_gana: string; materiales: string;
 }
 
-export type CategoriaEstacion = "juego_largo" | "juego_corto" | "putt";
+// "fisico" y "campo_infantil" son nuevos — antes campo_infantil solo existía
+// como tipo de día especial completo; ahora también es una estación normal
+// más dentro de un día de 2-4 estaciones (planeación manual guiada).
+export type CategoriaEstacion = "juego_largo" | "juego_corto" | "putt" | "fisico" | "campo_infantil";
 export type TipoEspecial = "test_tecnico" | "test_fisico" | "campo_pacos" | "campo_infantil";
 
-export interface DrillJuvenilEstacion { titulo: string; descripcion: string; }
+export interface DrillJuvenilEstacion { titulo: string; descripcion: string; id?: string; series_repeticiones?: string | null }
 
 export interface EstacionJuvenil {
   categoria: CategoriaEstacion;
@@ -24,7 +27,7 @@ export interface EstacionJuvenil {
 
 export interface SesionJuvenilEstaciones {
   tipo: "estaciones";
-  estaciones: EstacionJuvenil[];
+  estaciones: EstacionJuvenil[]; // 2 a 4 — dato viejo siempre trae exactamente 3
 }
 
 export interface SesionJuvenilEspecial {
@@ -43,27 +46,41 @@ export interface SesionJuvenilLegacy {
 
 export type SesionJuvenilData = SesionJuvenilEstaciones | SesionJuvenilEspecial | SesionJuvenilLegacy;
 
-// drills.categoria (tabla real de la biblioteca) por categoría de estación juvenil
-export const DRILLS_CATEGORIA_JUVENIL: Record<CategoriaEstacion, string> = {
+// drills.categoria (tabla real de la biblioteca) por categoría de estación
+// juvenil — "fisico" no usa esta tabla (ver ejercicios_fisicos más abajo).
+export const DRILLS_CATEGORIA_JUVENIL: Record<CategoriaEstacion, string | null> = {
   juego_largo: "tecnico",
   juego_corto: "juego_corto",
   putt: "putting",
+  campo_infantil: "campo",
+  fisico: null,
 };
 
 // ── Constants ──────────────────────────────────────────────────────────────────
 const GREEN = "#1B4D2E";
 
 const CATEGORIAS: { value: CategoriaEstacion; emoji: string; label: string }[] = [
-  { value: "juego_largo", emoji: "🏌️", label: "Juego Largo" },
-  { value: "juego_corto", emoji: "⛳",  label: "Juego Corto" },
-  { value: "putt",        emoji: "🎯",  label: "Putt" },
+  { value: "juego_largo",    emoji: "🏌️", label: "Juego Largo" },
+  { value: "juego_corto",    emoji: "⛳",  label: "Juego Corto" },
+  { value: "putt",           emoji: "🎯",  label: "Putt" },
+  { value: "fisico",         emoji: "💪",  label: "Físico" },
+  { value: "campo_infantil", emoji: "👶",  label: "Campo Infantil" },
 ];
 
+export const CATEGORIA_ESTACION_LABEL_JUVENIL: Record<CategoriaEstacion, string> = {
+  juego_largo: "Juego Largo", juego_corto: "Juego Corto", putt: "Putt",
+  fisico: "Físico", campo_infantil: "Campo Infantil",
+};
+
+// Solo estas 3 categorías tienen sugerencia por IA (app/api/suggest-station-game
+// solo conoce drills de golf) — Físico y Campo Infantil se arman siempre a mano
+// desde la biblioteca (ejercicios_fisicos / drills categoría "campo").
+const CATEGORIAS_CON_IA = new Set<CategoriaEstacion>(["juego_largo", "juego_corto", "putt"]);
+
 const ESPECIALES: { value: TipoEspecial; emoji: string; label: string; desc: string }[] = [
-  { value: "test_tecnico",   emoji: "📋", label: "Test técnico",       desc: "Evaluación P1-P10" },
-  { value: "test_fisico",    emoji: "💪", label: "Test físico",        desc: "Evaluación TPI" },
-  { value: "campo_pacos",    emoji: "🌿", label: "Campo Pacos/Fabios", desc: "Juego en campo real" },
-  { value: "campo_infantil", emoji: "👶", label: "Campo Infantil",     desc: "Día lúdico diferente" },
+  { value: "test_tecnico", emoji: "📋", label: "Test técnico",  desc: "Evaluación P1-P10" },
+  { value: "test_fisico",  emoji: "💪", label: "Test físico",   desc: "Evaluación TPI" },
+  { value: "campo_pacos",  emoji: "🌿", label: "Salida al campo", desc: "Juego en campo real" },
 ];
 
 const ESPECIAL_TIPO_SESION: Record<TipoEspecial, string> = {
@@ -103,10 +120,8 @@ interface Props {
   horaInicio?: string;
   horaFin?: string;
   sesionExistente?: ExistingSesion | null;
-  // Único fallback cuando no llega horaInicio/horaFin ni una sesión existente
-  // con horas propias (ej. al abrir el modal desde el wizard "día específico"
-  // sin sesión previa) — nunca se guarda sin hora, así el NOT NULL de
-  // sesiones_semana no rompe el guardado.
+  // Único fallback cuando horariosDefecto no trae nada para este día — nunca se
+  // guarda sin hora, así el NOT NULL de sesiones_semana no rompe el guardado.
   horariosDefecto?: { tipo_plan: string; dia_semana: string; hora_inicio: string; hora_fin: string }[];
   onClose: () => void;
   onSaved: () => void;
@@ -124,33 +139,40 @@ interface StationState {
   showPicker: boolean;
 }
 
-function initStations(sesion?: ExistingSesion | null): StationState[] {
-  const base: StationState[] = CATEGORIAS.map((c) => ({
-    categoria: c.value, open: false, fetched: false, loading: false, failed: false,
-    drills: [], desafio: "", showPicker: false,
-  }));
-  if (sesion?.sesion_juvenil && 'tipo' in sesion.sesion_juvenil && sesion.sesion_juvenil.tipo === "estaciones") {
-    const est = sesion.sesion_juvenil.estaciones;
-    base.forEach((s, i) => {
-      const existing = est.find((e) => e.categoria === s.categoria);
-      if (!existing) return;
-      base[i].drills = existing.drills ?? [];
-      base[i].desafio = existing.desafio ?? "";
-      base[i].fetched = true;
-    });
-  }
-  return base;
+function nuevaEstacion(categoria: CategoriaEstacion): StationState {
+  return { categoria, open: false, fetched: false, loading: false, failed: false, drills: [], desafio: "", showPicker: false };
 }
 
-function initMode(sesion?: ExistingSesion | null): "tipo" | "estaciones" | "especial" {
-  if (!sesion?.sesion_juvenil || !('tipo' in sesion.sesion_juvenil)) return "tipo";
-  return sesion.sesion_juvenil.tipo === "estaciones" ? "estaciones" : "especial";
+const POOL_ORDEN: CategoriaEstacion[] = ["juego_largo", "juego_corto", "putt", "fisico", "campo_infantil"];
+
+function initStations(sesion?: ExistingSesion | null): StationState[] | null {
+  if (sesion?.sesion_juvenil && "tipo" in sesion.sesion_juvenil && sesion.sesion_juvenil.tipo === "estaciones") {
+    const est = sesion.sesion_juvenil.estaciones;
+    if (est.length >= 2) {
+      return est.map((e) => ({
+        categoria: e.categoria, open: false, fetched: true, loading: false, failed: false,
+        drills: e.drills ?? [], desafio: e.desafio ?? "", showPicker: false,
+      }));
+    }
+  }
+  return null;
+}
+
+function initMode(sesion?: ExistingSesion | null): "count" | "estaciones" | "especial_tipo" {
+  if (!sesion?.sesion_juvenil || !("tipo" in sesion.sesion_juvenil)) return "count";
+  if (sesion.sesion_juvenil.tipo === "estaciones" && sesion.sesion_juvenil.estaciones.length >= 2) return "estaciones";
+  if (sesion.sesion_juvenil.tipo === "especial") return "especial_tipo";
+  return "count";
 }
 
 function initEspecial(sesion?: ExistingSesion | null): TipoEspecial | null {
-  if (!sesion?.sesion_juvenil || !('tipo' in sesion.sesion_juvenil)) return null;
+  if (!sesion?.sesion_juvenil || !("tipo" in sesion.sesion_juvenil)) return null;
   if (sesion.sesion_juvenil.tipo !== "especial") return null;
-  return sesion.sesion_juvenil.tipo_especial;
+  const valor = sesion.sesion_juvenil.tipo_especial;
+  // Solo los 3 nuevos son elegibles desde este flujo — un valor viejo
+  // (campo_infantil como día completo) obliga a elegir de nuevo, en vez de
+  // mostrar una opción que ya no existe en la lista.
+  return ESPECIALES.some((e) => e.value === valor) ? valor : null;
 }
 
 function formatFecha(fecha: string) {
@@ -163,22 +185,25 @@ export default function JuvenileClassModal({
   horaInicio, horaFin, sesionExistente, horariosDefecto,
   onClose, onSaved,
 }: Props) {
-  const defaultHorario = (horariosDefecto ?? [])
+  const slotsDia = (horariosDefecto ?? [])
     .filter((h) => h.tipo_plan === "juvenil" && h.dia_semana === dia)
-    .sort((a, b) => a.hora_inicio.localeCompare(b.hora_inicio))[0];
-  const horaInicioFinal = horaInicio || sesionExistente?.hora_inicio || defaultHorario?.hora_inicio.slice(0, 5) || "";
-  const horaFinFinal = horaFin || sesionExistente?.hora_fin || defaultHorario?.hora_fin.slice(0, 5) || "";
+    .sort((a, b) => a.hora_inicio.localeCompare(b.hora_inicio));
+  const horaInicioFinal = horaInicio || sesionExistente?.hora_inicio || slotsDia[0]?.hora_inicio.slice(0, 5) || "";
+  const horaFinFinal = horaFin || sesionExistente?.hora_fin || slotsDia[0]?.hora_fin.slice(0, 5) || "";
+  const horarioHeader = slotsDia.length > 1
+    ? slotsDia.map((s) => `${s.hora_inicio.slice(0, 5)}–${s.hora_fin.slice(0, 5)}`).join(" y ")
+    : horaInicioFinal && horaFinFinal ? `${horaInicioFinal}–${horaFinFinal}` : "";
 
-  const [mode, setMode] = useState<"tipo" | "estaciones" | "especial">(() => initMode(sesionExistente));
-  const [stations, setStations] = useState<StationState[]>(() => initStations(sesionExistente));
+  const [mode, setMode] = useState<"count" | "estaciones" | "especial_tipo">(() => initMode(sesionExistente));
+  const [stations, setStations] = useState<StationState[]>(() => initStations(sesionExistente) ?? []);
   const [tipoEspecial, setTipoEspecial] = useState<TipoEspecial | null>(() => initEspecial(sesionExistente));
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const busy = saving || stations.some((s) => s.loading);
-  const allStationsFilled = stations.every((s) => s.drills.length > 0 && s.desafio.trim().length > 0);
+  const allStationsFilled = stations.length >= 2 && stations.every((s) => s.drills.length > 0 && s.desafio.trim().length > 0);
 
-  // ── AI: sugerir drills + desafío para una estación ──────────────────────
+  // ── AI: sugerir drills + desafío para una estación (solo golf) ─────────────
   async function fetchSuggestion(stIdx: number) {
     const st = stations[stIdx];
     setStations((prev) => prev.map((s, i) => i === stIdx ? { ...s, loading: true, failed: false } : s));
@@ -201,7 +226,19 @@ export default function JuvenileClassModal({
   function toggleStation(idx: number) {
     const st = stations[idx];
     setStations((prev) => prev.map((s, i) => i === idx ? { ...s, open: !s.open } : s));
-    if (!st.open && !st.fetched) fetchSuggestion(idx);
+    if (!st.open && !st.fetched) {
+      if (CATEGORIAS_CON_IA.has(st.categoria)) fetchSuggestion(idx);
+      else setStations((prev) => prev.map((s, i) => i === idx ? { ...s, fetched: true } : s));
+    }
+  }
+
+  function categoriasDisponibles(stIdx: number) {
+    const usadasPorOtras = stations.filter((_, i) => i !== stIdx).map((s) => s.categoria);
+    return CATEGORIAS.filter((c) => !usadasPorOtras.includes(c.value));
+  }
+
+  function changeCategoria(stIdx: number, categoria: CategoriaEstacion) {
+    setStations((prev) => prev.map((s, i) => i === stIdx ? nuevaEstacion(categoria) : s));
   }
 
   function removeDrill(stIdx: number, drillIdx: number) {
@@ -220,6 +257,15 @@ export default function JuvenileClassModal({
     setStations((prev) => prev.map((s, i) => i === stIdx ? { ...s, showPicker: show } : s));
   }
 
+  function handleChooseCount(n: number) {
+    if (n === 1) {
+      setMode("especial_tipo");
+      return;
+    }
+    setStations(POOL_ORDEN.slice(0, n).map(nuevaEstacion));
+    setMode("estaciones");
+  }
+
   // ── Save ─────────────────────────────────────────────────────────────────
   async function handleSave() {
     setSaving(true);
@@ -228,42 +274,42 @@ export default function JuvenileClassModal({
       type Payload = Record<string, unknown>;
       let payload: Payload;
 
-      if (mode === "especial") {
+      if (mode === "especial_tipo") {
         if (!tipoEspecial) return;
         payload = {
-          plan_id: planId, dia_semana: dia, fecha,
           tipo_sesion: ESPECIAL_TIPO_SESION[tipoEspecial],
           lugar: ESPECIAL_LUGAR[tipoEspecial],
-          hora_inicio: horaInicioFinal || null, hora_fin: horaFinFinal || null,
           objetivo: ESPECIAL_OBJETIVO[tipoEspecial],
           drills: [], juego_competitivo: null, estaciones_damas: null, notas: null,
           sesion_juvenil: { tipo: "especial", tipo_especial: tipoEspecial },
         };
       } else {
         const estaciones: EstacionJuvenil[] = stations.map((s) => {
-          if (s.drills.length === 0) throw new Error(`Falta al menos 1 drill en ${s.categoria}`);
+          if (s.drills.length === 0) throw new Error(`Falta al menos 1 ejercicio en ${CATEGORIA_ESTACION_LABEL_JUVENIL[s.categoria]}`);
           return { categoria: s.categoria, drills: s.drills, desafio: s.desafio };
         });
         payload = {
-          plan_id: planId, dia_semana: dia, fecha,
           tipo_sesion: "juvenil_estaciones",
           lugar: "campo_practica",
-          hora_inicio: horaInicioFinal || null, hora_fin: horaFinFinal || null,
-          objetivo: "Sesión 3 estaciones: Juego Largo · Juego Corto · Putt",
+          objetivo: `Sesión ${estaciones.length} estaciones: ${estaciones.map((e) => CATEGORIA_ESTACION_LABEL_JUVENIL[e.categoria]).join(" · ")}`,
           drills: [], juego_competitivo: null, estaciones_damas: null, notas: null,
           sesion_juvenil: { tipo: "estaciones", estaciones },
         };
       }
 
-      if (sesionExistente) {
-        const { error: e } = await supabase.from("sesiones_semana").update(payload).eq("id", sesionExistente.id);
-        if (e) throw new Error(e.message);
-      } else {
-        // Delete any existing session for this plan+fecha before inserting to prevent duplicates
-        await supabase.from("sesiones_semana").delete().eq("plan_id", planId).eq("fecha", fecha);
-        const { error: e } = await supabase.from("sesiones_semana").insert(payload);
-        if (e) throw new Error(e.message);
-      }
+      // Sábado y domingo tienen 2 horarios físicos con el MISMO contenido — se
+      // guardan en un solo upsert para que nunca puedan divergir entre sí.
+      const slots = slotsDia.length > 0 ? slotsDia : [{ hora_inicio: horaInicioFinal, hora_fin: horaFinFinal }];
+      if (!slots[0]?.hora_inicio) throw new Error("No hay horario por defecto para este día; defínelo en horarios_defecto.");
+
+      const rows = slots.map((slot) => ({
+        plan_id: planId, dia_semana: dia, fecha,
+        hora_inicio: slot.hora_inicio.slice(0, 5), hora_fin: slot.hora_fin.slice(0, 5),
+        ...payload,
+      }));
+
+      const { error: e } = await supabase.from("sesiones_semana").upsert(rows, { onConflict: "plan_id,fecha,hora_inicio" });
+      if (e) throw new Error(e.message);
       onSaved();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Error al guardar");
@@ -285,7 +331,7 @@ export default function JuvenileClassModal({
             <h2 className="font-bold text-gray-900 text-sm">
               {sesionExistente ? "Cambiar sesión" : "Asignar sesión"} — {diaLabel}
             </h2>
-            <p className="text-xs text-gray-400 mt-0.5">{diaLabel} {formatFecha(fecha)}</p>
+            <p className="text-xs text-gray-400 mt-0.5">{diaLabel} {formatFecha(fecha)}{horarioHeader ? ` · ${horarioHeader}` : ""}</p>
           </div>
           <button onClick={() => { if (!busy) onClose(); }} disabled={busy}
             className="text-gray-400 hover:text-gray-600 disabled:opacity-40">
@@ -295,63 +341,58 @@ export default function JuvenileClassModal({
           </button>
         </div>
 
-        {/* ── Elegir tipo ── */}
-        {mode === "tipo" && (
+        {/* ── Paso 1: cuántas estaciones ── */}
+        {mode === "count" && (
           <div className="p-5 space-y-3">
-            <p className="text-xs font-bold text-gray-500 uppercase tracking-wide">¿Qué tipo de sesión?</p>
-            <button
-              onClick={() => setMode("estaciones")}
-              className="w-full flex items-center gap-4 p-4 rounded-xl border-2 border-gray-200 hover:border-green-400 hover:bg-green-50 text-left transition-all group"
-            >
-              <span className="text-3xl">🎯</span>
-              <div>
-                <p className="font-bold text-gray-900 group-hover:text-green-900">Día de 3 estaciones</p>
-                <p className="text-xs text-gray-500">Juego Largo · Juego Corto · Putt — 2-3 drills y un desafío por estación</p>
-              </div>
-            </button>
-            <button
-              onClick={() => setMode("especial")}
-              className="w-full flex items-center gap-4 p-4 rounded-xl border-2 border-gray-200 hover:border-purple-400 hover:bg-purple-50 text-left transition-all group"
-            >
-              <span className="text-3xl">⭐</span>
-              <div>
-                <p className="font-bold text-gray-900 group-hover:text-purple-900">Día especial</p>
-                <p className="text-xs text-gray-500">Test técnico, test físico, campo real u otro</p>
-              </div>
-            </button>
+            <p className="text-xs font-bold text-gray-500 uppercase tracking-wide">¿Cuántas estaciones tiene este día?</p>
+            <div className="grid grid-cols-4 gap-2">
+              {[1, 2, 3, 4].map((n) => (
+                <button
+                  key={n}
+                  onClick={() => handleChooseCount(n)}
+                  className="flex flex-col items-center justify-center py-4 rounded-xl border-2 border-gray-200 hover:border-green-400 hover:bg-green-50 transition-all font-bold text-lg text-gray-800"
+                >
+                  {n}
+                </button>
+              ))}
+            </div>
+            <p className="text-xs text-gray-500">
+              <strong>1</strong> convierte el día en especial (test técnico, test físico o salida al campo).{" "}
+              <strong>2 a 4</strong> arma estaciones normales, cada una con sus propios drills/ejercicios y un desafío de cierre.
+            </p>
           </div>
         )}
 
-        {/* ── Estaciones ── */}
+        {/* ── Estaciones (2-4) ── */}
         {mode === "estaciones" && (
           <>
             <div className="p-4 space-y-3 max-h-[70vh] overflow-y-auto">
               {stations.map((st, stIdx) => {
-                const cat = CATEGORIAS[stIdx];
                 const filled = st.drills.length > 0 && st.desafio.trim().length > 0;
+                const catInfo = CATEGORIAS.find((c) => c.value === st.categoria)!;
                 return (
-                  <div key={st.categoria} className="border rounded-xl overflow-hidden"
+                  <div key={stIdx} className="border rounded-xl overflow-hidden"
                     style={{ borderColor: filled ? GREEN : "#e5e7eb" }}>
-                    {/* Station header */}
-                    <button
-                      onClick={() => toggleStation(stIdx)}
-                      className="w-full flex items-center justify-between px-4 py-3 text-left"
-                      style={{ background: filled ? "#f0faf2" : "#f9fafb" }}
-                    >
-                      <div className="flex items-center gap-2 min-w-0">
-                        <span className="text-lg flex-shrink-0">{cat.emoji}</span>
-                        <div className="min-w-0">
-                          <p className="text-[11px] font-bold uppercase tracking-wide" style={{ color: GREEN }}>
-                            Estación {stIdx + 1} — {cat.label}
-                          </p>
-                          <p className="text-sm font-semibold text-gray-800 truncate">
-                            {st.drills.length > 0
-                              ? `${st.drills.length} drill${st.drills.length > 1 ? "s" : ""}${st.desafio ? " + desafío" : ""}`
-                              : <span className="text-gray-400 font-normal">Ver sugerencias →</span>}
-                          </p>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-2 flex-shrink-0">
+                    {/* Station header: categoría (dropdown) + toggle */}
+                    <div className="flex items-center gap-2 px-3 py-2.5" style={{ background: filled ? "#f0faf2" : "#f9fafb" }}>
+                      <span className="text-lg flex-shrink-0">{catInfo.emoji}</span>
+                      <select
+                        value={st.categoria}
+                        onChange={(e) => changeCategoria(stIdx, e.target.value as CategoriaEstacion)}
+                        onClick={(e) => e.stopPropagation()}
+                        className="text-xs font-bold uppercase tracking-wide bg-transparent border-none focus:outline-none focus:ring-1 focus:ring-green-300 rounded px-1 py-0.5"
+                        style={{ color: GREEN }}
+                      >
+                        {categoriasDisponibles(stIdx).map((c) => (
+                          <option key={c.value} value={c.value}>Estación {stIdx + 1} — {c.label}</option>
+                        ))}
+                      </select>
+                      <button onClick={() => toggleStation(stIdx)} className="ml-auto flex items-center gap-2 flex-shrink-0">
+                        <span className="text-sm font-semibold text-gray-800 truncate max-w-[140px]">
+                          {st.drills.length > 0
+                            ? `${st.drills.length} drill${st.drills.length > 1 ? "s" : ""}${st.desafio ? " + desafío" : ""}`
+                            : <span className="text-gray-400 font-normal">Ver opciones →</span>}
+                        </span>
                         {filled && (
                           <div className="w-5 h-5 rounded-full flex items-center justify-center" style={{ background: GREEN }}>
                             <svg width="10" height="10" viewBox="0 0 20 20" fill="none" stroke="#fff" strokeWidth={3}><path d="M3 10l4 4 9-9" /></svg>
@@ -361,8 +402,8 @@ export default function JuvenileClassModal({
                           className={`transition-transform ${st.open ? "rotate-180" : ""}`}>
                           <path d="M19 9l-7 7-7-7" />
                         </svg>
-                      </div>
-                    </button>
+                      </button>
+                    </div>
 
                     {/* Station content */}
                     {st.open && (
@@ -412,12 +453,14 @@ export default function JuvenileClassModal({
                               >
                                 + Agregar de la biblioteca
                               </button>
-                              <button
-                                onClick={() => fetchSuggestion(stIdx)}
-                                className="flex items-center gap-1.5 text-xs font-medium text-purple-700 hover:text-purple-900"
-                              >
-                                🔄 Regenerar con IA
-                              </button>
+                              {CATEGORIAS_CON_IA.has(st.categoria) && (
+                                <button
+                                  onClick={() => fetchSuggestion(stIdx)}
+                                  className="flex items-center gap-1.5 text-xs font-medium text-purple-700 hover:text-purple-900"
+                                >
+                                  🔄 Regenerar con IA
+                                </button>
+                              )}
                             </div>
 
                             <div>
@@ -434,12 +477,24 @@ export default function JuvenileClassModal({
                         )}
 
                         {st.showPicker && (
-                          <BibliotecaDrillPicker
-                            categoriaDrills={DRILLS_CATEGORIA_JUVENIL[st.categoria]}
-                            yaSeleccionados={st.drills.map((d) => d.titulo)}
-                            onAdd={(drill) => addDrillFromBiblioteca(stIdx, drill)}
-                            onClose={() => togglePicker(stIdx, false)}
-                          />
+                          st.categoria === "fisico" ? (
+                            <EstacionLibraryPicker
+                              fuente="ejercicios_fisicos"
+                              grupos={["Birdies", "Águilas", "Albatros", "+14"]}
+                              yaSeleccionados={st.drills.map((d) => d.titulo)}
+                              onAdd={(item) => addDrillFromBiblioteca(stIdx, item)}
+                              onClose={() => togglePicker(stIdx, false)}
+                            />
+                          ) : (
+                            <EstacionLibraryPicker
+                              fuente="drills"
+                              categoriaDrills={DRILLS_CATEGORIA_JUVENIL[st.categoria]!}
+                              grupos={[]}
+                              yaSeleccionados={st.drills.map((d) => d.titulo)}
+                              onAdd={(item) => addDrillFromBiblioteca(stIdx, item)}
+                              onClose={() => togglePicker(stIdx, false)}
+                            />
+                          )
                         )}
                       </div>
                     )}
@@ -453,7 +508,7 @@ export default function JuvenileClassModal({
             </div>
 
             <div className="px-5 pb-5 pt-3 flex gap-2 border-t border-gray-100">
-              <button onClick={() => setMode("tipo")}
+              <button onClick={() => setMode("count")}
                 className="px-4 py-2.5 rounded-xl text-sm font-medium border border-gray-200 text-gray-600 hover:bg-gray-50">
                 ← Volver
               </button>
@@ -463,14 +518,14 @@ export default function JuvenileClassModal({
                 className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-semibold text-white disabled:opacity-40 transition-all hover:brightness-110"
                 style={{ background: GREEN }}
               >
-                {saving ? "Guardando..." : allStationsFilled ? "✓ Guardar sesión" : `Completa las 3 estaciones (${stations.filter((s) => s.drills.length > 0 && s.desafio.trim()).length}/3)`}
+                {saving ? "Guardando..." : allStationsFilled ? "✓ Guardar sesión" : `Completa las estaciones (${stations.filter((s) => s.drills.length > 0 && s.desafio.trim()).length}/${stations.length})`}
               </button>
             </div>
           </>
         )}
 
-        {/* ── Especial ── */}
-        {mode === "especial" && (
+        {/* ── Especial (1 estación) ── */}
+        {mode === "especial_tipo" && (
           <>
             <div className="p-5 space-y-2">
               <p className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-3">Tipo de día especial</p>
@@ -501,7 +556,7 @@ export default function JuvenileClassModal({
             </div>
 
             <div className="px-5 pb-5 pt-3 flex gap-2 border-t border-gray-100">
-              <button onClick={() => setMode("tipo")}
+              <button onClick={() => setMode("count")}
                 className="px-4 py-2.5 rounded-xl text-sm font-medium border border-gray-200 text-gray-600 hover:bg-gray-50">
                 ← Volver
               </button>

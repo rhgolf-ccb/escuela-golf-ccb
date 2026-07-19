@@ -10,6 +10,7 @@ import JuvenileClassModal, {
   type SesionJuvenilEspecial,
 } from "./JuvenileClassModal";
 import CompetenciaClassModal from "./CompetenciaClassModal";
+import DamasClassModal from "./DamasClassModal";
 import PacoPlanningModal from "./PacoPlanningModal";
 import ActividadEspecialWizard from "./ActividadEspecialWizard";
 import PacoPlanWizard from "./PacoPlanWizard";
@@ -41,7 +42,15 @@ export interface Drill {
   repeticiones?: string | null;
 }
 
-export interface EstacionDamas { nombre: string; lugar: string; duracion_min: number; descripcion: string; }
+// categoria/drills son nuevos (planeación manual guiada, ver DamasClassModal) —
+// nombre/lugar/duracion_min/descripcion siguen siendo lo único que dato viejo
+// trae, por eso quedan obligatorios y sesionesToEstaciones los sigue leyendo
+// igual que antes cuando no hay drills.
+export interface EstacionDamas {
+  nombre: string; lugar: string; duracion_min: number; descripcion: string;
+  categoria?: string;
+  drills?: { titulo: string; descripcion: string; id?: string; series_repeticiones?: string | null }[];
+}
 
 export interface DrillLibre { titulo: string; descripcion: string; }
 
@@ -209,6 +218,25 @@ export const TIPO_PLAN_LABEL: Record<TipoPlan, string> = {
   juvenil: "Juvenil", competencia: "Competencia", damas: "Damas",
 };
 
+// ── Opciones de combobox para "Editar tema semanal" — constantes editables
+// para ampliar la lista de sugerencias sin tocar el resto del componente. El
+// profesor puede elegir una o escribir su propio texto (datalist nativo).
+const TEMA_SEMANAL_OPCIONES: Record<TipoPlan, string[]> = {
+  juvenil: ["Semana estándar 3 estaciones", "Semana de tests", "Semana de campo", "Semana de fundamentos", "Semana pre-torneo"],
+  competencia: ["Semana estándar", "Semana de tests", "Semana de campo", "Semana pre-torneo", "Semana de recuperación"],
+  damas: ["Semana estándar 3 estaciones", "Semana de tests", "Semana de campo", "Semana de fundamentos"],
+};
+const DESCRIPCION_TEMA_OPCIONES: Record<TipoPlan, string[]> = {
+  juvenil: ["Consolidar fundamentos técnicos por grupo de edad", "Preparación física y técnica general", "Evaluación de progreso trimestral"],
+  competencia: ["Afinar consistencia de cara al torneo", "Trabajo técnico y físico combinado", "Evaluación de progreso trimestral"],
+  damas: ["Rotación estándar de las 3 estaciones", "Enfoque en consistencia de contacto", "Evaluación de progreso trimestral"],
+};
+const OBJETIVO_MENSUAL_OPCIONES: Record<TipoPlan, string[]> = {
+  juvenil: ["Consistencia de contacto", "Control de distancias", "Lectura de greens", "Coordinación y equilibrio", "Fundamentos de swing"],
+  competencia: ["Consistencia de contacto", "Control de distancias", "Lectura de greens", "Precisión en approach", "Velocidad de swing"],
+  damas: ["Consistencia de contacto", "Control de distancias", "Lectura de greens", "Confianza en juego corto"],
+};
+
 const TIPO_PLAN_COLOR: Record<TipoPlan, string> = {
   juvenil: "#1B4D2E", competencia: "#1e40af", damas: "#86198f",
 };
@@ -289,6 +317,7 @@ function defaultSesionForm(tipoPlan: TipoPlan): SesionForm {
 // ── Juvenil session detail (nuevo formato con actividades) ───────────────────
 const CATEGORIA_LABEL_MAP: Record<string, string> = {
   juego_largo: "Juego Largo", juego_corto: "Juego Corto", putt: "Putt",
+  fisico: "Físico", campo_infantil: "Campo Infantil",
 };
 const ESPECIAL_LABEL_MAP: Record<string, string> = {
   test_tecnico: "Test Técnico P1-P10", test_fisico: "Test Físico TPI",
@@ -327,7 +356,12 @@ function sesionesToEstaciones(diaySesiones: SesionSemana[], tipoPlan: TipoPlan):
           nombre: est.nombre,
           lugar: est.lugar,
           horario: `${est.duracion_min} min`,
-          drills: [{ nombre: "Actividad principal", descripcion: est.descripcion }],
+          // Estaciones armadas con el flujo guiado traen drills reales de la
+          // biblioteca — se listan individualmente. Dato viejo (texto libre,
+          // sin drills) sigue mostrando el bloque único de siempre.
+          drills: est.drills && est.drills.length > 0
+            ? est.drills.map((d) => ({ nombre: d.titulo, descripcion: d.descripcion, repeticiones: d.series_repeticiones ?? null }))
+            : [{ nombre: "Actividad principal", descripcion: est.descripcion }],
         });
       });
       continue;
@@ -462,8 +496,14 @@ export default function ProgramacionModule({ currentRol }: { currentRol: Rol | n
   const [confirmDeleteSesion, setConfirmDeleteSesion] = useState<SesionSemana | null>(null);
   const [deletingSesion, setDeletingSesion]           = useState(false);
 
-  // Juvenile class modal (3-estaciones o día especial)
+  // Juvenile class modal (estaciones o día especial)
   const [juvClassCtx, setJuvClassCtx] = useState<{
+    dia: DiaSemana; fecha: string; sesion: SesionSemana | null;
+    horaInicio?: string; horaFin?: string;
+  } | null>(null);
+
+  // Damas class modal (estaciones o día especial) — mismo patrón que Juvenil/Competencia
+  const [damasClassCtx, setDamasClassCtx] = useState<{
     dia: DiaSemana; fecha: string; sesion: SesionSemana | null;
     horaInicio?: string; horaFin?: string;
   } | null>(null);
@@ -474,6 +514,10 @@ export default function ProgramacionModule({ currentRol }: { currentRol: Rol | n
 
   function openCompModal(dia: DiaSemana, fecha: string, sesion: SesionSemana | null, extra?: { hi?: string; hf?: string }) {
     setCompClassCtx({ dia, fecha, sesion, horaInicio: extra?.hi, horaFin: extra?.hf });
+  }
+
+  function openDamasModal(dia: DiaSemana, fecha: string, sesion: SesionSemana | null, extra?: { hi?: string; hf?: string }) {
+    setDamasClassCtx({ dia, fecha, sesion, horaInicio: extra?.hi, horaFin: extra?.hf });
   }
 
   // ── Wizard "Planificar con Paco" ──────────────────────────────────────────
@@ -515,7 +559,7 @@ export default function ProgramacionModule({ currentRol }: { currentRol: Rol | n
     const sesionExistente = sesiones.find((s) => s.dia_semana === dia) ?? null;
     if (grupoPendiente === "juvenil") openJuvModal(dia, fecha, sesionExistente);
     else if (grupoPendiente === "competencia") openCompModal(dia, fecha, sesionExistente);
-    else openEditSesion(dia, sesionExistente);
+    else openDamasModal(dia, fecha, sesionExistente);
     setPendingDiaWizard(null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pendingDiaWizard, activeTab, loading, plan, sesiones]);
@@ -654,33 +698,28 @@ export default function ProgramacionModule({ currentRol }: { currentRol: Rol | n
   }
 
   // ── Create plan helpers ───────────────────────────────────────────────────
-  async function handleCrearPlanComp() {
+  // Crea (o reutiliza) el plan de la semana para el grupo elegido y abre de
+  // una vez el flujo guiado del primer día aplicable — sin sembrar filas
+  // vacías en sesiones_semana: cada día se crea recién cuando el profesor lo
+  // guarda desde el modal correspondiente, así nunca queda una fila "fantasma"
+  // sin contenido real.
+  async function handleCrearPlan(tipoPlan: TipoPlan) {
     setCreandoPlan(true);
     try {
-      const hdRows: HorarioDefecto[] = horariosDefecto.length > 0 ? horariosDefecto
-        : (((await supabase.from("horarios_defecto").select("tipo_plan,dia_semana,hora_inicio,hora_fin")).data) ?? []) as HorarioDefecto[];
-      const getHD = (tipo: TipoPlan, dia: DiaSemana) => {
-        const slots = hdRows.filter((h) => h.tipo_plan === tipo && h.dia_semana === dia).sort((a, b) => a.hora_inicio.localeCompare(b.hora_inicio));
-        return slots[0] ? { hi: slots[0].hora_inicio.slice(0, 5), hf: slots[0].hora_fin.slice(0, 5) } : null;
-      };
       const { data: newPlan, error: planErr } = await supabase.from("planes_semanales")
         .upsert(
-          { semana_inicio: toISODate(semana), tipo_plan: "competencia", tema_semanal: "Semana de Competencia", descripcion_tema: "", objetivo_mensual: null, foco_mes: null },
+          { semana_inicio: toISODate(semana), tipo_plan: tipoPlan, tema_semanal: `Semana ${TIPO_PLAN_LABEL[tipoPlan]}`, descripcion_tema: "", objetivo_mensual: null, foco_mes: null },
           { onConflict: "semana_inicio,tipo_plan" }
         )
         .select().single();
       if (planErr || !newPlan) throw new Error(planErr?.message || "Error al crear plan");
-      const { count } = await supabase.from("sesiones_semana").select("id", { count: "exact", head: true }).eq("plan_id", newPlan.id);
-      if (!count) for (const dia of DIAS_POR_TIPO["competencia"]) {
-        const defaultH = getHD("competencia", dia as DiaSemana);
-        if (!defaultH) throw new Error(`No hay horario por defecto para competencia el ${dia}; defínelo en horarios_defecto.`);
-        await supabase.from("sesiones_semana").insert({
-          plan_id: newPlan.id, dia_semana: dia, fecha: getFechaForDia(semana, dia as DiaSemana),
-          tipo_sesion: "tiro_largo", lugar: "campo_practica", objetivo: "", drills: [],
-          hora_inicio: defaultH.hi, hora_fin: defaultH.hf, estaciones_damas: null,
-        });
-      }
-      showToast("Plan Competencia creado ✓"); await fetchPlan();
+      showToast(`Plan ${TIPO_PLAN_LABEL[tipoPlan]} creado ✓`);
+      await fetchPlan();
+      const primerDia = DIAS_POR_TIPO[tipoPlan][0];
+      const fecha = getFechaForDia(semana, primerDia);
+      if (tipoPlan === "juvenil") openJuvModal(primerDia, fecha, null);
+      else if (tipoPlan === "competencia") openCompModal(primerDia, fecha, null);
+      else openDamasModal(primerDia, fecha, null);
     } catch (err) {
       showToast(err instanceof Error ? err.message : "Error al crear");
     } finally { setCreandoPlan(false); }
@@ -801,7 +840,11 @@ export default function ProgramacionModule({ currentRol }: { currentRol: Rol | n
       const endHour = Math.min(hour + 1, 18);
       openCompModal(dia, getFechaForDia(semana, dia), null, defaultH ?? { hi: hourStr, hf: `${endHour.toString().padStart(2, "0")}:00` });
     } else {
-      openEditSesion(dia, null, hourStr);
+      // Damas: mismo criterio que Competencia — la hora sale de
+      // horarios_defecto, nunca de la celda clickeada.
+      const defaultH = getDefaultHoras("damas", dia, []);
+      const endHour = Math.min(hour + 1, 18);
+      openDamasModal(dia, getFechaForDia(semana, dia), null, defaultH ?? { hi: hourStr, hf: `${endHour.toString().padStart(2, "0")}:00` });
     }
   }
 
@@ -1402,17 +1445,15 @@ export default function ProgramacionModule({ currentRol }: { currentRol: Rol | n
       {viewMode === "plan" && !loading && (
         <div className="flex items-center justify-end mb-4 gap-2">
           {!plan ? (
-            activeTab === "competencia" && (
-              <button
-                onClick={handleCrearPlanComp}
-                disabled={creandoPlan}
-                className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold text-white shadow-sm hover:brightness-110 transition-all disabled:opacity-50"
-                style={{ background: accentColor }}
-              >
-                <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
-                Crear plan
-              </button>
-            )
+            <button
+              onClick={() => handleCrearPlan(activeTab)}
+              disabled={creandoPlan}
+              className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold text-white shadow-sm hover:brightness-110 transition-all disabled:opacity-50"
+              style={{ background: accentColor }}
+            >
+              <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
+              Crear plan
+            </button>
           ) : (
             <>
               <button
@@ -1474,18 +1515,17 @@ export default function ProgramacionModule({ currentRol }: { currentRol: Rol | n
             </div>
             <p className="text-base font-semibold text-gray-700 mb-1">Sin plan para esta semana</p>
             <p className="text-sm text-gray-400 mb-6">No hay plan {TIPO_PLAN_LABEL[activeTab]} para la semana seleccionada.</p>
-            {activeTab === "competencia" ? (
-              <button
-                onClick={handleCrearPlanComp}
-                disabled={creandoPlan}
-                className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-semibold text-white shadow-sm hover:brightness-110 transition-all disabled:opacity-50"
-                style={{ background: accentColor }}
-              >
-                <svg width="15" height="15" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
-                Crear plan
-              </button>
-            ) : (
-              <p className="text-xs text-gray-400">Usa el botón <strong>Planificar con Paco 🦅</strong> arriba para crear el plan de esta semana.</p>
+            <button
+              onClick={() => handleCrearPlan(activeTab)}
+              disabled={creandoPlan}
+              className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-semibold text-white shadow-sm hover:brightness-110 transition-all disabled:opacity-50"
+              style={{ background: accentColor }}
+            >
+              <svg width="15" height="15" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
+              Crear plan
+            </button>
+            {activeTab !== "competencia" && (
+              <p className="text-xs text-gray-400 mt-3">o usa <strong>Planificar con Paco 🦅</strong> arriba si prefieres que la IA arme la semana.</p>
             )}
           </div>
         ) : (
@@ -1537,23 +1577,17 @@ export default function ProgramacionModule({ currentRol }: { currentRol: Rol | n
                 const btnClass = "flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-gray-200 text-xs font-medium text-gray-600 hover:bg-gray-50 transition-colors";
 
                 function openEditDia() {
-                  // Si ya existe una sesión para este día, usa siempre el editor genérico:
-                  // pre-llena directamente desde las columnas de sesiones_semana (tipo_sesion,
-                  // lugar, horas, objetivo, drills, juego_competitivo), así que funciona sin
-                  // importar qué flujo la haya creado originalmente — el wizard de Paco (tool
-                  // proponer_programacion_semana), el asistente especializado de Juvenil, o el
-                  // formulario manual. El wizard especializado de Juvenil asume una forma
-                  // específica (estaciones/juegos) que no siempre calza con lo que generó
-                  // Paco, y por eso "editar" parecía no funcionar. Competencia es la excepción:
-                  // siempre usa su asistente propio (incluso editando) porque es el único que
-                  // sabe combinar varias categorías en estaciones separadas — el editor
-                  // genérico solo entiende una tipo_sesion por fila y colapsaría la
-                  // combinación a una sola. Sin sesión existente, se mantiene el asistente
-                  // guiado normal para crear contenido nuevo.
+                  // Los 3 grupos usan siempre su modal especializado, exista o
+                  // no sesión previa — así "editar" reabre el mismo flujo
+                  // guiado con los valores cargados (planeación manual
+                  // guiada). Si la sesión existente viene de un flujo viejo
+                  // (Paco, o datos legacy) y no calza con la forma estricta
+                  // del modal, este cae a su pantalla inicial ("¿qué tipo de
+                  // día?") en vez de romperse — el profesor arma ese día de
+                  // nuevo si decide editarlo, sin perder nada si no lo toca.
                   if (activeTab === "competencia") openCompModal(dia, fecha, primeraSesion);
-                  else if (primeraSesion) openEditSesion(dia, primeraSesion);
-                  else if (activeTab === "juvenil") openJuvModal(dia, fecha, null);
-                  else openEditSesion(dia, null);
+                  else if (activeTab === "juvenil") openJuvModal(dia, fecha, primeraSesion);
+                  else openDamasModal(dia, fecha, primeraSesion);
                 }
 
                 return (
@@ -1699,9 +1733,45 @@ export default function ProgramacionModule({ currentRol }: { currentRol: Rol | n
               <button onClick={() => setShowEditTema(false)} className="text-gray-400 hover:text-gray-600"><svg width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path d="M18 6L6 18M6 6l12 12"/></svg></button>
             </div>
             <div className="px-6 py-5 space-y-4">
-              <div><label className="block text-xs font-semibold text-gray-700 mb-1.5">Tema semanal</label><input value={temaForm.tema_semanal} onChange={(e) => setTemaForm((f) => ({ ...f, tema_semanal: e.target.value }))} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-600" /></div>
-              <div><label className="block text-xs font-semibold text-gray-700 mb-1.5">Descripción</label><textarea value={temaForm.descripcion_tema} onChange={(e) => setTemaForm((f) => ({ ...f, descripcion_tema: e.target.value }))} rows={2} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-600 resize-none" /></div>
-              <div><label className="block text-xs font-semibold text-gray-700 mb-1.5">Objetivo mensual</label><input value={temaForm.objetivo_mensual} onChange={(e) => setTemaForm((f) => ({ ...f, objetivo_mensual: e.target.value }))} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-600" /></div>
+              <div>
+                <label className="block text-xs font-semibold text-gray-700 mb-1.5">Tema semanal</label>
+                <input
+                  list="tema-semanal-opciones"
+                  value={temaForm.tema_semanal}
+                  onChange={(e) => setTemaForm((f) => ({ ...f, tema_semanal: e.target.value }))}
+                  placeholder="Elige una opción o escribe la tuya..."
+                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-600"
+                />
+                <datalist id="tema-semanal-opciones">
+                  {TEMA_SEMANAL_OPCIONES[activeTab].map((op) => <option key={op} value={op} />)}
+                </datalist>
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-gray-700 mb-1.5">Descripción</label>
+                <input
+                  list="descripcion-tema-opciones"
+                  value={temaForm.descripcion_tema}
+                  onChange={(e) => setTemaForm((f) => ({ ...f, descripcion_tema: e.target.value }))}
+                  placeholder="Elige una opción o escribe la tuya..."
+                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-600"
+                />
+                <datalist id="descripcion-tema-opciones">
+                  {DESCRIPCION_TEMA_OPCIONES[activeTab].map((op) => <option key={op} value={op} />)}
+                </datalist>
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-gray-700 mb-1.5">Objetivo mensual</label>
+                <input
+                  list="objetivo-mensual-opciones"
+                  value={temaForm.objetivo_mensual}
+                  onChange={(e) => setTemaForm((f) => ({ ...f, objetivo_mensual: e.target.value }))}
+                  placeholder="Elige una opción o escribe la tuya..."
+                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-600"
+                />
+                <datalist id="objetivo-mensual-opciones">
+                  {OBJETIVO_MENSUAL_OPCIONES[activeTab].map((op) => <option key={op} value={op} />)}
+                </datalist>
+              </div>
             </div>
             <div className="px-6 pb-5 flex gap-2">
               <button onClick={handleSaveTema} disabled={savingTema} className="flex-1 py-2.5 rounded-xl text-sm font-semibold text-white disabled:opacity-50" style={{ background: accentColor }}>{savingTema ? "Guardando..." : "Guardar cambios"}</button>
@@ -1938,7 +2008,7 @@ export default function ProgramacionModule({ currentRol }: { currentRol: Rol | n
                       // separadas — el editor genérico las colapsaría a una sola.
                       setTimeout(() => openCompModal(calEventDetail.dia_semana, calEventDetail.fecha, calEventDetail as unknown as SesionSemana), 100);
                     } else {
-                      setTimeout(() => openEditSesion(calEventDetail.dia_semana, calEventDetail), 100);
+                      setTimeout(() => openDamasModal(calEventDetail.dia_semana, calEventDetail.fecha, calEventDetail as unknown as SesionSemana), 100);
                     }
                   }}
                   className="flex-1 py-1.5 rounded-xl text-xs font-medium text-gray-500 hover:bg-gray-50 border border-gray-100"
@@ -2018,7 +2088,7 @@ export default function ProgramacionModule({ currentRol }: { currentRol: Rol | n
         </div>
       )}
 
-      {/* ══ MODAL: Clase Juvenil IA ══════════════════════════════════════════ */}
+      {/* ══ MODAL: Clase Juvenil ═════════════════════════════════════════════ */}
       {juvClassCtx && plan && (
         <JuvenileClassModal
           planId={plan.id}
@@ -2039,7 +2109,7 @@ export default function ProgramacionModule({ currentRol }: { currentRol: Rol | n
         />
       )}
 
-      {/* ══ MODAL: Clase Competencia IA ══════════════════════════════════════ */}
+      {/* ══ MODAL: Clase Competencia ═════════════════════════════════════════ */}
       {compClassCtx && plan && (
         <CompetenciaClassModal
           planId={plan.id}
@@ -2053,6 +2123,27 @@ export default function ProgramacionModule({ currentRol }: { currentRol: Rol | n
           onClose={() => setCompClassCtx(null)}
           onSaved={async () => {
             setCompClassCtx(null);
+            showToast("Sesión guardada ✓");
+            await fetchPlan();
+            if (viewMode === "semana") fetchCalSemana();
+          }}
+        />
+      )}
+
+      {/* ══ MODAL: Clase Damas ═══════════════════════════════════════════════ */}
+      {damasClassCtx && plan && (
+        <DamasClassModal
+          planId={plan.id}
+          dia={damasClassCtx.dia}
+          diaLabel={DIA_LABEL[damasClassCtx.dia]}
+          fecha={damasClassCtx.fecha}
+          horaInicio={damasClassCtx.horaInicio}
+          horaFin={damasClassCtx.horaFin}
+          sesionExistente={damasClassCtx.sesion ?? undefined}
+          horariosDefecto={horariosDefecto}
+          onClose={() => setDamasClassCtx(null)}
+          onSaved={async () => {
+            setDamasClassCtx(null);
             showToast("Sesión guardada ✓");
             await fetchPlan();
             if (viewMode === "semana") fetchCalSemana();
