@@ -70,14 +70,14 @@ export function diaCompleto(dia: DiaWizardState): boolean {
 
 // Lista legible de qué falta para poder avanzar — se muestra junto al botón
 // "Siguiente día" porque quedaba deshabilitado sin ninguna pista de qué
-// completar.
+// completar. El desafío de cierre es opcional (igual que el calentamiento) —
+// solo se exige elegir al menos un ejercicio de biblioteca por estación.
 export function diaFaltantes(dia: DiaWizardState): string[] {
   if (dia.tipo === "especial") return dia.especial ? [] : ["Elige un tipo de día especial"];
   if (dia.estaciones.length === 0) return ["Agrega al menos una estación"];
   const faltantes: string[] = [];
   dia.estaciones.forEach((e, i) => {
     if (e.items.length === 0) faltantes.push(`Estación ${i + 1}: falta elegir un ejercicio de la biblioteca`);
-    else if (e.desafio.trim().length === 0) faltantes.push(`Estación ${i + 1}: falta el desafío de cierre`);
   });
   return faltantes;
 }

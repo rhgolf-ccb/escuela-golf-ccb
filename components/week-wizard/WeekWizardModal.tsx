@@ -152,33 +152,57 @@ export default function WeekWizardModal({ tipoPlan, semana, planId, horariosDefe
     setCurrentIndex(0);
   }
 
-  async function handleSave() {
+  function rowsForDia(dia: DiaSemana, diaState: DiaWizardState): Record<string, unknown>[] {
+    const slots = slotsPara(horariosDefecto, tipoPlan, dia);
+    const fecha = getFechaForDia(semana, dia);
+    const slotList = slots.length > 0 ? slots : (diaState.horaInicio && diaState.horaFin ? [{ hora_inicio: diaState.horaInicio, hora_fin: diaState.horaFin }] : []);
+    if (slotList.length === 0) throw new Error(`No hay horario por defecto para ${dia}; defínelo en horarios_defecto.`);
+    return slotList.map((slot) => {
+      const base = { plan_id: planId, dia_semana: dia, fecha, hora_inicio: slot.hora_inicio.slice(0, 5), hora_fin: slot.hora_fin.slice(0, 5) };
+      return tipoPlan === "juvenil" ? buildJuvenilRow(base, diaState, config)
+        : tipoPlan === "competencia" ? buildCompetenciaRow(base, diaState, config)
+        : buildDamasRow(base, diaState, config);
+    });
+  }
+
+  // Guarda un solo día de inmediato — así "Siguiente día" no deja el trabajo
+  // solo en memoria: si el profe cierra el wizard a mitad de semana para
+  // terminarla después, los días ya recorridos quedan guardados.
+  async function guardarDia(dia: DiaSemana): Promise<boolean> {
     setSaving(true);
     setError(null);
     try {
-      const rows: Record<string, unknown>[] = [];
-      for (const dia of dias) {
-        const diaState = diasState[dia];
-        const slots = slotsPara(horariosDefecto, tipoPlan, dia);
-        const fecha = getFechaForDia(semana, dia);
-        const slotList = slots.length > 0 ? slots : (diaState.horaInicio && diaState.horaFin ? [{ hora_inicio: diaState.horaInicio, hora_fin: diaState.horaFin }] : []);
-        if (slotList.length === 0) throw new Error(`No hay horario por defecto para ${dia}; defínelo en horarios_defecto.`);
-        for (const slot of slotList) {
-          const base = { plan_id: planId, dia_semana: dia, fecha, hora_inicio: slot.hora_inicio.slice(0, 5), hora_fin: slot.hora_fin.slice(0, 5) };
-          const row = tipoPlan === "juvenil" ? buildJuvenilRow(base, diaState, config)
-            : tipoPlan === "competencia" ? buildCompetenciaRow(base, diaState, config)
-            : buildDamasRow(base, diaState, config);
-          rows.push(row);
-        }
-      }
+      const rows = rowsForDia(dia, diasState[dia]);
       const { error: e } = await supabase.from("sesiones_semana").upsert(rows, { onConflict: "plan_id,fecha,hora_inicio" });
       if (e) throw new Error(e.message);
-      onSaved();
+      return true;
     } catch (err) {
       setError(err instanceof Error ? err.message : "Error al guardar");
+      return false;
     } finally {
       setSaving(false);
     }
+  }
+
+  async function handleSiguienteDia() {
+    const ok = await guardarDia(diaActualKey);
+    if (ok) setCurrentIndex((i) => i + 1);
+  }
+
+  // Si el día actual ya está completo, lo guarda antes de volver — así una
+  // edición hecha al revisitar un día no se pierde si el profe cierra el
+  // wizard sin volver a avanzar hasta el final.
+  async function handleDiaAnterior() {
+    if (diaCompleto(diaActual)) {
+      const ok = await guardarDia(diaActualKey);
+      if (!ok) return;
+    }
+    setCurrentIndex((i) => i - 1);
+  }
+
+  async function handleSave() {
+    const ok = await guardarDia(diaActualKey);
+    if (ok) onSaved();
   }
 
   const duracionTotal = diaActual ? computeSessionDuration(diaActual.horaInicio || "00:00", diaActual.horaFin || "00:00") : 0;
@@ -344,19 +368,19 @@ export default function WeekWizardModal({ tipoPlan, semana, planId, horariosDefe
 
             <div className="px-5 pb-5 pt-3 flex gap-2 border-t border-gray-100">
               {currentIndex > 0 && (
-                <button onClick={() => setCurrentIndex((i) => i - 1)} disabled={saving}
+                <button onClick={handleDiaAnterior} disabled={saving}
                   className="px-4 py-2.5 rounded-xl text-sm font-medium border border-gray-200 text-gray-600 hover:bg-gray-50">
                   ← Día anterior
                 </button>
               )}
               {!singleDay && !esUltimoDia && (
                 <button
-                  onClick={() => setCurrentIndex((i) => i + 1)}
-                  disabled={!puedeAvanzar}
+                  onClick={handleSiguienteDia}
+                  disabled={!puedeAvanzar || saving}
                   className="flex-1 py-2.5 rounded-xl text-sm font-semibold text-white disabled:opacity-40"
                   style={{ background: config.color }}
                 >
-                  Siguiente día →
+                  {saving ? "Guardando..." : "Siguiente día →"}
                 </button>
               )}
               {(singleDay || esUltimoDia) && (

@@ -2156,7 +2156,13 @@ export default function ProgramacionModule({ currentRol }: { currentRol: Rol | n
           horariosDefecto={horariosDefecto}
           sesionesExistentes={sesiones}
           singleDay={weekWizardCtx.singleDay}
-          onClose={() => setWeekWizardCtx(null)}
+          onClose={() => {
+            // Los días recorridos ya se guardaron incrementalmente al avanzar
+            // — refrescar aquí evita que la grilla se quede mostrando "sin
+            // programación" en días que sí se guardaron antes de cerrar.
+            setWeekWizardCtx(null);
+            fetchPlan();
+          }}
           onSaved={async () => {
             setWeekWizardCtx(null);
             showToast("Programación guardada ✓");
