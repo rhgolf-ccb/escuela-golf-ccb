@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import * as XLSX from "xlsx";
 import { supabase } from "@/lib/supabase";
 import { Dumbbell } from "lucide-react";
+import { FOCOS, FOCO_LABEL, MATERIALES, MATERIAL_LABEL } from "@/lib/estacion-library-constants";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 type Categoria = "tecnico" | "juego_corto" | "putting" | "campo";
@@ -69,18 +70,6 @@ const NIVEL_LABEL: Record<string,string> = {
 // (chipping/bunker/P1-P10/etc.) que ya usa el formulario de crear/editar. Un
 // drill viejo sin este valor exacto en subcategoria simplemente no aparece al
 // filtrar por Foco — no se migran datos existentes.
-const FOCOS = ["secuencia","potencia_velocidad","transferencia_peso","rotacion_giro","compresion_contacto","finish_balance","coordinacion_juego","calentamiento"];
-const FOCO_LABEL: Record<string,string> = {
-  secuencia: "Secuencia", potencia_velocidad: "Potencia/Velocidad", transferencia_peso: "Transferencia de peso",
-  rotacion_giro: "Rotación/Giro", compresion_contacto: "Compresión/Contacto", finish_balance: "Finish/Balance",
-  coordinacion_juego: "Coordinación de juego", calentamiento: "Calentamiento",
-};
-
-const MATERIALES = ["balon_medicinal","banda","palo_velocidad","conos_escalera","ninguno"];
-const MATERIAL_LABEL: Record<string,string> = {
-  balon_medicinal: "Balón medicinal", banda: "Banda", palo_velocidad: "Palo de velocidad",
-  conos_escalera: "Conos/Escalera", ninguno: "Ninguno",
-};
 const LUGARES = [
   { value: "campo_practica",          label: "Campo de práctica" },
   { value: "putting_green_fundadores", label: "Putting Green Fundadores" },

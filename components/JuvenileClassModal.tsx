@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { supabase } from "@/lib/supabase";
 import EstacionLibraryPicker from "./EstacionLibraryPicker";
+import { FOCOS, FOCO_LABEL, MATERIALES, MATERIAL_LABEL } from "@/lib/estacion-library-constants";
 
 // ── Types (exported — used in ProgramacionModule / PacoPlanningModal) ────────
 export interface Actividad {
@@ -81,17 +82,6 @@ const CATEGORIAS_CON_IA = new Set<CategoriaEstacion>(["juego_largo", "juego_cort
 // Foco/Material — mismo vocabulario que la Biblioteca de Drills (DrillsModule.tsx),
 // usados como filtros previos a mostrar la biblioteca. Solo aplican a
 // categorías que usan drills.categoria — no a "fisico" (biblioteca distinta).
-const FOCOS = ["secuencia", "potencia_velocidad", "transferencia_peso", "rotacion_giro", "compresion_contacto", "finish_balance", "coordinacion_juego", "calentamiento"];
-const FOCO_LABEL: Record<string, string> = {
-  secuencia: "Secuencia", potencia_velocidad: "Potencia/Velocidad", transferencia_peso: "Transferencia de peso",
-  rotacion_giro: "Rotación/Giro", compresion_contacto: "Compresión/Contacto", finish_balance: "Finish/Balance",
-  coordinacion_juego: "Coordinación de juego", calentamiento: "Calentamiento",
-};
-const MATERIALES = ["balon_medicinal", "banda", "palo_velocidad", "conos_escalera", "ninguno"];
-const MATERIAL_LABEL: Record<string, string> = {
-  balon_medicinal: "Balón medicinal", banda: "Banda", palo_velocidad: "Palo de velocidad",
-  conos_escalera: "Conos/Escalera", ninguno: "Ninguno",
-};
 
 const LUGARES_ESTACION: { value: string; label: string }[] = [
   { value: "campo_practica",    label: "Campo de práctica" },

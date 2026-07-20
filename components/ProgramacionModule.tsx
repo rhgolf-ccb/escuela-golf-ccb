@@ -3,19 +3,22 @@
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
-import JuvenileClassModal, {
+import {
+  // JuvenileClassModal.tsx ya no se renderiza (WeekWizardModal lo reemplazó)
+  // pero sigue siendo la fuente de estos tipos, que PacoPlanningModal.tsx
+  // también usa — no se mueven hasta la fase de alinear Paco (fuera de
+  // alcance de esta fase).
   type SesionJuvenilData,
   type SesionJuvenilLegacy,
   type SesionJuvenilEstaciones,
   type SesionJuvenilEspecial,
 } from "./JuvenileClassModal";
-import CompetenciaClassModal from "./CompetenciaClassModal";
-import DamasClassModal from "./DamasClassModal";
 import PacoPlanningModal from "./PacoPlanningModal";
 import ActividadEspecialWizard from "./ActividadEspecialWizard";
 import PacoPlanWizard from "./PacoPlanWizard";
 import EventoDiaSinEscuelaModal from "./EventoDiaSinEscuelaModal";
 import EventosTab from "./EventosTab";
+import WeekWizardModal from "./week-wizard/WeekWizardModal";
 import { isStaff, type Rol } from "@/lib/roles";
 import { formatWhatsAppMessage, openWhatsApp } from "@/lib/whatsapp-formatter";
 import { CalendarDays } from "lucide-react";
@@ -140,6 +143,7 @@ export interface SesionSemana {
   estaciones_competencia?: EstacionCompetencia[] | null;
   notas: string | null; asistencia_registrada: boolean;
   sesion_juvenil?: SesionJuvenilData | null;
+  calentamiento?: { ejercicios: { id: string; nombre: string; series_repeticiones: string | null }[]; duracion_min: number } | null;
 }
 
 interface CalSesion extends SesionSemana { tipo_plan: TipoPlan; cupo_maximo?: number; }
@@ -476,12 +480,6 @@ export default function ProgramacionModule({ currentRol }: { currentRol: Rol | n
   // Crear plan Competencia (sin IA — sesiones vacías con horario por defecto)
   const [creandoPlan, setCreandoPlan]           = useState(false);
 
-  // Competencia day-by-day modal
-  const [compClassCtx, setCompClassCtx] = useState<{
-    dia: DiaSemana; fecha: string; sesion: SesionSemana | null;
-    horaInicio?: string; horaFin?: string;
-  } | null>(null);
-
   // Delete plan
   const [confirmDeletePlan, setConfirmDeletePlan] = useState(false);
   const [deletingPlan, setDeletingPlan]           = useState(false);
@@ -501,28 +499,20 @@ export default function ProgramacionModule({ currentRol }: { currentRol: Rol | n
   const [confirmDeleteSesion, setConfirmDeleteSesion] = useState<SesionSemana | null>(null);
   const [deletingSesion, setDeletingSesion]           = useState(false);
 
-  // Juvenile class modal (estaciones o día especial)
-  const [juvClassCtx, setJuvClassCtx] = useState<{
-    dia: DiaSemana; fecha: string; sesion: SesionSemana | null;
-    horaInicio?: string; horaFin?: string;
-  } | null>(null);
+  // Wizard de semana completa — reemplaza el flujo día-por-día que antes
+  // vivía en JuvenileClassModal/CompetenciaClassModal/DamasClassModal.
+  const [weekWizardCtx, setWeekWizardCtx] = useState<{ tipoPlan: TipoPlan; singleDay?: DiaSemana } | null>(null);
 
-  // Damas class modal (estaciones o día especial) — mismo patrón que Juvenil/Competencia
-  const [damasClassCtx, setDamasClassCtx] = useState<{
-    dia: DiaSemana; fecha: string; sesion: SesionSemana | null;
-    horaInicio?: string; horaFin?: string;
-  } | null>(null);
-
-  function openJuvModal(dia: DiaSemana, fecha: string, sesion: SesionSemana | null, extra?: { hi?: string; hf?: string }) {
-    setJuvClassCtx({ dia, fecha, sesion, horaInicio: extra?.hi, horaFin: extra?.hf });
+  function openJuvModal(dia: DiaSemana, _fecha: string, _sesion: SesionSemana | null, _extra?: { hi?: string; hf?: string }) {
+    setWeekWizardCtx({ tipoPlan: "juvenil", singleDay: dia });
   }
 
-  function openCompModal(dia: DiaSemana, fecha: string, sesion: SesionSemana | null, extra?: { hi?: string; hf?: string }) {
-    setCompClassCtx({ dia, fecha, sesion, horaInicio: extra?.hi, horaFin: extra?.hf });
+  function openCompModal(dia: DiaSemana, _fecha: string, _sesion: SesionSemana | null, _extra?: { hi?: string; hf?: string }) {
+    setWeekWizardCtx({ tipoPlan: "competencia", singleDay: dia });
   }
 
-  function openDamasModal(dia: DiaSemana, fecha: string, sesion: SesionSemana | null, extra?: { hi?: string; hf?: string }) {
-    setDamasClassCtx({ dia, fecha, sesion, horaInicio: extra?.hi, horaFin: extra?.hf });
+  function openDamasModal(dia: DiaSemana, _fecha: string, _sesion: SesionSemana | null, _extra?: { hi?: string; hf?: string }) {
+    setWeekWizardCtx({ tipoPlan: "damas", singleDay: dia });
   }
 
   // ── Wizard "Planificar con Paco" ──────────────────────────────────────────
@@ -720,11 +710,7 @@ export default function ProgramacionModule({ currentRol }: { currentRol: Rol | n
       if (planErr || !newPlan) throw new Error(planErr?.message || "Error al crear plan");
       showToast(`Plan ${TIPO_PLAN_LABEL[tipoPlan]} creado ✓`);
       await fetchPlan();
-      const primerDia = DIAS_POR_TIPO[tipoPlan][0];
-      const fecha = getFechaForDia(semana, primerDia);
-      if (tipoPlan === "juvenil") openJuvModal(primerDia, fecha, null);
-      else if (tipoPlan === "competencia") openCompModal(primerDia, fecha, null);
-      else openDamasModal(primerDia, fecha, null);
+      setWeekWizardCtx({ tipoPlan });
     } catch (err) {
       showToast(err instanceof Error ? err.message : "Error al crear");
     } finally { setCreandoPlan(false); }
@@ -1475,6 +1461,14 @@ export default function ProgramacionModule({ currentRol }: { currentRol: Rol | n
           ) : (
             <>
               <button
+                onClick={() => setWeekWizardCtx({ tipoPlan: activeTab })}
+                className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold text-white shadow-sm hover:brightness-110 transition-all"
+                style={{ background: accentColor }}
+              >
+                <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
+                Armar programación
+              </button>
+              <button
                 onClick={openEditTema}
                 className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-medium border border-gray-200 text-gray-600 hover:bg-gray-50 transition-colors"
               >
@@ -2108,65 +2102,20 @@ export default function ProgramacionModule({ currentRol }: { currentRol: Rol | n
         </div>
       )}
 
-      {/* ══ MODAL: Clase Juvenil ═════════════════════════════════════════════ */}
-      {juvClassCtx && plan && (
-        <JuvenileClassModal
+      {/* ══ WIZARD: Armar programación (semana completa o un día) ══════════════ */}
+      {weekWizardCtx && plan && plan.tipo_plan === weekWizardCtx.tipoPlan && (
+        <WeekWizardModal
+          tipoPlan={weekWizardCtx.tipoPlan}
+          semana={semana}
           planId={plan.id}
-          dia={juvClassCtx.dia}
-          diaLabel={DIA_LABEL[juvClassCtx.dia]}
-          fecha={juvClassCtx.fecha}
-          horaInicio={juvClassCtx.horaInicio}
-          horaFin={juvClassCtx.horaFin}
-          sesionExistente={juvClassCtx.sesion ?? undefined}
           horariosDefecto={horariosDefecto}
-          onClose={() => setJuvClassCtx(null)}
+          sesionesExistentes={sesiones}
+          singleDay={weekWizardCtx.singleDay}
+          onClose={() => setWeekWizardCtx(null)}
           onSaved={async () => {
-            setJuvClassCtx(null);
-            showToast("Clase guardada ✓");
+            setWeekWizardCtx(null);
+            showToast("Programación guardada ✓");
             await fetchPlan();
-            if (viewMode === "semana") fetchCalSemana();
-          }}
-        />
-      )}
-
-      {/* ══ MODAL: Clase Competencia ═════════════════════════════════════════ */}
-      {compClassCtx && plan && (
-        <CompetenciaClassModal
-          planId={plan.id}
-          dia={compClassCtx.dia}
-          diaLabel={DIA_LABEL[compClassCtx.dia]}
-          fecha={compClassCtx.fecha}
-          horaInicio={compClassCtx.horaInicio}
-          horaFin={compClassCtx.horaFin}
-          sesionExistente={compClassCtx.sesion ?? undefined}
-          horariosDefecto={horariosDefecto}
-          onClose={() => setCompClassCtx(null)}
-          onSaved={async () => {
-            setCompClassCtx(null);
-            showToast("Sesión guardada ✓");
-            await fetchPlan();
-            if (viewMode === "semana") fetchCalSemana();
-          }}
-        />
-      )}
-
-      {/* ══ MODAL: Clase Damas ═══════════════════════════════════════════════ */}
-      {damasClassCtx && plan && (
-        <DamasClassModal
-          planId={plan.id}
-          dia={damasClassCtx.dia}
-          diaLabel={DIA_LABEL[damasClassCtx.dia]}
-          fecha={damasClassCtx.fecha}
-          horaInicio={damasClassCtx.horaInicio}
-          horaFin={damasClassCtx.horaFin}
-          sesionExistente={damasClassCtx.sesion ?? undefined}
-          horariosDefecto={horariosDefecto}
-          onClose={() => setDamasClassCtx(null)}
-          onSaved={async () => {
-            setDamasClassCtx(null);
-            showToast("Sesión guardada ✓");
-            await fetchPlan();
-            if (viewMode === "semana") fetchCalSemana();
           }}
         />
       )}

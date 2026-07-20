@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
+import { MATERIAL_KEYWORDS, normalizarTexto, type Material } from "@/lib/estacion-library-constants";
 
 export type FuenteLibreria = "drills" | "ejercicios_fisicos";
 
@@ -32,11 +33,18 @@ interface Props {
   // Para ejercicios_fisicos: filtro estricto vía .overlaps("grupos", grupos) —
   // siempre debe venir con al menos un valor.
   grupos: string[];
-  // Foco/Material — solo aplican a fuente "drills" (ejercicios_fisicos no tiene
-  // estas columnas). Elegidos como pasos previos en el flujo guiado
-  // (Foco → Material → Ejercicios), llegan aquí ya decididos.
+  // Foco — solo aplica a fuente "drills" (ejercicios_fisicos no tiene esa
+  // columna). Elegido como paso previo en el flujo guiado, llega ya decidido.
   foco?: string | null;
+  // Material — para drills, overlap exacto contra material (text[]). Para
+  // ejercicios_fisicos, match por palabra clave contra materiales (texto
+  // libre) — ver MATERIAL_KEYWORDS.
   material?: string[];
+  // Solo fuente "ejercicios_fisicos": filtra por categoria exacta (ej.
+  // "Calentamiento" para el paso de calentamiento) o la excluye (trabajo
+  // físico, que nunca debe mostrar ejercicios de calentamiento).
+  categoria?: string;
+  categoriaExcluida?: string;
   yaSeleccionados: string[];
   onAdd: (item: EstacionLibraryPick) => void;
   onClose: () => void;
@@ -60,7 +68,7 @@ function StarRating({ rating }: { rating: number | null }) {
 // según `fuente` — para agregar uno a una estación. Reemplaza a
 // BibliotecaDrillPicker (que solo conocía drills técnicos), usado ahora desde
 // JuvenileClassModal, CompetenciaClassModal, DamasClassModal y PacoPlanningModal.
-export default function EstacionLibraryPicker({ fuente, categoriaDrills, grupos, foco, material, yaSeleccionados, onAdd, onClose }: Props) {
+export default function EstacionLibraryPicker({ fuente, categoriaDrills, grupos, foco, material, categoria, categoriaExcluida, yaSeleccionados, onAdd, onClose }: Props) {
   const [items, setItems] = useState<LibraryItem[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -90,14 +98,23 @@ export default function EstacionLibraryPicker({ fuente, categoriaDrills, grupos,
       } else {
         let query = supabase
           .from("ejercicios_fisicos")
-          .select("id, nombre, instrucciones, series_repeticiones")
+          .select("id, nombre, categoria, materiales, instrucciones, series_repeticiones")
           .order("nombre")
           .limit(30);
         if (grupos.length > 0) query = query.overlaps("grupos", grupos);
+        if (categoria) query = query.eq("categoria", categoria);
+        if (categoriaExcluida) query = query.neq("categoria", categoriaExcluida);
         const { data } = await query;
         if (cancelled) return;
-        type Row = { id: string; nombre: string; instrucciones: string | null; series_repeticiones: string | null };
-        const rows = (data as Row[]) ?? [];
+        type Row = { id: string; nombre: string; categoria: string | null; materiales: string | null; instrucciones: string | null; series_repeticiones: string | null };
+        let rows = (data as Row[]) ?? [];
+        if (material && material.length > 0) {
+          const keywords = material.flatMap((m) => MATERIAL_KEYWORDS[m as Material] ?? []);
+          rows = rows.filter((r) => {
+            const texto = normalizarTexto(r.materiales ?? "");
+            return keywords.some((k) => texto.includes(k));
+          });
+        }
         setItems(
           rows.map((e) => ({
             id: e.id,
@@ -114,7 +131,7 @@ export default function EstacionLibraryPicker({ fuente, categoriaDrills, grupos,
     return () => {
       cancelled = true;
     };
-  }, [fuente, categoriaDrills, grupos, foco, material]);
+  }, [fuente, categoriaDrills, grupos, foco, material, categoria, categoriaExcluida]);
 
   const disponibles = items.filter((d) => !yaSeleccionados.includes(d.titulo));
 
