@@ -96,6 +96,8 @@ Junto con la llamada a la herramienta, responde también en texto con un resumen
 
 Si la respuesta del profesor es incompleta o ambigua, no asumas — haz una pregunta de seguimiento concreta. Por ejemplo si dice "enfócate en el putt": "¿Quieres que todos los días tengan énfasis en putt o solo algunos días? ¿Y cuántos drills de putt por estación — 1 o 2?"
 
+IMPORTANTE — no llames obtener_drills ni obtener_sesiones_semana en este flujo: la librería completa de drills aprobados y la programación existente de esta semana ya vienen abajo en "Contexto de planificación disponible". Volver a consultarlas por herramienta solo agrega llamadas y tiempo sin aportar nada nuevo — esta pantalla tiene un límite de tiempo de respuesta ajustado, así que ve directo a generar el plan con lo que ya tienes en el contexto. Si necesitas ejercicios físicos para una estación de Física, ahí sí usa obtener_ejercicios_fisicos (esos no vienen precargados).
+
 Contexto de planificación disponible:
 ${contextoPlanificacion}`;
 }
