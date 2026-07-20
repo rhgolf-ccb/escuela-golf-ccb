@@ -16,9 +16,9 @@ function isPublicPath(pathname: string): boolean {
   return PUBLIC_PATHS.some((p) => pathname === p || pathname.startsWith(`${p}/`));
 }
 
-// Headers de confianza que middleware entrega ya validados a layouts/API routes
+// Headers de confianza que proxy entrega ya validados a layouts/API routes
 // (ver lib/current-user.ts) para que no repitan su propia consulta a
-// auth.getUser()/app_users — middleware ya es el único punto que la hace por
+// auth.getUser()/app_users — proxy ya es el único punto que la hace por
 // request. Se limpian primero en TODA request (incluso rutas públicas) para
 // que un cliente no pueda inyectar un valor propio y hacerse pasar por otro rol.
 const TRUSTED_HEADERS = ["x-ccb-uid", "x-ccb-rol", "x-ccb-nombre", "x-ccb-email"];
@@ -29,7 +29,30 @@ function stripTrustedHeaders(request: NextRequest): Headers {
   return headers;
 }
 
-export async function middleware(request: NextRequest) {
+// Proxy corre en CADA navegación — sin timeout, un blip de red hacia la API
+// de auth de Supabase (fetch failed / ECONNRESET) deja la petición colgada
+// indefinidamente ("Cargando..." fijo) en vez de fallar rápido.
+const AUTH_FETCH_TIMEOUT_MS = 6000;
+function fetchWithTimeout(input: string | URL | Request, init?: RequestInit) {
+  return fetch(input, { ...init, signal: AbortSignal.timeout(AUTH_FETCH_TIMEOUT_MS) });
+}
+
+// Un solo intento adicional para no forzar un logout por un blip de red
+// transitorio — si el segundo intento también falla, sí se trata como no
+// autenticado (fail-closed, el comportamiento seguro por defecto).
+async function getUserResilient(supabase: ReturnType<typeof createServerClient>) {
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try {
+      const { data } = await supabase.auth.getUser();
+      return data.user;
+    } catch {
+      if (attempt === 1) return null;
+    }
+  }
+  return null;
+}
+
+export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
   const isApi = pathname.startsWith("/api/");
 
@@ -52,6 +75,7 @@ export async function middleware(request: NextRequest) {
           list.forEach(({ name, value, options }) => response.cookies.set(name, value, options));
         },
       },
+      global: { fetch: fetchWithTimeout },
     }
   );
 
@@ -62,7 +86,7 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(url);
   };
 
-  const { data: { user } } = await supabase.auth.getUser();
+  const user = await getUserResilient(supabase);
   if (!user) return fail(401);
 
   const { data: appUser } = await supabase
