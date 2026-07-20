@@ -1,7 +1,7 @@
 import type { NextRequest } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { PACO_PLANNING_KNOWLEDGE } from "@/lib/paco-planning-knowledge";
-import { ANTHROPIC_MODEL } from "@/lib/anthropic-model";
+import { ANTHROPIC_MODEL, callAnthropicMessages } from "@/lib/anthropic-model";
 
 const CATEGORIA_LABEL: Record<string, string> = {
   juego_largo: "Juego Largo (swing)",
@@ -69,29 +69,26 @@ Devuelve SOLO JSON:
 ${PACO_PLANNING_KNOWLEDGE}`;
 
   const nonce = Math.random().toString(36).slice(2, 8);
-  const aiRes = await fetch("https://api.anthropic.com/v1/messages", {
-    method: "POST",
-    cache: "no-store",
-    headers: {
-      "x-api-key": process.env.ANTHROPIC_API_KEY!,
-      "anthropic-version": "2023-06-01",
-      "content-type": "application/json",
-    },
-    body: JSON.stringify({
+  try {
+    const aiRes = await callAnthropicMessages({
       model: ANTHROPIC_MODEL,
       max_tokens: 800,
       system,
       messages: [{ role: "user", content: `Sugiere drills y desafío para: ${categoriaLabel}. [${nonce}]` }],
-    }),
-  });
+    });
 
-  const aiData = await aiRes.json() as { content?: { text: string }[]; error?: { message: string } };
-  if (!aiRes.ok) return Response.json({ error: aiData.error?.message ?? "Error IA" }, { status: 500 });
+    const aiData = await aiRes.json() as { content?: { text: string }[]; error?: { message: string } };
+    if (!aiRes.ok) return Response.json({ error: aiData.error?.message ?? "Error IA" }, { status: 500 });
 
-  const raw = aiData.content?.[0]?.text ?? "";
-  const parsed = parseJSON(raw) as { drills?: unknown[]; desafio?: string } | null;
-  if (!parsed || !Array.isArray(parsed.drills) || parsed.drills.length === 0) {
-    return Response.json({ error: "Sin opciones", raw }, { status: 500 });
+    const raw = aiData.content?.[0]?.text ?? "";
+    const parsed = parseJSON(raw) as { drills?: unknown[]; desafio?: string } | null;
+    if (!parsed || !Array.isArray(parsed.drills) || parsed.drills.length === 0) {
+      return Response.json({ error: "Sin opciones", raw }, { status: 500 });
+    }
+    return Response.json(parsed);
+  } catch (err) {
+    console.error("[suggest-station-game] Anthropic error:", err);
+    const timedOut = err instanceof Error && err.name === "TimeoutError";
+    return Response.json({ error: timedOut ? "La IA tardó demasiado en responder" : "Error de red al conectar con la IA" }, { status: 504 });
   }
-  return Response.json(parsed);
 }
