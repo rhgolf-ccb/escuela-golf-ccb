@@ -15,6 +15,7 @@ import PacoPlanningModal from "./PacoPlanningModal";
 import ActividadEspecialWizard from "./ActividadEspecialWizard";
 import PacoPlanWizard from "./PacoPlanWizard";
 import EventoDiaSinEscuelaModal from "./EventoDiaSinEscuelaModal";
+import EventosTab from "./EventosTab";
 import { isStaff, type Rol } from "@/lib/roles";
 import { formatWhatsAppMessage, openWhatsApp } from "@/lib/whatsapp-formatter";
 import { CalendarDays } from "lucide-react";
@@ -447,6 +448,10 @@ export default function ProgramacionModule({ currentRol }: { currentRol: Rol | n
   // Plan state
   const [semana, setSemana]       = useState<Date>(() => getMonday(new Date()));
   const [activeTab, setActiveTab] = useState<TipoPlan>("juvenil");
+  // Pestaña "Eventos" no es un TipoPlan (no tiene semana/plan) — vive aparte
+  // del tab bar de Juvenil/Competencia/Damas, reemplaza el contenido de plan
+  // por EventosTab sin tocar activeTab ni sus efectos de fetch.
+  const [showEventos, setShowEventos] = useState(false);
   const [plan, setPlan]           = useState<PlanSemanal | null>(null);
   const [sesiones, setSesiones]   = useState<SesionSemana[]>([]);
   const [loading, setLoading]     = useState(false);
@@ -1370,49 +1375,51 @@ export default function ProgramacionModule({ currentRol }: { currentRol: Rol | n
         </div>
       )}
 
-      {/* ── Header: view toggle + navigator ── */}
-      <div className="flex items-center justify-between mb-5 flex-wrap gap-3">
-        {/* View toggle */}
-        <div className="flex gap-0.5 bg-gray-100 rounded-xl p-1">
-          {([["plan", "Plan"], ["semana", "Semana"], ["mes", "Mes"]] as const).map(([mode, label]) => (
-            <button
-              key={mode}
-              onClick={() => setViewMode(mode)}
-              className={`px-4 py-1.5 rounded-lg text-sm font-semibold transition-all ${viewMode === mode ? "bg-ccb-green text-white" : "text-gray-600 hover:text-gray-900"}`}
-            >
-              {label}
-            </button>
-          ))}
-        </div>
+      {/* ── Header: view toggle + navigator (no aplica a Eventos) ── */}
+      {!showEventos && (
+        <div className="flex items-center justify-between mb-5 flex-wrap gap-3">
+          {/* View toggle */}
+          <div className="flex gap-0.5 bg-gray-100 rounded-xl p-1">
+            {([["plan", "Plan"], ["semana", "Semana"], ["mes", "Mes"]] as const).map(([mode, label]) => (
+              <button
+                key={mode}
+                onClick={() => setViewMode(mode)}
+                className={`px-4 py-1.5 rounded-lg text-sm font-semibold transition-all ${viewMode === mode ? "bg-ccb-green text-white" : "text-gray-600 hover:text-gray-900"}`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
 
-        {/* Navigator */}
-        {viewMode !== "mes" ? (
-          <div className="flex items-center gap-2">
-            <button onClick={prevWeek} className="flex items-center gap-1 px-3 py-2 rounded-lg border border-gray-200 text-sm font-medium text-gray-600 hover:bg-gray-50 transition-colors">
-              <svg width="13" height="13" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path d="M15 18l-6-6 6-6"/></svg>
-              Ant.
-            </button>
-            <div className="text-center">
-              <p className="text-sm font-bold text-gray-900 leading-tight">{formatWeekRange(semana)}</p>
-              <button onClick={goToday} className="text-[11px] text-gray-400 hover:text-gray-600 transition-colors">esta semana</button>
+          {/* Navigator */}
+          {viewMode !== "mes" ? (
+            <div className="flex items-center gap-2">
+              <button onClick={prevWeek} className="flex items-center gap-1 px-3 py-2 rounded-lg border border-gray-200 text-sm font-medium text-gray-600 hover:bg-gray-50 transition-colors">
+                <svg width="13" height="13" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path d="M15 18l-6-6 6-6"/></svg>
+                Ant.
+              </button>
+              <div className="text-center">
+                <p className="text-sm font-bold text-gray-900 leading-tight">{formatWeekRange(semana)}</p>
+                <button onClick={goToday} className="text-[11px] text-gray-400 hover:text-gray-600 transition-colors">esta semana</button>
+              </div>
+              <button onClick={nextWeek} className="flex items-center gap-1 px-3 py-2 rounded-lg border border-gray-200 text-sm font-medium text-gray-600 hover:bg-gray-50 transition-colors">
+                Sig.
+                <svg width="13" height="13" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path d="M9 18l6-6-6-6"/></svg>
+              </button>
             </div>
-            <button onClick={nextWeek} className="flex items-center gap-1 px-3 py-2 rounded-lg border border-gray-200 text-sm font-medium text-gray-600 hover:bg-gray-50 transition-colors">
-              Sig.
-              <svg width="13" height="13" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path d="M9 18l6-6-6-6"/></svg>
-            </button>
-          </div>
-        ) : (
-          <div className="flex items-center gap-3">
-            <button onClick={prevMonth} className="flex items-center gap-1 px-3 py-2 rounded-lg border border-gray-200 text-sm font-medium text-gray-600 hover:bg-gray-50 transition-colors">
-              <svg width="13" height="13" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path d="M15 18l-6-6 6-6"/></svg>
-            </button>
-            <p className="text-sm font-bold text-gray-900 capitalize">{mesCal.toLocaleDateString("es-CO", { month: "long", year: "numeric" })}</p>
-            <button onClick={nextMonth} className="flex items-center gap-1 px-3 py-2 rounded-lg border border-gray-200 text-sm font-medium text-gray-600 hover:bg-gray-50 transition-colors">
-              <svg width="13" height="13" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path d="M9 18l6-6-6-6"/></svg>
-            </button>
-          </div>
-        )}
-      </div>
+          ) : (
+            <div className="flex items-center gap-3">
+              <button onClick={prevMonth} className="flex items-center gap-1 px-3 py-2 rounded-lg border border-gray-200 text-sm font-medium text-gray-600 hover:bg-gray-50 transition-colors">
+                <svg width="13" height="13" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path d="M15 18l-6-6 6-6"/></svg>
+              </button>
+              <p className="text-sm font-bold text-gray-900 capitalize">{mesCal.toLocaleDateString("es-CO", { month: "long", year: "numeric" })}</p>
+              <button onClick={nextMonth} className="flex items-center gap-1 px-3 py-2 rounded-lg border border-gray-200 text-sm font-medium text-gray-600 hover:bg-gray-50 transition-colors">
+                <svg width="13" height="13" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path d="M9 18l6-6-6-6"/></svg>
+              </button>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* ── Tabs (always visible) ── */}
       <div className="flex items-center justify-between gap-3 border-b border-gray-200 mb-5">
@@ -1420,15 +1427,22 @@ export default function ProgramacionModule({ currentRol }: { currentRol: Rol | n
           {(["juvenil", "competencia", "damas"] as TipoPlan[]).map((tab) => (
             <button
               key={tab}
-              onClick={() => setActiveTab(tab)}
-              className={`px-5 py-2.5 text-sm font-semibold rounded-t-lg transition-all border-b-2 -mb-px ${activeTab === tab ? "border-current" : "border-transparent text-gray-500 hover:text-gray-700"}`}
-              style={activeTab === tab ? { color: TIPO_PLAN_COLOR[tab], borderColor: TIPO_PLAN_COLOR[tab] } : {}}
+              onClick={() => { setActiveTab(tab); setShowEventos(false); }}
+              className={`px-5 py-2.5 text-sm font-semibold rounded-t-lg transition-all border-b-2 -mb-px ${!showEventos && activeTab === tab ? "border-current" : "border-transparent text-gray-500 hover:text-gray-700"}`}
+              style={!showEventos && activeTab === tab ? { color: TIPO_PLAN_COLOR[tab], borderColor: TIPO_PLAN_COLOR[tab] } : {}}
             >
               {TIPO_PLAN_LABEL[tab]}
             </button>
           ))}
+          <button
+            onClick={() => setShowEventos(true)}
+            className={`px-5 py-2.5 text-sm font-semibold rounded-t-lg transition-all border-b-2 -mb-px ${showEventos ? "border-current" : "border-transparent text-gray-500 hover:text-gray-700"}`}
+            style={showEventos ? { color: "#7c3aed", borderColor: "#7c3aed" } : {}}
+          >
+            Eventos
+          </button>
         </div>
-        {currentRol && isStaff(currentRol) && (
+        {!showEventos && currentRol && isStaff(currentRol) && (
           <div className="flex gap-2 mb-2 shrink-0">
             <button
               onClick={() => setShowWizard(true)}
@@ -1441,6 +1455,10 @@ export default function ProgramacionModule({ currentRol }: { currentRol: Rol | n
         )}
       </div>
 
+      {showEventos ? (
+        <EventosTab currentRol={currentRol} />
+      ) : (
+        <>
       {/* ── Action bar (create/delete plan) ── */}
       {viewMode === "plan" && !loading && (
         <div className="flex items-center justify-end mb-4 gap-2">
@@ -1722,6 +1740,8 @@ export default function ProgramacionModule({ currentRol }: { currentRol: Rol | n
             </div>
           </div>
         )
+      )}
+        </>
       )}
 
       {/* ══ MODAL: Editar tema ════════════════════════════════════════════════ */}
