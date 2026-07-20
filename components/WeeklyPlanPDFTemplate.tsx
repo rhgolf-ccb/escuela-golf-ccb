@@ -7,10 +7,13 @@ interface Drill {
 }
 interface EstacionDamas { nombre: string; lugar: string; duracion_min: number; descripcion: string; }
 interface EstacionCompetencia { categoria: string; objetivo: string; lugar?: string; drills: Drill[]; juego_competitivo: string | null; }
-interface JuegoJuvenil { nombre: string; como_se_juega: string; }
-interface EstacionJuvenil { categoria: string; juego: JuegoJuvenil; }
+// Estación Juvenil real: drills de biblioteca + desafío de cierre — no "juego"
+// (ese campo era de un esquema anterior; ya no existe en los datos reales).
+interface EstacionJuvenil { categoria: string; drills: Drill[]; desafio: string; lugar?: string; }
 interface SesionJuvenilEstaciones { tipo: "estaciones"; estaciones: EstacionJuvenil[]; }
 interface SesionJuvenilEspecial { tipo: "especial"; tipo_especial: string; }
+interface CalentamientoEjercicio { nombre: string; series_repeticiones: string | null; }
+interface Calentamiento { ejercicios: CalentamientoEjercicio[]; duracion_min: number; }
 interface SesionSemana {
   id: string; plan_id: string; dia_semana: string; fecha: string;
   tipo_sesion: string; lugar: string;
@@ -19,6 +22,7 @@ interface SesionSemana {
   juego_competitivo: string | null; estaciones_damas: EstacionDamas[] | null;
   estaciones_competencia?: EstacionCompetencia[] | null;
   sesion_juvenil?: unknown;
+  calentamiento?: Calentamiento | null;
   notas: string | null; asistencia_registrada: boolean;
 }
 interface PlanSemanal {
@@ -94,6 +98,8 @@ const CAT_LABEL: Record<string, string> = {
   juego_largo: "🏌️ Juego Largo",
   juego_corto: "⛳ Juego Corto",
   putt: "🎯 Putt",
+  campo_infantil: "👶 Campo Infantil",
+  fisico: "💪 Físico",
 };
 const ESPECIAL_LABEL: Record<string, string> = {
   test_tecnico: "Test Técnico P1-P10",
@@ -121,10 +127,8 @@ function DayColumn({ sesion }: { sesion: SesionSemana }) {
   // Friendly objetivo text for estaciones
   const objetivoText = isJuvEstaciones
     ? (() => {
-        const names = estacionesJuv.map((e) => e.juego?.nombre).filter(Boolean);
-        return names.length > 0
-          ? `Hoy jugamos: ${names.join(" · ")}`
-          : "Sesión de 3 estaciones";
+        const cats = estacionesJuv.map((e) => CAT_LABEL[e.categoria]?.replace(/^\S+\s/, "") ?? e.categoria).filter(Boolean);
+        return cats.length > 0 ? `Hoy trabajamos: ${cats.join(" · ")}` : `Sesión de ${estacionesJuv.length} estaciones`;
       })()
     : sesion.objetivo;
 
@@ -181,6 +185,18 @@ function DayColumn({ sesion }: { sesion: SesionSemana }) {
         {/* Separador */}
         <div style={{ height: 1, background: "#e0e0e0", margin: "2px 0 9px" }} />
 
+        {/* Calentamiento (opcional, previo a las estaciones) */}
+        {sesion.calentamiento && sesion.calentamiento.ejercicios.length > 0 && (
+          <div style={{ marginBottom: 10 }}>
+            <p style={{ margin: "0 0 4px", color: "#c8a84b", fontWeight: 800, fontSize: 11, textTransform: "uppercase", letterSpacing: "0.05em" }}>
+              Calentamiento ({sesion.calentamiento.duracion_min} min):
+            </p>
+            <p style={{ margin: 0, fontSize: 9.5, color: "#555555", lineHeight: 1.35 }}>
+              {sesion.calentamiento.ejercicios.map((e) => e.nombre).join(" · ")}
+            </p>
+          </div>
+        )}
+
         {/* Estaciones Juvenil */}
         {isJuvEstaciones && estacionesJuv.length > 0 && (
           <div style={{ marginBottom: 10 }}>
@@ -188,27 +204,36 @@ function DayColumn({ sesion }: { sesion: SesionSemana }) {
               Estaciones:
             </p>
             {estacionesJuv.map((est, idx) => (
-              <div key={idx} style={{ display: "flex", gap: 8, marginBottom: 8, alignItems: "flex-start" }}>
-                <div style={{
-                  width: 18, height: 18, background: "#1a3a2a", borderRadius: "50%",
-                  display: "flex", alignItems: "center", justifyContent: "center",
-                  flexShrink: 0, marginTop: 1, fontSize: 9,
-                }}>
-                  <span style={{ color: "#ffffff", fontWeight: 800, lineHeight: 1 }}>{idx + 1}</span>
-                </div>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <p style={{ margin: "0 0 1px", fontWeight: 700, fontSize: 10, color: "#1a3a2a", lineHeight: 1.3 }}>
+              <div key={idx} style={{ marginBottom: 9 }}>
+                <div style={{ display: "flex", gap: 8, marginBottom: 4, alignItems: "flex-start" }}>
+                  <div style={{
+                    width: 18, height: 18, background: "#1a3a2a", borderRadius: "50%",
+                    display: "flex", alignItems: "center", justifyContent: "center",
+                    flexShrink: 0, marginTop: 1, fontSize: 9,
+                  }}>
+                    <span style={{ color: "#ffffff", fontWeight: 800, lineHeight: 1 }}>{idx + 1}</span>
+                  </div>
+                  <p style={{ margin: 0, fontWeight: 700, fontSize: 10, color: "#1a3a2a", lineHeight: 1.3 }}>
                     {CAT_LABEL[est.categoria] ?? est.categoria}
                   </p>
-                  <p style={{ margin: "0 0 1px", fontWeight: 700, fontSize: 10.5, color: "#1a1a1a", lineHeight: 1.3 }}>
-                    {est.juego?.nombre}
-                  </p>
-                  {est.juego?.como_se_juega && (
-                    <p style={{ margin: 0, fontSize: 9.5, color: "#555555", lineHeight: 1.35 }}>
-                      {est.juego.como_se_juega.slice(0, 90)}{est.juego.como_se_juega.length > 90 ? "…" : ""}
-                    </p>
-                  )}
                 </div>
+                {(est.drills ?? []).slice(0, 3).map((drill, dIdx) => (
+                  <div key={dIdx} style={{ marginLeft: 26, marginBottom: 3 }}>
+                    <p style={{ margin: 0, fontWeight: 700, fontSize: 10, color: "#1a1a1a", lineHeight: 1.3 }}>
+                      {drill.titulo}
+                    </p>
+                    {drill.descripcion && (
+                      <p style={{ margin: 0, fontSize: 9.5, color: "#555555", lineHeight: 1.35 }}>
+                        {drill.descripcion.slice(0, 90)}{drill.descripcion.length > 90 ? "…" : ""}
+                      </p>
+                    )}
+                  </div>
+                ))}
+                {est.desafio && (
+                  <p style={{ margin: "2px 0 0 26px", fontSize: 9.5, color: "#555555", fontStyle: "italic" }}>
+                    🏆 {est.desafio}
+                  </p>
+                )}
               </div>
             ))}
           </div>

@@ -65,7 +65,19 @@ export function nuevaEstacion(categoria: string, lugarSugerido: string): Estacio
 }
 
 export function diaCompleto(dia: DiaWizardState): boolean {
-  if (dia.tipo === "especial") return !!dia.especial;
-  if (dia.estaciones.length === 0) return false;
-  return dia.estaciones.every((e) => e.items.length > 0 && e.desafio.trim().length > 0);
+  return diaFaltantes(dia).length === 0;
+}
+
+// Lista legible de qué falta para poder avanzar — se muestra junto al botón
+// "Siguiente día" porque quedaba deshabilitado sin ninguna pista de qué
+// completar.
+export function diaFaltantes(dia: DiaWizardState): string[] {
+  if (dia.tipo === "especial") return dia.especial ? [] : ["Elige un tipo de día especial"];
+  if (dia.estaciones.length === 0) return ["Agrega al menos una estación"];
+  const faltantes: string[] = [];
+  dia.estaciones.forEach((e, i) => {
+    if (e.items.length === 0) faltantes.push(`Estación ${i + 1}: falta elegir un ejercicio de la biblioteca`);
+    else if (e.desafio.trim().length === 0) faltantes.push(`Estación ${i + 1}: falta el desafío de cierre`);
+  });
+  return faltantes;
 }

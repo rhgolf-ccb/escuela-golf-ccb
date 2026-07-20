@@ -35,10 +35,12 @@ export default function EstacionEditor({ estacion, index, categoriaOptions, grup
   }
 
   const yaSeleccionados = [...estacion.items.map((i) => i.titulo), ...usadosEnOtrasPartes];
+  const completa = estacion.items.length > 0 && estacion.desafio.trim().length > 0;
+  const enProgreso = estacion.items.length > 0 && !completa;
 
   return (
-    <div className="border rounded-xl overflow-hidden" style={{ borderColor: estacion.items.length > 0 ? "#1B4D2E" : "#e5e7eb" }}>
-      <div className="flex items-center gap-2 px-3 py-2.5" style={{ background: estacion.items.length > 0 ? "#f0faf2" : "#f9fafb" }}>
+    <div className="border rounded-xl overflow-hidden" style={{ borderColor: completa ? "#1B4D2E" : enProgreso ? "#d97706" : "#e5e7eb" }}>
+      <div className="flex items-center gap-2 px-3 py-2.5" style={{ background: completa ? "#f0faf2" : enProgreso ? "#fffbeb" : "#f9fafb" }}>
         <span className="text-lg shrink-0">{opcionActual.emoji}</span>
         <select
           value={estacion.categoria}
@@ -109,13 +111,16 @@ export default function EstacionEditor({ estacion, index, categoriaOptions, grup
         </button>
 
         <div>
-          <label className="text-[11px] font-bold text-gray-500 uppercase tracking-wide block mb-1">Desafío / mini-juego de cierre</label>
+          <label className="text-[11px] font-bold text-gray-500 uppercase tracking-wide block mb-1">
+            Desafío / mini-juego de cierre {enProgreso && <span className="text-amber-600 normal-case font-medium">— falta para continuar</span>}
+          </label>
           <textarea
             value={estacion.desafio}
             onChange={(e) => onChange({ ...estacion, desafio: e.target.value })}
             rows={2}
             placeholder="Reto o juego competitivo de cierre para esta estación"
-            className="w-full text-xs border border-gray-200 rounded-lg px-2.5 py-1.5 resize-none"
+            className="w-full text-xs border rounded-lg px-2.5 py-1.5 resize-none"
+            style={{ borderColor: enProgreso ? "#d97706" : "#e5e7eb" }}
           />
         </div>
 

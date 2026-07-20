@@ -7,7 +7,7 @@ import { DIAS_POR_TIPO, TIPO_PLAN_LABEL, getFechaForDia } from "@/components/Pro
 import type { EstacionLibraryPick } from "@/components/EstacionLibraryPicker";
 import { GROUP_CONFIGS, gruposParaDrills, gruposParaFisico, categoriaOptionForCanonical } from "./group-configs";
 import type { DiaWizardState } from "./types";
-import { nuevaEstacion, diaCompleto } from "./types";
+import { nuevaEstacion, diaCompleto, diaFaltantes } from "./types";
 import { computeSessionDuration, allocateStationMinutes, defaultStationCount, defaultCategoriasForDia, suggestLugar } from "@/lib/planning-defaults";
 import { SUBGRUPO_LABEL, type SubgrupoJuvenil } from "@/lib/estacion-library-constants";
 import EstacionEditor from "./EstacionEditor";
@@ -185,6 +185,7 @@ export default function WeekWizardModal({ tipoPlan, semana, planId, horariosDefe
   const minutosPorEstacion = diaActual ? allocateStationMinutes(duracionTotal, diaActual.calentamiento?.duracionMin ?? 0, diaActual.estaciones.length || 1) : 0;
   const esUltimoDia = currentIndex === dias.length - 1;
   const puedeAvanzar = diaActual ? diaCompleto(diaActual) : false;
+  const faltantes = diaActual ? diaFaltantes(diaActual) : [];
 
   return (
     <div className="fixed inset-0 bg-black/60 z-50 flex items-start justify-center p-4 overflow-y-auto" onClick={() => { if (!saving) onClose(); }}>
@@ -333,6 +334,13 @@ export default function WeekWizardModal({ tipoPlan, semana, planId, horariosDefe
 
               {error && <div className="bg-red-50 border border-red-100 rounded-lg px-4 py-3 text-sm text-red-700">{error}</div>}
             </div>
+
+            {!puedeAvanzar && faltantes.length > 0 && (
+              <div className="mx-5 mb-2 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 text-xs text-amber-800 space-y-0.5">
+                <p className="font-semibold">Falta para continuar:</p>
+                {faltantes.map((f, i) => <p key={i}>· {f}</p>)}
+              </div>
+            )}
 
             <div className="px-5 pb-5 pt-3 flex gap-2 border-t border-gray-100">
               {currentIndex > 0 && (
