@@ -8,8 +8,12 @@ import { PACO_PLANNING_KNOWLEDGE, PACO_ADVANCED_PLANNING } from "@/lib/paco-plan
 import { ANTHROPIC_MODEL } from "@/lib/anthropic-model";
 
 // La planeación semanal (thinking + tool loop + max_tokens 8000) puede tardar
-// bien por encima del límite por defecto de Vercel — sube el límite de la función.
-export const maxDuration = 60;
+// 40-65s medido en la práctica, y hasta ~65s en el peor caso — 60s se quedaba
+// corto y la función moría a mitad de generación (Vercel Runtime Timeout).
+// Con Fluid Compute activado en este proyecto, Hobby ya permite hasta 300s
+// (ver defaultResourceConfig.functionDefaultTimeout en la API de Vercel) —
+// no hace falta plan Pro para este margen.
+export const maxDuration = 300;
 
 const MAX_CONTINUATIONS = 3;
 const MAX_TOOL_ITERATIONS = 10;
