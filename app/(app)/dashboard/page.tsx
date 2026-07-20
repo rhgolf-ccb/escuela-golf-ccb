@@ -1,40 +1,29 @@
-import Link from "next/link";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
 import { getCurrentAppUser } from "@/lib/current-user";
-import { Users, Calendar, UserCheck, CalendarCheck, Clock, Trophy, CalendarOff, Star, Pin, ChartBar } from "lucide-react";
+import { Users, Calendar, UserCheck, CalendarCheck, Trophy, CalendarOff, Star, Pin, ChartBar } from "lucide-react";
 import WeatherChip from "@/components/WeatherChip";
+import DashboardAgendaCard, { type AgendaSesion } from "@/components/DashboardAgendaCard";
 
 export const metadata = { title: "Inicio | Escuela de Golf CCB" };
 
-// Copiados de ProgramacionModule.tsx (mismos valores) — se duplican en vez de
+type TipoPlan = "juvenil" | "competencia" | "damas";
+
+// Copiado de ProgramacionModule.tsx (mismo valor) — se duplica en vez de
 // importarse porque ese módulo es "use client" y arrastra el cliente de
 // Supabase del navegador; ningún otro Server Component de este proyecto
 // importa constantes desde un módulo cliente, así que se sigue el mismo
 // patrón de duplicación que ya usa CalendarioPadresModule.tsx.
-type TipoPlan = "juvenil" | "competencia" | "damas";
-
-const TIPO_SESION_LABEL: Record<string, string> = {
-  tiro_largo: "Tiro Largo", juego_corto: "Juego Corto", putt: "Putt",
-  campo: "Campo", test_tecnico: "Test Técnico", test_fisico: "Test Físico", trabajo_fisico: "Trabajo Físico",
-  competencia: "Competencia", damas_estaciones: "Estaciones", juvenil_estaciones: "3 Estaciones",
-};
-const LUGAR_LABEL: Record<string, string> = {
-  campo_practica: "Campo de práctica", putting_green: "Putting Green",
-  campo_infantil: "Campo Infantil", campo_pacos_fabios: "Pacos/Fabios",
-  campo_completo: "Campo Completo",
-};
-const TIPO_PLAN_LABEL: Record<TipoPlan, string> = { juvenil: "Juvenil", competencia: "Competencia", damas: "Damas" };
-const TIPO_PLAN_COLOR: Record<TipoPlan, string> = { juvenil: "#1B4D2E", competencia: "#1e40af", damas: "#86198f" };
-
-function formatHora(t: string | null): string {
-  return t ? t.slice(0, 5) : "";
+function getMondayISO(fechaISO: string): string {
+  const d = new Date(`${fechaISO}T12:00:00`);
+  const dia = d.getDay();
+  d.setDate(d.getDate() + (dia === 0 ? -6 : 1 - dia));
+  return d.toISOString().split("T")[0];
 }
 
-function duracionMin(inicio: string | null, fin: string | null): number | null {
-  if (!inicio || !fin) return null;
-  const [h1, m1] = inicio.split(":").map(Number);
-  const [h2, m2] = fin.split(":").map(Number);
-  return h2 * 60 + m2 - (h1 * 60 + m1);
+function addDaysISO(fechaISO: string, n: number): string {
+  const d = new Date(`${fechaISO}T12:00:00`);
+  d.setDate(d.getDate() + n);
+  return d.toISOString().split("T")[0];
 }
 
 // Ancla a mediodía para que el día calendario no se corra por la zona
@@ -83,11 +72,31 @@ export default async function DashboardPage() {
     supabase.from("reservas").select("*", { count: "exact", head: true }),
   ]);
 
-  const { data: sesionesHoy } = await supabase
+  const semanaInicio = getMondayISO(hoy);
+  const semanaFin = addDaysISO(semanaInicio, 6);
+
+  const { data: sesionesSemanaRaw } = await supabase
     .from("sesiones_semana")
-    .select("id, hora_inicio, hora_fin, tipo_sesion, lugar, objetivo, planes_semanales(tipo_plan)")
-    .eq("fecha", hoy)
+    .select("id, fecha, hora_inicio, hora_fin, tipo_sesion, lugar, objetivo, planes_semanales(tipo_plan)")
+    .gte("fecha", semanaInicio)
+    .lte("fecha", semanaFin)
+    .order("fecha", { ascending: true })
     .order("hora_inicio", { ascending: true });
+
+  const sesionesSemana: AgendaSesion[] = (sesionesSemanaRaw ?? []).map((s) => {
+    const planRel = Array.isArray(s.planes_semanales) ? s.planes_semanales[0] : s.planes_semanales;
+    return {
+      id: s.id,
+      fecha: s.fecha,
+      hora_inicio: s.hora_inicio,
+      hora_fin: s.hora_fin,
+      tipo_sesion: s.tipo_sesion,
+      lugar: s.lugar,
+      objetivo: s.objetivo,
+      tipo_plan: (planRel?.tipo_plan as TipoPlan | undefined) ?? null,
+    };
+  });
+  const sesionesHoy = sesionesSemana.filter((s) => s.fecha === hoy);
 
   const { data: eventosProximos } = await supabase
     .from("eventos_calendario")
@@ -198,58 +207,8 @@ export default async function DashboardPage() {
         {/* AGENDA + PRÓXIMOS EVENTOS + RESUMEN DE ASISTENCIA */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
 
-          {/* AGENDA DEL DÍA */}
-          <div className="bg-white rounded-xl border border-gray-100 border-t-[3px] shadow-sm p-4 sm:p-6" style={{ borderTopColor: "#1B4D2E" }}>
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-sm font-semibold text-foreground flex items-center gap-2">
-                <Clock size={15} style={{ color: "#1B4D2E" }} />
-                Agenda del día
-              </h2>
-              <span className="text-xs text-gray-400">{fechaLabel}</span>
-            </div>
-
-            {!sesionesHoy || sesionesHoy.length === 0 ? (
-              <div className="flex flex-col items-center justify-center py-10 text-gray-400">
-                <Calendar size={28} className="mb-2 opacity-40" />
-                <p className="text-sm">No hay sesiones programadas para hoy</p>
-              </div>
-            ) : (
-              <div className="space-y-3">
-                {sesionesHoy.map((s) => {
-                  const planRel = Array.isArray(s.planes_semanales) ? s.planes_semanales[0] : s.planes_semanales;
-                  const tipoPlan = planRel?.tipo_plan as TipoPlan | undefined;
-                  const color = tipoPlan ? TIPO_PLAN_COLOR[tipoPlan] : "#9ca3af";
-                  const dur = duracionMin(s.hora_inicio, s.hora_fin);
-                  return (
-                    <div key={s.id} className="flex gap-3">
-                      <div className="w-14 shrink-0 text-right">
-                        <p className="text-sm font-bold text-gray-800">{formatHora(s.hora_inicio)}</p>
-                        {dur !== null && <p className="text-[10px] text-gray-400">{dur} min</p>}
-                      </div>
-                      <div className="w-1 rounded-full shrink-0" style={{ background: color }} />
-                      <div className="flex-1 min-w-0 pb-3 border-b border-gray-50 last:border-0 last:pb-0">
-                        <p className="text-sm font-semibold text-gray-900">
-                          {tipoPlan ? `${TIPO_PLAN_LABEL[tipoPlan]} — ` : ""}
-                          {TIPO_SESION_LABEL[s.tipo_sesion] ?? s.tipo_sesion}
-                        </p>
-                        <p className="text-xs text-gray-400 mt-0.5">
-                          {LUGAR_LABEL[s.lugar] ?? s.lugar}
-                          {s.objetivo ? ` · ${s.objetivo}` : ""}
-                        </p>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-
-            <Link
-              href="/programacion"
-              className="mt-4 flex items-center justify-center gap-1 text-sm font-semibold text-ccb-green hover:underline"
-            >
-              Ver programación completa →
-            </Link>
-          </div>
+          {/* AGENDA (hoy / semana) */}
+          <DashboardAgendaCard sesionesHoy={sesionesHoy} sesionesSemana={sesionesSemana} fechaLabel={fechaLabel} hoy={hoy} />
 
           {/* PRÓXIMOS EVENTOS */}
           <div className="bg-white rounded-xl border border-gray-100 border-t-[3px] shadow-sm p-4 sm:p-6" style={{ borderTopColor: "#f59e0b" }}>
