@@ -7,6 +7,7 @@ import ParentReportModal from "./ParentReportModal";
 import PacoContextChat from "./PacoContextChat";
 import PlanParaCasaModal from "./PlanParaCasaModal";
 import { isStaff, DIRECTOR_COORD_ROLES, type Rol } from "@/lib/roles";
+import { scoreToHandicapTest, handicapBand, formatHandicapTest } from "@/lib/handicap-test";
 
 type Tab = "datos" | "tecnicos" | "fisicos" | "hitos" | "notas";
 type CritValue = "cumple" | "progreso" | "no" | null;
@@ -2233,6 +2234,7 @@ posPayload[`${key}_score`] = rawScore !== null ? Math.round(rawScore) : null;
                         </div>
                         <div className="flex items-center gap-2">
                           <EvalTypeBadge type={ev.evaluation_type}/>
+                          {(() => { const h = scoreToHandicapTest(ev.score_promedio); const b = handicapBand(h); return h !== null ? <span className="px-2.5 py-1 rounded-full text-xs font-semibold" title={`Handicap del test · ${b.label}`} style={{ backgroundColor:b.bg, color:b.text }}>{formatHandicapTest(h)}</span> : null; })()}
                           {ev.score_promedio !== null && <span className="px-2.5 py-1 rounded-full text-xs font-semibold" style={{ backgroundColor:scoreColor(ev.score_promedio).bg, color:scoreColor(ev.score_promedio).text }}>{ev.score_promedio.toFixed(1)}/10</span>}
                           {ai && <span className="px-2 py-1 rounded-full text-xs font-medium bg-purple-50 text-purple-700">IA ✓</span>}
                           <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} className={`text-gray-400 transition-transform ml-1 ${isOpen?"rotate-180":""}`}><path d="M19 9l-7 7-7-7"/></svg>
@@ -3094,6 +3096,20 @@ posPayload[`${key}_score`] = rawScore !== null ? Math.round(rawScore) : null;
                   {calcPhysPromedio(physicalForm.tests)!==null?`${calcPhysPromedio(physicalForm.tests)?.toFixed(1)}/10`:"—"}
                 </span>
               </div>
+
+              {(() => {
+                const h = scoreToHandicapTest(calcPhysPromedio(physicalForm.tests));
+                const b = handicapBand(h);
+                return (
+                  <div className="rounded-xl p-4 flex items-center justify-between" style={{ backgroundColor:b.bg }}>
+                    <div>
+                      <span className="text-sm font-medium" style={{ color:b.text }}>Handicap del test</span>
+                      <p className="text-[11px]" style={{ color:b.text }}>Estilo golf 0–36 · menor es mejor{h!==null?` · ${b.label}`:""}</p>
+                    </div>
+                    <span className="text-xl font-bold" style={{ color:b.text }}>{h!==null?`${h}`:"—"}</span>
+                  </div>
+                );
+              })()}
 
               {physicalSaveError && <p className="text-sm text-red-600 bg-red-50 border border-red-100 rounded-lg px-3 py-2">Error: {physicalSaveError}</p>}
             </div>

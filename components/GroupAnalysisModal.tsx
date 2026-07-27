@@ -7,6 +7,7 @@ import { supabase } from "@/lib/supabase";
 import { TOOL_STATUS_LABELS, formatTime, MARKDOWN_COMPONENTS, streamAsesorChat, PACO_LIMIT_MESSAGE } from "@/lib/paco-chat-shared";
 import { formatWhatsAppMessage, openWhatsApp } from "@/lib/whatsapp-formatter";
 import { POSICIONES_NOMBRES, physResultToScore, type PhysicalResult } from "./StudentProfile";
+import { scoreToHandicapTest } from "@/lib/handicap-test";
 
 type Message = {
   role: "user" | "assistant";
@@ -113,7 +114,8 @@ async function buildGroupContext(grupo: string, students: { id: string; full_nam
     let fisicoTxt = "sin test físico registrado";
     if (physicalEvals.length) {
       const latest = physicalEvals[0];
-      fisicoTxt = `físico ${latest.score_promedio ?? "—"}/10 (${latest.evaluation_date})`;
+      const hcpFisico = scoreToHandicapTest(latest.score_promedio);
+      fisicoTxt = `físico ${latest.score_promedio ?? "—"}/10 · HCP del test ${hcpFisico ?? "—"}/36 (${latest.evaluation_date})`;
       if (latest.tests_data) {
         Object.entries(latest.tests_data).forEach(([codigo, t]) => {
           if (t.na) return;

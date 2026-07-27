@@ -1,6 +1,7 @@
 import type { NextRequest } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { ANTHROPIC_MODEL } from "@/lib/anthropic-model";
+import { scoreToHandicapTest } from "@/lib/handicap-test";
 
 function calcularEdadNum(birthDate: string | null): number | null {
   if (!birthDate) return null;
@@ -123,6 +124,7 @@ Fortalezas técnicas: ${(swingAI.fortalezas ?? []).join("; ") || "no especificad
     contexto += `
 EVALUACIÓN FÍSICA TPI (${formatFecha(physEval.evaluation_date)}):
 Puntaje promedio: ${physEval.score_promedio ?? "—"}/10
+Handicap del test (estilo golf, 0=ideal y 36=máx, relativo al grupo): ${scoreToHandicapTest(physEval.score_promedio) ?? "—"}/36
 Resumen físico: ${physAI.resumen ?? ""}
 Fortalezas físicas: ${(physAI.fortalezas_fisicas ?? []).join("; ") || "no especificadas"}
 Aspectos físicos a desarrollar: ${(physAI.limitaciones ?? []).slice(0, 3).map((l: { titulo?: string }) => l.titulo ?? "").filter(Boolean).join("; ") || "no especificados"}

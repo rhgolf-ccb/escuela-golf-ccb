@@ -5,6 +5,7 @@ import Link from "next/link";
 import { User } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import type { Rol } from "@/lib/roles";
+import { scoreToHandicapTest, handicapBand, formatHandicapTest } from "@/lib/handicap-test";
 
 type Estudiante = {
   id: string;
@@ -55,8 +56,10 @@ type AsistenciaRow = { id: string; estado: string; asistio: boolean | null; sesi
 type Hito = { id: string; titulo: string; descripcion: string | null; fecha: string; foto_url: string | null };
 type Nota = { id: string; contenido: string; imagen_url: string | null; video_url: string | null; profesor_nombre: string | null; fecha: string };
 
-function EvalCard({ label, ev }: { label: string; ev: { evaluation_date: string; evaluation_type: string; score_promedio: number | null; professor_comment: string | null } }) {
+function EvalCard({ label, ev, showHandicap }: { label: string; ev: { evaluation_date: string; evaluation_type: string; score_promedio: number | null; professor_comment: string | null }; showHandicap?: boolean }) {
   const c = scoreColor(ev.score_promedio);
+  const h = scoreToHandicapTest(ev.score_promedio);
+  const hb = handicapBand(h);
   return (
     <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-4">
       <div className="flex items-center justify-between mb-2">
@@ -64,9 +67,17 @@ function EvalCard({ label, ev }: { label: string; ev: { evaluation_date: string;
           <p className="text-xs font-bold text-gray-400 uppercase tracking-wide">{label}</p>
           <p className="text-sm text-gray-600 capitalize">{ev.evaluation_type} · {formatFecha(ev.evaluation_date)}</p>
         </div>
-        <div className="text-right px-3 py-1.5 rounded-lg" style={{ background: c.bg }}>
-          <p className="text-lg font-bold" style={{ color: c.text }}>{ev.score_promedio?.toFixed(1) ?? "—"}</p>
-          <p className="text-[10px] font-semibold" style={{ color: c.text }}>{scoreLabel(ev.score_promedio)}</p>
+        <div className="flex items-center gap-2">
+          {showHandicap && h !== null && (
+            <div className="text-center px-3 py-1.5 rounded-lg" style={{ background: hb.bg }}>
+              <p className="text-lg font-bold" style={{ color: hb.text }}>{formatHandicapTest(h)}</p>
+              <p className="text-[10px] font-semibold" style={{ color: hb.text }}>{hb.label}</p>
+            </div>
+          )}
+          <div className="text-right px-3 py-1.5 rounded-lg" style={{ background: c.bg }}>
+            <p className="text-lg font-bold" style={{ color: c.text }}>{ev.score_promedio?.toFixed(1) ?? "—"}</p>
+            <p className="text-[10px] font-semibold" style={{ color: c.text }}>{scoreLabel(ev.score_promedio)}</p>
+          </div>
         </div>
       </div>
       {ev.professor_comment && <p className="text-sm text-gray-600 mt-2 italic">&ldquo;{ev.professor_comment}&rdquo;</p>}
@@ -205,7 +216,7 @@ export default function MiPerfilView({ rol, estudiantes }: { rol: Rol; estudiant
                 ) : (
                   <>
                     {swingEvals.map((ev) => <EvalCard key={ev.id} label="Evaluación técnica" ev={ev} />)}
-                    {physicalEvals.map((ev) => <EvalCard key={ev.id} label="Evaluación física" ev={ev} />)}
+                    {physicalEvals.map((ev) => <EvalCard key={ev.id} label="Evaluación física" ev={ev} showHandicap />)}
                   </>
                 )
               )}
