@@ -126,7 +126,7 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50 px-4">
+    <div className="min-h-screen flex flex-col items-center justify-center bg-gray-50 px-4 py-8">
       <div className="w-full max-w-sm bg-white rounded-xl border border-gray-100 p-6">
         <div className="flex flex-col items-center text-center mb-6">
           <Image src="/Paco_transparente.png" alt="CCB" width={64} height={64} className="object-contain mb-2" />
@@ -202,6 +202,14 @@ export default function LoginPage() {
             <p className="text-[11px] text-gray-400 text-center">{sessionDaysNote(sessionDays)}</p>
           </form>
         )}
+      </div>
+
+      {/* Powered by RHGOLF */}
+      <div className="mt-6 flex flex-col items-center gap-1">
+        <Image src="/rh-monograma.png" alt="RH Golf" width={52} height={37} className="object-contain opacity-90" />
+        <p className="text-[10px] tracking-[0.22em] text-gray-400 font-medium">
+          POWERED BY <span className="font-semibold" style={{ color: "#B8860B" }}>RHGOLF</span>
+        </p>
       </div>
     </div>
   );

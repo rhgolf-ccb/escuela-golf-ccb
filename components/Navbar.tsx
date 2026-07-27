@@ -149,6 +149,20 @@ export default function Navbar({
         <p className="text-center text-[10px] text-sidebar-text opacity-50 mt-4 px-2 italic">
           Formamos campeones dentro y fuera del campo.
         </p>
+
+        {/* Powered by RHGOLF */}
+        <div className="mt-4 pt-3 border-t border-white/5 flex flex-col items-center gap-1">
+          <Image
+            src="/rh-monograma.png"
+            alt="RH Golf"
+            width={46}
+            height={33}
+            className="object-contain opacity-90"
+          />
+          <p className="text-[9px] tracking-[0.22em] text-white/40 font-medium">
+            POWERED BY <span className="text-ccb-gold/90 font-semibold">RHGOLF</span>
+          </p>
+        </div>
       </div>
     </div>
   );
