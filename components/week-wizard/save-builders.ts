@@ -69,6 +69,7 @@ export function buildCompetenciaRow(base: RowBase, dia: DiaWizardState, config: 
     const catLabel = config.categorias.find((c) => c.value === s.categoria)?.label ?? s.categoria;
     return {
       categoria: s.categoria,
+      foco: s.foco ?? null,
       objetivo: `${catLabel}: ${s.items.map((d) => d.titulo).join(", ")}`,
       lugar: s.lugar,
       juego_competitivo: s.desafio || null,

@@ -54,7 +54,7 @@ export function parseExistingToDiaState(tipoPlan: TipoPlan, config: GroupConfig,
   if (tipoPlan === "competencia") {
     if (sesion.estaciones_competencia && sesion.estaciones_competencia.length > 0) {
       const estaciones: EstacionWizardState[] = sesion.estaciones_competencia.map((e) => ({
-        categoria: e.categoria, foco: null, material: [],
+        categoria: e.categoria, foco: e.foco ?? null, material: [],
         items: e.drills.map(toPick), desafio: e.juego_competitivo ?? "", lugar: e.lugar,
       }));
       return { tipo: "normal", calentamiento, estaciones, horaInicio: hhmm(sesion.hora_inicio), horaFin: hhmm(sesion.hora_fin) };

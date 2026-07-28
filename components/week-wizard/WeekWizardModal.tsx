@@ -5,7 +5,7 @@ import { supabase } from "@/lib/supabase";
 import type { DiaSemana, HorarioDefecto, SesionSemana, TipoPlan } from "@/components/ProgramacionModule";
 import { DIAS_POR_TIPO, TIPO_PLAN_LABEL, getFechaForDia } from "@/components/ProgramacionModule";
 import type { EstacionLibraryPick } from "@/components/EstacionLibraryPicker";
-import { GROUP_CONFIGS, gruposParaDrills, gruposParaFisico, categoriaOptionForCanonical } from "./group-configs";
+import { GROUP_CONFIGS, gruposParaDrills, gruposParaFisico, categoriaOptionForCanonical, retosSugeridos } from "./group-configs";
 import type { DiaWizardState } from "./types";
 import { nuevaEstacion, diaCompleto, diaFaltantes } from "./types";
 import { computeSessionDuration, allocateStationMinutes, defaultStationCount, defaultCategoriasForDia, suggestLugar } from "@/lib/planning-defaults";
@@ -324,6 +324,7 @@ export default function WeekWizardModal({ tipoPlan, semana, planId, horariosDefe
                         grupos={gruposParaDrills(tipoPlan, diaActual.subgrupo)}
                         gruposFisico={gruposParaFisico(tipoPlan, diaActual.subgrupo)}
                         usadosEnOtrasPartes={[...titulosUsadosSemana].filter((t) => !est.items.some((i) => i.titulo === t))}
+                        retosSugeridos={retosSugeridos(tipoPlan, est.categoria, est.foco)}
                         onChange={(next) => {
                           const estaciones = diaActual.estaciones.map((e, i) => (i === idx ? next : e));
                           updateDia({ ...diaActual, estaciones });

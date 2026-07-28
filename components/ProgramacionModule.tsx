@@ -71,6 +71,7 @@ export interface DrillEstacionCompetencia extends DrillLibre {
 // cada una guarda su propio lugar, foco, drills/ejercicios y reto, por separado.
 export interface EstacionCompetencia {
   categoria: TipoSesion;
+  foco?: string | null;
   objetivo: string;
   lugar: Lugar;
   drills: DrillEstacionCompetencia[];
