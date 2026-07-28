@@ -35,6 +35,8 @@ function slotsPara(horariosDefecto: HorarioDefecto[], tipoPlan: TipoPlan, dia: D
 
 export default function WeekWizardModal({ tipoPlan, semana, planId, horariosDefecto, sesionesExistentes, singleDay, onClose, onSaved }: Props) {
   const config = GROUP_CONFIGS[tipoPlan];
+  // Competencia ofrece 1–3 estaciones; Juvenil/Damas hasta 4.
+  const conteos = tipoPlan === "competencia" ? [1, 2, 3] : [1, 2, 3, 4];
   const dias = useMemo(() => (singleDay ? [singleDay] : DIAS_POR_TIPO[tipoPlan]), [singleDay, tipoPlan]);
 
   function initDia(dia: DiaSemana, nEstaciones: number): DiaWizardState {
@@ -232,8 +234,8 @@ export default function WeekWizardModal({ tipoPlan, semana, planId, horariosDefe
         {step === "count" && (
           <div className="p-5 space-y-3">
             <p className="text-xs font-bold text-gray-500 uppercase tracking-wide">¿Cuántas estaciones por día?</p>
-            <div className="grid grid-cols-4 gap-2">
-              {[1, 2, 3, 4].map((n) => (
+            <div className={`grid gap-2 ${conteos.length === 3 ? "grid-cols-3" : "grid-cols-4"}`}>
+              {conteos.map((n) => (
                 <button key={n} onClick={() => handleChooseCount(n)}
                   className="flex flex-col items-center justify-center py-4 rounded-xl border-2 border-gray-200 hover:border-green-400 hover:bg-green-50 transition-all font-bold text-lg text-gray-800">
                   {n}
@@ -307,6 +309,40 @@ export default function WeekWizardModal({ tipoPlan, semana, planId, horariosDefe
                     onChange={(c) => updateDia({ ...diaActual, calentamiento: c })}
                   />
 
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="text-[11px] font-bold text-gray-500 uppercase tracking-wide">Estaciones del día</span>
+                    <div className="flex gap-1.5">
+                      {conteos.map((n) => {
+                        const active = diaActual.estaciones.length === n;
+                        return (
+                          <button
+                            key={n}
+                            type="button"
+                            onClick={() => {
+                              const cur = diaActual.estaciones;
+                              if (n === cur.length) return;
+                              if (n < cur.length) {
+                                updateDia({ ...diaActual, estaciones: cur.slice(0, n) });
+                                return;
+                              }
+                              const estaciones = [...cur];
+                              while (estaciones.length < n) {
+                                const opt = config.categorias.find((c) => !estaciones.some((e) => e.categoria === c.value)) ?? config.categorias[0];
+                                estaciones.push(nuevaEstacion(opt.value, suggestLugar(opt.canonical)));
+                              }
+                              updateDia({ ...diaActual, estaciones });
+                            }}
+                            className="w-8 h-8 rounded-lg text-sm font-bold border transition-all"
+                            style={active ? { background: config.color, color: "#fff", borderColor: config.color } : { background: "#f9fafb", color: "#374151", borderColor: "#e5e7eb" }}
+                          >
+                            {n}
+                          </button>
+                        );
+                      })}
+                    </div>
+                    <span className="text-[11px] text-gray-400">1 = clase completa de un solo tema</span>
+                  </div>
+
                   {diaActual.estaciones.length > 0 && (
                     <p className="text-xs text-gray-400">~{minutosPorEstacion} min sugeridos por estación</p>
                   )}
@@ -334,7 +370,7 @@ export default function WeekWizardModal({ tipoPlan, semana, planId, horariosDefe
                   })}
 
                   <div className="flex items-center gap-2">
-                    {diaActual.estaciones.length < 4 && (
+                    {diaActual.estaciones.length < conteos[conteos.length - 1] && (
                       <button
                         onClick={() => {
                           const opt = config.categorias.find((c) => !diaActual.estaciones.some((e) => e.categoria === c.value)) ?? config.categorias[0];

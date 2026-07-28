@@ -16,11 +16,11 @@ export function allocateStationMinutes(totalMin: number, warmupMin: number, nEst
   return Math.floor(restante / nEstaciones);
 }
 
-// Los 3 grupos parten de 3 estaciones por defecto — el profe la ajusta
-// libremente (1-4) por día. Se deja como función (no constante) para que la
-// UI tenga un solo punto de verdad si algún grupo cambia de default a futuro.
-export function defaultStationCount(_tipoPlan: TipoPlan): number {
-  return 3;
+// Competencia parte de 2 estaciones (días más variados, muchos de un solo tema);
+// Juvenil/Damas parten de 3. Siempre ajustable por día en la UI. Punto único de
+// verdad para el default por grupo.
+export function defaultStationCount(tipoPlan: TipoPlan): number {
+  return tipoPlan === "competencia" ? 2 : 3;
 }
 
 export type EstacionCategoria = "juego_largo" | "juego_corto" | "putt" | "campo" | "trabajo_fisico" | "campo_infantil";
