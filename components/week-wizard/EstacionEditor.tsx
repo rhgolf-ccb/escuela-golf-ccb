@@ -12,13 +12,25 @@ interface Props {
   grupos: string[];
   gruposFisico: string[];
   usadosEnOtrasPartes: string[]; // títulos ya elegidos en otras estaciones/días de la semana
+  retosSugeridos?: string[]; // sugerencias de reto de cierre (vacío = sin sugerencia)
   onChange: (next: EstacionWizardState) => void;
 }
 
-export default function EstacionEditor({ estacion, index, categoriaOptions, grupos, gruposFisico, usadosEnOtrasPartes, onChange }: Props) {
+const FOCOS_LEGACY = new Set<string>(FOCOS);
+
+export default function EstacionEditor({ estacion, index, categoriaOptions, grupos, gruposFisico, usadosEnOtrasPartes, retosSugeridos, onChange }: Props) {
   const [showPicker, setShowPicker] = useState(false);
+  const [retoIdx, setRetoIdx] = useState(0);
   const opcionActual = categoriaOptions.find((c) => c.value === estacion.categoria) ?? categoriaOptions[0];
   const esFisica = opcionActual.drillsCategoria === null;
+  // Focos del tema (Competencia) o el vocabulario genérico si el tema no define.
+  const focoOpciones = opcionActual.focos ?? FOCOS.map((f) => ({ value: f, label: FOCO_LABEL[f] }));
+  // El picker filtra por drills.subcategoria: solo pasamos el foco si es del
+  // vocabulario legacy con drills etiquetados; los focos nuevos no filtran (aún)
+  // para no dejar la biblioteca vacía.
+  const focoParaPicker = estacion.foco && FOCOS_LEGACY.has(estacion.foco) ? estacion.foco : null;
+  const sugerencias = retosSugeridos ?? [];
+  const sugerenciaActual = sugerencias.length ? sugerencias[retoIdx % sugerencias.length] : null;
 
   function toggleMaterial(m: string) {
     const next = estacion.material.includes(m) ? estacion.material.filter((x) => x !== m) : [...estacion.material, m];
@@ -69,7 +81,7 @@ export default function EstacionEditor({ estacion, index, categoriaOptions, grup
               className="w-full text-xs border border-gray-200 rounded-lg px-2.5 py-1.5 bg-white"
             >
               <option value="">Cualquiera</option>
-              {FOCOS.map((f) => <option key={f} value={f}>{FOCO_LABEL[f]}</option>)}
+              {focoOpciones.map((f) => <option key={f.value} value={f.value}>{f.label}</option>)}
             </select>
           </div>
         )}
@@ -111,8 +123,22 @@ export default function EstacionEditor({ estacion, index, categoriaOptions, grup
 
         <div>
           <label className="text-[11px] font-bold text-gray-500 uppercase tracking-wide block mb-1">
-            Desafío / mini-juego de cierre <span className="text-gray-400 normal-case font-medium">— opcional</span>
+            Reto de cierre <span className="text-gray-400 normal-case font-medium">— sugerido, opcional</span>
           </label>
+          {sugerenciaActual && (
+            <div className="mb-2 rounded-lg px-2.5 py-2 flex items-start gap-2" style={{ background: "#fff8e1", border: "1px solid #f0d98c" }}>
+              <span className="text-sm shrink-0">🏆</span>
+              <p className="text-xs flex-1 min-w-0" style={{ color: "#7d5a00" }}>{sugerenciaActual}</p>
+              <div className="flex flex-col gap-1 shrink-0">
+                <button type="button" onClick={() => onChange({ ...estacion, desafio: sugerenciaActual })}
+                  className="text-[10px] font-bold px-2 py-0.5 rounded" style={{ background: "#7d5a00", color: "#fff" }}>Usar</button>
+                {sugerencias.length > 1 && (
+                  <button type="button" onClick={() => setRetoIdx((i) => i + 1)}
+                    className="text-[10px] font-semibold px-2 py-0.5 rounded border" style={{ color: "#7d5a00", borderColor: "#f0d98c" }}>Otro</button>
+                )}
+              </div>
+            </div>
+          )}
           <textarea
             value={estacion.desafio}
             onChange={(e) => onChange({ ...estacion, desafio: e.target.value })}
@@ -150,7 +176,7 @@ export default function EstacionEditor({ estacion, index, categoriaOptions, grup
             fuente="drills"
             categoriaDrills={opcionActual.drillsCategoria!}
             grupos={grupos}
-            foco={estacion.foco}
+            foco={focoParaPicker}
             material={estacion.material}
             yaSeleccionados={yaSeleccionados}
             onAdd={addItem}

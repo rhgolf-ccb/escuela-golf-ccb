@@ -3,6 +3,11 @@ import type { EstacionLibraryPick } from "@/components/EstacionLibraryPicker";
 import type { SubgrupoJuvenil } from "@/lib/estacion-library-constants";
 import type { EstacionCategoria } from "@/lib/planning-defaults";
 
+export interface FocoOption {
+  value: string;
+  label: string;
+}
+
 export interface CategoriaOption {
   value: string; // valor exacto que se guarda en el campo categoria del grupo
   emoji: string;
@@ -11,6 +16,9 @@ export interface CategoriaOption {
   drillsCategoria: string | null;
   // mapea al vocabulario canónico de lib/planning-defaults para sugerir lugar
   canonical: EstacionCategoria;
+  // focos específicos de este tema (ej. Competencia). Si falta, el editor usa
+  // el vocabulario genérico FOCOS.
+  focos?: FocoOption[];
 }
 
 export interface EspecialOption {
