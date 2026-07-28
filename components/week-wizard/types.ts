@@ -41,11 +41,21 @@ export interface GroupConfig {
   especiales: EspecialOption[];
 }
 
+// Bloque de una secuencia de transferencia (tiro largo): un ejercicio de
+// preparación (banda, balón medicinal, SuperSpeed, etc.) seguido de pegar bolas.
+export interface TransferBlock {
+  id: string;
+  prep: string;
+  bolas: number;
+}
+
 export interface EstacionWizardState {
   categoria: string;
   foco: string | null;
   material: string[];
   items: EstacionLibraryPick[];
+  // Solo tiro largo (Competencia): secuencia ordenada de prep → bolas.
+  transferencia?: TransferBlock[];
   desafio: string;
   // Lugar vive por estación (no por día) — así ya lo guardan los 3 grupos hoy:
   // cada estación puede pasar por un sitio distinto dentro del mismo día.
@@ -85,7 +95,8 @@ export function diaFaltantes(dia: DiaWizardState): string[] {
   if (dia.estaciones.length === 0) return ["Agrega al menos una estación"];
   const faltantes: string[] = [];
   dia.estaciones.forEach((e, i) => {
-    if (e.items.length === 0) faltantes.push(`Estación ${i + 1}: falta elegir un ejercicio de la biblioteca`);
+    const tieneContenido = e.items.length > 0 || (e.transferencia?.length ?? 0) > 0;
+    if (!tieneContenido) faltantes.push(`Estación ${i + 1}: falta un ejercicio de la biblioteca o un bloque de transferencia`);
   });
   return faltantes;
 }

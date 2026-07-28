@@ -3,7 +3,12 @@
 import { useState } from "react";
 import EstacionLibraryPicker, { type EstacionLibraryPick } from "@/components/EstacionLibraryPicker";
 import { FOCOS, FOCO_LABEL, MATERIALES, MATERIAL_LABEL, LUGARES_ESTACION } from "@/lib/estacion-library-constants";
-import type { CategoriaOption, EstacionWizardState } from "./types";
+import type { CategoriaOption, EstacionWizardState, TransferBlock } from "./types";
+import { TRANSFER_PRESETS } from "./group-configs";
+
+function genBlockId(): string {
+  return Math.random().toString(36).slice(2, 9);
+}
 
 interface Props {
   estacion: EstacionWizardState;
@@ -13,16 +18,39 @@ interface Props {
   gruposFisico: string[];
   usadosEnOtrasPartes: string[]; // títulos ya elegidos en otras estaciones/días de la semana
   retosSugeridos?: string[]; // sugerencias de reto de cierre (vacío = sin sugerencia)
+  permiteTransferencia?: boolean; // Competencia: habilita secuencia de transferencia en tiro largo
   onChange: (next: EstacionWizardState) => void;
 }
 
 const FOCOS_LEGACY = new Set<string>(FOCOS);
 
-export default function EstacionEditor({ estacion, index, categoriaOptions, grupos, gruposFisico, usadosEnOtrasPartes, retosSugeridos, onChange }: Props) {
+export default function EstacionEditor({ estacion, index, categoriaOptions, grupos, gruposFisico, usadosEnOtrasPartes, retosSugeridos, permiteTransferencia, onChange }: Props) {
   const [showPicker, setShowPicker] = useState(false);
   const [retoIdx, setRetoIdx] = useState(0);
   const opcionActual = categoriaOptions.find((c) => c.value === estacion.categoria) ?? categoriaOptions[0];
   const esFisica = opcionActual.drillsCategoria === null;
+  const esTiroLargo = !!permiteTransferencia && opcionActual.canonical === "juego_largo";
+  const bloques = estacion.transferencia ?? [];
+
+  function setBloques(next: TransferBlock[]) {
+    onChange({ ...estacion, transferencia: next });
+  }
+  function addBloque(prep = "", bolas = 10) {
+    setBloques([...bloques, { id: genBlockId(), prep, bolas }]);
+  }
+  function updateBloque(idx: number, patch: Partial<TransferBlock>) {
+    setBloques(bloques.map((b, i) => (i === idx ? { ...b, ...patch } : b)));
+  }
+  function removeBloque(idx: number) {
+    setBloques(bloques.filter((_, i) => i !== idx));
+  }
+  function moveBloque(idx: number, dir: -1 | 1) {
+    const j = idx + dir;
+    if (j < 0 || j >= bloques.length) return;
+    const next = [...bloques];
+    [next[idx], next[j]] = [next[j], next[idx]];
+    setBloques(next);
+  }
   // Focos del tema (Competencia) o el vocabulario genérico si el tema no define.
   const focoOpciones = opcionActual.focos ?? FOCOS.map((f) => ({ value: f, label: FOCO_LABEL[f] }));
   // El picker filtra por drills.subcategoria: solo pasamos el foco si es del
@@ -47,7 +75,7 @@ export default function EstacionEditor({ estacion, index, categoriaOptions, grup
   }
 
   const yaSeleccionados = [...estacion.items.map((i) => i.titulo), ...usadosEnOtrasPartes];
-  const completa = estacion.items.length > 0;
+  const completa = estacion.items.length > 0 || bloques.length > 0;
 
   return (
     <div className="border rounded-xl overflow-hidden" style={{ borderColor: completa ? "#1B4D2E" : "#e5e7eb" }}>
@@ -98,6 +126,44 @@ export default function EstacionEditor({ estacion, index, categoriaOptions, grup
             ))}
           </div>
         </div>
+
+        {esTiroLargo && (
+          <div>
+            <label className="text-[11px] font-bold text-gray-500 uppercase tracking-wide block mb-1">
+              Secuencia de transferencia <span className="text-gray-400 normal-case font-medium">— físico → técnico</span>
+            </label>
+            <div className="space-y-1.5">
+              {bloques.map((b, i) => (
+                <div key={b.id} className="flex items-center gap-1.5">
+                  <div className="flex flex-col text-[10px] leading-none">
+                    <button type="button" onClick={() => moveBloque(i, -1)} disabled={i === 0} className="text-gray-300 hover:text-gray-600 disabled:opacity-20">▲</button>
+                    <button type="button" onClick={() => moveBloque(i, 1)} disabled={i === bloques.length - 1} className="text-gray-300 hover:text-gray-600 disabled:opacity-20">▼</button>
+                  </div>
+                  <input value={b.prep} onChange={(e) => updateBloque(i, { prep: e.target.value })}
+                    placeholder="Preparación (ej. bandas + backswing)"
+                    className="flex-1 min-w-0 text-xs border border-gray-200 rounded-lg px-2 py-1.5" />
+                  <span className="text-gray-400 text-xs shrink-0">→</span>
+                  <input type="number" min={0} value={b.bolas}
+                    onChange={(e) => updateBloque(i, { bolas: Math.max(0, parseInt(e.target.value) || 0) })}
+                    className="w-12 text-xs border border-gray-200 rounded-lg px-1.5 py-1.5 text-center" />
+                  <span className="text-[11px] text-gray-500 shrink-0">bolas</span>
+                  <button type="button" onClick={() => removeBloque(i)} className="text-gray-300 hover:text-red-500 shrink-0">
+                    <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path d="M18 6L6 18M6 6l12 12" /></svg>
+                  </button>
+                </div>
+              ))}
+            </div>
+            <div className="flex flex-wrap gap-1.5 mt-2">
+              {TRANSFER_PRESETS.map((p) => (
+                <button key={p.prep} type="button" onClick={() => addBloque(p.prep, p.bolas)}
+                  className="px-2 py-1 rounded-full text-[11px] font-semibold border"
+                  style={{ background: "#fff8e1", color: "#7d5a00", borderColor: "#f0d98c" }}>+ {p.prep}</button>
+              ))}
+              <button type="button" onClick={() => addBloque()}
+                className="px-2 py-1 rounded-full text-[11px] font-semibold border border-gray-200 text-gray-600">+ Bloque vacío</button>
+            </div>
+          </div>
+        )}
 
         <div className="space-y-2">
           {estacion.items.map((item) => (

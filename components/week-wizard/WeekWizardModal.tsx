@@ -361,6 +361,7 @@ export default function WeekWizardModal({ tipoPlan, semana, planId, horariosDefe
                         gruposFisico={gruposParaFisico(tipoPlan, diaActual.subgrupo)}
                         usadosEnOtrasPartes={[...titulosUsadosSemana].filter((t) => !est.items.some((i) => i.titulo === t))}
                         retosSugeridos={retosSugeridos(tipoPlan, est.categoria, est.foco)}
+                        permiteTransferencia={tipoPlan === "competencia"}
                         onChange={(next) => {
                           const estaciones = diaActual.estaciones.map((e, i) => (i === idx ? next : e));
                           updateDia({ ...diaActual, estaciones });

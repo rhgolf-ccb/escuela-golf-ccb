@@ -32,6 +32,37 @@ const FOCOS_PUTT: FocoOption[] = [
   { value: "start_line", label: "Línea de arranque" },
 ];
 
+// Focos de Juvenil (Birdies / Águilas / Albatros entrenan juntos, mismos focos)
+// — fundamentos apropiados a la edad, no el vocabulario avanzado de Competencia.
+const FOCOS_JUV_LARGO: FocoOption[] = [
+  { value: "postura_agarre", label: "Postura y agarre" },
+  { value: "equilibrio", label: "Equilibrio" },
+  { value: "giro", label: "Giro" },
+  { value: "contacto", label: "Contacto" },
+  { value: "direccion", label: "Dirección al objetivo" },
+  { value: "distancia", label: "Distancia" },
+  { value: "ritmo", label: "Ritmo" },
+];
+const FOCOS_JUV_CORTO: FocoOption[] = [
+  { value: "contacto_limpio", label: "Contacto limpio" },
+  { value: "distancia_corta", label: "Control de distancia corta" },
+  { value: "punteria", label: "Puntería" },
+  { value: "chip_basico", label: "Chip básico" },
+  { value: "bunker", label: "Bunker" },
+];
+const FOCOS_JUV_PUTT: FocoOption[] = [
+  { value: "linea", label: "Puntería / línea" },
+  { value: "fuerza", label: "Fuerza (distancia)" },
+  { value: "rutina", label: "Rutina" },
+  { value: "embocar", label: "Embocar corto" },
+];
+const FOCOS_JUV_CAMPO: FocoOption[] = [
+  { value: "motricidad", label: "Coordinación y motricidad" },
+  { value: "juego_diversion", label: "Juego y diversión" },
+  { value: "reglas_etiqueta", label: "Reglas y etiqueta" },
+  { value: "primeros_golpes", label: "Primeros golpes en campo" },
+];
+
 // Vocabularios reales por grupo — cada uno ya existía en su modal propio
 // (JuvenileClassModal/CompetenciaClassModal/DamasClassModal) y otras partes
 // del sistema (PDF, WhatsApp, calendario de padres) esperan exactamente estos
@@ -41,10 +72,10 @@ export const GROUP_CONFIGS: Record<TipoPlan, GroupConfig> = {
     tipoPlan: "juvenil",
     color: "#1a3a2a",
     categorias: [
-      { value: "juego_largo", emoji: "🏌️", label: "Juego Largo", drillsCategoria: "tecnico", canonical: "juego_largo" },
-      { value: "juego_corto", emoji: "⛳", label: "Juego Corto", drillsCategoria: "juego_corto", canonical: "juego_corto" },
-      { value: "putt", emoji: "🎯", label: "Putt", drillsCategoria: "putting", canonical: "putt" },
-      { value: "campo_infantil", emoji: "👶", label: "Campo Infantil", drillsCategoria: "campo", canonical: "campo_infantil" },
+      { value: "juego_largo", emoji: "🏌️", label: "Juego Largo", drillsCategoria: "tecnico", canonical: "juego_largo", focos: FOCOS_JUV_LARGO },
+      { value: "juego_corto", emoji: "⛳", label: "Juego Corto", drillsCategoria: "juego_corto", canonical: "juego_corto", focos: FOCOS_JUV_CORTO },
+      { value: "putt", emoji: "🎯", label: "Putt", drillsCategoria: "putting", canonical: "putt", focos: FOCOS_JUV_PUTT },
+      { value: "campo_infantil", emoji: "👶", label: "Campo Infantil", drillsCategoria: "campo", canonical: "campo_infantil", focos: FOCOS_JUV_CAMPO },
       { value: "fisico", emoji: "💪", label: "Físico", drillsCategoria: null, canonical: "trabajo_fisico" },
     ],
     especiales: [
@@ -153,3 +184,13 @@ export function retosSugeridos(tipoPlan: TipoPlan, categoria: string, foco: stri
   const porCategoria = RETOS_POR_CATEGORIA[categoria] ?? [];
   return [...porFoco, ...porCategoria];
 }
+
+// Presets de bloques de transferencia (físico → técnico) para tiro largo — los
+// drills de potencia base que se pueden agregar de un toque y luego ajustar.
+export const TRANSFER_PRESETS: { prep: string; bolas: number }[] = [
+  { prep: "Bandas + backswing (3 series)", bolas: 10 },
+  { prep: "Balón medicinal rotacional (8 lanz.)", bolas: 10 },
+  { prep: "SuperSpeed (protocolo)", bolas: 8 },
+  { prep: "Step-drill / fuerza de piso", bolas: 10 },
+  { prep: "Escalera velocidad / control", bolas: 10 },
+];

@@ -67,13 +67,20 @@ export function buildCompetenciaRow(base: RowBase, dia: DiaWizardState, config: 
   }
   const estacionesEdit = dia.estaciones.map((s) => {
     const catLabel = config.categorias.find((c) => c.value === s.categoria)?.label ?? s.categoria;
+    const bloques = s.transferencia ?? [];
+    const itemDrills = s.items.map((d) => ({ id: d.id, titulo: d.titulo, descripcion: d.descripcion, series_repeticiones: d.series_repeticiones ?? null }));
+    // Los bloques de transferencia se guardan también como "drills" (prep → N
+    // bolas) para que la grilla, el PDF y el WhatsApp los muestren sin cambios.
+    const transferDrills = bloques.map((b) => ({ id: b.id, titulo: `${b.prep} → ${b.bolas} bolas`, descripcion: "", series_repeticiones: null }));
+    const drills = [...itemDrills, ...transferDrills];
     return {
       categoria: s.categoria,
       foco: s.foco ?? null,
-      objetivo: `${catLabel}: ${s.items.map((d) => d.titulo).join(", ")}`,
+      objetivo: `${catLabel}: ${drills.map((d) => d.titulo).join(", ")}`,
       lugar: s.lugar,
       juego_competitivo: s.desafio || null,
-      drills: s.items.map((d) => ({ id: d.id, titulo: d.titulo, descripcion: d.descripcion, series_repeticiones: d.series_repeticiones ?? null })),
+      transferencia: bloques.length ? bloques.map((b) => ({ id: b.id, prep: b.prep, bolas: b.bolas })) : null,
+      drills,
     };
   });
   const esMultiple = estacionesEdit.length > 1;

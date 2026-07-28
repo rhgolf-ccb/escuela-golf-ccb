@@ -76,6 +76,7 @@ export interface EstacionCompetencia {
   lugar: Lugar;
   drills: DrillEstacionCompetencia[];
   juego_competitivo: string | null;
+  transferencia?: { id?: string; prep: string; bolas: number }[] | null;
 }
 export interface EstacionLibre { nombre: string; lugar: string; horario: string; drills: DrillLibre[]; }
 
