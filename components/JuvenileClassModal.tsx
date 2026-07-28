@@ -22,6 +22,7 @@ export interface DrillJuvenilEstacion { titulo: string; descripcion: string; id?
 
 export interface EstacionJuvenil {
   categoria: CategoriaEstacion;
+  foco?: string | null; // foco del tema (opcional)
   drills: DrillJuvenilEstacion[]; // 1 a 3
   desafio: string;
   lugar?: string; // nuevo — sitio de práctica, elegido al final por estación

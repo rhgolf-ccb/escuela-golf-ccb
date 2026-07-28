@@ -7,11 +7,21 @@ interface Props {
   valor?: string;
   notas?: string;
   color: string;
+  juegosCampo?: string[]; // catálogo de juegos de campo (solo si aplica)
+  juegosSeleccionados?: string[];
   onChangeValor: (value: string) => void;
   onChangeNotas: (notas: string) => void;
+  onChangeJuegos?: (juegos: string[]) => void;
 }
 
-export default function EspecialDiaPicker({ opciones, valor, notas, color, onChangeValor, onChangeNotas }: Props) {
+export default function EspecialDiaPicker({ opciones, valor, notas, color, juegosCampo, juegosSeleccionados, onChangeValor, onChangeNotas, onChangeJuegos }: Props) {
+  const opcionSel = opciones.find((o) => o.value === valor);
+  const esSalidaCampo = opcionSel?.tipoSesion === "campo";
+  const seleccion = juegosSeleccionados ?? [];
+  function toggleJuego(j: string) {
+    if (!onChangeJuegos) return;
+    onChangeJuegos(seleccion.includes(j) ? seleccion.filter((x) => x !== j) : [...seleccion, j]);
+  }
   return (
     <div className="space-y-2">
       <p className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-1">Tipo de día especial</p>
@@ -34,6 +44,23 @@ export default function EspecialDiaPicker({ opciones, valor, notas, color, onCha
           )}
         </button>
       ))}
+      {esSalidaCampo && juegosCampo && juegosCampo.length > 0 && (
+        <div className="pt-1">
+          <p className="text-[11px] font-bold text-gray-500 uppercase tracking-wide mb-1.5">Juegos / retos de campo</p>
+          <div className="flex flex-wrap gap-1.5">
+            {juegosCampo.map((j) => {
+              const on = seleccion.includes(j);
+              return (
+                <button key={j} type="button" onClick={() => toggleJuego(j)}
+                  className="px-2.5 py-1 rounded-full text-[11px] font-semibold border transition-all"
+                  style={on ? { background: color, color: "#fff", borderColor: color } : { background: "#f9fafb", color: "#374151", borderColor: "#e5e7eb" }}>
+                  {j}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
       <textarea
         value={notas ?? ""}
         onChange={(e) => onChangeNotas(e.target.value)}

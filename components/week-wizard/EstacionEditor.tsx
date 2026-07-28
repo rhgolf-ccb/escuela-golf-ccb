@@ -51,8 +51,11 @@ export default function EstacionEditor({ estacion, index, categoriaOptions, grup
     [next[idx], next[j]] = [next[j], next[idx]];
     setBloques(next);
   }
-  // Focos del tema (Competencia) o el vocabulario genérico si el tema no define.
+  // Focos del tema (Competencia/Juvenil) o el vocabulario genérico si no define.
   const focoOpciones = opcionActual.focos ?? FOCOS.map((f) => ({ value: f, label: FOCO_LABEL[f] }));
+  // El foco también se muestra en físico cuando el tema define sus propios focos
+  // (ej. físico de Juvenil orientado al swing).
+  const mostrarFoco = opcionActual.focos != null || !esFisica;
   // El picker filtra por drills.subcategoria: solo pasamos el foco si es del
   // vocabulario legacy con drills etiquetados; los focos nuevos no filtran (aún)
   // para no dejar la biblioteca vacía.
@@ -100,12 +103,18 @@ export default function EstacionEditor({ estacion, index, categoriaOptions, grup
       </div>
 
       <div className="p-3 space-y-3">
-        {!esFisica && (
+        {mostrarFoco && (
           <div>
             <label className="text-[11px] font-bold text-gray-500 uppercase tracking-wide block mb-1">Foco</label>
             <select
               value={estacion.foco ?? ""}
-              onChange={(e) => onChange({ ...estacion, foco: e.target.value || null, items: [] })}
+              onChange={(e) => {
+                const v = e.target.value || null;
+                // Solo limpiamos los ejercicios si el foco realmente filtra la
+                // biblioteca (vocabulario legacy); los focos nuevos no filtran.
+                const filtra = v != null && FOCOS_LEGACY.has(v);
+                onChange(filtra ? { ...estacion, foco: v, items: [] } : { ...estacion, foco: v });
+              }}
               className="w-full text-xs border border-gray-200 rounded-lg px-2.5 py-1.5 bg-white"
             >
               <option value="">Cualquiera</option>

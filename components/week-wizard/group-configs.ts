@@ -9,7 +9,7 @@ import type { EstacionCategoria } from "@/lib/planning-defaults";
 const FOCOS_TIRO_LARGO: FocoOption[] = [
   { value: "posiciones", label: "Posiciones (general)" },
   { value: "transicion", label: "Transición" },
-  { value: "secuencia", label: "Secuencia" },
+  { value: "secuencia_tl", label: "Secuencia" },
   { value: "potencia", label: "Potencia" },
   { value: "alineacion", label: "Alineación" },
   { value: "manejo_bola", label: "Manejo de la bola (efectos y trayectorias)" },
@@ -62,6 +62,17 @@ const FOCOS_JUV_CAMPO: FocoOption[] = [
   { value: "reglas_etiqueta", label: "Reglas y etiqueta" },
   { value: "primeros_golpes", label: "Primeros golpes en campo" },
 ];
+// Físico de Juvenil — apropiado a la edad y orientado a que se transfiera al
+// swing (rotación, velocidad/potencia, equilibrio), no físico genérico.
+const FOCOS_JUV_FISICO: FocoOption[] = [
+  { value: "coordinacion", label: "Coordinación" },
+  { value: "equilibrio", label: "Equilibrio y estabilidad" },
+  { value: "movilidad", label: "Movilidad (giro)" },
+  { value: "rotacion", label: "Rotación / giro del swing" },
+  { value: "fuerza", label: "Fuerza (piernas y core)" },
+  { value: "velocidad", label: "Velocidad y potencia" },
+  { value: "agilidad", label: "Agilidad" },
+];
 
 // Vocabularios reales por grupo — cada uno ya existía en su modal propio
 // (JuvenileClassModal/CompetenciaClassModal/DamasClassModal) y otras partes
@@ -76,7 +87,7 @@ export const GROUP_CONFIGS: Record<TipoPlan, GroupConfig> = {
       { value: "juego_corto", emoji: "⛳", label: "Juego Corto", drillsCategoria: "juego_corto", canonical: "juego_corto", focos: FOCOS_JUV_CORTO },
       { value: "putt", emoji: "🎯", label: "Putt", drillsCategoria: "putting", canonical: "putt", focos: FOCOS_JUV_PUTT },
       { value: "campo_infantil", emoji: "👶", label: "Campo Infantil", drillsCategoria: "campo", canonical: "campo_infantil", focos: FOCOS_JUV_CAMPO },
-      { value: "fisico", emoji: "💪", label: "Físico", drillsCategoria: null, canonical: "trabajo_fisico" },
+      { value: "fisico", emoji: "💪", label: "Físico", drillsCategoria: null, canonical: "trabajo_fisico", focos: FOCOS_JUV_FISICO },
     ],
     especiales: [
       { value: "test_tecnico", tipoSesion: "test_tecnico", emoji: "📋", label: "Test técnico", desc: "Evaluación P1-P10", lugar: "campo_practica", objetivo: "Evaluación técnica P1-P10" },
@@ -178,12 +189,34 @@ const RETOS_POR_FOCO: Record<string, string[]> = {
   lectura_caidas: ["Lee y emboca 3 putts en caída desde 3 m."],
 };
 
+// Retos Trackman al aire libre (medibles) — se ofrecen junto a los demás retos
+// de cierre en Competencia.
+const RETOS_TRACKMAN: string[] = [
+  "Trackman · Escalera de distancias (Combine): supera tu score.",
+  "Trackman · Longest carry dentro del corredor de dispersión.",
+  "Trackman · PR de velocidad de bola con smash ≥ 1.45.",
+  "Trackman · Dispersión: X de Y dentro del radio objetivo.",
+  "Trackman · Ventana de carry: 5 tiros dentro de ±3 m.",
+];
+
 export function retosSugeridos(tipoPlan: TipoPlan, categoria: string, foco: string | null): string[] {
   if (tipoPlan !== "competencia") return [];
   const porFoco = foco ? RETOS_POR_FOCO[foco] ?? [] : [];
   const porCategoria = RETOS_POR_CATEGORIA[categoria] ?? [];
-  return [...porFoco, ...porCategoria];
+  return [...porFoco, ...porCategoria, ...RETOS_TRACKMAN];
 }
+
+// Juegos de campo para las salidas — desafiantes, para toda la clase.
+export const CAMPO_GAMES: string[] = [
+  "Solo palos impares",
+  "Tres palos (elige y juega)",
+  "9 hoyos scramble",
+  "Peor bola",
+  "Suma de puntos (par o mejor)",
+  "Up-and-down en cada hoyo",
+  "Vuelta sin driver",
+  "Match play por parejas",
+];
 
 // Presets de bloques de transferencia (físico → técnico) para tiro largo — los
 // drills de potencia base que se pueden agregar de un toque y luego ajustar.

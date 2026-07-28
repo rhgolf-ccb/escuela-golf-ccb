@@ -5,7 +5,7 @@ import { supabase } from "@/lib/supabase";
 import type { DiaSemana, HorarioDefecto, SesionSemana, TipoPlan } from "@/components/ProgramacionModule";
 import { DIAS_POR_TIPO, TIPO_PLAN_LABEL, getFechaForDia } from "@/components/ProgramacionModule";
 import type { EstacionLibraryPick } from "@/components/EstacionLibraryPicker";
-import { GROUP_CONFIGS, gruposParaDrills, gruposParaFisico, categoriaOptionForCanonical, retosSugeridos } from "./group-configs";
+import { GROUP_CONFIGS, gruposParaDrills, gruposParaFisico, categoriaOptionForCanonical, retosSugeridos, CAMPO_GAMES } from "./group-configs";
 import type { DiaWizardState } from "./types";
 import { nuevaEstacion, diaCompleto, diaFaltantes } from "./types";
 import { computeSessionDuration, allocateStationMinutes, defaultStationCount, defaultCategoriasForDia, suggestLugar } from "@/lib/planning-defaults";
@@ -297,8 +297,11 @@ export default function WeekWizardModal({ tipoPlan, semana, planId, horariosDefe
                   valor={diaActual.especial}
                   notas={diaActual.especialNotas}
                   color={config.color}
+                  juegosCampo={tipoPlan === "competencia" ? CAMPO_GAMES : undefined}
+                  juegosSeleccionados={diaActual.especialJuegos ?? []}
                   onChangeValor={(v) => updateDia({ ...diaActual, especial: v })}
                   onChangeNotas={(n) => updateDia({ ...diaActual, especialNotas: n })}
+                  onChangeJuegos={(g) => updateDia({ ...diaActual, especialJuegos: g })}
                 />
               ) : (
                 <>

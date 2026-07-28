@@ -71,6 +71,7 @@ export interface DiaWizardState {
   tipo: "normal" | "especial";
   especial?: string;
   especialNotas?: string;
+  especialJuegos?: string[]; // juegos elegidos en salida al campo
   calentamiento: CalentamientoState | null;
   estaciones: EstacionWizardState[];
   subgrupo?: SubgrupoJuvenil;

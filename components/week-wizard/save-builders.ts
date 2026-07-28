@@ -39,7 +39,7 @@ export function buildJuvenilRow(base: RowBase, dia: DiaWizardState, config: Grou
     };
   }
   const estaciones = dia.estaciones.map((s) => ({
-    categoria: s.categoria, drills: s.items, desafio: s.desafio, lugar: s.lugar,
+    categoria: s.categoria, foco: s.foco ?? null, drills: s.items, desafio: s.desafio, lugar: s.lugar,
   }));
   return {
     ...base,
@@ -57,10 +57,13 @@ export function buildCompetenciaRow(base: RowBase, dia: DiaWizardState, config: 
   const calentamiento = buildCalentamiento(dia);
   if (dia.tipo === "especial") {
     const esp = especialDe(config, dia);
+    const juegos = dia.especialJuegos ?? [];
+    const juegoDrills = juegos.map((j) => ({ titulo: j, descripcion: "", series_repeticiones: null }));
     return {
       ...base,
-      tipo_sesion: esp.tipoSesion, lugar: esp.lugar, objetivo: esp.objetivo,
-      drills: [], juego_competitivo: null, estaciones_damas: null, sesion_juvenil: null,
+      tipo_sesion: esp.tipoSesion, lugar: esp.lugar,
+      objetivo: juegos.length ? `${esp.objetivo} — Juegos: ${juegos.join(", ")}` : esp.objetivo,
+      drills: juegoDrills, juego_competitivo: null, estaciones_damas: null, sesion_juvenil: null,
       estaciones_competencia: null, notas: dia.especialNotas || null,
       calentamiento,
     };

@@ -83,7 +83,8 @@ export default function EstacionLibraryPicker({ fuente, categoriaDrills, grupos,
           .eq("categoria", categoriaDrills ?? "")
           .eq("aprobado", true)
           .order("rating", { ascending: false })
-          .limit(30);
+          .limit(500); // el filtro por grupo/material es cliente: hay que traer
+                       // todos los elegibles, no solo el top-N por rating.
         if (foco) query = query.eq("subcategoria", foco);
         const { data } = await query;
         if (cancelled) return;

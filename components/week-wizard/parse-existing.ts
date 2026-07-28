@@ -33,7 +33,7 @@ export function parseExistingToDiaState(tipoPlan: TipoPlan, config: GroupConfig,
     if (sj && "tipo" in sj) {
       if (sj.tipo === "estaciones" && sj.estaciones.length >= 1) {
         const estaciones: EstacionWizardState[] = sj.estaciones.map((e) => ({
-          categoria: e.categoria, foco: null, material: [],
+          categoria: e.categoria, foco: e.foco ?? null, material: [],
           items: (e.drills ?? []).map(toPick), desafio: e.desafio ?? "",
           lugar: e.lugar ?? suggestLugar(config.categorias.find((c) => c.value === e.categoria)?.canonical ?? "juego_largo"),
         }));
@@ -75,6 +75,7 @@ export function parseExistingToDiaState(tipoPlan: TipoPlan, config: GroupConfig,
       const opt = config.especiales.find((e) => e.tipoSesion === sesion.tipo_sesion)!;
       return {
         tipo: "especial", especial: opt.value, especialNotas: sesion.notas ?? "",
+        especialJuegos: (sesion.drills ?? []).map((d) => d.titulo),
         calentamiento: null, estaciones: [], horaInicio: hhmm(sesion.hora_inicio), horaFin: hhmm(sesion.hora_fin),
       };
     }
