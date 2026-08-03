@@ -143,12 +143,19 @@ export default function CalendarioPadresModule({
           </div>
 
           <div className="space-y-2">
-            {diasSinEscuelaSemana.map((d) => (
-              <div key={d.id} className="rounded-xl border border-gray-200 bg-gray-100 px-4 py-3">
-                <p className="text-sm font-bold text-gray-600">Sin escuela{d.motivo ? ` — ${d.motivo}` : ""}</p>
-                <p className="text-xs text-gray-400">{formatFechaCorta(d.fecha_inicio)} – {formatFechaCorta(d.fecha_fin)}</p>
-              </div>
-            ))}
+            {diasSinEscuelaSemana.map((d) => {
+              const m = d.motivo ?? "";
+              // Festivo/compensatorio ya implican que no hay escuela — se muestran
+              // tal cual. Otros motivos (torneo, campo cerrado) sí avisan "Sin escuela".
+              const tipoObvio = /^(festivo|compensatorio)/i.test(m);
+              const label = m ? (tipoObvio ? m : `Sin escuela — ${m}`) : "Sin escuela";
+              return (
+                <div key={d.id} className="rounded-xl border border-gray-200 bg-gray-100 px-4 py-3">
+                  <p className="text-sm font-bold text-gray-600">{label}</p>
+                  <p className="text-xs text-gray-400">{formatFechaCorta(d.fecha_inicio)} – {formatFechaCorta(d.fecha_fin)}</p>
+                </div>
+              );
+            })}
 
             {eventosSemana.map((e) => (
               <div key={e.id} className="rounded-xl border px-4 py-3" style={{ borderColor: e.tipo === "especial" ? "#b4530930" : "#1565c030", background: e.tipo === "especial" ? "#b4530910" : "#1565c010" }}>

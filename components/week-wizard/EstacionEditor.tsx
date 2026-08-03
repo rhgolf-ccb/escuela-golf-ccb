@@ -235,19 +235,29 @@ export default function EstacionEditor({ estacion, index, categoriaOptions, grup
           </select>
         </div>
 
-        {profesores && profesores.length > 0 && (
-          <div>
-            <label className="text-[11px] font-bold text-gray-500 uppercase tracking-wide block mb-1">Responsable</label>
-            <select
-              value={estacion.responsable ?? ""}
-              onChange={(e) => onChange({ ...estacion, responsable: e.target.value || undefined })}
-              className="w-full text-xs border border-gray-200 rounded-lg px-2.5 py-1.5 bg-white"
-            >
-              <option value="">Sin asignar</option>
-              {profesores.map((p) => <option key={p} value={p}>{p}</option>)}
-            </select>
-          </div>
-        )}
+        {profesores && profesores.length > 0 && (() => {
+          const partes = (estacion.responsable ?? "").split(" · ");
+          const r1 = partes[0] ?? "";
+          const r2 = partes[1] ?? "";
+          const setResp = (a: string, b: string) => onChange({ ...estacion, responsable: [a, b].filter(Boolean).join(" · ") || undefined });
+          return (
+            <div>
+              <label className="text-[11px] font-bold text-gray-500 uppercase tracking-wide block mb-1">Responsable(s) <span className="text-gray-400 normal-case font-medium">— hasta 2</span></label>
+              <div className="flex gap-2">
+                <select value={r1} onChange={(e) => setResp(e.target.value, r2)}
+                  className="flex-1 min-w-0 text-xs border border-gray-200 rounded-lg px-2.5 py-1.5 bg-white">
+                  <option value="">Sin asignar</option>
+                  {profesores.map((p) => <option key={p} value={p}>{p}</option>)}
+                </select>
+                <select value={r2} onChange={(e) => setResp(r1, e.target.value)} disabled={!r1}
+                  className="flex-1 min-w-0 text-xs border border-gray-200 rounded-lg px-2.5 py-1.5 bg-white disabled:opacity-40">
+                  <option value="">— 2º profe (opcional)</option>
+                  {profesores.filter((p) => p !== r1).map((p) => <option key={p} value={p}>{p}</option>)}
+                </select>
+              </div>
+            </div>
+          );
+        })()}
       </div>
 
       {showPicker && (
