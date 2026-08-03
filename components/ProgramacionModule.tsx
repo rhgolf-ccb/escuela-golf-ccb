@@ -466,6 +466,8 @@ export default function ProgramacionModule({ currentRol }: { currentRol: Rol | n
   const [calEventos, setCalEventos] = useState<EventoCalendario[]>([]);
   const [calDiasSinEscuela, setCalDiasSinEscuela] = useState<DiaSinEscuela[]>([]);
   const [showEventoWizard, setShowEventoWizard] = useState(false);
+  const [editEventoCal, setEditEventoCal] = useState<EventoCalendario | null>(null);
+  const [editDiaSinEscuela, setEditDiaSinEscuela] = useState<DiaSinEscuela | null>(null);
   const [showWizard, setShowWizard] = useState(false);
   const [pendingDiaWizard, setPendingDiaWizard] = useState<{ grupo: TipoPlan; dia: DiaSemana; fecha: string } | null>(null);
   const [wizardActividadInit, setWizardActividadInit] = useState<{ grupos: TipoPlan[]; fecha: string } | null>(null);
@@ -1074,9 +1076,9 @@ export default function ProgramacionModule({ currentRol }: { currentRol: Rol | n
                   const eventosDia = calEventos.filter((e) => fechaEnRango(fecha, e.fecha_inicio, e.fecha_fin));
                   return (
                     <div key={dia} style={{ borderRight: "1px solid #d4e0d2", padding: "2px 4px", minHeight: sinEscuela || eventosDia.length ? 24 : 0, background: sinEscuela ? "#e5e7eb" : "transparent" }}>
-                      {sinEscuela && <p style={{ margin: 0, fontSize: 10, fontWeight: 700, color: "#4b5563" }} title={sinEscuela.motivo ?? undefined}>{etiquetaDiaSinEscuela(sinEscuela.motivo)}</p>}
+                      {sinEscuela && <p onClick={() => setEditDiaSinEscuela(sinEscuela)} style={{ margin: 0, fontSize: 10, fontWeight: 700, color: "#4b5563", cursor: "pointer" }} title={`${sinEscuela.motivo ?? ""} · clic para editar`}>{etiquetaDiaSinEscuela(sinEscuela.motivo)}</p>}
                       {eventosDia.map((e) => (
-                        <p key={e.id} style={{ margin: 0, fontSize: 10, fontWeight: 600, color: e.tipo === "especial" ? "#b45309" : "#1565c0" }} title={e.descripcion ?? undefined}>
+                        <p key={e.id} onClick={() => setEditEventoCal(e)} style={{ margin: 0, fontSize: 10, fontWeight: 600, color: e.tipo === "especial" ? "#b45309" : "#1565c0", cursor: "pointer" }} title={`${e.descripcion ?? e.nombre} · clic para editar`}>
                           {e.tipo === "especial" ? "🌟" : "📌"} {e.nombre}
                         </p>
                       ))}
@@ -1330,11 +1332,11 @@ export default function ProgramacionModule({ currentRol }: { currentRol: Rol | n
                       {date.getDate()}
                     </div>
                     <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
-                      {sinEscuela && <p style={{ margin: 0, fontSize: 10, fontWeight: 700, color: "#4b5563" }} title={sinEscuela.motivo ?? undefined}>{etiquetaDiaSinEscuela(sinEscuela.motivo)}</p>}
+                      {sinEscuela && <p onClick={(ev) => { ev.stopPropagation(); setEditDiaSinEscuela(sinEscuela); }} style={{ margin: 0, fontSize: 10, fontWeight: 700, color: "#4b5563", cursor: "pointer" }} title={`${sinEscuela.motivo ?? ""} · clic para editar`}>{etiquetaDiaSinEscuela(sinEscuela.motivo)}</p>}
                       {dayEventos.map((e) => (
-                        <div key={e.id} style={{
+                        <div key={e.id} onClick={(ev) => { ev.stopPropagation(); setEditEventoCal(e); }} style={{
                           background: e.tipo === "especial" ? "#b45309" : "#1565c0", color: "#fff",
-                          borderRadius: 3, padding: "2px 5px",
+                          borderRadius: 3, padding: "2px 5px", cursor: "pointer",
                           fontSize: 11, fontWeight: 600, lineHeight: 1.35,
                           overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
                         }}>
@@ -2315,10 +2317,12 @@ export default function ProgramacionModule({ currentRol }: { currentRol: Rol | n
       )}
 
       {/* ══ MODAL: Evento / día sin escuela ════════════════════════════════════ */}
-      {showEventoWizard && (
+      {(showEventoWizard || editEventoCal || editDiaSinEscuela) && (
         <EventoDiaSinEscuelaModal
           fechaSugerida={toISODate(semana)}
-          onClose={() => setShowEventoWizard(false)}
+          editEvento={editEventoCal}
+          editSinEscuela={editDiaSinEscuela}
+          onClose={() => { setShowEventoWizard(false); setEditEventoCal(null); setEditDiaSinEscuela(null); }}
           onCreated={() => {
             showToast("Guardado en el calendario ✓");
             if (viewMode === "semana") fetchCalSemana();
