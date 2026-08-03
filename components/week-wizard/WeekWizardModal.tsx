@@ -35,8 +35,9 @@ function slotsPara(horariosDefecto: HorarioDefecto[], tipoPlan: TipoPlan, dia: D
 
 export default function WeekWizardModal({ tipoPlan, semana, planId, horariosDefecto, sesionesExistentes, singleDay, onClose, onSaved }: Props) {
   const config = GROUP_CONFIGS[tipoPlan];
-  // Competencia ofrece 1–3 estaciones; Juvenil/Damas hasta 4.
-  const conteos = tipoPlan === "competencia" ? [1, 2, 3] : [1, 2, 3, 4];
+  // Competencia: 1 o 2 estaciones (físico + técnica, o dos técnicas; putt/campo = 1).
+  // Juvenil/Damas hasta 4.
+  const conteos = tipoPlan === "competencia" ? [1, 2] : [1, 2, 3, 4];
   const dias = useMemo(() => (singleDay ? [singleDay] : DIAS_POR_TIPO[tipoPlan]), [singleDay, tipoPlan]);
 
   function initDia(dia: DiaSemana, nEstaciones: number): DiaWizardState {
