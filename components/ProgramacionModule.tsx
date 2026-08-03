@@ -361,6 +361,20 @@ function etiquetaDiaSinEscuela(motivo: string | null | undefined): string {
   return "Sin escuela";
 }
 
+// Nombre legible del foco para mostrar en la grilla (el valor se guarda con
+// guiones bajos). Casos especiales con etiqueta propia; el resto se formatea.
+const FOCO_DISPLAY: Record<string, string> = {
+  toma_datos_trackman: "Toma de datos Trackman",
+  secuencia_tl: "Secuencia",
+  control_distancia: "Control de distancia",
+  contacto_compresion: "Contacto y compresión",
+  plano_swing: "Plano de swing",
+};
+function prettyFoco(foco: string | null | undefined): string | null {
+  if (!foco) return null;
+  return FOCO_DISPLAY[foco] ?? foco.replace(/_/g, " ").replace(/^\w/, (c) => c.toUpperCase());
+}
+
 function sesionesToEstaciones(diaySesiones: SesionSemana[], tipoPlan: TipoPlan): EstacionView[] {
   const views: EstacionView[] = [];
   // Sábado y domingo de Juvenil guardan 2 filas físicas (una por horario) con el
@@ -901,7 +915,7 @@ export default function ProgramacionModule({ currentRol }: { currentRol: Rol | n
         est.horario,
         est.lugar,
         est.responsable ? `Responsable: ${est.responsable}` : null,
-        est.foco ? `Foco: ${est.foco.replace(/_/g, " ")}` : null,
+        est.foco ? `Foco: ${prettyFoco(est.foco)}` : null,
       ].filter(Boolean).join(" · ");
       if (meta) lines.push(meta);
       est.drills.forEach((d) => lines.push(`- ${d.nombre}${d.descripcion ? `: ${d.descripcion}` : ""}${d.repeticiones ? ` (${d.repeticiones})` : ""}`));
@@ -1791,6 +1805,16 @@ export default function ProgramacionModule({ currentRol }: { currentRol: Rol | n
                                   <span className="flex items-center gap-1 text-xs text-gray-400">
                                     <svg width="10" height="10" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path d="M12 21s-7-6.2-7-11a7 7 0 1 1 14 0c0 4.8-7 11-7 11z"/><circle cx="12" cy="10" r="2.5"/></svg>
                                     {est.lugar}
+                                  </span>
+                                )}
+                                {est.foco && (
+                                  <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full" style={{ backgroundColor: `${groupColor}18`, color: groupColor }}>
+                                    🎯 {prettyFoco(est.foco)}
+                                  </span>
+                                )}
+                                {est.responsable && (
+                                  <span className="text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-gray-100 text-gray-600">
+                                    👤 {est.responsable}
                                   </span>
                                 )}
                               </div>
