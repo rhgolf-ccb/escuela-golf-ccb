@@ -60,6 +60,22 @@ function initiales(name: string): string {
 function fechaEnRango(fecha: string, inicio: string, fin: string | null): boolean {
   return fecha >= inicio && fecha <= (fin ?? inicio);
 }
+const DIA_KEYS = ["domingo", "lunes", "martes", "miercoles", "jueves", "viernes", "sabado"];
+function diaKeyDeFecha(fecha: string): string {
+  return DIA_KEYS[new Date(`${fecha}T00:00:00`).getDay()] ?? "";
+}
+// Festivo/compensatorio ya implican que no hay escuela — se muestran tal cual.
+// Otros motivos (torneo, campo cerrado) muestran "Sin escuela".
+function etiquetaTipoSinEscuela(motivo: string | null | undefined): string {
+  const m = motivo ?? "";
+  if (/^festivo/i.test(m)) return "Festivo";
+  if (/^compensatorio/i.test(m)) return "Compensatorio";
+  return "Sin escuela";
+}
+// Detalle = el motivo sin el prefijo "Festivo — " / "Compensatorio — " para no repetir.
+function detalleSinEscuela(motivo: string | null | undefined): string {
+  return (motivo ?? "").trim().replace(/^(festivo|compensatorio|sin escuela)\s*[—:-]?\s*/i, "").trim();
+}
 
 export default function CalendarioPadresModule({
   estudiantes, dias, actividades, eventos, diasSinEscuela,
@@ -94,6 +110,17 @@ export default function CalendarioPadresModule({
     : [];
   const eventosSemana = eventos.filter((e) => fechaEnRango(inicio, e.fecha_inicio, e.fecha_fin) || fechaEnRango(fin, e.fecha_inicio, e.fecha_fin) || (e.fecha_inicio >= inicio && e.fecha_inicio <= fin));
   const diasSinEscuelaSemana = diasSinEscuela.filter((d) => d.fecha_inicio <= fin && d.fecha_fin >= inicio);
+
+  // Sesiones y días sin escuela se muestran juntos, en orden de fecha, para que
+  // un festivo aparezca en el lugar del día (ej: "Viernes 7 · Festivo") y no como
+  // una tira suelta arriba.
+  type FilaDia =
+    | { kind: "sesion"; fecha: string; dia: DiaPrograma }
+    | { kind: "sin"; fecha: string; sin: DiaSinEscuelaPadre };
+  const filasDias: FilaDia[] = [
+    ...diasSemana.map((d) => ({ kind: "sesion" as const, fecha: d.fecha, dia: d })),
+    ...diasSinEscuelaSemana.map((s) => ({ kind: "sin" as const, fecha: s.fecha_inicio, sin: s })),
+  ].sort((a, b) => a.fecha.localeCompare(b.fecha));
 
   return (
     <div className="max-w-3xl mx-auto px-4 sm:px-6 py-8">
@@ -143,20 +170,6 @@ export default function CalendarioPadresModule({
           </div>
 
           <div className="space-y-2">
-            {diasSinEscuelaSemana.map((d) => {
-              const m = d.motivo ?? "";
-              // Festivo/compensatorio ya implican que no hay escuela — se muestran
-              // tal cual. Otros motivos (torneo, campo cerrado) sí avisan "Sin escuela".
-              const tipoObvio = /^(festivo|compensatorio)/i.test(m);
-              const label = m ? (tipoObvio ? m : `Sin escuela — ${m}`) : "Sin escuela";
-              return (
-                <div key={d.id} className="rounded-xl border border-gray-200 bg-gray-100 px-4 py-3">
-                  <p className="text-sm font-bold text-gray-600">{label}</p>
-                  <p className="text-xs text-gray-400">{formatFechaCorta(d.fecha_inicio)} – {formatFechaCorta(d.fecha_fin)}</p>
-                </div>
-              );
-            })}
-
             {eventosSemana.map((e) => (
               <div key={e.id} className="rounded-xl border px-4 py-3" style={{ borderColor: e.tipo === "especial" ? "#b4530930" : "#1565c030", background: e.tipo === "especial" ? "#b4530910" : "#1565c010" }}>
                 <p className="text-sm font-bold" style={{ color: e.tipo === "especial" ? "#b45309" : "#1565c0" }}>
@@ -176,31 +189,50 @@ export default function CalendarioPadresModule({
               </div>
             ))}
 
-            {diasSemana.length === 0 ? (
+            {filasDias.length === 0 ? (
               <p className="text-sm text-gray-400 text-center py-10">Sin sesiones programadas esta semana.</p>
             ) : (
-              diasSemana.map((d, i) => (
-                <div key={i} className="bg-white rounded-xl border border-gray-100 shadow-sm p-4">
-                  <div className="flex items-center gap-2 flex-wrap mb-1">
-                    <span className="text-xs font-bold" style={{ color: GROUP_COLOR[d.grupo] }}>{TIPO_PLAN_LABEL[d.grupo]}</span>
-                    <span className="text-xs font-semibold text-gray-500 capitalize">{DIA_LABEL[d.dia_semana] ?? d.dia_semana} · {formatFechaCorta(d.fecha)}</span>
-                  </div>
-                  <p className="text-sm font-bold text-gray-900">{TIPO_SESION_LABEL[d.tipo_sesion] ?? d.tipo_sesion}</p>
-                  <p className="text-xs text-gray-400 mt-0.5">
-                    {d.hora_inicio && `${formatHora(d.hora_inicio)}${d.hora_fin ? `–${formatHora(d.hora_fin)}` : ""} · `}{LUGAR_LABEL[d.lugar] ?? d.lugar}
-                  </p>
-                  {d.objetivo && <p className="text-xs text-gray-600 mt-1.5">{d.objetivo}</p>}
-                  {d.estaciones.length > 0 && (
-                    <div className="flex flex-wrap gap-1.5 mt-2">
-                      {d.estaciones.map((est, ei) => (
-                        <span key={ei} className="text-[11px] font-medium px-2 py-0.5 rounded-full" style={{ backgroundColor: `${GROUP_COLOR[d.grupo]}18`, color: GROUP_COLOR[d.grupo] }}>
-                          {est}
+              filasDias.map((f, i) => {
+                if (f.kind === "sin") {
+                  const s = f.sin;
+                  const detalle = detalleSinEscuela(s.motivo);
+                  const rango = s.fecha_fin !== s.fecha_inicio ? ` – ${formatFechaCorta(s.fecha_fin)}` : "";
+                  return (
+                    <div key={`sin-${s.id}`} className="rounded-xl border border-gray-200 bg-gray-100 px-4 py-3">
+                      <div className="flex items-center gap-2 flex-wrap mb-1">
+                        <span className="text-xs font-bold text-gray-500 capitalize">
+                          {DIA_LABEL[diaKeyDeFecha(s.fecha_inicio)] ?? ""} · {formatFechaCorta(s.fecha_inicio)}{rango}
                         </span>
-                      ))}
+                      </div>
+                      <p className="text-sm font-bold text-gray-700">🚫 {etiquetaTipoSinEscuela(s.motivo)}</p>
+                      {detalle && <p className="text-xs text-gray-500 mt-1">{detalle}</p>}
                     </div>
-                  )}
-                </div>
-              ))
+                  );
+                }
+                const d = f.dia;
+                return (
+                  <div key={`ses-${i}`} className="bg-white rounded-xl border border-gray-100 shadow-sm p-4">
+                    <div className="flex items-center gap-2 flex-wrap mb-1">
+                      <span className="text-xs font-bold" style={{ color: GROUP_COLOR[d.grupo] }}>{TIPO_PLAN_LABEL[d.grupo]}</span>
+                      <span className="text-xs font-semibold text-gray-500 capitalize">{DIA_LABEL[d.dia_semana] ?? d.dia_semana} · {formatFechaCorta(d.fecha)}</span>
+                    </div>
+                    <p className="text-sm font-bold text-gray-900">{TIPO_SESION_LABEL[d.tipo_sesion] ?? d.tipo_sesion}</p>
+                    <p className="text-xs text-gray-400 mt-0.5">
+                      {d.hora_inicio && `${formatHora(d.hora_inicio)}${d.hora_fin ? `–${formatHora(d.hora_fin)}` : ""} · `}{LUGAR_LABEL[d.lugar] ?? d.lugar}
+                    </p>
+                    {d.objetivo && <p className="text-xs text-gray-600 mt-1.5">{d.objetivo}</p>}
+                    {d.estaciones.length > 0 && (
+                      <div className="flex flex-wrap gap-1.5 mt-2">
+                        {d.estaciones.map((est, ei) => (
+                          <span key={ei} className="text-[11px] font-medium px-2 py-0.5 rounded-full" style={{ backgroundColor: `${GROUP_COLOR[d.grupo]}18`, color: GROUP_COLOR[d.grupo] }}>
+                            {est}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                );
+              })
             )}
           </div>
         </>
