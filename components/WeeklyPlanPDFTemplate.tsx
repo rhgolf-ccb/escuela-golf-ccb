@@ -6,7 +6,7 @@ interface Drill {
   descripcion: string;
 }
 interface EstacionDamas { nombre: string; lugar: string; duracion_min: number; descripcion: string; }
-interface EstacionCompetencia { categoria: string; objetivo: string; lugar?: string; drills: Drill[]; juego_competitivo: string | null; }
+interface EstacionCompetencia { categoria: string; objetivo: string; lugar?: string; foco?: string | null; drills: Drill[]; juego_competitivo: string | null; }
 // Estación Juvenil real: drills de biblioteca + desafío de cierre — no "juego"
 // (ese campo era de un esquema anterior; ya no existe en los datos reales).
 interface EstacionJuvenil { categoria: string; drills: Drill[]; desafio: string; lugar?: string; }
@@ -42,6 +42,17 @@ const LUGAR_LABEL: Record<string, string> = {
   campo_pacos_fabios: "Campo Pacos & Fabios",
   campo_completo: "Campo Completo",
 };
+const FOCO_LABEL_PDF: Record<string, string> = {
+  toma_datos_trackman: "Toma de datos Trackman",
+  secuencia_tl: "Secuencia",
+  control_distancia: "Control de distancia",
+  contacto_compresion: "Contacto y compresión",
+  plano_swing: "Plano de swing",
+};
+function prettyFocoPDF(foco: string | null | undefined): string | null {
+  if (!foco) return null;
+  return FOCO_LABEL_PDF[foco] ?? foco.replace(/_/g, " ").replace(/^\w/, (c) => c.toUpperCase());
+}
 const DIA_OFFSET: Record<string, number> = {
   martes: 1, miercoles: 2, jueves: 3, viernes: 4, sabado: 5, domingo: 6,
 };
@@ -286,6 +297,11 @@ function DayColumn({ sesion }: { sesion: SesionSemana }) {
                 <p style={{ margin: "0 0 2px", color: "#c8a84b", fontWeight: 800, fontSize: 11, textTransform: "uppercase", letterSpacing: "0.05em" }}>
                   Estación {eIdx + 1} — {TIPO_SESION_LABEL_PDF[est.categoria] ?? est.categoria}:
                 </p>
+                {est.foco && (
+                  <p style={{ margin: "0 0 3px", fontSize: 9.5, color: "#1a3a2a", fontWeight: 700 }}>
+                    🎯 Foco: {prettyFocoPDF(est.foco)}
+                  </p>
+                )}
                 {est.lugar && (
                   <p style={{ margin: "0 0 6px", fontSize: 9.5, color: "#666" }}>
                     📍 {LUGAR_LABEL[est.lugar] ?? est.lugar}
