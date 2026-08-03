@@ -7,6 +7,7 @@ import type { EstacionCategoria } from "@/lib/planning-defaults";
 // genérico FOCOS. Se muestran en el selector de "Foco" según la categoría de la
 // estación. "tempo" es transversal a tiro largo, juego corto y putt.
 const FOCOS_TIRO_LARGO: FocoOption[] = [
+  { value: "toma_datos_trackman", label: "Toma de datos Trackman" },
   { value: "posiciones", label: "Posiciones (general)" },
   { value: "transicion", label: "Transición" },
   { value: "secuencia_tl", label: "Secuencia" },
@@ -23,6 +24,7 @@ const FOCOS_TIRO_LARGO: FocoOption[] = [
   { value: "tempo", label: "Tempo" },
 ];
 const FOCOS_JUEGO_CORTO: FocoOption[] = [
+  { value: "toma_datos_trackman", label: "Toma de datos Trackman" },
   { value: "control_distancia", label: "Control de distancia" },
   { value: "reloj_distancias", label: "Distancias parciales (reloj)" },
   { value: "trayectorias", label: "Trayectorias" },
@@ -45,6 +47,17 @@ const FOCOS_PUTT: FocoOption[] = [
   { value: "estabilidad", label: "Estabilidad de cabeza / cuerpo" },
   { value: "presion_rutina", label: "Presión / rutina" },
   { value: "tempo", label: "Tempo" },
+];
+
+// Focos del Trabajo Físico de Competencia — orientados a transferir al swing y a
+// medir con Trackman (velocidad). El físico también puede ser un día de toma de
+// datos para revisar velocidad de palo/bola.
+const FOCOS_FISICO_COMP: FocoOption[] = [
+  { value: "toma_datos_trackman", label: "Toma de datos Trackman (velocidad)" },
+  { value: "velocidad", label: "Velocidad / speed" },
+  { value: "potencia", label: "Potencia" },
+  { value: "movilidad", label: "Movilidad" },
+  { value: "estabilidad", label: "Estabilidad / equilibrio" },
 ];
 
 // Focos de Juvenil (Birdies / Águilas / Albatros entrenan juntos, mismos focos)
@@ -118,7 +131,7 @@ export const GROUP_CONFIGS: Record<TipoPlan, GroupConfig> = {
       { value: "tiro_largo", emoji: "🏌️", label: "Tiro Largo", drillsCategoria: "tecnico", canonical: "juego_largo", focos: FOCOS_TIRO_LARGO },
       { value: "juego_corto", emoji: "⛳", label: "Juego Corto", drillsCategoria: "juego_corto", canonical: "juego_corto", focos: FOCOS_JUEGO_CORTO },
       { value: "putt", emoji: "🎯", label: "Putt", drillsCategoria: "putting", canonical: "putt", focos: FOCOS_PUTT },
-      { value: "trabajo_fisico", emoji: "💪", label: "Trabajo Físico", drillsCategoria: null, canonical: "trabajo_fisico" },
+      { value: "trabajo_fisico", emoji: "💪", label: "Trabajo Físico", drillsCategoria: null, canonical: "trabajo_fisico", focos: FOCOS_FISICO_COMP },
     ],
     especiales: [
       { value: "test_tecnico", tipoSesion: "test_tecnico", emoji: "📋", label: "Test técnico", desc: "Evaluación P1-P10", lugar: "campo_practica", objetivo: "Evaluación técnica P1-P10" },
@@ -197,6 +210,7 @@ const RETOS_POR_CATEGORIA: Record<string, string[]> = {
 };
 
 const RETOS_POR_FOCO: Record<string, string[]> = {
+  toma_datos_trackman: ["Registra tu línea base con Trackman: velocidad de palo y bola, smash y carry por palo."],
   potencia: ["Supera tu mejor velocidad de bola del día con smash ≥ 1.45."],
   tempo: ["Tour Tempo: 10 repeticiones seguidas sin romper el ritmo, contacto centrado."],
   control_distancia: ["5 tiros dentro de ±3 m del carry objetivo."],
