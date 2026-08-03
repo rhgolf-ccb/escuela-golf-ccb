@@ -11,6 +11,12 @@ const FOCOS_TIRO_LARGO: FocoOption[] = [
   { value: "transicion", label: "Transición" },
   { value: "secuencia_tl", label: "Secuencia" },
   { value: "potencia", label: "Potencia" },
+  { value: "velocidad", label: "Velocidad" },
+  { value: "rotacion", label: "Rotación / giro" },
+  { value: "contacto_compresion", label: "Contacto y compresión" },
+  { value: "plano_swing", label: "Plano de swing" },
+  { value: "liberacion", label: "Liberación (release)" },
+  { value: "equilibrio", label: "Equilibrio" },
   { value: "alineacion", label: "Alineación" },
   { value: "manejo_bola", label: "Manejo de la bola (efectos y trayectorias)" },
   { value: "tiros_especiales", label: "Tiros especiales" },
@@ -18,18 +24,27 @@ const FOCOS_TIRO_LARGO: FocoOption[] = [
 ];
 const FOCOS_JUEGO_CORTO: FocoOption[] = [
   { value: "control_distancia", label: "Control de distancia" },
+  { value: "reloj_distancias", label: "Distancias parciales (reloj)" },
   { value: "trayectorias", label: "Trayectorias" },
+  { value: "alto_bajo", label: "Golpe alto / bajo" },
+  { value: "spin", label: "Spin / efecto" },
   { value: "bunker", label: "Bunker" },
   { value: "chipping", label: "Chipping" },
+  { value: "lie_dificil", label: "Lie difícil" },
   { value: "tiros_especiales", label: "Tiros especiales" },
   { value: "tempo", label: "Tempo" },
 ];
 const FOCOS_PUTT: FocoOption[] = [
   { value: "control_distancia", label: "Control de distancia" },
+  { value: "corto_largo", label: "Putt corto vs largo" },
   { value: "mecanica_stroke", label: "Mecánica del stroke" },
   { value: "lectura_caidas", label: "Lectura y trabajo de caídas" },
-  { value: "tempo", label: "Tempo" },
+  { value: "green_reading", label: "Lectura de green" },
+  { value: "aim", label: "Alineación del putter" },
   { value: "start_line", label: "Línea de arranque" },
+  { value: "estabilidad", label: "Estabilidad de cabeza / cuerpo" },
+  { value: "presion_rutina", label: "Presión / rutina" },
+  { value: "tempo", label: "Tempo" },
 ];
 
 // Focos de Juvenil (Birdies / Águilas / Albatros entrenan juntos, mismos focos)
@@ -199,11 +214,30 @@ const RETOS_TRACKMAN: string[] = [
   "Trackman · Ventana de carry: 5 tiros dentro de ±3 m.",
 ];
 
+const RETOS_JUVENIL: Record<string, string[]> = {
+  juego_largo: ["¿Quién le pega más lejos manteniendo el equilibrio?", "Puntería: dale al cono/aro objetivo, 3 de 5.", "5 bolas al aire: cuenta cuántas pasan la línea."],
+  juego_corto: ["Chip a la diana: gana quien quede más cerca.", "3 chips seguidos que caigan en la alfombra.", "Mete el chip en el balde."],
+  putt: ["Escalera de putts: 1, 2 y 3 metros sin fallar.", "El túnel: mete 3 putts por la puerta.", "¿Quién emboca más de 1 metro seguidos?"],
+  campo_infantil: ["Circuito de habilidades contra el reloj.", "Relevos con golpes cortos por equipos.", "Completa la estación sin fallar."],
+  fisico: ["Equilibrio: aguanta 20 seg en una pierna.", "Circuito rápido sin perder la técnica.", "¿Quién salta y gira más controlado?"],
+};
+
+const RETOS_DAMAS: Record<string, string[]> = {
+  juego_largo: ["5 de 8 bolas dentro del objetivo.", "Mismo tempo en 10 golpes seguidos.", "Draw o fade a pedido: 4 de 6."],
+  juego_corto: ["Escalera de distancias: gana la proximidad media más baja.", "Up-and-down desde 3 lies distintos.", "Bunker: 3 de 5 cerca de la bandera."],
+  putt: ["Escalera de presión: 5 putts de 1,5 m seguidos.", "9 putts a 3 objetivos, supera tu marca.", "Lag: 3 bolas dentro del círculo desde 12 m."],
+  fisico: ["Circuito controlado sin perder la técnica.", "Reto de equilibrio y estabilidad."],
+};
+
 export function retosSugeridos(tipoPlan: TipoPlan, categoria: string, foco: string | null): string[] {
-  if (tipoPlan !== "competencia") return [];
-  const porFoco = foco ? RETOS_POR_FOCO[foco] ?? [] : [];
-  const porCategoria = RETOS_POR_CATEGORIA[categoria] ?? [];
-  return [...porFoco, ...porCategoria, ...RETOS_TRACKMAN];
+  if (tipoPlan === "competencia") {
+    const porFoco = foco ? RETOS_POR_FOCO[foco] ?? [] : [];
+    const porCategoria = RETOS_POR_CATEGORIA[categoria] ?? [];
+    return [...porFoco, ...porCategoria, ...RETOS_TRACKMAN];
+  }
+  if (tipoPlan === "juvenil") return RETOS_JUVENIL[categoria] ?? [];
+  if (tipoPlan === "damas") return RETOS_DAMAS[categoria] ?? [];
+  return [];
 }
 
 // Juegos de campo para las salidas — desafiantes, para toda la clase.
@@ -221,9 +255,19 @@ export const CAMPO_GAMES: string[] = [
 // Presets de bloques de transferencia (físico → técnico) para tiro largo — los
 // drills de potencia base que se pueden agregar de un toque y luego ajustar.
 export const TRANSFER_PRESETS: { prep: string; bolas: number }[] = [
+  // Con equipo
   { prep: "Bandas + backswing (3 series)", bolas: 10 },
   { prep: "Balón medicinal rotacional (8 lanz.)", bolas: 10 },
   { prep: "SuperSpeed (protocolo)", bolas: 8 },
   { prep: "Step-drill / fuerza de piso", bolas: 10 },
   { prep: "Escalera velocidad / control", bolas: 10 },
+  // Sin equipo (peso corporal / sensación)
+  { prep: "Ojos cerrados (sentir el movimiento)", bolas: 8 },
+  { prep: "Pausa arriba del backswing (2 seg)", bolas: 10 },
+  { prep: "Cámara lenta → velocidad real", bolas: 8 },
+  { prep: "Pies juntos (equilibrio)", bolas: 10 },
+  { prep: "Un solo pie / pie atrás (transferencia)", bolas: 8 },
+  { prep: "Swing con paso (walk-through)", bolas: 10 },
+  { prep: "Salto y giro antes de pegar", bolas: 8 },
+  { prep: "Happy Gilmore (carrera y golpe)", bolas: 6 },
 ];

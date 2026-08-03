@@ -92,7 +92,14 @@ export default function EstacionLibraryPicker({ fuente, categoriaDrills, grupos,
         const rows = (data as Row[]) ?? [];
         const filtered = rows.filter((d) => {
           if (d.nivel_recomendado && d.nivel_recomendado.length > 0 && grupos.length > 0 && !d.nivel_recomendado.some((n) => grupos.includes(n))) return false;
-          if (material && material.length > 0 && !(d.material && d.material.some((m) => material.includes(m)))) return false;
+          if (material && material.length > 0) {
+            // "ninguno" = sin equipo → incluye drills que no requieren material.
+            const equipos = material.filter((m) => m !== "ninguno");
+            const incluyeNinguno = material.includes("ninguno");
+            const matchEquipo = !!(d.material && d.material.some((m) => equipos.includes(m)));
+            const sinMaterial = !d.material || d.material.length === 0;
+            if (!(matchEquipo || (incluyeNinguno && sinMaterial))) return false;
+          }
           return true;
         });
         setItems(filtered);
@@ -110,10 +117,15 @@ export default function EstacionLibraryPicker({ fuente, categoriaDrills, grupos,
         type Row = { id: string; nombre: string; categoria: string | null; materiales: string | null; instrucciones: string | null; series_repeticiones: string | null };
         let rows = (data as Row[]) ?? [];
         if (material && material.length > 0) {
-          const keywords = material.flatMap((m) => MATERIAL_KEYWORDS[m as Material] ?? []);
+          // "ninguno" = sin equipo → incluye ejercicios sin material o de peso corporal.
+          const equipos = material.filter((m) => m !== "ninguno");
+          const incluyeNinguno = material.includes("ninguno");
+          const keywords = equipos.flatMap((m) => MATERIAL_KEYWORDS[m as Material] ?? []);
           rows = rows.filter((r) => {
             const texto = normalizarTexto(r.materiales ?? "");
-            return keywords.some((k) => texto.includes(k));
+            const matchEquipo = keywords.some((k) => texto.includes(k));
+            const sinMaterial = texto.trim() === "" || texto.includes("ninguno") || texto.includes("ninguna") || texto.includes("sin ") || texto.includes("corporal");
+            return matchEquipo || (incluyeNinguno && sinMaterial);
           });
         }
         setItems(
