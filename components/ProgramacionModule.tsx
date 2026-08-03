@@ -352,6 +352,15 @@ export type EstacionView = {
   drills: { nombre: string; descripcion: string; repeticiones?: string | null; dificultad?: string | null }[];
 };
 
+// Etiqueta corta para un día sin escuela: festivo/compensatorio se distinguen;
+// otros motivos (torneo, campo cerrado) quedan como "Sin escuela".
+function etiquetaDiaSinEscuela(motivo: string | null | undefined): string {
+  const m = motivo ?? "";
+  if (/^festivo/i.test(m)) return "Festivo";
+  if (/^compensatorio/i.test(m)) return "Compensatorio";
+  return "Sin escuela";
+}
+
 function sesionesToEstaciones(diaySesiones: SesionSemana[], tipoPlan: TipoPlan): EstacionView[] {
   const views: EstacionView[] = [];
   // Sábado y domingo de Juvenil guardan 2 filas físicas (una por horario) con el
@@ -1065,7 +1074,7 @@ export default function ProgramacionModule({ currentRol }: { currentRol: Rol | n
                   const eventosDia = calEventos.filter((e) => fechaEnRango(fecha, e.fecha_inicio, e.fecha_fin));
                   return (
                     <div key={dia} style={{ borderRight: "1px solid #d4e0d2", padding: "2px 4px", minHeight: sinEscuela || eventosDia.length ? 24 : 0, background: sinEscuela ? "#e5e7eb" : "transparent" }}>
-                      {sinEscuela && <p style={{ margin: 0, fontSize: 10, fontWeight: 700, color: "#4b5563" }} title={sinEscuela.motivo ?? undefined}>Sin escuela</p>}
+                      {sinEscuela && <p style={{ margin: 0, fontSize: 10, fontWeight: 700, color: "#4b5563" }} title={sinEscuela.motivo ?? undefined}>{etiquetaDiaSinEscuela(sinEscuela.motivo)}</p>}
                       {eventosDia.map((e) => (
                         <p key={e.id} style={{ margin: 0, fontSize: 10, fontWeight: 600, color: e.tipo === "especial" ? "#b45309" : "#1565c0" }} title={e.descripcion ?? undefined}>
                           {e.tipo === "especial" ? "🌟" : "📌"} {e.nombre}
@@ -1321,7 +1330,7 @@ export default function ProgramacionModule({ currentRol }: { currentRol: Rol | n
                       {date.getDate()}
                     </div>
                     <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
-                      {sinEscuela && <p style={{ margin: 0, fontSize: 10, fontWeight: 700, color: "#4b5563" }}>Sin escuela</p>}
+                      {sinEscuela && <p style={{ margin: 0, fontSize: 10, fontWeight: 700, color: "#4b5563" }} title={sinEscuela.motivo ?? undefined}>{etiquetaDiaSinEscuela(sinEscuela.motivo)}</p>}
                       {dayEventos.map((e) => (
                         <div key={e.id} style={{
                           background: e.tipo === "especial" ? "#b45309" : "#1565c0", color: "#fff",
