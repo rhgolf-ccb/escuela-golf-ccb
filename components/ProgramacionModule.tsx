@@ -54,6 +54,7 @@ export interface Drill {
 export interface EstacionDamas {
   nombre: string; lugar: string; duracion_min: number; descripcion: string;
   categoria?: string;
+  responsable?: string | null;
   drills?: { titulo: string; descripcion: string; id?: string; series_repeticiones?: string | null }[];
 }
 
@@ -72,6 +73,7 @@ export interface DrillEstacionCompetencia extends DrillLibre {
 export interface EstacionCompetencia {
   categoria: TipoSesion;
   foco?: string | null;
+  responsable?: string | null;
   objetivo: string;
   lugar: Lugar;
   drills: DrillEstacionCompetencia[];
@@ -345,6 +347,8 @@ export type EstacionView = {
   horario: string | null;
   numero?: number;
   reto?: string | null;
+  responsable?: string | null;
+  foco?: string | null;
   drills: { nombre: string; descripcion: string; repeticiones?: string | null; dificultad?: string | null }[];
 };
 
@@ -364,6 +368,7 @@ function sesionesToEstaciones(diaySesiones: SesionSemana[], tipoPlan: TipoPlan):
           nombre: est.nombre,
           lugar: est.lugar,
           horario: `${est.duracion_min} min`,
+          responsable: est.responsable ?? null,
           // Estaciones armadas con el flujo guiado traen drills reales de la
           // biblioteca — se listan individualmente. Dato viejo (texto libre,
           // sin drills) sigue mostrando el bloque único de siempre.
@@ -383,6 +388,8 @@ function sesionesToEstaciones(diaySesiones: SesionSemana[], tipoPlan: TipoPlan):
           horario,
           numero: idx + 1,
           reto: est.juego_competitivo ?? null,
+          responsable: est.responsable ?? null,
+          foco: est.foco ?? null,
           drills: est.drills.map((d) => ({ nombre: d.titulo, descripcion: d.descripcion, repeticiones: d.series_repeticiones ?? null })),
         });
       });
@@ -399,6 +406,8 @@ function sesionesToEstaciones(diaySesiones: SesionSemana[], tipoPlan: TipoPlan):
             lugar, horario,
             numero: idx + 1,
             reto: e.desafio ?? null,
+            responsable: e.responsable ?? null,
+            foco: e.foco ?? null,
             drills: (e.drills ?? []).map((d) => ({ nombre: d.titulo, descripcion: d.descripcion })),
           });
         });
@@ -867,6 +876,46 @@ export default function ProgramacionModule({ currentRol }: { currentRol: Rol | n
       lines.push("");
     });
     return lines.join("\n");
+  }
+
+  // Markdown DETALLADO para profesores — incluye responsable, foco y descripciones
+  // completas de cada ejercicio, para que preparen su clase.
+  function buildDiaMarkdownProfesores(dia: DiaSemana, fecha: string, estaciones: EstacionView[]): string {
+    const lines: string[] = [`## ${DIA_LABEL[dia]} — ${formatDiaFecha(fecha)}`];
+    if (estaciones.length === 0) { lines.push("Sin programación para este día."); return lines.join("\n"); }
+    estaciones.forEach((est) => {
+      const titulo = est.numero ? `Estación ${est.numero}: ${est.nombre}` : est.nombre;
+      lines.push(`**${titulo}**`);
+      const meta = [
+        est.horario,
+        est.lugar,
+        est.responsable ? `Responsable: ${est.responsable}` : null,
+        est.foco ? `Foco: ${est.foco.replace(/_/g, " ")}` : null,
+      ].filter(Boolean).join(" · ");
+      if (meta) lines.push(meta);
+      est.drills.forEach((d) => lines.push(`- ${d.nombre}${d.descripcion ? `: ${d.descripcion}` : ""}${d.repeticiones ? ` (${d.repeticiones})` : ""}`));
+      if (est.reto) lines.push(`🏆 Reto: ${est.reto}`);
+      lines.push("");
+    });
+    return lines.join("\n");
+  }
+
+  async function handlePdfProfesores() {
+    if (!plan) return;
+    const fechaInicio = formatDiaFecha(toISODate(semana));
+    const fechaFin = formatDiaFecha(toISODate(addDays(semana, 6)));
+    const bloques = diasRequeridos
+      .map((dia) => {
+        const diaySesiones = sesiones.filter((s) => s.dia_semana === dia);
+        if (!diaySesiones.length) return null;
+        return buildDiaMarkdownProfesores(dia, getFechaForDia(semana, dia), sesionesToEstaciones(diaySesiones, activeTab));
+      })
+      .filter((b): b is string => !!b);
+    const { generateCCBPdf } = await import("@/lib/pdf-generator");
+    generateCCBPdf(bloques.join("\n\n---\n\n"), {
+      documentName: `Programación para profesores · ${TIPO_PLAN_LABEL[activeTab]} — semana del ${fechaInicio} al ${fechaFin}`,
+      filenamePrefix: `Profesores-${activeTab}-${toISODate(semana)}`,
+    });
   }
 
   async function handlePdfSemana() {
@@ -1671,6 +1720,10 @@ export default function ProgramacionModule({ currentRol }: { currentRol: Rol | n
                           <button onClick={handlePdfDia} className={btnClass}>
                             <svg width="12" height="12" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
                             PDF día
+                          </button>
+                          <button onClick={handlePdfProfesores} className={btnClass}>
+                            <svg width="12" height="12" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2M9 11a4 4 0 100-8 4 4 0 000 8zM23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 010 7.75"/></svg>
+                            PDF profesores
                           </button>
                           <button onClick={openPdfPreview} disabled={generatingPdfPadres} className={btnClass}>
                             <svg width="12" height="12" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7z"/><circle cx="12" cy="12" r="3"/></svg>

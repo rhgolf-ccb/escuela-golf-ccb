@@ -39,7 +39,7 @@ export function buildJuvenilRow(base: RowBase, dia: DiaWizardState, config: Grou
     };
   }
   const estaciones = dia.estaciones.map((s) => ({
-    categoria: s.categoria, foco: s.foco ?? null, drills: s.items, desafio: s.desafio, lugar: s.lugar,
+    categoria: s.categoria, foco: s.foco ?? null, responsable: s.responsable ?? null, drills: s.items, desafio: s.desafio, lugar: s.lugar,
   }));
   return {
     ...base,
@@ -79,6 +79,7 @@ export function buildCompetenciaRow(base: RowBase, dia: DiaWizardState, config: 
     return {
       categoria: s.categoria,
       foco: s.foco ?? null,
+      responsable: s.responsable ?? null,
       objetivo: `${catLabel}: ${drills.map((d) => d.titulo).join(", ")}`,
       lugar: s.lugar,
       juego_competitivo: s.desafio || null,
@@ -126,6 +127,7 @@ export function buildDamasRow(base: RowBase, dia: DiaWizardState, config: GroupC
       duracion_min: DURACION_ESTACION_DAMAS_MIN,
       descripcion: s.items.map((d) => d.titulo).join(", "),
       categoria: s.categoria,
+      responsable: s.responsable ?? null,
       drills: s.items,
     };
   });

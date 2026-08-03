@@ -52,6 +52,7 @@ export interface TransferBlock {
 export interface EstacionWizardState {
   categoria: string;
   foco: string | null;
+  responsable?: string; // profesor a cargo de la estación
   material: string[];
   items: EstacionLibraryPick[];
   // Solo tiro largo (Competencia): secuencia ordenada de prep → bolas.

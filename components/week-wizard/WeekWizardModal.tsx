@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import type { DiaSemana, HorarioDefecto, SesionSemana, TipoPlan } from "@/components/ProgramacionModule";
 import { DIAS_POR_TIPO, TIPO_PLAN_LABEL, getFechaForDia } from "@/components/ProgramacionModule";
@@ -71,6 +71,22 @@ export default function WeekWizardModal({ tipoPlan, semana, planId, horariosDefe
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [sugiriendo, setSugiriendo] = useState(false);
+  const [profesores, setProfesores] = useState<string[]>([]);
+
+  useEffect(() => {
+    supabase
+      .from("staff_directorio")
+      .select("nombre, categoria, orden")
+      .eq("activo", true)
+      .then(({ data }) => {
+        const rows = (data ?? []) as { nombre: string; categoria: string | null; orden: number | null }[];
+        const nombres = rows
+          .filter((r) => r.nombre && r.categoria !== "administrativos")
+          .sort((a, b) => (a.orden ?? 0) - (b.orden ?? 0))
+          .map((r) => r.nombre);
+        setProfesores(nombres);
+      });
+  }, []);
 
   const diaActualKey = dias[currentIndex];
   const diaActual = diasState[diaActualKey];
@@ -365,6 +381,7 @@ export default function WeekWizardModal({ tipoPlan, semana, planId, horariosDefe
                         usadosEnOtrasPartes={[...titulosUsadosSemana].filter((t) => !est.items.some((i) => i.titulo === t))}
                         retosSugeridos={retosSugeridos(tipoPlan, est.categoria, est.foco)}
                         permiteTransferencia={tipoPlan === "competencia"}
+                        profesores={profesores}
                         onChange={(next) => {
                           const estaciones = diaActual.estaciones.map((e, i) => (i === idx ? next : e));
                           updateDia({ ...diaActual, estaciones });

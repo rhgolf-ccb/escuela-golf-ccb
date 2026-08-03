@@ -33,7 +33,7 @@ export function parseExistingToDiaState(tipoPlan: TipoPlan, config: GroupConfig,
     if (sj && "tipo" in sj) {
       if (sj.tipo === "estaciones" && sj.estaciones.length >= 1) {
         const estaciones: EstacionWizardState[] = sj.estaciones.map((e) => ({
-          categoria: e.categoria, foco: e.foco ?? null, material: [],
+          categoria: e.categoria, foco: e.foco ?? null, responsable: e.responsable ?? undefined, material: [],
           items: (e.drills ?? []).map(toPick), desafio: e.desafio ?? "",
           lugar: e.lugar ?? suggestLugar(config.categorias.find((c) => c.value === e.categoria)?.canonical ?? "juego_largo"),
         }));
@@ -62,7 +62,7 @@ export function parseExistingToDiaState(tipoPlan: TipoPlan, config: GroupConfig,
         const drills = e.drills ?? [];
         const itemDrills = bloques.length > 0 ? drills.slice(0, Math.max(0, drills.length - bloques.length)) : drills;
         return {
-          categoria: e.categoria, foco: e.foco ?? null, material: [],
+          categoria: e.categoria, foco: e.foco ?? null, responsable: e.responsable ?? undefined, material: [],
           items: itemDrills.map(toPick),
           transferencia: bloques.length > 0 ? bloques : undefined,
           desafio: e.juego_competitivo ?? "", lugar: e.lugar,
@@ -96,7 +96,7 @@ export function parseExistingToDiaState(tipoPlan: TipoPlan, config: GroupConfig,
   // damas
   if (sesion.estaciones_damas && sesion.estaciones_damas.length > 0 && sesion.estaciones_damas.every((e) => e.categoria)) {
     const estaciones: EstacionWizardState[] = sesion.estaciones_damas.map((e) => ({
-      categoria: e.categoria!, foco: null, material: [],
+      categoria: e.categoria!, foco: null, responsable: e.responsable ?? undefined, material: [],
       items: (e.drills ?? []).map(toPick), desafio: "",
       lugar: LUGAR_VALUE_FROM_LABEL[e.lugar]
         ?? suggestLugar(config.categorias.find((c) => c.value === e.categoria)?.canonical ?? "juego_largo"),

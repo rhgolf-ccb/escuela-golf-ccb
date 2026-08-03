@@ -19,12 +19,13 @@ interface Props {
   usadosEnOtrasPartes: string[]; // títulos ya elegidos en otras estaciones/días de la semana
   retosSugeridos?: string[]; // sugerencias de reto de cierre (vacío = sin sugerencia)
   permiteTransferencia?: boolean; // Competencia: habilita secuencia de transferencia en tiro largo
+  profesores?: string[]; // lista de profesores para asignar responsable
   onChange: (next: EstacionWizardState) => void;
 }
 
 const FOCOS_LEGACY = new Set<string>(FOCOS);
 
-export default function EstacionEditor({ estacion, index, categoriaOptions, grupos, gruposFisico, usadosEnOtrasPartes, retosSugeridos, permiteTransferencia, onChange }: Props) {
+export default function EstacionEditor({ estacion, index, categoriaOptions, grupos, gruposFisico, usadosEnOtrasPartes, retosSugeridos, permiteTransferencia, profesores, onChange }: Props) {
   const [showPicker, setShowPicker] = useState(false);
   const [retoIdx, setRetoIdx] = useState(0);
   const opcionActual = categoriaOptions.find((c) => c.value === estacion.categoria) ?? categoriaOptions[0];
@@ -233,6 +234,20 @@ export default function EstacionEditor({ estacion, index, categoriaOptions, grup
             {LUGARES_ESTACION.map((l) => <option key={l.value} value={l.value}>{l.label}</option>)}
           </select>
         </div>
+
+        {profesores && profesores.length > 0 && (
+          <div>
+            <label className="text-[11px] font-bold text-gray-500 uppercase tracking-wide block mb-1">Responsable</label>
+            <select
+              value={estacion.responsable ?? ""}
+              onChange={(e) => onChange({ ...estacion, responsable: e.target.value || undefined })}
+              className="w-full text-xs border border-gray-200 rounded-lg px-2.5 py-1.5 bg-white"
+            >
+              <option value="">Sin asignar</option>
+              {profesores.map((p) => <option key={p} value={p}>{p}</option>)}
+            </select>
+          </div>
+        )}
       </div>
 
       {showPicker && (
