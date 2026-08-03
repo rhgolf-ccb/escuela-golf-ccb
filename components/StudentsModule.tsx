@@ -53,9 +53,12 @@ export default function StudentsModule({ currentRol }: { currentRol: Rol | null 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
-  const [statusFilter, setStatusFilter] = useState<StatusFilter>("todos");
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>("activo");
   const [groupFilter, setGroupFilter] = useState<GroupFilter>("todos");
   const [soloTalegaPropia, setSoloTalegaPropia] = useState(false);
+  const [soloSinGrupo, setSoloSinGrupo] = useState(false);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [bulkSaving, setBulkSaving] = useState(false);
   const [showGroupAnalysis, setShowGroupAnalysis] = useState(false);
   const router = useRouter();
 
@@ -92,9 +95,44 @@ export default function StudentsModule({ currentRol }: { currentRol: Rol | null 
           ? s.grupo_activo === "Competencia"
           : grupoCalculado === groupFilter;
       const matchTalega = !soloTalegaPropia || s.tiene_talega === "Sí";
-      return matchSearch && matchStatus && matchGroup && matchTalega;
+      const matchSinGrupo = !soloSinGrupo || !s.grupo_activo;
+      return matchSearch && matchStatus && matchGroup && matchTalega && matchSinGrupo;
     });
-  }, [students, search, statusFilter, groupFilter, soloTalegaPropia]);
+  }, [students, search, statusFilter, groupFilter, soloTalegaPropia, soloSinGrupo]);
+
+  const sinGrupoCount = useMemo(() => students.filter((s) => !s.grupo_activo).length, [students]);
+  const allFilteredSelected = filtered.length > 0 && filtered.every((s) => selected.has(String(s.id)));
+
+  function toggleSelect(id: string) {
+    setSelected((prev) => { const n = new Set(prev); if (n.has(id)) n.delete(id); else n.add(id); return n; });
+  }
+  function toggleSelectAll() {
+    setSelected((prev) => {
+      const n = new Set(prev);
+      if (allFilteredSelected) filtered.forEach((s) => n.delete(String(s.id)));
+      else filtered.forEach((s) => n.add(String(s.id)));
+      return n;
+    });
+  }
+  async function toggleStatus(student: Student) {
+    const nuevo = student.status === "activo" ? "inactivo" : "activo";
+    setStudents((prev) => prev.map((s) => (s.id === student.id ? { ...s, status: nuevo } : s)));
+    const { error: e } = await supabase.from("students").update({ status: nuevo }).eq("id", student.id);
+    if (e) {
+      setError(e.message);
+      setStudents((prev) => prev.map((s) => (s.id === student.id ? { ...s, status: student.status } : s)));
+    }
+  }
+  async function bulkUpdateStatus(nuevo: "activo" | "inactivo") {
+    const ids = students.filter((s) => selected.has(String(s.id))).map((s) => s.id);
+    if (!ids.length) return;
+    setBulkSaving(true);
+    const { error: e } = await supabase.from("students").update({ status: nuevo }).in("id", ids);
+    setBulkSaving(false);
+    if (e) { setError(e.message); return; }
+    setStudents((prev) => prev.map((s) => (selected.has(String(s.id)) ? { ...s, status: nuevo } : s)));
+    setSelected(new Set());
+  }
 
   const groupActiveStudents = useMemo(() => {
     if (groupFilter === "todos") return [];
@@ -190,6 +228,16 @@ export default function StudentsModule({ currentRol }: { currentRol: Rol | null 
         >
           Talega propia ({counts.talegaPropia})
         </button>
+        <button
+          onClick={() => setSoloSinGrupo((v) => !v)}
+          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors self-start sm:self-auto shrink-0 border ${
+            soloSinGrupo
+              ? "bg-ccb-green text-white border-ccb-green"
+              : "text-gray-600 border-gray-200 bg-white hover:border-gray-300"
+          }`}
+        >
+          Sin grupo ({sinGrupoCount})
+        </button>
       </div>
 
       {/* CHIPS DE GRUPO */}
@@ -237,6 +285,22 @@ export default function StudentsModule({ currentRol }: { currentRol: Rol | null 
         )}
       </div>
 
+      {/* BARRA DE ACCIÓN EN BLOQUE */}
+      {selected.size > 0 && (
+        <div className="bg-ccb-green text-white rounded-xl px-4 py-2.5 mb-3 flex items-center justify-between gap-3 flex-wrap">
+          <span className="text-sm font-medium">{selected.size} seleccionado{selected.size > 1 ? "s" : ""}</span>
+          <div className="flex items-center gap-2">
+            <button onClick={() => bulkUpdateStatus("inactivo")} disabled={bulkSaving} className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-white/15 hover:bg-white/25 disabled:opacity-50">
+              {bulkSaving ? "Guardando…" : "Marcar inactivos"}
+            </button>
+            <button onClick={() => bulkUpdateStatus("activo")} disabled={bulkSaving} className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-white/15 hover:bg-white/25 disabled:opacity-50">
+              Marcar activos
+            </button>
+            <button onClick={() => setSelected(new Set())} className="px-3 py-1.5 rounded-lg text-xs font-medium text-white/80 hover:text-white">Limpiar</button>
+          </div>
+        </div>
+      )}
+
       {/* TABLA */}
       <div className="bg-white rounded-xl shadow-sm border border-(--border) overflow-hidden">
         {loading ? (
@@ -257,6 +321,9 @@ export default function StudentsModule({ currentRol }: { currentRol: Rol | null 
               <table className="w-full text-sm">
                 <thead>
                   <tr className="bg-gray-50 border-b border-gray-200">
+                    <th className="px-4 py-3 w-10">
+                      <input type="checkbox" checked={allFilteredSelected} onChange={toggleSelectAll} title="Seleccionar todos los filtrados" className="w-4 h-4 accent-[#1B4D2E] cursor-pointer" />
+                    </th>
                     <th className="text-left px-5 py-3 font-semibold tracking-wide text-xs uppercase text-gray-500">Nombre</th>
                     <th className="text-left px-5 py-3 font-semibold tracking-wide text-xs uppercase text-gray-500">Fecha de nacimiento</th>
                     <th className="text-left px-5 py-3 font-semibold tracking-wide text-xs uppercase text-gray-500">Grupo</th>
@@ -266,7 +333,7 @@ export default function StudentsModule({ currentRol }: { currentRol: Rol | null 
                 <tbody>
                   {filtered.length === 0 ? (
                     <tr>
-                      <td colSpan={7} className="text-center py-16 text-gray-400">
+                      <td colSpan={5} className="text-center py-16 text-gray-400">
                         {search ? `No se encontraron alumnos con "${search}"` : "No hay alumnos en esta categoría"}
                       </td>
                     </tr>
@@ -280,6 +347,9 @@ export default function StudentsModule({ currentRol }: { currentRol: Rol | null 
                           className="border-t border-gray-50 cursor-pointer transition-colors hover:bg-ccb-gold/[0.06]"
                           onClick={() => router.push(`/alumnos/${student.id}`)}
                         >
+                          <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
+                            <input type="checkbox" checked={selected.has(String(student.id))} onChange={() => toggleSelect(String(student.id))} className="w-4 h-4 accent-[#1B4D2E] cursor-pointer" />
+                          </td>
                           <td className="px-5 py-3 font-medium text-gray-800">
                             <div className="flex items-center gap-2.5">
                               <span className="inline-flex items-center justify-center w-8 h-8 rounded-full text-xs font-bold shrink-0 bg-ccb-green/10 text-ccb-green">
@@ -298,8 +368,10 @@ export default function StudentsModule({ currentRol }: { currentRol: Rol | null 
                           <td className="px-5 py-3">
                             {grupoMostrar ? <GroupBadge grupo={grupoMostrar} /> : <span className="text-gray-300">—</span>}
                           </td>
-                          <td className="px-5 py-3">
-                            <StatusBadge status={student.status} />
+                          <td className="px-5 py-3" onClick={(e) => e.stopPropagation()}>
+                            <button onClick={() => toggleStatus(student)} title="Cambiar activo / inactivo" className="cursor-pointer focus:outline-none">
+                              <StatusBadge status={student.status} />
+                            </button>
                           </td>
                         </tr>
                       );

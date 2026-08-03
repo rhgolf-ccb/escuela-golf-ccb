@@ -30,6 +30,12 @@ interface StudentRow {
 }
 
 type Asistencia = boolean | null; // true=presente, false=ausente, null=sin marcar
+type CheckResult = "cumple" | "progreso" | "bajo" | null; // check rápido sobre el foco del día
+
+function prettifyFoco(f: string): string {
+  const s = f.replace(/_/g, " ");
+  return s.charAt(0).toUpperCase() + s.slice(1);
+}
 
 const TIPO_SESION_LABEL: Record<string, string> = {
   tiro_largo: "Tiro Largo", juego_corto: "Juego Corto", putt: "Putt",
@@ -75,6 +81,8 @@ export default function AsistenciaView({ sesionId }: { sesionId: string }) {
   const [plan, setPlan] = useState<PlanInfo | null>(null);
   const [students, setStudents] = useState<StudentRow[]>([]);
   const [asistencias, setAsistencias] = useState<Record<string, Asistencia>>({});
+  const [checks, setChecks] = useState<Record<string, CheckResult>>({});
+  const [focosDia, setFocosDia] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -94,6 +102,17 @@ export default function AsistenciaView({ sesionId }: { sesionId: string }) {
     if (!sesData) { setLoading(false); return; }
     const s = sesData as SesionInfo;
     setSesion(s);
+
+    // Focos del día — desde las estaciones (Competencia/Juvenil) para saber
+    // sobre qué se hace el check rápido.
+    const raw = sesData as unknown as {
+      estaciones_competencia?: { foco?: string | null }[] | null;
+      sesion_juvenil?: { estaciones?: { foco?: string | null }[] } | null;
+    };
+    const fset = new Set<string>();
+    (raw.estaciones_competencia ?? []).forEach((e) => { if (e?.foco) fset.add(e.foco); });
+    (raw.sesion_juvenil?.estaciones ?? []).forEach((e) => { if (e?.foco) fset.add(e.foco); });
+    setFocosDia([...fset]);
 
     // 2. Load plan
     const { data: planData } = await supabase
@@ -135,6 +154,18 @@ export default function AsistenciaView({ sesionId }: { sesionId: string }) {
     rows.forEach((r) => { map[r.id] = r.asistio; });
     setAsistencias(map);
 
+    // 5. Cargar checks rápidos ya guardados para esta sesión (si la tabla existe)
+    const { data: checkData } = await supabase
+      .from("progreso_checks")
+      .select("student_id, resultado")
+      .eq("sesion_id", sesionId);
+    const cmap: Record<string, CheckResult> = {};
+    (checkData ?? []).forEach((c) => {
+      const row = c as { student_id: string; resultado: CheckResult };
+      cmap[row.student_id] = row.resultado;
+    });
+    setChecks(cmap);
+
     setLoading(false);
   }, [sesionId]);
 
@@ -154,6 +185,10 @@ export default function AsistenciaView({ sesionId }: { sesionId: string }) {
   // ── Handlers ──────────────────────────────────────────────────────────────
   function marcar(studentId: string, value: Asistencia) {
     setAsistencias((prev) => ({ ...prev, [studentId]: value }));
+  }
+
+  function setCheckFor(studentId: string, value: CheckResult) {
+    setChecks((prev) => ({ ...prev, [studentId]: prev[studentId] === value ? null : value }));
   }
 
   function todosPresentes() {
@@ -185,6 +220,24 @@ export default function AsistenciaView({ sesionId }: { sesionId: string }) {
         .from("sesiones_semana")
         .update({ asistencia_registrada: true })
         .eq("id", sesionId);
+
+      // Guardar checks rápidos (no bloquea la asistencia si la tabla no existe aún)
+      const checkRows = students
+        .filter((s) => checks[s.id])
+        .map((s) => ({
+          student_id: s.id,
+          sesion_id: sesionId,
+          fecha: sesion.fecha,
+          categoria: sesion.tipo_sesion,
+          foco: focosDia.join(", ") || null,
+          resultado: checks[s.id],
+        }));
+      if (checkRows.length) {
+        const { error: chkErr } = await supabase
+          .from("progreso_checks")
+          .upsert(checkRows, { onConflict: "student_id,sesion_id" });
+        if (chkErr) console.warn("check rápido no guardado:", chkErr.message);
+      }
 
       setSaved(true);
       setSesion((prev) => prev ? { ...prev, asistencia_registrada: true } : prev);
@@ -331,6 +384,12 @@ export default function AsistenciaView({ sesionId }: { sesionId: string }) {
           <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
             {studentsFiltered.length} alumnos{filtroGrupo !== "todos" ? ` · ${filtroGrupo}` : ""}
           </p>
+          {focosDia.length > 0 && (
+            <p className="text-[11px] text-gray-500 mt-1">
+              Check del día sobre <span className="font-semibold" style={{ color: "#7d5a00" }}>{focosDia.map(prettifyFoco).join(", ")}</span>
+              <span className="text-gray-400"> · ↑ bien · → regular · ↓ bajo</span>
+            </p>
+          )}
         </div>
         {studentsFiltered.length === 0 ? (
           <div className="py-12 text-center text-gray-400 text-sm">
@@ -368,22 +427,46 @@ export default function AsistenciaView({ sesionId }: { sesionId: string }) {
                     </div>
                   </div>
 
-                  {/* P / A / ? buttons */}
-                  <div className="flex gap-1.5">
-                    <button
-                      onClick={() => marcar(student.id, estado === true ? null : true)}
-                      className={`w-9 h-9 rounded-lg text-sm font-bold transition-all ${estado === true ? "bg-emerald-500 text-white shadow-sm" : "bg-emerald-50 text-emerald-700 hover:bg-emerald-100"}`}
-                      title="Presente"
-                    >
-                      ✓
-                    </button>
-                    <button
-                      onClick={() => marcar(student.id, estado === false ? null : false)}
-                      className={`w-9 h-9 rounded-lg text-sm font-bold transition-all ${estado === false ? "bg-red-500 text-white shadow-sm" : "bg-red-50 text-red-600 hover:bg-red-100"}`}
-                      title="Ausente"
-                    >
-                      ✕
-                    </button>
+                  {/* Check rápido (si presente) + P / A */}
+                  <div className="flex items-center gap-2">
+                    {estado === true && (
+                      <div className="flex gap-1" title="Check rápido sobre el foco del día">
+                        {([
+                          ["cumple", "#16a34a", "↑", "Bien"],
+                          ["progreso", "#d97706", "→", "Regular"],
+                          ["bajo", "#dc2626", "↓", "Bajo"],
+                        ] as const).map(([val, color, sym, tit]) => {
+                          const on = checks[student.id] === val;
+                          return (
+                            <button
+                              key={val}
+                              onClick={() => setCheckFor(student.id, val)}
+                              className="w-7 h-7 rounded-md text-sm font-bold transition-all"
+                              style={on ? { background: color, color: "#fff" } : { background: "#f3f4f6", color }}
+                              title={tit}
+                            >
+                              {sym}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
+                    <div className="flex gap-1.5 border-l border-gray-100 pl-2">
+                      <button
+                        onClick={() => marcar(student.id, estado === true ? null : true)}
+                        className={`w-9 h-9 rounded-lg text-sm font-bold transition-all ${estado === true ? "bg-emerald-500 text-white shadow-sm" : "bg-emerald-50 text-emerald-700 hover:bg-emerald-100"}`}
+                        title="Presente"
+                      >
+                        ✓
+                      </button>
+                      <button
+                        onClick={() => marcar(student.id, estado === false ? null : false)}
+                        className={`w-9 h-9 rounded-lg text-sm font-bold transition-all ${estado === false ? "bg-red-500 text-white shadow-sm" : "bg-red-50 text-red-600 hover:bg-red-100"}`}
+                        title="Ausente"
+                      >
+                        ✕
+                      </button>
+                    </div>
                   </div>
                 </div>
               );
