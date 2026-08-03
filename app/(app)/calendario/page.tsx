@@ -14,6 +14,7 @@ export const metadata = {
 type TipoPlan = "juvenil" | "competencia" | "damas";
 
 const CATEGORIA_LABEL: Record<string, string> = { juego_largo: "Juego Largo", juego_corto: "Juego Corto", putt: "Putt" };
+const COMPETENCIA_CAT_LABEL: Record<string, string> = { tiro_largo: "Tiro Largo", juego_corto: "Juego Corto", putt: "Putt", trabajo_fisico: "Trabajo Físico" };
 const ESPECIAL_LABEL: Record<string, string> = {
   test_tecnico: "Test Técnico", test_fisico: "Test Físico", campo_pacos: "Campo Pacos y Fabios", campo_infantil: "Campo Infantil",
 };
@@ -29,6 +30,10 @@ function tipoPlanForGrupo(grupo: string | null): TipoPlan | null {
 // descripción/instrucciones del drill, que es contenido interno del profesor.
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function estacionesDeSesion(s: any): string[] {
+  if (Array.isArray(s.estaciones_competencia) && s.estaciones_competencia.length) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    return s.estaciones_competencia.map((e: any) => COMPETENCIA_CAT_LABEL[e.categoria] ?? e.categoria);
+  }
   if (Array.isArray(s.estaciones_damas) && s.estaciones_damas.length) {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     return s.estaciones_damas.map((e: any) => e.nombre);
@@ -113,7 +118,7 @@ export default async function CalendarioPage() {
       const planMap = Object.fromEntries(planes.map((p) => [p.id, p.tipo_plan as TipoPlan]));
       const { data: seses } = await admin
         .from("sesiones_semana")
-        .select("plan_id, dia_semana, fecha, tipo_sesion, lugar, hora_inicio, hora_fin, objetivo, drills, sesion_juvenil, estaciones_damas")
+        .select("plan_id, dia_semana, fecha, tipo_sesion, lugar, hora_inicio, hora_fin, objetivo, drills, sesion_juvenil, estaciones_damas, estaciones_competencia")
         .in("plan_id", planes.map((p) => p.id));
 
       dias = (seses ?? []).map((s) => ({

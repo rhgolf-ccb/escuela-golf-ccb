@@ -214,10 +214,25 @@ export default function WeekWizardModal({ tipoPlan, semana, planId, horariosDefe
   // Guarda SOLO el día actual y se queda ahí — para armar día a día y poder parar.
   async function guardarDiaActual() { await guardarDia(diaActualKey); }
 
-  // Guarda el día actual y cierra el asistente.
+  // Guarda TODOS los días completos (no solo el actual) y cierra. Así, si armaste
+  // varios días navegando con las flechas y cierras acá, no se pierde ninguno.
   async function handleSave() {
-    const ok = await guardarDia(diaActualKey);
-    if (ok) onSaved();
+    setSaving(true);
+    setError(null);
+    try {
+      const diasAGuardar = dias.filter((d) => diasState[d] && diaCompleto(diasState[d]));
+      if (diaActual && diaCompleto(diaActual) && !diasAGuardar.includes(diaActualKey)) diasAGuardar.push(diaActualKey);
+      if (diasAGuardar.length === 0) { setError("No hay ningún día completo para guardar."); return; }
+      const rows = diasAGuardar.flatMap((d) => rowsForDia(d, diasState[d]));
+      const { error: e } = await supabase.from("sesiones_semana").upsert(rows, { onConflict: "plan_id,fecha,hora_inicio" });
+      if (e) throw new Error(e.message);
+      setGuardados((prev) => { const n = new Set(prev); diasAGuardar.forEach((d) => n.add(d)); return n; });
+      onSaved();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Error al guardar");
+    } finally {
+      setSaving(false);
+    }
   }
 
   const duracionTotal = diaActual ? computeSessionDuration(diaActual.horaInicio || "00:00", diaActual.horaFin || "00:00") : 0;
@@ -225,6 +240,7 @@ export default function WeekWizardModal({ tipoPlan, semana, planId, horariosDefe
   const esUltimoDia = currentIndex === dias.length - 1;
   const puedeAvanzar = diaActual ? diaCompleto(diaActual) : false;
   const faltantes = diaActual ? diaFaltantes(diaActual) : [];
+  const diasCompletos = dias.filter((d) => diasState[d] && diaCompleto(diasState[d])).length;
 
   return (
     <div className="fixed inset-0 bg-black/60 z-50 flex items-start justify-center p-4 overflow-y-auto" onClick={() => { if (!saving) onClose(); }}>
@@ -454,10 +470,10 @@ export default function WeekWizardModal({ tipoPlan, semana, planId, horariosDefe
                   </button>
                 </>
               )}
-              <button onClick={handleSave} disabled={!puedeAvanzar || saving}
+              <button onClick={handleSave} disabled={(singleDay ? !puedeAvanzar : diasCompletos === 0) || saving}
                 className="flex-1 py-2.5 rounded-xl text-sm font-semibold text-white disabled:opacity-40"
                 style={{ background: config.color }}>
-                {saving ? "Guardando..." : singleDay ? "✓ Guardar" : "Guardar y cerrar"}
+                {saving ? "Guardando..." : singleDay ? "✓ Guardar" : `Guardar todo y cerrar${diasCompletos > 1 ? ` (${diasCompletos} días)` : ""}`}
               </button>
             </div>
           </>

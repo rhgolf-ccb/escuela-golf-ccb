@@ -33,11 +33,12 @@ export function defaultCategoriasForDia(tipoPlan: TipoPlan, dia: DiaSemana): Est
     // énfasis en ritmo/giro se refleja en el foco por defecto, no aquí.
     return ["juego_largo", "juego_corto", "putt"];
   }
-  // Competencia — estructura día por día: martes énfasis juego largo,
-  // miércoles putt/campo, jueves juego corto, sábado repaso integral.
+  // Competencia — estructura día por día. Solo categorías que existen como
+  // estación en Competencia (juego_largo/juego_corto/putt/trabajo_fisico): "campo"
+  // no es estación aquí sino un día especial "Salida al campo".
   switch (dia) {
     case "martes":    return ["juego_largo", "juego_corto", "putt"];
-    case "miercoles": return ["putt", "campo", "juego_corto"];
+    case "miercoles": return ["putt", "juego_corto", "trabajo_fisico"];
     case "jueves":    return ["juego_corto", "juego_largo", "putt"];
     case "sabado":    return ["juego_largo", "juego_corto", "putt"]; // repaso integral
     default:          return ["juego_largo", "juego_corto", "putt"];
