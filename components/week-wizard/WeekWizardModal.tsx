@@ -73,6 +73,8 @@ export default function WeekWizardModal({ tipoPlan, semana, planId, horariosDefe
   const [error, setError] = useState<string | null>(null);
   const [sugiriendo, setSugiriendo] = useState(false);
   const [profesores, setProfesores] = useState<string[]>([]);
+  // Días ya guardados en la base — para marcarlos con ✓ y poder parar/retomar.
+  const [guardados, setGuardados] = useState<Set<string>>(() => new Set(sesionesExistentes.map((s) => s.dia_semana)));
 
   useEffect(() => {
     supabase
@@ -194,6 +196,7 @@ export default function WeekWizardModal({ tipoPlan, semana, planId, horariosDefe
       const rows = rowsForDia(dia, diasState[dia]);
       const { error: e } = await supabase.from("sesiones_semana").upsert(rows, { onConflict: "plan_id,fecha,hora_inicio" });
       if (e) throw new Error(e.message);
+      setGuardados((prev) => new Set(prev).add(dia));
       return true;
     } catch (err) {
       setError(err instanceof Error ? err.message : "Error al guardar");
@@ -203,22 +206,15 @@ export default function WeekWizardModal({ tipoPlan, semana, planId, horariosDefe
     }
   }
 
-  async function handleSiguienteDia() {
-    const ok = await guardarDia(diaActualKey);
-    if (ok) setCurrentIndex((i) => i + 1);
-  }
+  // Navegación pura entre días — NO guarda. Así puedes saltar al día que quieras
+  // (o revisar la semana sugerida) sin que se programen días que no querías.
+  function handleSiguienteDia() { setCurrentIndex((i) => Math.min(i + 1, dias.length - 1)); }
+  function handleDiaAnterior() { setCurrentIndex((i) => Math.max(i - 1, 0)); }
 
-  // Si el día actual ya está completo, lo guarda antes de volver — así una
-  // edición hecha al revisitar un día no se pierde si el profe cierra el
-  // wizard sin volver a avanzar hasta el final.
-  async function handleDiaAnterior() {
-    if (diaCompleto(diaActual)) {
-      const ok = await guardarDia(diaActualKey);
-      if (!ok) return;
-    }
-    setCurrentIndex((i) => i - 1);
-  }
+  // Guarda SOLO el día actual y se queda ahí — para armar día a día y poder parar.
+  async function guardarDiaActual() { await guardarDia(diaActualKey); }
 
+  // Guarda el día actual y cierra el asistente.
   async function handleSave() {
     const ok = await guardarDia(diaActualKey);
     if (ok) onSaved();
@@ -247,6 +243,25 @@ export default function WeekWizardModal({ tipoPlan, semana, planId, horariosDefe
             <svg width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path d="M18 6L6 18M6 6l12 12" /></svg>
           </button>
         </div>
+
+        {step === "dias" && diaActual && !singleDay && (
+          <div className="px-4 pt-3 pb-3 flex gap-1.5 flex-wrap border-b border-gray-50">
+            {dias.map((d, i) => {
+              const active = i === currentIndex;
+              const saved = guardados.has(d);
+              return (
+                <button
+                  key={d}
+                  onClick={() => setCurrentIndex(i)}
+                  className="px-2.5 py-1.5 rounded-lg text-xs font-semibold border capitalize flex items-center gap-1 transition-all"
+                  style={active ? { background: config.color, color: "#fff", borderColor: config.color } : { background: "#f9fafb", color: "#374151", borderColor: "#e5e7eb" }}
+                >
+                  {saved && <span>✓</span>}{d}
+                </button>
+              );
+            })}
+          </div>
+        )}
 
         {step === "count" && (
           <div className="p-5 space-y-3">
@@ -425,33 +440,25 @@ export default function WeekWizardModal({ tipoPlan, semana, planId, horariosDefe
               </div>
             )}
 
-            <div className="px-5 pb-5 pt-3 flex gap-2 border-t border-gray-100">
-              {currentIndex > 0 && (
-                <button onClick={handleDiaAnterior} disabled={saving}
-                  className="px-4 py-2.5 rounded-xl text-sm font-medium border border-gray-200 text-gray-600 hover:bg-gray-50">
-                  ← Día anterior
-                </button>
+            <div className="px-5 pb-5 pt-3 flex items-center gap-2 border-t border-gray-100">
+              {!singleDay && (
+                <>
+                  <button onClick={handleDiaAnterior} disabled={currentIndex === 0}
+                    className="px-3 py-2.5 rounded-xl text-sm font-medium border border-gray-200 text-gray-600 hover:bg-gray-50 disabled:opacity-30" title="Día anterior">←</button>
+                  <button onClick={handleSiguienteDia} disabled={esUltimoDia}
+                    className="px-3 py-2.5 rounded-xl text-sm font-medium border border-gray-200 text-gray-600 hover:bg-gray-50 disabled:opacity-30" title="Siguiente día">→</button>
+                  <button onClick={guardarDiaActual} disabled={!puedeAvanzar || saving}
+                    className="flex-1 py-2.5 rounded-xl text-sm font-semibold border-2 disabled:opacity-40"
+                    style={{ borderColor: config.color, color: config.color }}>
+                    {saving ? "Guardando..." : guardados.has(diaActualKey) ? "✓ Guardado — actualizar" : "Guardar día"}
+                  </button>
+                </>
               )}
-              {!singleDay && !esUltimoDia && (
-                <button
-                  onClick={handleSiguienteDia}
-                  disabled={!puedeAvanzar || saving}
-                  className="flex-1 py-2.5 rounded-xl text-sm font-semibold text-white disabled:opacity-40"
-                  style={{ background: config.color }}
-                >
-                  {saving ? "Guardando..." : "Siguiente día →"}
-                </button>
-              )}
-              {(singleDay || esUltimoDia) && (
-                <button
-                  onClick={handleSave}
-                  disabled={!puedeAvanzar || saving}
-                  className="flex-1 py-2.5 rounded-xl text-sm font-semibold text-white disabled:opacity-40"
-                  style={{ background: config.color }}
-                >
-                  {saving ? "Guardando..." : "✓ Guardar programación"}
-                </button>
-              )}
+              <button onClick={handleSave} disabled={!puedeAvanzar || saving}
+                className="flex-1 py-2.5 rounded-xl text-sm font-semibold text-white disabled:opacity-40"
+                style={{ background: config.color }}>
+                {saving ? "Guardando..." : singleDay ? "✓ Guardar" : "Guardar y cerrar"}
+              </button>
             </div>
           </>
         )}
