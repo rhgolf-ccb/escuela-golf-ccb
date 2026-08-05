@@ -48,6 +48,32 @@ body {
   --shadow-card-hover: 0 4px 12px rgba(0,0,0,0.10);
 }
 
+/* Hero a pantalla completa. Reglas fuera de @layer para que ganen siempre a las
+   utilidades de Tailwind (que sí van en capa), sin depender del orden en el que
+   el compilador emita min-h-screen y la clase svh.
+   svh (no vh) evita el salto de alto cuando Chrome oculta/muestra su barra en la
+   PWA de Android. En móvil/tablet se descuenta el navbar fijo (pt-14 = 3.5rem). */
+.hero-fullscreen {
+  min-height: calc(100vh - 3.5rem);
+  min-height: calc(100svh - 3.5rem);
+}
+@media (min-width: 1024px) {
+  .hero-fullscreen {
+    min-height: 100vh;
+    min-height: 100svh;
+  }
+}
+
+/* Sin backdrop-filter el vidrio al 70 % es ilegible: se opaca la tarjeta. */
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .glass-card {
+    background-color: rgba(255, 255, 255, 0.92);
+  }
+  .glass-panel {
+    background-color: rgba(255, 255, 255, 0.96);
+  }
+}
+
 @keyframes asesor-golf-panel-in {
   from { opacity: 0; transform: translateY(12px); }
   to { opacity: 1; transform: translateY(0); }

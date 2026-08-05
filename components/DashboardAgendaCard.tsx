@@ -3,6 +3,9 @@
 import { useState } from "react";
 import Link from "next/link";
 import { Clock, Calendar } from "lucide-react";
+import {
+  GLASS_PANEL, GLASS_TITLE, GLASS_SUBTITLE, GLASS_MUTED, GLASS_DIVIDER,
+} from "@/lib/dashboard-glass";
 
 type TipoPlan = "juvenil" | "competencia" | "damas";
 
@@ -57,16 +60,16 @@ function SesionRow({ s }: { s: AgendaSesion }) {
   return (
     <div className="flex gap-3">
       <div className="w-14 shrink-0 text-right">
-        <p className="text-sm font-bold text-gray-800">{formatHora(s.hora_inicio)}</p>
-        {dur !== null && <p className="text-[10px] text-gray-400">{dur} min</p>}
+        <p className="text-sm font-bold" style={{ color: GLASS_TITLE }}>{formatHora(s.hora_inicio)}</p>
+        {dur !== null && <p className="text-[10px]" style={{ color: GLASS_MUTED }}>{dur} min</p>}
       </div>
       <div className="w-1 rounded-full shrink-0" style={{ background: color }} />
-      <div className="flex-1 min-w-0 pb-3 border-b border-gray-50 last:border-0 last:pb-0">
-        <p className="text-sm font-semibold text-gray-900">
+      <div className="flex-1 min-w-0 pb-3 border-b last:border-0 last:pb-0" style={{ borderColor: GLASS_DIVIDER }}>
+        <p className="text-sm font-semibold" style={{ color: GLASS_TITLE }}>
           {s.tipo_plan ? `${TIPO_PLAN_LABEL[s.tipo_plan]} — ` : ""}
           {TIPO_SESION_LABEL[s.tipo_sesion] ?? s.tipo_sesion}
         </p>
-        <p className="text-xs text-gray-400 mt-0.5">
+        <p className="text-xs mt-0.5" style={{ color: GLASS_MUTED }}>
           {LUGAR_LABEL[s.lugar] ?? s.lugar}
           {s.objetivo ? ` · ${s.objetivo}` : ""}
         </p>
@@ -97,18 +100,18 @@ export default function DashboardAgendaCard({
   const dias = Array.from(porDia.keys()).sort();
 
   return (
-    <div className="bg-white rounded-xl border border-gray-100 border-t-[3px] shadow-sm p-4 sm:p-6" style={{ borderTopColor: "#1B4D2E" }}>
+    <div className={`${GLASS_PANEL} border-t-[3px] p-4 sm:p-6`} style={{ borderTopColor: "#1B4D2E" }}>
       <div className="flex items-center justify-between mb-1">
-        <h2 className="text-sm font-semibold text-foreground flex items-center gap-2">
+        <h2 className="text-sm font-semibold flex items-center gap-2" style={{ color: GLASS_TITLE }}>
           <Clock size={15} style={{ color: "#1B4D2E" }} />
           Agenda
         </h2>
-        <div className="flex items-center gap-0.5 rounded-full p-0.5 bg-gray-50 border border-gray-100 shrink-0">
+        <div className="flex items-center gap-0.5 rounded-full p-0.5 bg-white/50 border border-white/60 shrink-0">
           <button
             type="button"
             onClick={() => setTab("hoy")}
             className="text-xs font-medium px-2.5 py-1 rounded-full transition-colors"
-            style={tab === "hoy" ? { background: "#1B4D2E", color: "#fff" } : { color: "#6b7280" }}
+            style={tab === "hoy" ? { background: "#1B4D2E", color: "#fff" } : { color: GLASS_SUBTITLE }}
           >
             Hoy
           </button>
@@ -116,7 +119,7 @@ export default function DashboardAgendaCard({
             type="button"
             onClick={() => setTab("semana")}
             className="text-xs font-medium px-2.5 py-1 rounded-full transition-colors"
-            style={tab === "semana" ? { background: "#1B4D2E", color: "#fff" } : { color: "#6b7280" }}
+            style={tab === "semana" ? { background: "#1B4D2E", color: "#fff" } : { color: GLASS_SUBTITLE }}
           >
             Semana
           </button>
@@ -125,9 +128,9 @@ export default function DashboardAgendaCard({
 
       {tab === "hoy" ? (
         <>
-          <p className="text-xs text-gray-400 mb-4">{fechaLabel}</p>
+          <p className="text-xs mb-4" style={{ color: GLASS_MUTED }}>{fechaLabel}</p>
           {sesionesHoy.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-10 text-gray-400">
+            <div className="flex flex-col items-center justify-center py-10" style={{ color: GLASS_MUTED }}>
               <Calendar size={28} className="mb-2 opacity-40" />
               <p className="text-sm">No hay sesiones programadas para hoy</p>
             </div>
@@ -142,7 +145,7 @@ export default function DashboardAgendaCard({
       ) : (
         <div className="mt-3">
           {dias.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-10 text-gray-400">
+            <div className="flex flex-col items-center justify-center py-10" style={{ color: GLASS_MUTED }}>
               <Calendar size={28} className="mb-2 opacity-40" />
               <p className="text-sm">No hay sesiones programadas esta semana</p>
             </div>
@@ -150,7 +153,7 @@ export default function DashboardAgendaCard({
             <div className="space-y-4 max-h-[420px] overflow-y-auto pr-1">
               {dias.map((fecha) => (
                 <div key={fecha}>
-                  <p className="text-[11px] font-bold uppercase tracking-wide mb-2" style={{ color: fecha === hoy ? "#1B4D2E" : "#9ca3af" }}>
+                  <p className="text-[11px] font-bold uppercase tracking-wide mb-2" style={{ color: fecha === hoy ? "#1B4D2E" : GLASS_MUTED }}>
                     {diaLabelFromFecha(fecha)}
                     {fecha === hoy ? " · Hoy" : ""}
                   </p>
