@@ -64,13 +64,19 @@ function ModuleCards({ cards, className }: { cards: ModuleCard[]; className: str
   );
 }
 
-const ATTENDANCE_LABEL: Record<string, string> = {
-  presente: "Presente", justificado: "Justificado", ausente: "Ausente", sin_reserva: "Sin reserva",
+// La asistencia real vive en reservas.asistio (boolean nullable), que sólo
+// distingue presente / ausente / sin marcar. La tabla `attendance` con sus
+// cuatro estados está muerta (RLS sin políticas, filas huérfanas, nadie
+// escribe en ella), así que aquí no se usa.
+type EstadoAsistencia = "presente" | "ausente" | "sin_marcar";
+
+const ATTENDANCE_LABEL: Record<EstadoAsistencia, string> = {
+  presente: "Presente", ausente: "Ausente", sin_marcar: "Sin marcar",
 };
-const ATTENDANCE_COLOR: Record<string, string> = {
-  presente: "#16a34a", justificado: "#378ADD", ausente: "#dc2626", sin_reserva: "#9ca3af",
+const ATTENDANCE_COLOR: Record<EstadoAsistencia, string> = {
+  presente: "#16a34a", ausente: "#dc2626", sin_marcar: "#9ca3af",
 };
-const ATTENDANCE_ORDER = ["presente", "justificado", "ausente", "sin_reserva"];
+const ATTENDANCE_ORDER: EstadoAsistencia[] = ["presente", "ausente", "sin_marcar"];
 
 export default async function DashboardPage() {
   const supabase = await createSupabaseServerClient();
@@ -99,6 +105,12 @@ export default async function DashboardPage() {
 
   const semanaInicio = getMondayISO(hoy);
   const semanaFin = addDaysISO(semanaInicio, 6);
+
+  const formatoDiaMes = new Intl.DateTimeFormat("es-CO", {
+    timeZone: "America/Bogota", day: "numeric", month: "short",
+  });
+  const rangoSemanaLabel = `Semana del ${formatoDiaMes.format(new Date(`${semanaInicio}T12:00:00`))
+    .replace(".", "")} al ${formatoDiaMes.format(new Date(`${semanaFin}T12:00:00`)).replace(".", "")}`;
 
   const { data: sesionesSemanaRaw } = await supabase
     .from("sesiones_semana")
@@ -130,13 +142,34 @@ export default async function DashboardPage() {
     .order("fecha_inicio", { ascending: true })
     .limit(5);
 
-  const { data: attendanceRows } = await supabase.from("attendance").select("status");
-  const attendanceCounts: Record<string, number> = { presente: 0, justificado: 0, ausente: 0, sin_reserva: 0 };
-  for (const row of attendanceRows ?? []) {
-    if (row.status && row.status in attendanceCounts) attendanceCounts[row.status]++;
+  // Asistencia de la semana en curso: se une con sesiones_semana por sesion_id
+  // para poder filtrar por fecha (reservas no guarda la fecha de la sesión).
+  const { data: reservasSemana, error: asistenciaError } = await supabase
+    .from("reservas")
+    .select("asistio, sesiones_semana!inner(fecha)")
+    .gte("sesiones_semana.fecha", semanaInicio)
+    .lte("sesiones_semana.fecha", semanaFin);
+
+  if (asistenciaError) {
+    console.error("Dashboard: no se pudo leer la asistencia de la semana:", asistenciaError.message);
   }
-  const totalAsistencia = Object.values(attendanceCounts).reduce((a, b) => a + b, 0);
-  const pctAsistencia = totalAsistencia > 0 ? Math.round((attendanceCounts.presente / totalAsistencia) * 100) : 0;
+
+  const attendanceCounts: Record<EstadoAsistencia, number> = { presente: 0, ausente: 0, sin_marcar: 0 };
+  for (const row of reservasSemana ?? []) {
+    if (row.asistio === true) attendanceCounts.presente++;
+    else if (row.asistio === false) attendanceCounts.ausente++;
+    else attendanceCounts.sin_marcar++;
+  }
+  const totalReservasSemana = Object.values(attendanceCounts).reduce((a, b) => a + b, 0);
+  // Las reservas sin marcar no entran en el denominador: no sabemos si el
+  // jugador asistió o no.
+  const totalMarcado = attendanceCounts.presente + attendanceCounts.ausente;
+  // null ≠ 0: null es "no pude leer", 0 es "nadie asistió".
+  const pctAsistencia = asistenciaError
+    ? null
+    : totalMarcado > 0
+      ? Math.round((attendanceCounts.presente / totalMarcado) * 100)
+      : 0;
 
   const kpis: ModuleCard[] = [
     { label: "Jugadores Activos", value: totalAlumnos ?? 0, icon: Users },
@@ -268,19 +301,21 @@ export default async function DashboardPage() {
                 <ChartBar size={15} style={{ color: "#1d5c9e" }} />
                 Resumen de asistencia
               </h2>
-              <p className="text-xs mt-0.5" style={{ color: GLASS_MUTED }}>Periodo registrado</p>
+              <p className="text-xs mt-0.5" style={{ color: GLASS_MUTED }}>{rangoSemanaLabel}</p>
             </div>
 
-            {totalAsistencia === 0 ? (
+            {!asistenciaError && totalReservasSemana === 0 ? (
               <div className="flex flex-col items-center justify-center py-10 text-center" style={{ color: GLASS_MUTED }}>
                 <ChartBar size={28} className="mb-2 opacity-40" />
-                <p className="text-sm">Aún no hay registros de asistencia</p>
+                <p className="text-sm">Aún no hay reservas esta semana</p>
               </div>
             ) : (
               <>
                 <div className="mb-4">
-                  <p className="text-3xl font-bold leading-none" style={{ color: GLASS_TITLE }}>{pctAsistencia}%</p>
-                  <p className="text-xs mt-1" style={{ color: GLASS_MUTED }}>Asistencia</p>
+                  <p className="text-3xl font-bold leading-none" style={{ color: GLASS_TITLE }}>
+                    {pctAsistencia === null ? "—" : `${pctAsistencia}%`}
+                  </p>
+                  <p className="text-xs mt-1" style={{ color: GLASS_MUTED }}>Asistencia de la semana en curso</p>
                 </div>
 
                 <div className="flex h-2.5 rounded-full overflow-hidden mb-4 bg-white/50">
@@ -290,7 +325,7 @@ export default async function DashboardPage() {
                     return (
                       <div
                         key={key}
-                        style={{ width: `${Math.round((count / totalAsistencia) * 100)}%`, background: ATTENDANCE_COLOR[key] }}
+                        style={{ width: `${Math.round((count / totalReservasSemana) * 100)}%`, background: ATTENDANCE_COLOR[key] }}
                       />
                     );
                   })}
