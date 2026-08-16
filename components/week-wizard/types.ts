@@ -88,17 +88,25 @@ export function diaCompleto(dia: DiaWizardState): boolean {
   return diaFaltantes(dia).length === 0;
 }
 
-// Lista legible de qué falta para poder avanzar — se muestra junto al botón
-// "Siguiente día" porque quedaba deshabilitado sin ninguna pista de qué
-// completar. El desafío de cierre es opcional (igual que el calentamiento) —
-// solo se exige elegir al menos un ejercicio de biblioteca por estación.
+// Lo que SÍ bloquea guardar el día — solo el esqueleto de la sesión (qué tipo de
+// día es y que haya estaciones). Los drills y el reto de cierre son sugerencias:
+// el director decide semana a semana si los usa, así que salen por
+// diaAdvertencias() y nunca deshabilitan un botón.
 export function diaFaltantes(dia: DiaWizardState): string[] {
   if (dia.tipo === "especial") return dia.especial ? [] : ["Elige un tipo de día especial"];
   if (dia.estaciones.length === 0) return ["Agrega al menos una estación"];
-  const faltantes: string[] = [];
+  return [];
+}
+
+// Avisos informativos — el día se puede guardar igual. Se muestran en ámbar
+// debajo del bloque de bloqueantes.
+export function diaAdvertencias(dia: DiaWizardState): string[] {
+  if (dia.tipo === "especial") return [];
+  const avisos: string[] = [];
   dia.estaciones.forEach((e, i) => {
     const tieneContenido = e.items.length > 0 || (e.transferencia?.length ?? 0) > 0;
-    if (!tieneContenido) faltantes.push(`Estación ${i + 1}: falta un ejercicio de la biblioteca o un bloque de transferencia`);
+    if (!tieneContenido) avisos.push(`Estación ${i + 1} (${e.categoria.replace(/_/g, " ")}): sin ejercicio asignado`);
+    if (!e.desafio.trim()) avisos.push(`Estación ${i + 1}: sin reto de cierre`);
   });
-  return faltantes;
+  return avisos;
 }

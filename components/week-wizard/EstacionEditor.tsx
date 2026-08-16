@@ -26,9 +26,17 @@ interface Props {
 const FOCOS_LEGACY = new Set<string>(FOCOS);
 
 export default function EstacionEditor({ estacion, index, categoriaOptions, grupos, gruposFisico, usadosEnOtrasPartes, retosSugeridos, permiteTransferencia, profesores, onChange }: Props) {
+  const opcionActual = categoriaOptions.find((c) => c.value === estacion.categoria) ?? categoriaOptions[0];
+  // Focos del tema (Competencia/Juvenil) o el vocabulario genérico si no define.
+  const focoOpciones = opcionActual.focos ?? FOCOS.map((f) => ({ value: f, label: FOCO_LABEL[f] }));
   const [showPicker, setShowPicker] = useState(false);
   const [retoIdx, setRetoIdx] = useState(0);
-  const opcionActual = categoriaOptions.find((c) => c.value === estacion.categoria) ?? categoriaOptions[0];
+  // Foco escrito a mano ("Otro…"). Se deriva en vez de depender solo del estado
+  // local: si el foco que llega no está en la lista (día ya guardado que se
+  // reabre, o copiado del día anterior) el editor arranca directo en modo libre
+  // y conserva el texto.
+  const [focoLibre, setFocoLibre] = useState(false);
+  const enModoLibre = focoLibre || (!!estacion.foco && !focoOpciones.some((f) => f.value === estacion.foco));
   const esFisica = opcionActual.drillsCategoria === null;
   const esTiroLargo = !!permiteTransferencia && opcionActual.canonical === "juego_largo";
   const bloques = estacion.transferencia ?? [];
@@ -52,8 +60,6 @@ export default function EstacionEditor({ estacion, index, categoriaOptions, grup
     [next[idx], next[j]] = [next[j], next[idx]];
     setBloques(next);
   }
-  // Focos del tema (Competencia/Juvenil) o el vocabulario genérico si no define.
-  const focoOpciones = opcionActual.focos ?? FOCOS.map((f) => ({ value: f, label: FOCO_LABEL[f] }));
   // El foco también se muestra en físico cuando el tema define sus propios focos
   // (ej. físico de Juvenil orientado al swing).
   const mostrarFoco = opcionActual.focos != null || !esFisica;
@@ -89,6 +95,7 @@ export default function EstacionEditor({ estacion, index, categoriaOptions, grup
           value={estacion.categoria}
           onChange={(e) => {
             const opt = categoriaOptions.find((c) => c.value === e.target.value)!;
+            setFocoLibre(false); // el foco se resetea con el tema, también si era texto libre
             onChange({ categoria: opt.value, foco: null, material: [], items: [], desafio: "", lugar: estacion.lugar });
           }}
           className="text-xs font-bold uppercase tracking-wide bg-transparent border-none focus:outline-none focus:ring-1 focus:ring-green-300 rounded px-1 py-0.5"
@@ -108,8 +115,14 @@ export default function EstacionEditor({ estacion, index, categoriaOptions, grup
           <div>
             <label className="text-[11px] font-bold text-gray-500 uppercase tracking-wide block mb-1">Foco</label>
             <select
-              value={estacion.foco ?? ""}
+              value={enModoLibre ? "__otro__" : estacion.foco ?? ""}
               onChange={(e) => {
+                if (e.target.value === "__otro__") {
+                  setFocoLibre(true);
+                  onChange({ ...estacion, foco: "" });
+                  return;
+                }
+                setFocoLibre(false);
                 const v = e.target.value || null;
                 // Solo limpiamos los ejercicios si el foco realmente filtra la
                 // biblioteca (vocabulario legacy); los focos nuevos no filtran.
@@ -120,7 +133,27 @@ export default function EstacionEditor({ estacion, index, categoriaOptions, grup
             >
               <option value="">Cualquiera</option>
               {focoOpciones.map((f) => <option key={f.value} value={f.value}>{f.label}</option>)}
+              <option value="__otro__">Otro…</option>
             </select>
+            {enModoLibre && (
+              <div className="flex items-center gap-2 mt-1.5">
+                <input
+                  type="text"
+                  value={estacion.foco ?? ""}
+                  onChange={(e) => onChange({ ...estacion, foco: e.target.value })}
+                  placeholder="Escribe el foco de esta estación"
+                  maxLength={60}
+                  className="flex-1 min-w-0 text-xs border border-gray-200 rounded-lg px-2.5 py-1.5"
+                />
+                <button
+                  type="button"
+                  onClick={() => { setFocoLibre(false); onChange({ ...estacion, foco: null }); }}
+                  className="text-[11px] font-medium text-blue-700 hover:text-blue-900 shrink-0"
+                >
+                  volver a la lista
+                </button>
+              </div>
+            )}
           </div>
         )}
 

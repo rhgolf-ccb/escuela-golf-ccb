@@ -209,24 +209,41 @@ const RETOS_POR_CATEGORIA: Record<string, string[]> = {
   ],
 };
 
-const RETOS_POR_FOCO: Record<string, string[]> = {
-  toma_datos_trackman: ["Registra tu línea base con Trackman: velocidad de palo y bola, smash y carry por palo."],
-  potencia: ["Supera tu mejor velocidad de bola del día con smash ≥ 1.45."],
-  tempo: ["Tour Tempo: 10 repeticiones seguidas sin romper el ritmo, contacto centrado."],
-  control_distancia: ["5 tiros dentro de ±3 m del carry objetivo."],
-  bunker: ["3 salidas de bunker seguidas dentro de 3 m."],
-  lectura_caidas: ["Lee y emboca 3 putts en caída desde 3 m."],
+// Retos ligados a un foco concreto. `categorias` limita en qué estación se
+// ofrecen: varios focos se repiten en más de un tema (toma_datos_trackman y
+// potencia son de juego largo, control_distancia vive en juego corto y en putt),
+// y su reto solo encaja en algunos. Sin `categorias` el reto vale para cualquier
+// estación (ej. tempo, que es transversal).
+const RETOS_POR_FOCO: Record<string, { categorias?: string[]; retos: string[] }> = {
+  toma_datos_trackman: { categorias: ["tiro_largo", "trabajo_fisico"], retos: ["Registra tu línea base con Trackman: velocidad de palo y bola, smash y carry por palo."] },
+  potencia: { categorias: ["tiro_largo", "trabajo_fisico"], retos: ["Supera tu mejor velocidad de bola del día con smash ≥ 1.45."] },
+  tempo: { retos: ["Tour Tempo: 10 repeticiones seguidas sin romper el ritmo, contacto centrado."] },
+  control_distancia: { categorias: ["juego_corto"], retos: ["5 tiros dentro de ±3 m del carry objetivo."] },
+  bunker: { categorias: ["juego_corto"], retos: ["3 salidas de bunker seguidas dentro de 3 m."] },
+  lectura_caidas: { categorias: ["putt"], retos: ["Lee y emboca 3 putts en caída desde 3 m."] },
 };
 
 // Retos Trackman al aire libre (medibles) — se ofrecen junto a los demás retos
-// de cierre en Competencia.
-const RETOS_TRACKMAN: string[] = [
-  "Trackman · Escalera de distancias (Combine): supera tu score.",
-  "Trackman · Longest carry dentro del corredor de dispersión.",
-  "Trackman · PR de velocidad de bola con smash ≥ 1.45.",
-  "Trackman · Dispersión: X de Y dentro del radio objetivo.",
-  "Trackman · Ventana de carry: 5 tiros dentro de ±3 m.",
-];
+// de cierre en Competencia, indexados por categoría: los de juego largo no
+// tienen nada que ver con la habilidad que se trabaja en putt o juego corto.
+const RETOS_TRACKMAN: Record<string, string[]> = {
+  tiro_largo: [
+    "Trackman · Escalera de distancias (Combine): supera tu score.",
+    "Trackman · Longest carry dentro del corredor de dispersión.",
+    "Trackman · PR de velocidad de bola con smash ≥ 1.45.",
+    "Trackman · Dispersión: X de Y dentro del radio objetivo.",
+    "Trackman · Ventana de carry: 5 tiros dentro de ±3 m.",
+  ],
+  juego_corto: [
+    "Trackman · Gapping de wedges: carry medio de PW, GW y SW en 5 bolas.",
+    "Trackman · Ventana de carry a 50 m: 5 tiros dentro de ±3 m.",
+    "Trackman · Control de spin: 4 de 6 bolas dentro del rango objetivo.",
+  ],
+  // Trackman no mide putt en el campo de práctica.
+  putt: [],
+  // La medición de velocidad ya vive en RETOS_POR_FOCO.potencia.
+  trabajo_fisico: [],
+};
 
 const RETOS_JUVENIL: Record<string, string[]> = {
   juego_largo: ["¿Quién le pega más lejos manteniendo el equilibrio?", "Puntería: dale al cono/aro objetivo, 3 de 5.", "5 bolas al aire: cuenta cuántas pasan la línea."],
@@ -245,9 +262,13 @@ const RETOS_DAMAS: Record<string, string[]> = {
 
 export function retosSugeridos(tipoPlan: TipoPlan, categoria: string, foco: string | null): string[] {
   if (tipoPlan === "competencia") {
-    const porFoco = foco ? RETOS_POR_FOCO[foco] ?? [] : [];
+    const entradaFoco = foco ? RETOS_POR_FOCO[foco] : undefined;
+    const focoAplica = !!entradaFoco && (!entradaFoco.categorias || entradaFoco.categorias.includes(categoria));
+    const porFoco = focoAplica ? entradaFoco.retos : [];
     const porCategoria = RETOS_POR_CATEGORIA[categoria] ?? [];
-    return [...porFoco, ...porCategoria, ...RETOS_TRACKMAN];
+    const porTrackman = RETOS_TRACKMAN[categoria] ?? [];
+    // El Set evita ofrecer dos veces el mismo texto al combinar las tres fuentes.
+    return [...new Set([...porFoco, ...porCategoria, ...porTrackman])];
   }
   if (tipoPlan === "juvenil") return RETOS_JUVENIL[categoria] ?? [];
   if (tipoPlan === "damas") return RETOS_DAMAS[categoria] ?? [];

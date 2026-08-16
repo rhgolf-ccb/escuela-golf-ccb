@@ -7,7 +7,7 @@ import { DIAS_POR_TIPO, TIPO_PLAN_LABEL, getFechaForDia } from "@/components/Pro
 import type { EstacionLibraryPick } from "@/components/EstacionLibraryPicker";
 import { GROUP_CONFIGS, gruposParaDrills, gruposParaFisico, categoriaOptionForCanonical, retosSugeridos, CAMPO_GAMES } from "./group-configs";
 import type { DiaWizardState } from "./types";
-import { nuevaEstacion, diaCompleto, diaFaltantes } from "./types";
+import { nuevaEstacion, diaCompleto, diaFaltantes, diaAdvertencias } from "./types";
 import { computeSessionDuration, allocateStationMinutes, defaultStationCount, defaultCategoriasForDia, suggestLugar } from "@/lib/planning-defaults";
 import { SUBGRUPO_LABEL, type SubgrupoJuvenil } from "@/lib/estacion-library-constants";
 import EstacionEditor from "./EstacionEditor";
@@ -269,6 +269,7 @@ export default function WeekWizardModal({ tipoPlan, semana, planId, horariosDefe
   const esUltimoDia = currentIndex === dias.length - 1;
   const puedeAvanzar = diaActual ? diaCompleto(diaActual) : false;
   const faltantes = diaActual ? diaFaltantes(diaActual) : [];
+  const advertencias = diaActual ? diaAdvertencias(diaActual) : [];
   const diasCompletos = dias.filter((d) => diasState[d] && diaCompleto(diasState[d])).length;
 
   return (
@@ -294,14 +295,20 @@ export default function WeekWizardModal({ tipoPlan, semana, planId, horariosDefe
             {dias.map((d, i) => {
               const active = i === currentIndex;
               const saved = guardados.has(d);
+              // Tres estados: guardado completo (✓), guardado pero con
+              // sugerencias sin usar (⚠) y sin guardar (sin marca).
+              const conAvisos = saved && !!diasState[d] && diaAdvertencias(diasState[d]).length > 0;
               return (
                 <button
                   key={d}
                   onClick={() => setCurrentIndex(i)}
+                  title={saved ? (conAvisos ? "Guardado — con sugerencias sin usar" : "Guardado") : "Sin guardar"}
                   className="px-2.5 py-1.5 rounded-lg text-xs font-semibold border capitalize flex items-center gap-1 transition-all"
                   style={active ? { background: config.color, color: "#fff", borderColor: config.color } : { background: "#f9fafb", color: "#374151", borderColor: "#e5e7eb" }}
                 >
-                  {saved && <span>✓</span>}{d}
+                  {saved && (
+                    <span style={{ color: active ? "#fff" : conAvisos ? "#b45309" : "#15803d" }}>{conAvisos ? "⚠" : "✓"}</span>
+                  )}{d}
                 </button>
               );
             })}
@@ -436,7 +443,10 @@ export default function WeekWizardModal({ tipoPlan, semana, planId, horariosDefe
                     );
                     return (
                       <EstacionEditor
-                        key={idx}
+                        // el día va en la key: el estado interno del editor
+                        // (picker abierto, reto sugerido, foco libre) es del día
+                        // que se está viendo, no del índice de estación.
+                        key={`${diaActualKey}-${idx}`}
                         index={idx}
                         estacion={est}
                         categoriaOptions={disponiblesParaEsta}
@@ -481,10 +491,17 @@ export default function WeekWizardModal({ tipoPlan, semana, planId, horariosDefe
               {error && <div className="bg-red-50 border border-red-100 rounded-lg px-4 py-3 text-sm text-red-700">{error}</div>}
             </div>
 
-            {!puedeAvanzar && faltantes.length > 0 && (
-              <div className="mx-5 mb-2 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 text-xs text-amber-800 space-y-0.5">
+            {faltantes.length > 0 && (
+              <div className="mx-5 mb-2 bg-red-50 border border-red-200 rounded-lg px-3 py-2 text-xs text-red-700 space-y-0.5">
                 <p className="font-semibold">Falta para continuar:</p>
                 {faltantes.map((f, i) => <p key={i}>· {f}</p>)}
+              </div>
+            )}
+
+            {advertencias.length > 0 && (
+              <div className="mx-5 mb-2 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 text-xs text-amber-800 space-y-0.5">
+                <p className="font-semibold">Puedes guardar así; son sugerencias:</p>
+                {advertencias.map((a, i) => <p key={i}>· {a}</p>)}
               </div>
             )}
 
