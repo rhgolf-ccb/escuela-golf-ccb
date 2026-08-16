@@ -129,18 +129,55 @@ export default function WeekWizardModal({ tipoPlan, semana, planId, horariosDefe
     updateDia({ ...anterior, horaInicio: diaActual.horaInicio, horaFin: diaActual.horaFin });
   }
 
+  // Los catálogos son chicos y fijos (drills ~148 filas, ejercicios_fisicos ~50)
+  // y no dependen ni del día ni de la estación, así que se traen enteros una vez
+  // y la selección se hace en memoria. Antes esto eran ~20 consultas
+  // secuenciales (una por día para el calentamiento, más una por estación) que
+  // el profesor esperaba antes de ver nada.
   async function sugerirSemana() {
     setSugiriendo(true);
+    setError(null);
+    const gFisico = gruposParaFisico(tipoPlan);
+
+    const [calRes, ejRes, drillsRes] = await Promise.all([
+      supabase.from("ejercicios_fisicos").select("id, nombre, instrucciones, series_repeticiones")
+        .eq("categoria", "Calentamiento").overlaps("grupos", gFisico).order("nombre"),
+      supabase.from("ejercicios_fisicos").select("id, nombre, instrucciones, series_repeticiones")
+        .neq("categoria", "Calentamiento").overlaps("grupos", gFisico).order("nombre"),
+      supabase.from("drills").select("id, titulo, descripcion, rating, categoria")
+        .eq("aprobado", true).order("rating", { ascending: false }),
+    ]);
+
+    // Sin esto un fallo de catálogo generaba la semana igual, con las estaciones
+    // vacías y sin avisar: parecía que no había material disponible.
+    const fallo = calRes.error ?? ejRes.error ?? drillsRes.error;
+    if (fallo) {
+      setError(`No se pudo cargar la biblioteca de ejercicios: ${fallo.message}. No se generó la semana sugerida.`);
+      setSugiriendo(false);
+      return;
+    }
+
+    const calentamientos = calRes.data ?? [];
+    const ejercicios = ejRes.data ?? [];
+
+    // Drills agrupados por categoría una sola vez, conservando el orden por
+    // rating que trajo la consulta.
+    type DrillRow = NonNullable<typeof drillsRes.data>[number];
+    const drillsPorCategoria = new Map<string, DrillRow[]>();
+    for (const d of drillsRes.data ?? []) {
+      const arr = drillsPorCategoria.get(d.categoria);
+      if (arr) arr.push(d); else drillsPorCategoria.set(d.categoria, [d]);
+    }
+
     const usados = new Set<string>();
     const next: Record<string, DiaWizardState> = {};
     for (const dia of dias) {
       const base = initDia(dia, estacionesPorDia);
-      const gFisico = gruposParaFisico(tipoPlan);
-      const { data: calData } = await supabase
-        .from("ejercicios_fisicos").select("id, nombre, instrucciones, series_repeticiones")
-        .eq("categoria", "Calentamiento").overlaps("grupos", gFisico).order("nombre").limit(2);
-      const calentamiento = calData && calData.length > 0
-        ? { ejercicios: calData.map((e) => ({ id: e.id, titulo: e.nombre, descripcion: e.instrucciones ?? "", series_repeticiones: e.series_repeticiones })), duracionMin: 8 }
+      // Mismos dos primeros calentamientos para todos los días, como antes: no
+      // entran al Set `usados`.
+      const calDia = calentamientos.slice(0, 2);
+      const calentamiento = calDia.length > 0
+        ? { ejercicios: calDia.map((e) => ({ id: e.id, titulo: e.nombre, descripcion: e.instrucciones ?? "", series_repeticiones: e.series_repeticiones })), duracionMin: 8 }
         : null;
 
       const estaciones = [];
@@ -148,18 +185,10 @@ export default function WeekWizardModal({ tipoPlan, semana, planId, horariosDefe
         const opt = config.categorias.find((c) => c.value === est.categoria)!;
         let item: EstacionLibraryPick | null = null;
         if (opt.drillsCategoria) {
-          const { data } = await supabase.from("drills")
-            .select("id, titulo, descripcion, rating")
-            .eq("categoria", opt.drillsCategoria).eq("aprobado", true)
-            .order("rating", { ascending: false }).limit(10);
-          const candidato = (data ?? []).find((d) => !usados.has(d.titulo));
+          const candidato = (drillsPorCategoria.get(opt.drillsCategoria) ?? []).find((d) => !usados.has(d.titulo));
           if (candidato) item = { id: candidato.id, titulo: candidato.titulo, descripcion: candidato.descripcion, series_repeticiones: null };
         } else {
-          const { data } = await supabase.from("ejercicios_fisicos")
-            .select("id, nombre, instrucciones, series_repeticiones")
-            .neq("categoria", "Calentamiento").overlaps("grupos", gFisico)
-            .order("nombre").limit(10);
-          const candidato = (data ?? []).find((d) => !usados.has(d.nombre));
+          const candidato = ejercicios.find((d) => !usados.has(d.nombre));
           if (candidato) item = { id: candidato.id, titulo: candidato.nombre, descripcion: candidato.instrucciones ?? "", series_repeticiones: candidato.series_repeticiones };
         }
         if (item) usados.add(item.titulo);
@@ -299,6 +328,9 @@ export default function WeekWizardModal({ tipoPlan, semana, planId, horariosDefe
             >
               {sugiriendo ? "Armando semana sugerida..." : "✨ Sugerir semana completa"}
             </button>
+            {/* El bloque de error del paso "días" no se ve desde acá, y este es
+                el único paso donde vive "Sugerir semana completa". */}
+            {error && <div className="bg-red-50 border border-red-100 rounded-lg px-4 py-3 text-sm text-red-700">{error}</div>}
           </div>
         )}
 
