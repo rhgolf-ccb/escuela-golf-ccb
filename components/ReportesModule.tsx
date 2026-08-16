@@ -1,6 +1,6 @@
 ﻿"use client";
 
-import { useState, useEffect, useRef, useCallback, type ReactNode, Fragment } from "react";
+import { useState, useEffect, useMemo, useRef, useCallback, type ReactNode, Fragment } from "react";
 import { createClient } from "@supabase/supabase-js";
 import * as XLSX from "xlsx";
 import { BarChart3 } from "lucide-react";
@@ -111,6 +111,58 @@ function weeksInRange(from: Date, to: Date): { inicio: Date; fin: Date }[] {
   }
   return weeks;
 }
+
+// ── Paginación ───────────────────────────────────────────────────────────────
+
+// PostgREST corta cualquier select en 1000 filas por defecto y no avisa: la
+// respuesta llega con `error: null` y la lista simplemente incompleta. El
+// padrón ya pasa de 1000 alumnos, así que toda consulta que traiga el listado
+// completo tiene que paginarse con .range().
+const PAGE_SIZE = 1000;
+
+type PagedResponse<T> = { data: T[] | null; error: { message: string } | null };
+
+/**
+ * Trae todas las páginas de una consulta acumulando con .range() hasta que una
+ * página devuelve menos de PAGE_SIZE filas.
+ *
+ * `buildQuery` recibe el rango porque los query builders de PostgREST son de un
+ * solo uso: hay que construir uno nuevo en cada iteración.
+ *
+ * Si una página falla se corta el bucle y se devuelve el mensaje de error junto
+ * con lo acumulado hasta ahí; quien llama debe mostrar el error en vez de
+ * pintar la lista parcial como si estuviera completa.
+ */
+async function fetchAllPages<T>(
+  buildQuery: (desde: number, hasta: number) => PromiseLike<PagedResponse<T>>
+): Promise<{ rows: T[]; error: string | null }> {
+  const rows: T[] = [];
+  for (let desde = 0; ; desde += PAGE_SIZE) {
+    const { data, error } = await buildQuery(desde, desde + PAGE_SIZE - 1);
+    if (error) return { rows, error: error.message };
+    const page = data ?? [];
+    rows.push(...page);
+    if (page.length < PAGE_SIZE) return { rows, error: null };
+  }
+}
+
+/**
+ * Padrón de alumnos paginado. `soloActivos` replica el .eq("status","activo")
+ * que usaban las pestañas que sólo miran el padrón activo.
+ *
+ * El orden secundario por id no es cosmético: sin un criterio de desempate
+ * estable, dos alumnos con el mismo nombre pueden caer en distinta página entre
+ * una petición y otra, y la paginación duplicaría una fila y se saltaría otra.
+ */
+function fetchStudents<T = Student>(columnas: string, soloActivos: boolean) {
+  return fetchAllPages<T>((desde, hasta) => {
+    const q = supabase.from("students").select(columnas);
+    return (soloActivos ? q.eq("status", "activo") : q)
+      .order("full_name").order("id").range(desde, hasta) as unknown as PromiseLike<PagedResponse<T>>;
+  });
+}
+
+const STUDENT_COLS = "id,full_name,birth_date,grupo_activo,status,tiene_talega";
 
 // ── Shared UI components ─────────────────────────────────────────────────────
 
@@ -329,10 +381,19 @@ function TabAsistencia() {
   const [reservas, setReservas] = useState<Reserva[]>([]);
   const [students, setStudents] = useState<Student[]>([]);
   const [loading, setLoading] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
-  const sunday = addDays(monday, 6);
-  const effFrom = periodMode === "semana" ? monday : new Date(rangeFrom + "T12:00:00");
-  const effTo = periodMode === "semana" ? sunday : new Date(rangeTo + "T12:00:00");
+  // effFrom/effTo se memorizan porque son objetos Date: sin esto cambian de
+  // identidad en cada render y arrastrarían a todos los useMemo que dependen
+  // de ellos.
+  const effFrom = useMemo(
+    () => (periodMode === "semana" ? monday : new Date(rangeFrom + "T12:00:00")),
+    [periodMode, monday, rangeFrom]
+  );
+  const effTo = useMemo(
+    () => (periodMode === "semana" ? addDays(monday, 6) : new Date(rangeTo + "T12:00:00")),
+    [periodMode, monday, rangeTo]
+  );
   const effFromISO = toISO(effFrom);
   const effToISO = toISO(effTo);
   const rangeDays = Math.round((effTo.getTime() - effFrom.getTime()) / 86400000) + 1;
@@ -342,56 +403,109 @@ function TabAsistencia() {
   useEffect(() => {
     async function load() {
       setLoading(true);
-      const [{ data: ses }, { data: sts }] = await Promise.all([
+      setLoadError(null);
+      const [{ data: ses, error: sesErr }, { rows: sts, error: stsErr }] = await Promise.all([
         supabase.from("sesiones_semana")
           .select("id,dia_semana,fecha,hora_inicio,hora_fin,tipo_sesion,lugar,objetivo,cupo_maximo,planes_semanales(tipo_plan)")
           .gte("fecha", effFromISO).lte("fecha", effToISO).order("fecha").order("hora_inicio"),
-        supabase.from("students").select("id,full_name,birth_date,grupo_activo,status,tiene_talega").eq("status", "activo").order("full_name"),
+        fetchStudents(STUDENT_COLS, true),
       ]);
+      if (sesErr || stsErr) {
+        setLoadError(sesErr?.message ?? stsErr!);
+        setSesiones([]); setStudents([]); setReservas([]);
+        setLoading(false);
+        return;
+      }
       setSesiones((ses ?? []) as unknown as Sesion[]);
-      setStudents((sts ?? []) as Student[]);
+      setStudents(sts);
       if (ses && ses.length > 0) {
         const ids = (ses as unknown as Sesion[]).map((s) => s.id);
-        const { data: rv } = await supabase.from("reservas")
-          .select("id,sesion_id,estudiante_id,estado,posicion_espera,created_at,asistio,students!reservas_estudiante_id_fkey(id,full_name,grupo_activo,tiene_talega)")
-          .in("sesion_id", ids)
-          .eq("estado", "confirmado");
-        setReservas(((rv ?? []) as unknown as Reserva[]).map((r) => ({ ...r, students: Array.isArray(r.students) ? r.students[0] : r.students })));
+        const { rows: rv, error: rvErr } = await fetchAllPages<Reserva>((desde, hasta) =>
+          supabase.from("reservas")
+            .select("id,sesion_id,estudiante_id,estado,posicion_espera,created_at,asistio,students!reservas_estudiante_id_fkey(id,full_name,grupo_activo,tiene_talega)")
+            .in("sesion_id", ids)
+            .eq("estado", "confirmado")
+            .order("id")
+            .range(desde, hasta) as unknown as PromiseLike<PagedResponse<Reserva>>
+        );
+        if (rvErr) {
+          setLoadError(rvErr);
+          setSesiones([]); setStudents([]); setReservas([]);
+          setLoading(false);
+          return;
+        }
+        setReservas(rv.map((r) => ({ ...r, students: Array.isArray(r.students) ? r.students[0] : r.students })));
       } else {
         setReservas([]);
       }
       setLoading(false);
     }
     load();
-  }, [periodMode, monday, rangeFrom, rangeTo]);
+  }, [periodMode, monday, rangeFrom, rangeTo, effFromISO, effToISO]);
 
   function handleAsistioSaved(reservaId: string, val: boolean | null) {
     setReservas((prev) => prev.map((r) => r.id === reservaId ? { ...r, asistio: val } : r));
   }
 
-  const sesionesFiltradas = sesiones.filter((s) => {
+  const sesionesFiltradas = useMemo(() => sesiones.filter((s) => {
     if (grupo === "todos") return true;
     const t = (s.planes_semanales as { tipo_plan: string } | null)?.tipo_plan;
     if (grupo === "juvenil") return t === "juvenil";
     if (grupo === "competencia") return t === "competencia";
     if (grupo === "damas") return t === "damas";
     return true;
-  });
+  }), [sesiones, grupo]);
 
-  const studentIds = new Set(reservas.map((r) => r.estudiante_id));
-  const studentsConReserva = students.filter((s) => {
-    if (!studentIds.has(s.id)) return false;
-    if (grupo === "todos") return true;
-    const t = grupoTipo(s.grupo_activo);
-    return t === grupo;
-  });
+  // Un Set en vez del sesionesFiltradas.some(...) que se repetía en cada
+  // filtro: era O(reservas × sesiones) y se recalculaba en cada render, incluido
+  // cada toggle de asistencia.
+  const sesionIdsFiltradas = useMemo(
+    () => new Set(sesionesFiltradas.map((s) => s.id)),
+    [sesionesFiltradas]
+  );
+  const reservasEnRango = useMemo(
+    () => reservas.filter((r) => sesionIdsFiltradas.has(r.sesion_id)),
+    [reservas, sesionIdsFiltradas]
+  );
 
-  const totalInscritos = new Set(reservas.filter((r) => sesionesFiltradas.some((s) => s.id === r.sesion_id)).map((r) => r.estudiante_id)).size;
-  const totalAsistieron = reservas.filter((r) => r.asistio === true && sesionesFiltradas.some((s) => s.id === r.sesion_id)).length;
-  const totalAusentes = reservas.filter((r) => r.asistio === false && sesionesFiltradas.some((s) => s.id === r.sesion_id)).length;
+  // Índices por alumno y por sesión: la tabla los consulta una vez por fila y
+  // por celda, y sin ellos cada consulta recorría el arreglo entero.
+  const reservasPorAlumno = useMemo(() => {
+    const m = new Map<string, Reserva[]>();
+    for (const r of reservasEnRango) {
+      const arr = m.get(r.estudiante_id);
+      if (arr) arr.push(r); else m.set(r.estudiante_id, [r]);
+    }
+    return m;
+  }, [reservasEnRango]);
+
+  const reservasPorSesion = useMemo(() => {
+    const m = new Map<string, Reserva[]>();
+    for (const r of reservas) {
+      const arr = m.get(r.sesion_id);
+      if (arr) arr.push(r); else m.set(r.sesion_id, [r]);
+    }
+    return m;
+  }, [reservas]);
+
+  const studentsConReserva = useMemo(() => {
+    const conReserva = new Set(reservas.map((r) => r.estudiante_id));
+    return students.filter((s) => {
+      if (!conReserva.has(s.id)) return false;
+      if (grupo === "todos") return true;
+      return grupoTipo(s.grupo_activo) === grupo;
+    });
+  }, [students, reservas, grupo]);
+
+  const { totalInscritos, totalAsistieron, totalAusentes, totalMarcadas } = useMemo(() => ({
+    totalInscritos: new Set(reservasEnRango.map((r) => r.estudiante_id)).size,
+    totalAsistieron: reservasEnRango.filter((r) => r.asistio === true).length,
+    totalAusentes: reservasEnRango.filter((r) => r.asistio === false).length,
+    totalMarcadas: reservasEnRango.filter((r) => r.asistio !== null).length,
+  }), [reservasEnRango]);
 
   // Rango corto: una columna por sesión (editable). Rango largo en modo periodo: una columna por semana (% agregado).
-  const columnas: { key: string; label: string; sesionIds: string[] }[] = groupByWeek
+  const columnas: { key: string; label: string; sesionIds: string[] }[] = useMemo(() => groupByWeek
     ? weeksInRange(effFrom, effTo).map((w) => {
         const wIni = toISO(w.inicio), wFin = toISO(w.fin);
         return {
@@ -403,16 +517,40 @@ function TabAsistencia() {
     : sesionesFiltradas.map((s) => {
         const d = new Date(s.fecha + "T12:00:00");
         return { key: s.id, label: `${d.getDate()}/${d.getMonth() + 1}`, sesionIds: [s.id] };
-      });
+      }), [groupByWeek, effFrom, effTo, sesionesFiltradas]);
+
+  // Cada sesión cae en exactamente una columna (la suya, o la semana que la
+  // contiene), así que las celdas se llenan con una sola pasada por reservas.
+  const colKeyPorSesion = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const col of columnas) for (const id of col.sesionIds) m.set(id, col.key);
+    return m;
+  }, [columnas]);
+
+  // Reservas de cada celda (alumno × columna), precalculadas una vez.
+  const reservasPorCelda = useMemo(() => {
+    const m = new Map<string, Reserva[]>();
+    for (const r of reservasEnRango) {
+      const colKey = colKeyPorSesion.get(r.sesion_id);
+      if (!colKey) continue;
+      const k = `${r.estudiante_id}|${colKey}`;
+      const arr = m.get(k);
+      if (arr) arr.push(r); else m.set(k, [r]);
+    }
+    return m;
+  }, [reservasEnRango, colKeyPorSesion]);
+
+  const celda = (alumnoId: string, colKey: string) => reservasPorCelda.get(`${alumnoId}|${colKey}`) ?? [];
+  const reservasDe = (alumnoId: string) => reservasPorAlumno.get(alumnoId) ?? [];
 
   const headers = ["Nombre", "Grupo", ...columnas.map((c) => c.label), "Total", "% Asist."];
 
   function doExportPDF() {
     const rows = studentsConReserva.map((st) => {
-      const reservasAlumno = reservas.filter((r) => r.estudiante_id === st.id && sesionesFiltradas.some((s) => s.id === r.sesion_id));
+      const reservasAlumno = reservasDe(st.id);
       const asistio = reservasAlumno.filter((r) => r.asistio === true).length;
       const cells = columnas.map((col) => {
-        const rCol = reservas.filter((rv) => rv.estudiante_id === st.id && col.sesionIds.includes(rv.sesion_id));
+        const rCol = celda(st.id, col.key);
         if (groupByWeek) {
           const marcado = rCol.filter((r) => r.asistio !== null).length;
           const asis = rCol.filter((r) => r.asistio === true).length;
@@ -431,10 +569,10 @@ function TabAsistencia() {
 
   function doExportExcel() {
     const rows = studentsConReserva.map((st) => {
-      const reservasAlumno = reservas.filter((r) => r.estudiante_id === st.id && sesionesFiltradas.some((s) => s.id === r.sesion_id));
+      const reservasAlumno = reservasDe(st.id);
       const asistio = reservasAlumno.filter((r) => r.asistio === true).length;
       const cells = columnas.map((col) => {
-        const rCol = reservas.filter((rv) => rv.estudiante_id === st.id && col.sesionIds.includes(rv.sesion_id));
+        const rCol = celda(st.id, col.key);
         if (groupByWeek) {
           const marcado = rCol.filter((r) => r.asistio !== null).length;
           const asis = rCol.filter((r) => r.asistio === true).length;
@@ -454,7 +592,7 @@ function TabAsistencia() {
   function doExportWhatsApp() {
     const lines = [periodoLabel, `Inscritos: ${totalInscritos} | Asistieron: ${totalAsistieron} | Ausentes: ${totalAusentes}`,
       "", ...studentsConReserva.slice(0, 30).map((st) => {
-        const rv = reservas.filter((r) => r.estudiante_id === st.id && sesionesFiltradas.some((s) => s.id === r.sesion_id));
+        const rv = reservasDe(st.id);
         const a = rv.filter((r) => r.asistio === true).length;
         return `• ${st.full_name}: ${a}/${rv.length} (${pct(a, rv.length)}%)`;
       })];
@@ -487,7 +625,9 @@ function TabAsistencia() {
         <MetricCard label={groupByWeek ? "Semanas" : "Sesiones"} value={groupByWeek ? columnas.length : sesionesFiltradas.length} />
       </div>
 
-      {loading ? <Loading /> : sesionesFiltradas.length === 0 ? (
+      {loading ? <Loading /> : loadError ? (
+        <ErrorState msg={loadError} />
+      ) : sesionesFiltradas.length === 0 ? (
         <EmptyState msg="No hay sesiones en el periodo para el grupo seleccionado." />
       ) : (
         <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-x-auto">
@@ -513,7 +653,7 @@ function TabAsistencia() {
               {studentsConReserva.length === 0 ? (
                 <tr><td colSpan={columnas.length + 4} className="text-center py-8 text-sm text-gray-400">Sin inscritos en el periodo</td></tr>
               ) : studentsConReserva.map((st, i) => {
-                const reservasAlumno = reservas.filter((r) => r.estudiante_id === st.id && sesionesFiltradas.some((s) => s.id === r.sesion_id));
+                const reservasAlumno = reservasDe(st.id);
                 const asistio = reservasAlumno.filter((r) => r.asistio === true).length;
                 const p = pct(asistio, reservasAlumno.length);
                 return (
@@ -525,7 +665,7 @@ function TabAsistencia() {
                       )}
                     </td>
                     {columnas.map((col) => {
-                      const rCol = reservas.filter((rv) => rv.estudiante_id === st.id && col.sesionIds.includes(rv.sesion_id));
+                      const rCol = celda(st.id, col.key);
                       if (groupByWeek) {
                         const marcado = rCol.filter((r) => r.asistio !== null).length;
                         const asis = rCol.filter((r) => r.asistio === true).length;
@@ -551,7 +691,7 @@ function TabAsistencia() {
                   <td className="px-1.5 py-1.5 text-[11px] text-gray-600">Totales</td>
                   <td />
                   {columnas.map((col) => {
-                    const rCol = reservas.filter((r) => col.sesionIds.includes(r.sesion_id));
+                    const rCol = col.sesionIds.flatMap((id) => reservasPorSesion.get(id) ?? []);
                     const total = rCol.length;
                     const asist = rCol.filter((r) => r.asistio === true).length;
                     return (
@@ -561,7 +701,7 @@ function TabAsistencia() {
                     );
                   })}
                   <td />
-                  <td className="text-center px-1.5 py-1.5 w-12"><PctBadge value={pct(totalAsistieron, reservas.filter((r) => sesionesFiltradas.some((s) => s.id === r.sesion_id) && (r.asistio === true || r.asistio === false)).length)} /></td>
+                  <td className="text-center px-1.5 py-1.5 w-12"><PctBadge value={pct(totalAsistieron, totalMarcadas)} /></td>
                 </tr>
               </tfoot>
             )}
@@ -594,18 +734,26 @@ function TabTests() {
   const [trackMap, setTrackMap] = useState<Record<string, boolean>>({});
   const [notasMap, setNotasMap] = useState<Record<string, { contenido: string; fecha: string }>>({});
   const [loading, setLoading] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   useEffect(() => {
     async function load() {
       setLoading(true);
-      const [{ data: sts }, { data: sw }, { data: ph }, { data: tr }, { data: nt }] = await Promise.all([
-        supabase.from("students").select("id,full_name,birth_date,grupo_activo,status,tiene_talega").eq("status", "activo").order("full_name"),
+      setLoadError(null);
+      const [{ rows: sts, error: stsErr }, { data: sw }, { data: ph }, { data: tr }, { data: nt }] = await Promise.all([
+        fetchStudents(STUDENT_COLS, true),
         supabase.from("swing_evaluations").select("student_id,score_promedio,p1_score,created_at").order("created_at", { ascending: false }),
         supabase.from("physical_tests").select("student_id,tpi_summary,created_at").order("created_at", { ascending: false }),
         supabase.from("trackman_sessions").select("alumno_id,created_at").order("created_at", { ascending: false }),
         supabase.from("notas_profesor").select("alumno_id,contenido,fecha,created_at").order("created_at", { ascending: false }),
       ]);
-      setStudents((sts ?? []) as Student[]);
+      if (stsErr) {
+        setLoadError(stsErr);
+        setStudents([]);
+        setLoading(false);
+        return;
+      }
+      setStudents(sts);
       const swMap: Record<string, { score_promedio: number | null; p1_score: number | null }> = {};
       (sw ?? []).forEach((s: { student_id: string; score_promedio: number | null; p1_score: number | null }) => { if (!swMap[s.student_id]) swMap[s.student_id] = s; });
       setSwingMap(swMap);
@@ -623,10 +771,10 @@ function TabTests() {
     load();
   }, []);
 
-  const studentsFiltrados = students.filter((s) => {
+  const studentsFiltrados = useMemo(() => students.filter((s) => {
     if (grupo === "todos") return true;
     return grupoTipo(s.grupo_activo) === grupo;
-  });
+  }), [students, grupo]);
 
   function getSwingStatus(id: string): TestStatus {
     const sw = swingMap[id];
@@ -689,7 +837,7 @@ function TabTests() {
           <ExportBtn label="WhatsApp" onClick={doExportWhatsApp} green />
         </div>
       </div>
-      {loading ? <Loading /> : studentsFiltrados.length === 0 ? <EmptyState msg="No hay alumnos activos." /> : (
+      {loading ? <Loading /> : loadError ? <ErrorState msg={loadError} /> : studentsFiltrados.length === 0 ? <EmptyState msg="No hay alumnos activos." /> : (
         <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
@@ -766,10 +914,12 @@ function TabProgreso() {
   const [physTotal, setPhysTotal] = useState<Record<string, boolean>>({});
   const [notasMap, setNotasMap] = useState<Record<string, { contenido: string; fecha: string }>>({});
   const [loading, setLoading] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   useEffect(() => {
     async function load() {
       setLoading(true);
+      setLoadError(null);
       const lunesHoy = getMondayOf(new Date());
       const semanasList: string[] = periodMode === "periodo"
         ? weeksInRange(new Date(rangeFrom + "T12:00:00"), new Date(rangeTo + "T12:00:00")).map((w) => toISO(w.inicio)).slice(-12)
@@ -777,15 +927,22 @@ function TabProgreso() {
       const primeraSemana = new Date(semanasList[0] + "T12:00:00");
       const ultimaSemanaFin = addDays(new Date(semanasList[semanasList.length - 1] + "T12:00:00"), 6);
 
-      const [{ data: sts }, { data: sw }, { data: ph }, { data: nt }, { data: ses }] = await Promise.all([
-        supabase.from("students").select("id,full_name,birth_date,grupo_activo,status,tiene_talega").eq("status", "activo").order("full_name"),
+      const [{ rows: sts, error: stsErr }, { data: sw }, { data: ph }, { data: nt }, { data: ses }] = await Promise.all([
+        fetchStudents(STUDENT_COLS, true),
         supabase.from("swing_evaluations").select("student_id,score_promedio").order("created_at", { ascending: false }),
         supabase.from("physical_tests").select("student_id,tpi_summary").order("created_at", { ascending: false }),
         supabase.from("notas_profesor").select("alumno_id,contenido,fecha,created_at").order("created_at", { ascending: false }),
         supabase.from("sesiones_semana").select("id,fecha").gte("fecha", toISO(primeraSemana)).lte("fecha", toISO(ultimaSemanaFin)),
       ]);
 
-      setStudents((sts ?? []) as Student[]);
+      if (stsErr) {
+        setLoadError(stsErr);
+        setStudents([]); setSemanas([]);
+        setLoading(false);
+        return;
+      }
+
+      setStudents(sts);
       const swMap: Record<string, number> = {};
       (sw ?? []).forEach((s: { student_id: string; score_promedio: number | null }) => { if (!swMap[s.student_id] && s.score_promedio !== null) swMap[s.student_id] = 1; });
       (ph ?? []).forEach((p: { student_id: string; tpi_summary: unknown }) => { if (p.tpi_summary) swMap[p.student_id] = (swMap[p.student_id] ?? 0) + 1; });
@@ -799,18 +956,32 @@ function TabProgreso() {
 
       const sesIds = (ses ?? []).map((s: { id: string }) => s.id);
       if (sesIds.length > 0) {
-        const { data: rv } = await supabase.from("reservas").select("estudiante_id,sesion_id,asistio").in("sesion_id", sesIds);
-        const sesFechaMap: Record<string, string> = {};
-        (ses ?? []).forEach((s: { id: string; fecha: string }) => { sesFechaMap[s.id] = s.fecha; });
+        // Hasta 12 semanas de reservas de todo el padrón: pasa de 1000 filas sin
+        // problema, así que también va paginado.
+        type RvProgreso = { estudiante_id: string; sesion_id: string; asistio: boolean | null };
+        const { rows: rv, error: rvErr } = await fetchAllPages<RvProgreso>((desde, hasta) =>
+          supabase.from("reservas").select("estudiante_id,sesion_id,asistio")
+            .in("sesion_id", sesIds).order("sesion_id").order("estudiante_id")
+            .range(desde, hasta) as unknown as PromiseLike<PagedResponse<RvProgreso>>
+        );
+        if (rvErr) {
+          setLoadError(rvErr);
+          setStudents([]); setSemanas([]);
+          setLoading(false);
+          return;
+        }
         const semanasData = semanasList.map((inicio) => {
           const fin = toISO(addDays(new Date(inicio + "T12:00:00"), 6));
-          const sesEnSemana = (ses ?? []).filter((s: { id: string; fecha: string }) => s.fecha >= inicio && s.fecha <= fin).map((s: { id: string }) => s.id);
+          const sesEnSemana = new Set(
+            (ses ?? []).filter((s: { id: string; fecha: string }) => s.fecha >= inicio && s.fecha <= fin).map((s: { id: string }) => s.id)
+          );
+          const rvSemana = rv.filter((r) => sesEnSemana.has(r.sesion_id));
           const pctMap: Record<string, number> = {};
-          (sts ?? []).forEach((st: Student) => {
-            const rvAlumno = (rv ?? []).filter((r: { estudiante_id: string; sesion_id: string }) => r.estudiante_id === st.id && sesEnSemana.includes(r.sesion_id));
-            const asist = (rv ?? []).filter((r: { estudiante_id: string; sesion_id: string; asistio: boolean | null }) => r.estudiante_id === st.id && sesEnSemana.includes(r.sesion_id) && r.asistio === true).length;
+          for (const st of sts) {
+            const rvAlumno = rvSemana.filter((r) => r.estudiante_id === st.id);
+            const asist = rvAlumno.filter((r) => r.asistio === true).length;
             pctMap[st.id] = rvAlumno.length > 0 ? pct(asist, rvAlumno.length) : 0;
-          });
+          }
           return { inicio, pct: pctMap };
         });
         setSemanas(semanasData);
@@ -822,10 +993,10 @@ function TabProgreso() {
     load();
   }, [rango, periodMode, rangeFrom, rangeTo]);
 
-  const studentsFiltrados = students.filter((s) => {
+  const studentsFiltrados = useMemo(() => students.filter((s) => {
     if (grupo === "todos") return true;
     return grupoTipo(s.grupo_activo) === grupo;
-  });
+  }), [students, grupo]);
 
   const periodoLabel = semanas.length > 0
     ? periodoSubtitle(new Date(semanas[0].inicio + "T12:00:00"), addDays(new Date(semanas[semanas.length - 1].inicio + "T12:00:00"), 6))
@@ -875,7 +1046,7 @@ function TabProgreso() {
           <ExportBtn label="Excel" onClick={doExportExcel} />
         </div>
       </div>
-      {loading ? <Loading /> : studentsFiltrados.length === 0 ? <EmptyState msg="No hay alumnos activos." /> : (
+      {loading ? <Loading /> : loadError ? <ErrorState msg={loadError} /> : studentsFiltrados.length === 0 ? <EmptyState msg="No hay alumnos activos." /> : (
         <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
@@ -932,25 +1103,44 @@ function TabEstadisticas() {
     porGrupo: { grupo: string; alumnos: number; sesiones: number; asistProm: number; testsCompletos: number }[];
   } | null>(null);
   const [loading, setLoading] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   useEffect(() => {
     async function load() {
       setLoading(true);
+      setLoadError(null);
       const hoy = new Date();
       const lunes4 = toISO(addDays(getMondayOf(hoy), -3 * 7));
       const domingo = toISO(addDays(getMondayOf(hoy), 6));
-      const [{ data: sts }, { data: ses }, { data: sw }] = await Promise.all([
-        supabase.from("students").select("id,grupo_activo,status,tiene_talega").eq("status", "activo"),
+      type ActivoRow = { id: string; grupo_activo: string | null };
+      type RvStats = { sesion_id: string; estudiante_id: string; asistio: boolean | null };
+      const [{ rows: activos, error: stsErr }, { data: ses }, { data: sw }] = await Promise.all([
+        fetchStudents<ActivoRow>("id,grupo_activo,status,tiene_talega", true),
         supabase.from("sesiones_semana").select("id,fecha,planes_semanales(tipo_plan)").gte("fecha", lunes4).lte("fecha", domingo),
         supabase.from("swing_evaluations").select("student_id,score_promedio"),
       ]);
-      const activos = (sts ?? []) as { id: string; grupo_activo: string | null }[];
+      if (stsErr) {
+        setLoadError(stsErr);
+        setStats(null);
+        setLoading(false);
+        return;
+      }
       const sesArr = (ses ?? []) as unknown as { id: string; fecha: string; planes_semanales: { tipo_plan: string } | null }[];
       const sesIds = sesArr.map((s) => s.id);
-      let rv: { sesion_id: string; estudiante_id: string; asistio: boolean | null }[] = [];
+      let rv: RvStats[] = [];
       if (sesIds.length > 0) {
-        const { data } = await supabase.from("reservas").select("sesion_id,estudiante_id,asistio").in("sesion_id", sesIds);
-        rv = data ?? [];
+        const { rows, error: rvErr } = await fetchAllPages<RvStats>((desde, hasta) =>
+          supabase.from("reservas").select("sesion_id,estudiante_id,asistio")
+            .in("sesion_id", sesIds).order("sesion_id").order("estudiante_id")
+            .range(desde, hasta) as unknown as PromiseLike<PagedResponse<RvStats>>
+        );
+        if (rvErr) {
+          setLoadError(rvErr);
+          setStats(null);
+          setLoading(false);
+          return;
+        }
+        rv = rows;
       }
       const swArr = (sw ?? []) as { student_id: string; score_promedio: number | null }[];
       const swSet = new Set(swArr.filter((s) => s.score_promedio !== null).map((s) => s.student_id));
@@ -979,6 +1169,7 @@ function TabEstadisticas() {
   }, []);
 
   if (loading) return <Loading />;
+  if (loadError) return <ErrorState msg={loadError} />;
   if (!stats) return <EmptyState msg="No hay datos." />;
 
   return (
@@ -1055,11 +1246,21 @@ function TabEdades() {
   const [students, setStudents] = useState<Student[]>([]);
   const [loading, setLoading] = useState(false);
 
+  const [loadError, setLoadError] = useState<string | null>(null);
+
   useEffect(() => {
     async function load() {
       setLoading(true);
-      const { data } = await supabase.from("students").select("id,full_name,birth_date,grupo_activo,status,tiene_talega").order("full_name");
-      setStudents((data ?? []) as Student[]);
+      setLoadError(null);
+      // Este listado es el que se usa para armar los grupos, así que trae el
+      // padrón entero (activos e inactivos) y tiene que venir completo.
+      const { rows, error } = await fetchStudents(STUDENT_COLS, false);
+      if (error) {
+        setLoadError(error);
+        setStudents([]);
+      } else {
+        setStudents(rows);
+      }
       setLoading(false);
     }
     load();
@@ -1073,47 +1274,60 @@ function TabEdades() {
   const showEdadDropdown = grupoSel === "Birdies" || grupoSel === "Águilas" || grupoSel === "Albatros";
   const colorHex = colorHexForGrupo(grupoSel);
 
-  const porGrupoYEstado = students.filter((s) => {
+  // La edad se recalcula muchas veces por alumno (filtro, orden, agrupación,
+  // métricas y render), así que se cachea una sola vez por lista.
+  const conEdad = useMemo(
+    () => students.map((s) => ({ student: s, edad: calcEdad(s.birth_date) })),
+    [students]
+  );
+
+  const porGrupoYEstado = useMemo(() => conEdad.filter(({ student: s }) => {
     if (s.grupo_activo !== grupoSel) return false;
     if (estadoFilter === "activos") return s.status === "activo";
     if (estadoFilter === "inactivos") return s.status === "inactivo";
     return true;
-  });
+  }), [conEdad, grupoSel, estadoFilter]);
 
-  const edadesDisponibles = Array.from(
-    new Set(porGrupoYEstado.map((s) => calcEdad(s.birth_date)).filter((e): e is number => e !== null))
-  ).sort((a, b) => a - b);
+  const edadesDisponibles = useMemo(() => Array.from(
+    new Set(porGrupoYEstado.map((e) => e.edad).filter((e): e is number => e !== null))
+  ).sort((a, b) => a - b), [porGrupoYEstado]);
 
-  const filtered = porGrupoYEstado
-    .filter((s) => {
+  const filteredConEdad = useMemo(() => porGrupoYEstado
+    .filter(({ edad }) => {
       if (!showEdadDropdown || edadFilter === "todas") return true;
-      return calcEdad(s.birth_date) === edadFilter;
+      return edad === edadFilter;
     })
     .sort((a, b) => {
-      const ea = calcEdad(a.birth_date) ?? 999, eb = calcEdad(b.birth_date) ?? 999;
+      const ea = a.edad ?? 999, eb = b.edad ?? 999;
       if (ea !== eb) return ea - eb;
-      return a.full_name.localeCompare(b.full_name);
-    });
+      return a.student.full_name.localeCompare(b.student.full_name);
+    }), [porGrupoYEstado, showEdadDropdown, edadFilter]);
 
-  const edadesFiltradas = filtered.map((s) => calcEdad(s.birth_date)).filter((e): e is number => e !== null);
-  const promedioEdad = edadesFiltradas.length > 0 ? Math.round((edadesFiltradas.reduce((a, b) => a + b, 0) / edadesFiltradas.length) * 10) / 10 : null;
-  const menorEdad = edadesFiltradas.length > 0 ? Math.min(...edadesFiltradas) : null;
-  const mayorEdad = edadesFiltradas.length > 0 ? Math.max(...edadesFiltradas) : null;
+  const filtered = useMemo(() => filteredConEdad.map((e) => e.student), [filteredConEdad]);
+
+  const { promedioEdad, menorEdad, mayorEdad } = useMemo(() => {
+    const edades = filteredConEdad.map((e) => e.edad).filter((e): e is number => e !== null);
+    if (edades.length === 0) return { promedioEdad: null, menorEdad: null, mayorEdad: null };
+    return {
+      promedioEdad: Math.round((edades.reduce((a, b) => a + b, 0) / edades.length) * 10) / 10,
+      menorEdad: Math.min(...edades),
+      mayorEdad: Math.max(...edades),
+    };
+  }, [filteredConEdad]);
 
   const agrupadoPorEdad = showEdadDropdown && edadFilter === "todas";
 
   type GrupoEdadRow = { edad: number | null; items: Student[] };
-  const grupos: GrupoEdadRow[] = agrupadoPorEdad
+  const grupos: GrupoEdadRow[] = useMemo(() => agrupadoPorEdad
     ? Array.from(
-        filtered.reduce((acc, s) => {
-          const e = calcEdad(s.birth_date);
-          const key = e === null ? "sinfecha" : String(e);
-          if (!acc.has(key)) acc.set(key, { edad: e, items: [] });
-          acc.get(key)!.items.push(s);
+        filteredConEdad.reduce((acc, { student, edad }) => {
+          const key = edad === null ? "sinfecha" : String(edad);
+          if (!acc.has(key)) acc.set(key, { edad, items: [] });
+          acc.get(key)!.items.push(student);
           return acc;
         }, new Map<string, GrupoEdadRow>()).values()
       ).sort((a, b) => (a.edad ?? 999) - (b.edad ?? 999))
-    : [{ edad: null, items: filtered }];
+    : [{ edad: null, items: filtered }], [agrupadoPorEdad, filteredConEdad, filtered]);
 
   function doExportPDF() {
     const parts: string[] = [];
@@ -1172,26 +1386,34 @@ function TabEdades() {
             {edadesDisponibles.map((e) => <option key={e} value={e}>{e} años</option>)}
           </select>
         )}
-        <div className="ml-auto flex gap-2">
-          <ExportBtn label="PDF" onClick={doExportPDF} />
-          <ExportBtn label="Excel" onClick={doExportExcel} />
-        </div>
+        {/* Sin exportar mientras la carga esté fallida: el PDF y el Excel de
+            esta pestaña son los que se usan para armar los grupos. */}
+        {!loadError && (
+          <div className="ml-auto flex gap-2">
+            <ExportBtn label="PDF" onClick={doExportPDF} />
+            <ExportBtn label="Excel" onClick={doExportExcel} />
+          </div>
+        )}
       </div>
 
       <div className="flex items-center gap-2 mb-3">
         <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: colorHex }} />
         <h3 className="text-sm font-bold text-gray-800">{grupoSel}</h3>
-        <span className="text-xs text-gray-400">({filtered.length} alumno{filtered.length === 1 ? "" : "s"})</span>
+        {!loadError && <span className="text-xs text-gray-400">({filtered.length} alumno{filtered.length === 1 ? "" : "s"})</span>}
       </div>
 
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
-        <MetricCard label="Total alumnos" value={filtered.length} />
-        <MetricCard label="Edad promedio" value={promedioEdad ?? "—"} />
-        <MetricCard label="Menor edad" value={menorEdad ?? "—"} />
-        <MetricCard label="Mayor edad" value={mayorEdad ?? "—"} />
-      </div>
+      {/* Conteos y promedios se ocultan si la carga falló: sobre un listado que
+          no llegó completo serían cifras falsas. */}
+      {!loadError && (
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
+          <MetricCard label="Total alumnos" value={filtered.length} />
+          <MetricCard label="Edad promedio" value={promedioEdad ?? "—"} />
+          <MetricCard label="Menor edad" value={menorEdad ?? "—"} />
+          <MetricCard label="Mayor edad" value={mayorEdad ?? "—"} />
+        </div>
+      )}
 
-      {loading ? <Loading /> : filtered.length === 0 ? <EmptyState msg="No hay alumnos para este filtro." /> : (
+      {loading ? <Loading /> : loadError ? <ErrorState msg={loadError} /> : filtered.length === 0 ? <EmptyState msg="No hay alumnos para este filtro." /> : (
         <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
@@ -1461,6 +1683,18 @@ function Loading() {
 
 function EmptyState({ msg }: { msg: string }) {
   return <div className="py-16 text-center text-sm text-gray-400">{msg}</div>;
+}
+
+// Una lista incompleta se ve igual que una completa, así que cuando la carga
+// falla hay que decirlo en pantalla en vez de pintar lo que alcanzó a llegar.
+function ErrorState({ msg }: { msg: string }) {
+  return (
+    <div className="py-12 px-4 text-center">
+      <p className="text-sm font-semibold text-red-700">No se pudo cargar el listado completo</p>
+      <p className="text-xs text-gray-500 mt-1">{msg}</p>
+      <p className="text-xs text-gray-400 mt-2">No se muestran resultados parciales para no dar por bueno un listado incompleto.</p>
+    </div>
+  );
 }
 
 function ExportBtn({ label, onClick, green }: { label: string; onClick: () => void; green?: boolean }) {

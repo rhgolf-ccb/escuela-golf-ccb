@@ -67,17 +67,35 @@ export default function StudentsModule({ currentRol }: { currentRol: Rol | null 
       setLoading(true);
       setError(null);
 
-      const { data, error } = await supabase
-        .from("students")
-        .select("id, full_name, birth_date, status, grupo_activo, gender, tiene_talega")
-        .order("full_name", { ascending: true });
+      // PostgREST corta en 1000 filas por defecto y no lo reporta como error:
+      // el padrón ya pasa de esa cifra, así que hay que pedir página por página.
+      // El desempate por id mantiene el orden estable entre páginas cuando dos
+      // alumnos comparten nombre.
+      const PAGE_SIZE = 1000;
+      const acc: Student[] = [];
+      let failed = false;
 
-      if (error) {
-        setError(error.message);
-      } else {
-        setStudents(data ?? []);
+      for (let desde = 0; ; desde += PAGE_SIZE) {
+        const { data, error } = await supabase
+          .from("students")
+          .select("id, full_name, birth_date, status, grupo_activo, gender, tiene_talega")
+          .order("full_name", { ascending: true })
+          .order("id", { ascending: true })
+          .range(desde, desde + PAGE_SIZE - 1);
+
+        if (error) {
+          setError(error.message);
+          failed = true;
+          break;
+        }
+        const page = data ?? [];
+        acc.push(...page);
+        if (page.length < PAGE_SIZE) break;
       }
 
+      // Con una carga fallida se deja la lista vacía: media lista se ve igual
+      // que la lista completa y aquí no habría forma de notarlo.
+      setStudents(failed ? [] : acc);
       setLoading(false);
     }
     fetchAll();
