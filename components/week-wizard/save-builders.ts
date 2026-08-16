@@ -1,4 +1,5 @@
-import type { DiaSemana } from "@/components/ProgramacionModule";
+import type { DiaSemana, DiaSinEscuela } from "@/components/ProgramacionModule";
+import { fechaEnRango } from "@/components/ProgramacionModule";
 import type { DiaWizardState, GroupConfig } from "./types";
 import { LUGAR_LABEL } from "@/lib/estacion-library-constants";
 
@@ -8,6 +9,27 @@ interface RowBase {
   fecha: string;
   hora_inicio: string;
   hora_fin: string;
+}
+
+// Última barrera antes del upsert: aunque el wizard ya excluye los días sin
+// escuela al armar la lista de días, alguien pudo marcar el festivo con el
+// wizard abierto. Ninguna fila puede quedar guardada en una fecha sin escuela.
+export function descartarFilasSinEscuela(
+  filas: Record<string, unknown>[],
+  diasSinEscuela: DiaSinEscuela[],
+): { filas: Record<string, unknown>[]; descartadas: { fecha: string; dia: string; info: DiaSinEscuela }[] } {
+  const validas: Record<string, unknown>[] = [];
+  const descartadas: { fecha: string; dia: string; info: DiaSinEscuela }[] = [];
+  for (const fila of filas) {
+    const fecha = String(fila.fecha ?? "");
+    const info = diasSinEscuela.find((d) => fechaEnRango(fecha, d.fecha_inicio, d.fecha_fin));
+    if (!info) { validas.push(fila); continue; }
+    // Una fila por horario: el aviso habla de días, no de filas.
+    if (!descartadas.some((d) => d.fecha === fecha)) {
+      descartadas.push({ fecha, dia: String(fila.dia_semana ?? ""), info });
+    }
+  }
+  return { filas: validas, descartadas };
 }
 
 function buildCalentamiento(dia: DiaWizardState) {

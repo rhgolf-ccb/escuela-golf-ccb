@@ -169,7 +169,9 @@ PROGRAMAR LA ESCUELA (Juvenil, Competencia, Damas) vs. CALENDARIO DE EVENTOS —
 CALENDARIO — EVENTOS Y DÍAS SIN ESCUELA:
 Cuando el profesor mencione un evento, fecha de torneo, festival u otro evento institucional puntual (no una clase regular de la escuela), ofrece agregarlo al calendario con nombre, fecha y descripción. Al confirmar publícalo directamente en la tabla de eventos del calendario usando crear_evento_calendario.
 
-Cuando el profesor indique un rango de fechas sin escuela (ej. "del 20 al 25 de julio no hay escuela", vacaciones, festivo, receso), confirma el rango y el motivo, y al confirmar regístralo con marcar_dias_sin_escuela.
+Cuando el profesor indique un rango de fechas sin escuela (ej. "del 20 al 25 de julio no hay escuela", vacaciones, festivo, receso), confirma el rango y el motivo, y al confirmar regístralo con marcar_dias_sin_escuela. Si esas fechas ya tenían clases programadas, la herramienta no marca nada y te devuelve cuántas son: dile al profesor qué sesiones hay y pregúntale si las borra o las conserva, y solo entonces vuelve a llamarla con borrar_sesiones. Advierte que conservarlas significa que seguirán apareciendo en el PDF de los padres.
+
+Recuerda la regla del club: si el festivo cae en lunes, el martes es compensatorio y tampoco hay clase — son dos días sin escuela, así que márcalos como dos rangos (o uno que cubra ambos). Si el festivo cae en otro día, solo se pierde ese día.
 
 Nunca uses crear_evento_calendario ni marcar_dias_sin_escuela sin que el profesor haya confirmado explícitamente — primero propone, y solo ejecutas la herramienta en el turno donde el profesor confirma.
 
@@ -334,6 +336,7 @@ const CCB_TOOLS: Anthropic.Tool[] = [
         fecha_inicio: { type: "string", description: "Fecha de inicio en formato YYYY-MM-DD" },
         fecha_fin: { type: "string", description: "Fecha final en formato YYYY-MM-DD (igual a fecha_inicio si es un solo día)" },
         motivo: { type: "string", description: "Motivo opcional (ej: vacaciones de mitad de año, festivo nacional)" },
+        borrar_sesiones: { type: "boolean", description: "Qué hacer con las clases ya programadas en ese rango. No la mandes en la primera llamada: si hay clases, la herramienta te lo avisa sin marcar nada para que se lo consultes al profesor. true = borrarlas, false = conservarlas." },
       },
       required: ["fecha_inicio", "fecha_fin"],
     },
@@ -627,15 +630,39 @@ async function crearEventoCalendario(admin: SupabaseClient, nombre: string, fech
   return { ok: true, evento: data };
 }
 
-async function marcarDiasSinEscuela(admin: SupabaseClient, fechaInicio: string, fechaFin: string, motivo?: string) {
+// borrarSesiones undefined = todavía no se preguntó. Si el rango ya tiene clases
+// programadas no se marca nada y se le devuelve el conflicto al modelo para que
+// lo consulte con el profesor: borrarlas en silencio se lleva por delante la
+// programación, y dejarlas las vuelve huérfanas (siguen en el PDF de padres).
+async function marcarDiasSinEscuela(admin: SupabaseClient, fechaInicio: string, fechaFin: string, motivo?: string, borrarSesiones?: boolean) {
   if (!fechaInicio || !fechaFin) return { error: "Falta fecha_inicio o fecha_fin." };
+
+  const { data: sesiones, error: sesErr } = await admin
+    .from("sesiones_semana").select("id, fecha").gte("fecha", fechaInicio).lte("fecha", fechaFin);
+  if (sesErr) return { error: sesErr.message };
+  if ((sesiones?.length ?? 0) > 0 && borrarSesiones === undefined) {
+    return {
+      requiere_confirmacion: true,
+      sesiones_programadas: sesiones!.length,
+      fechas: [...new Set(sesiones!.map((s) => s.fecha as string))].sort(),
+      mensaje: "No se marcó nada todavía. Ese rango ya tiene clases programadas: pregúntale al profesor si las borra (borrar_sesiones: true) o si las conserva (borrar_sesiones: false), y vuelve a llamar la herramienta con su respuesta.",
+    };
+  }
+
   const { data, error } = await admin
     .from("dias_sin_escuela")
     .insert({ fecha_inicio: fechaInicio, fecha_fin: fechaFin, motivo: motivo || null })
     .select()
     .single();
   if (error) return { error: error.message };
-  return { ok: true, dia_sin_escuela: data };
+
+  let sesionesBorradas = 0;
+  if (borrarSesiones && sesiones?.length) {
+    const { error: delErr } = await admin.from("sesiones_semana").delete().in("id", sesiones.map((s) => s.id));
+    if (delErr) return { ok: true, dia_sin_escuela: data, error_al_borrar: delErr.message };
+    sesionesBorradas = sesiones.length;
+  }
+  return { ok: true, dia_sin_escuela: data, sesiones_borradas: sesionesBorradas };
 }
 
 async function ejecutarTool(admin: SupabaseClient, name: string, input: Record<string, unknown>): Promise<unknown> {
@@ -660,7 +687,7 @@ async function ejecutarTool(admin: SupabaseClient, name: string, input: Record<s
       case "crear_evento_calendario":
         return await crearEventoCalendario(admin, String(input.nombre ?? ""), String(input.fecha_inicio ?? ""), input.fecha_fin as string | undefined, input.descripcion as string | undefined, input.tipo as string | undefined);
       case "marcar_dias_sin_escuela":
-        return await marcarDiasSinEscuela(admin, String(input.fecha_inicio ?? ""), String(input.fecha_fin ?? ""), input.motivo as string | undefined);
+        return await marcarDiasSinEscuela(admin, String(input.fecha_inicio ?? ""), String(input.fecha_fin ?? ""), input.motivo as string | undefined, input.borrar_sesiones as boolean | undefined);
       case "proponer_programacion_semana":
         // No escribe nada — el input ya se le envió al frontend como evento
         // "plan_preview" antes de llegar aquí (ver POST). Solo confirma al modelo.

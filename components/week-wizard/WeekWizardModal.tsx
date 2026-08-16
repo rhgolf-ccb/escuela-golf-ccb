@@ -2,8 +2,8 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/lib/supabase";
-import type { DiaSemana, HorarioDefecto, SesionSemana, TipoPlan } from "@/components/ProgramacionModule";
-import { DIAS_POR_TIPO, TIPO_PLAN_LABEL, getFechaForDia } from "@/components/ProgramacionModule";
+import type { DiaSemana, DiaSinEscuela, HorarioDefecto, SesionSemana, TipoPlan } from "@/components/ProgramacionModule";
+import { DIAS_POR_TIPO, DIA_LABEL, TIPO_PLAN_LABEL, descripcionDiaSinEscuela, fechaEnRango, getFechaForDia } from "@/components/ProgramacionModule";
 import type { EstacionLibraryPick } from "@/components/EstacionLibraryPicker";
 import { GROUP_CONFIGS, gruposParaDrills, gruposParaFisico, categoriaOptionForCanonical, retosSugeridos, CAMPO_GAMES } from "./group-configs";
 import type { DiaWizardState } from "./types";
@@ -13,7 +13,7 @@ import { SUBGRUPO_LABEL, type SubgrupoJuvenil } from "@/lib/estacion-library-con
 import EstacionEditor from "./EstacionEditor";
 import CalentamientoStep from "./CalentamientoStep";
 import EspecialDiaPicker from "./EspecialDiaPicker";
-import { buildJuvenilRow, buildCompetenciaRow, buildDamasRow } from "./save-builders";
+import { buildJuvenilRow, buildCompetenciaRow, buildDamasRow, descartarFilasSinEscuela } from "./save-builders";
 import { parseExistingToDiaState } from "./parse-existing";
 
 interface Props {
@@ -22,6 +22,10 @@ interface Props {
   planId: string;
   horariosDefecto: HorarioDefecto[];
   sesionesExistentes: SesionSemana[];
+  // Filas de dias_sin_escuela que puedan tocar esta semana. La regla del club
+  // (lunes festivo → martes compensatorio) vive en los datos: festivo y
+  // compensatorio son dos filas, así que acá solo se respetan, no se deducen.
+  diasSinEscuela: DiaSinEscuela[];
   singleDay?: DiaSemana;
   onClose: () => void;
   onSaved: () => void;
@@ -33,12 +37,36 @@ function slotsPara(horariosDefecto: HorarioDefecto[], tipoPlan: TipoPlan, dia: D
     .sort((a, b) => a.hora_inicio.localeCompare(b.hora_inicio));
 }
 
-export default function WeekWizardModal({ tipoPlan, semana, planId, horariosDefecto, sesionesExistentes, singleDay, onClose, onSaved }: Props) {
+// "martes 18 (Compensatorio — lunes festivo)" — mismo formato en la cabecera y
+// en el aviso de guardado.
+function etiquetaDiaOmitido(dia: DiaSemana, fecha: string, info: DiaSinEscuela): string {
+  return `${DIA_LABEL[dia].toLowerCase()} ${Number(fecha.slice(8, 10))} (${descripcionDiaSinEscuela(info.motivo)})`;
+}
+
+function avisoDescartes(descartadas: { fecha: string; dia: string; info: DiaSinEscuela }[]): string {
+  const lista = descartadas.map((d) => etiquetaDiaOmitido(d.dia as DiaSemana, d.fecha, d.info)).join(", ");
+  return `Se guardó lo demás, pero no se programó ${lista}: está marcado como día sin escuela.`;
+}
+
+export default function WeekWizardModal({ tipoPlan, semana, planId, horariosDefecto, sesionesExistentes, diasSinEscuela, singleDay, onClose, onSaved }: Props) {
   const config = GROUP_CONFIGS[tipoPlan];
   // Competencia: 1 o 2 estaciones (físico + técnica, o dos técnicas; putt/campo = 1).
   // Juvenil/Damas hasta 4.
   const conteos = tipoPlan === "competencia" ? [1, 2] : [1, 2, 3, 4];
-  const dias = useMemo(() => (singleDay ? [singleDay] : DIAS_POR_TIPO[tipoPlan]), [singleDay, tipoPlan]);
+  // Los días marcados como sin escuela no entran al recorrido: ni se arman, ni
+  // se sugieren, ni se guardan.
+  const { dias, omitidos } = useMemo(() => {
+    const candidatos = singleDay ? [singleDay] : DIAS_POR_TIPO[tipoPlan];
+    const programables: DiaSemana[] = [];
+    const fuera: { dia: DiaSemana; fecha: string; info: DiaSinEscuela }[] = [];
+    for (const dia of candidatos) {
+      const fecha = getFechaForDia(semana, dia);
+      const info = diasSinEscuela.find((d) => fechaEnRango(fecha, d.fecha_inicio, d.fecha_fin));
+      if (info) fuera.push({ dia, fecha, info });
+      else programables.push(dia);
+    }
+    return { dias: programables, omitidos: fuera };
+  }, [singleDay, tipoPlan, semana, diasSinEscuela]);
 
   function initDia(dia: DiaSemana, nEstaciones: number): DiaWizardState {
     const slots = slotsPara(horariosDefecto, tipoPlan, dia);
@@ -71,6 +99,8 @@ export default function WeekWizardModal({ tipoPlan, semana, planId, horariosDefe
   });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Aviso no bloqueante del guardado (ej. filas omitidas por día sin escuela).
+  const [aviso, setAviso] = useState<string | null>(null);
   const [sugiriendo, setSugiriendo] = useState(false);
   const [profesores, setProfesores] = useState<string[]>([]);
   // Días ya guardados en la base — para marcarlos con ✓ y poder parar/retomar.
@@ -222,10 +252,15 @@ export default function WeekWizardModal({ tipoPlan, semana, planId, horariosDefe
     setSaving(true);
     setError(null);
     try {
-      const rows = rowsForDia(dia, diasState[dia]);
-      const { error: e } = await supabase.from("sesiones_semana").upsert(rows, { onConflict: "plan_id,fecha,hora_inicio" });
+      const { filas, descartadas } = descartarFilasSinEscuela(rowsForDia(dia, diasState[dia]), diasSinEscuela);
+      if (filas.length === 0) {
+        setError(`${DIA_LABEL[dia]} está marcado como día sin escuela (${descripcionDiaSinEscuela(descartadas[0]?.info.motivo)}). No se guardó nada.`);
+        return false;
+      }
+      const { error: e } = await supabase.from("sesiones_semana").upsert(filas, { onConflict: "plan_id,fecha,hora_inicio" });
       if (e) throw new Error(e.message);
       setGuardados((prev) => new Set(prev).add(dia));
+      if (descartadas.length > 0) setAviso(avisoDescartes(descartadas));
       return true;
     } catch (err) {
       setError(err instanceof Error ? err.message : "Error al guardar");
@@ -252,10 +287,21 @@ export default function WeekWizardModal({ tipoPlan, semana, planId, horariosDefe
       const diasAGuardar = dias.filter((d) => diasState[d] && diaCompleto(diasState[d]));
       if (diaActual && diaCompleto(diaActual) && !diasAGuardar.includes(diaActualKey)) diasAGuardar.push(diaActualKey);
       if (diasAGuardar.length === 0) { setError("No hay ningún día completo para guardar."); return; }
-      const rows = diasAGuardar.flatMap((d) => rowsForDia(d, diasState[d]));
-      const { error: e } = await supabase.from("sesiones_semana").upsert(rows, { onConflict: "plan_id,fecha,hora_inicio" });
+      const { filas, descartadas } = descartarFilasSinEscuela(
+        diasAGuardar.flatMap((d) => rowsForDia(d, diasState[d])), diasSinEscuela
+      );
+      if (filas.length === 0) { setError(`Todos los días quedaron sin escuela (${descripcionDiaSinEscuela(descartadas[0]?.info.motivo)}). No se guardó nada.`); return; }
+      const { error: e } = await supabase.from("sesiones_semana").upsert(filas, { onConflict: "plan_id,fecha,hora_inicio" });
       if (e) throw new Error(e.message);
-      setGuardados((prev) => { const n = new Set(prev); diasAGuardar.forEach((d) => n.add(d)); return n; });
+      const fechasDescartadas = new Set(descartadas.map((d) => d.fecha));
+      setGuardados((prev) => {
+        const n = new Set(prev);
+        diasAGuardar.filter((d) => !fechasDescartadas.has(getFechaForDia(semana, d))).forEach((d) => n.add(d));
+        return n;
+      });
+      // Con descartes no se cierra el modal: el aviso se perdería y el profesor
+      // creería que se guardó la semana entera.
+      if (descartadas.length > 0) { setAviso(avisoDescartes(descartadas)); return; }
       onSaved();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Error al guardar");
@@ -284,11 +330,32 @@ export default function WeekWizardModal({ tipoPlan, semana, planId, horariosDefe
                 {diaActual.tipo === "normal" && ` · ${duracionTotal} min totales`}
               </p>
             )}
+            {omitidos.length > 0 && (
+              <p className="text-xs mt-0.5" style={{ color: "#b45309" }}>
+                No se programan: {omitidos.map((o) => etiquetaDiaOmitido(o.dia, o.fecha, o.info)).join(", ")}
+              </p>
+            )}
           </div>
           <button onClick={() => { if (!saving) onClose(); }} disabled={saving} className="text-gray-400 hover:text-gray-600 disabled:opacity-40">
             <svg width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path d="M18 6L6 18M6 6l12 12" /></svg>
           </button>
         </div>
+
+        {/* Semana entera sin escuela — ProgramacionModule ya no debería abrir el
+            wizard en este caso; queda como red de seguridad. */}
+        {dias.length === 0 && (
+          <div className="p-5 space-y-3">
+            <div className="bg-gray-100 border border-gray-200 rounded-lg px-4 py-3 text-sm text-gray-700 space-y-1">
+              <p className="font-semibold">No hay días para programar.</p>
+              {omitidos.map((o) => <p key={o.dia}>· {etiquetaDiaOmitido(o.dia, o.fecha, o.info)}</p>)}
+            </div>
+            <button onClick={onClose} className="w-full py-2.5 rounded-xl text-sm font-semibold text-white" style={{ background: config.color }}>Cerrar</button>
+          </div>
+        )}
+
+        {aviso && (
+          <div className="mx-5 mt-3 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 text-xs text-amber-800">{aviso}</div>
+        )}
 
         {step === "dias" && diaActual && !singleDay && (
           <div className="px-4 pt-3 pb-3 flex gap-1.5 flex-wrap border-b border-gray-50">
@@ -315,7 +382,7 @@ export default function WeekWizardModal({ tipoPlan, semana, planId, horariosDefe
           </div>
         )}
 
-        {step === "count" && (
+        {step === "count" && dias.length > 0 && (
           <div className="p-5 space-y-3">
             <p className="text-xs font-bold text-gray-500 uppercase tracking-wide">¿Cuántas estaciones por día?</p>
             <div className={`grid gap-2 ${conteos.length === 3 ? "grid-cols-3" : "grid-cols-4"}`}>

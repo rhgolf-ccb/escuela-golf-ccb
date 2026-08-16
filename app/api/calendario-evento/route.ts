@@ -39,15 +39,45 @@ export async function POST(req: NextRequest) {
   }
 
   if (body.kind === "sin_escuela") {
-    const { fecha_inicio, fecha_fin, motivo } = body as { fecha_inicio?: string; fecha_fin?: string; motivo?: string | null };
+    const { fecha_inicio, fecha_fin, motivo, sesiones_existentes } = body as {
+      fecha_inicio?: string; fecha_fin?: string; motivo?: string | null;
+      sesiones_existentes?: "borrar" | "conservar";
+    };
     if (!fecha_inicio || !fecha_fin) {
       return Response.json({ error: "El rango de fechas es requerido" }, { status: 400 });
     }
+
+    // Marcar un día sin escuela sobre fechas ya programadas dejaba las sesiones
+    // huérfanas: seguían saliendo en el PDF de padres. No se borran en silencio
+    // — se devuelve el conflicto y el cliente decide.
+    const { data: sesiones, error: sesErr } = await admin
+      .from("sesiones_semana").select("id, fecha").gte("fecha", fecha_inicio).lte("fecha", fecha_fin);
+    if (sesErr) return Response.json({ error: sesErr.message }, { status: 500 });
+    if ((sesiones?.length ?? 0) > 0 && !sesiones_existentes) {
+      return Response.json({
+        needs_confirm: true,
+        sesiones: sesiones!.length,
+        fechas: [...new Set(sesiones!.map((s) => s.fecha as string))].sort(),
+      }, { status: 409 });
+    }
+
     const { data, error } = await admin.from("dias_sin_escuela").insert({
       fecha_inicio, fecha_fin, motivo: motivo?.trim() || null,
     }).select().single();
     if (error) return Response.json({ error: error.message }, { status: 500 });
-    return Response.json({ dia_sin_escuela: data });
+
+    let sesiones_borradas = 0;
+    if (sesiones_existentes === "borrar" && sesiones?.length) {
+      const { error: delErr } = await admin.from("sesiones_semana").delete().in("id", sesiones.map((s) => s.id));
+      if (delErr) {
+        return Response.json({
+          dia_sin_escuela: data,
+          error: `Se marcó el día sin escuela, pero no se pudieron borrar las sesiones: ${delErr.message}`,
+        }, { status: 500 });
+      }
+      sesiones_borradas = sesiones.length;
+    }
+    return Response.json({ dia_sin_escuela: data, sesiones_borradas });
   }
 
   return Response.json({ error: "kind debe ser 'evento' o 'sin_escuela'" }, { status: 400 });

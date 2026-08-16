@@ -354,11 +354,19 @@ export type EstacionView = {
 
 // Etiqueta corta para un día sin escuela: festivo/compensatorio se distinguen;
 // otros motivos (torneo, campo cerrado) quedan como "Sin escuela".
-function etiquetaDiaSinEscuela(motivo: string | null | undefined): string {
+export function etiquetaDiaSinEscuela(motivo: string | null | undefined): string {
   const m = motivo ?? "";
   if (/^festivo/i.test(m)) return "Festivo";
   if (/^compensatorio/i.test(m)) return "Compensatorio";
   return "Sin escuela";
+}
+
+// Texto largo para avisos ("Compensatorio — lunes festivo"). Cuando el motivo ya
+// empieza por festivo/compensatorio no se repite la etiqueta.
+export function descripcionDiaSinEscuela(motivo: string | null | undefined): string {
+  const etiqueta = etiquetaDiaSinEscuela(motivo);
+  if (!motivo?.trim()) return etiqueta;
+  return etiqueta === "Sin escuela" ? `Sin escuela — ${motivo.trim()}` : motivo.trim();
 }
 
 // Nombre legible del foco para mostrar en la grilla (el valor se guarda con
@@ -547,15 +555,15 @@ export default function ProgramacionModule({ currentRol }: { currentRol: Rol | n
   const [pdfPreview, setPdfPreview] = useState<{ dataUrl: string; ratio: number } | null>(null);
 
   function openJuvModal(dia: DiaSemana, _fecha: string, _sesion: SesionSemana | null, _extra?: { hi?: string; hf?: string }) {
-    setWeekWizardCtx({ tipoPlan: "juvenil", singleDay: dia });
+    abrirWizard("juvenil", dia);
   }
 
   function openCompModal(dia: DiaSemana, _fecha: string, _sesion: SesionSemana | null, _extra?: { hi?: string; hf?: string }) {
-    setWeekWizardCtx({ tipoPlan: "competencia", singleDay: dia });
+    abrirWizard("competencia", dia);
   }
 
   function openDamasModal(dia: DiaSemana, _fecha: string, _sesion: SesionSemana | null, _extra?: { hi?: string; hf?: string }) {
-    setWeekWizardCtx({ tipoPlan: "damas", singleDay: dia });
+    abrirWizard("damas", dia);
   }
 
   // ── Wizard "Planificar con Paco" ──────────────────────────────────────────
@@ -606,11 +614,49 @@ export default function ProgramacionModule({ currentRol }: { currentRol: Rol | n
   const [toast, setToast] = useState<string | null>(null);
   const showToast = (msg: string) => { setToast(msg); setTimeout(() => setToast(null), 3500); };
 
+  // Día sin escuela que aplica a un día de la semana en curso, si lo hay. El
+  // compensatorio del lunes festivo ya viene como su propia fila, así que no se
+  // deduce nada: manda lo que esté cargado en dias_sin_escuela.
+  function diaSinEscuelaDe(dia: DiaSemana): DiaSinEscuela | undefined {
+    const fecha = getFechaForDia(semana, dia);
+    return calDiasSinEscuela.find((d) => fechaEnRango(fecha, d.fecha_inicio, d.fecha_fin));
+  }
+
+  // Abre el wizard solo si queda al menos un día programable. Si la semana (o el
+  // día pedido) está entera sin escuela, avisa con el motivo en vez de abrir un
+  // wizard que no podría guardar nada.
+  function abrirWizard(tipoPlan: TipoPlan, singleDay?: DiaSemana) {
+    const objetivo = singleDay ? [singleDay] : DIAS_POR_TIPO[tipoPlan];
+    const bloqueados = objetivo
+      .map((d) => ({ dia: d, sin: diaSinEscuelaDe(d) }))
+      .filter((x): x is { dia: DiaSemana; sin: DiaSinEscuela } => !!x.sin);
+    if (bloqueados.length === objetivo.length && objetivo.length > 0) {
+      const { dia, sin } = bloqueados[0];
+      showToast(
+        singleDay
+          ? `${DIA_LABEL[dia]} no tiene clase — ${descripcionDiaSinEscuela(sin.motivo)}`
+          : `Esta semana no hay días de clase para ${TIPO_PLAN_LABEL[tipoPlan]} — ${descripcionDiaSinEscuela(sin.motivo)}`
+      );
+      return;
+    }
+    setWeekWizardCtx({ tipoPlan, singleDay });
+  }
+
   // ── Load horarios_defecto once ────────────────────────────────────────────
   useEffect(() => {
     supabase.from("horarios_defecto").select("tipo_plan, dia_semana, hora_inicio, hora_fin")
       .then(({ data }) => { if (data) setHorariosDefecto(data as HorarioDefecto[]); });
   }, []);
+
+  // ── Load dias_sin_escuela once ────────────────────────────────────────────
+  // La tabla es chica y no depende de la semana. Antes solo se traía dentro de
+  // fetchCalSemana/fetchCalMes, así que en Vista Plan —de donde sale el wizard—
+  // la lista estaba vacía y se podía programar encima de un festivo.
+  const fetchDiasSinEscuela = useCallback(async () => {
+    const { data } = await supabase.from("dias_sin_escuela").select("*");
+    setCalDiasSinEscuela((data as DiaSinEscuela[]) ?? []);
+  }, []);
+  useEffect(() => { fetchDiasSinEscuela(); }, [fetchDiasSinEscuela]);
 
   // ── Fetch plan (for active tab & week) ───────────────────────────────────
   const fetchPlan = useCallback(async () => {
@@ -753,7 +799,7 @@ export default function ProgramacionModule({ currentRol }: { currentRol: Rol | n
       if (planErr || !newPlan) throw new Error(planErr?.message || "Error al crear plan");
       showToast(`Plan ${TIPO_PLAN_LABEL[tipoPlan]} creado ✓`);
       await fetchPlan();
-      setWeekWizardCtx({ tipoPlan });
+      abrirWizard(tipoPlan);
     } catch (err) {
       showToast(err instanceof Error ? err.message : "Error al crear");
     } finally { setCreandoPlan(false); }
@@ -1579,7 +1625,7 @@ export default function ProgramacionModule({ currentRol }: { currentRol: Rol | n
           ) : (
             <>
               <button
-                onClick={() => setWeekWizardCtx({ tipoPlan: activeTab })}
+                onClick={() => abrirWizard(activeTab)}
                 className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold text-white shadow-sm hover:brightness-110 transition-all"
                 style={{ background: accentColor }}
               >
@@ -2279,6 +2325,7 @@ export default function ProgramacionModule({ currentRol }: { currentRol: Rol | n
           planId={plan.id}
           horariosDefecto={horariosDefecto}
           sesionesExistentes={sesiones}
+          diasSinEscuela={calDiasSinEscuela}
           singleDay={weekWizardCtx.singleDay}
           onClose={() => {
             // Los días recorridos ya se guardaron incrementalmente al avanzar
@@ -2349,6 +2396,8 @@ export default function ProgramacionModule({ currentRol }: { currentRol: Rol | n
           onClose={() => { setShowEventoWizard(false); setEditEventoCal(null); setEditDiaSinEscuela(null); }}
           onCreated={() => {
             showToast("Guardado en el calendario ✓");
+            fetchDiasSinEscuela();
+            fetchPlan();
             if (viewMode === "semana") fetchCalSemana();
             else if (viewMode === "mes") fetchCalMes();
           }}

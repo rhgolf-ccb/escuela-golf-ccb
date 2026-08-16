@@ -32,8 +32,11 @@ export default function EventoDiaSinEscuelaModal({
   const [deleting, setDeleting] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Sesiones ya programadas dentro del rango que se está marcando sin escuela —
+  // el servidor las devuelve en un 409 y acá se decide qué hacer con ellas.
+  const [conflicto, setConflicto] = useState<{ sesiones: number; fechas: string[] } | null>(null);
 
-  async function handleGuardar() {
+  async function handleGuardar(sesionesExistentes?: "borrar" | "conservar") {
     setError(null);
     if (kind === "evento" && !nombre.trim()) { setError("Ponle un nombre al evento."); return; }
     if (!fechaInicio) { setError("Selecciona una fecha."); return; }
@@ -43,7 +46,7 @@ export default function EventoDiaSinEscuelaModal({
     try {
       const base = kind === "evento"
         ? { kind, nombre: nombre.trim(), fecha_inicio: fechaInicio, fecha_fin: fechaFin || null, descripcion: descripcion.trim() || null, tipo }
-        : { kind, fecha_inicio: fechaInicio, fecha_fin: fechaFin, motivo: motivo.trim() || null };
+        : { kind, fecha_inicio: fechaInicio, fecha_fin: fechaFin, motivo: motivo.trim() || null, sesiones_existentes: sesionesExistentes };
       const body = editId ? { ...base, id: editId } : base;
       const res = await fetch("/api/calendario-evento", {
         method: editId ? "PATCH" : "POST",
@@ -51,6 +54,11 @@ export default function EventoDiaSinEscuelaModal({
         body: JSON.stringify(body),
       });
       const data = await res.json();
+      if (res.status === 409 && data.needs_confirm) {
+        setConflicto({ sesiones: data.sesiones, fechas: data.fechas ?? [] });
+        setSaving(false);
+        return;
+      }
       if (!res.ok) throw new Error(data.error || "Error al guardar");
       onCreated();
       onClose();
@@ -132,7 +140,26 @@ export default function EventoDiaSinEscuelaModal({
 
         {error && <p className="text-xs text-red-600">{error}</p>}
 
-        {confirmDelete ? (
+        {conflicto ? (
+          <div className="space-y-2 pt-1">
+            <div className="rounded-lg px-3 py-2 text-xs space-y-1" style={{ backgroundColor: "#fffbeb", border: "1px solid #fde68a", color: "#92400e" }}>
+              <p className="font-semibold">
+                Ya hay {conflicto.sesiones} sesión{conflicto.sesiones > 1 ? "es" : ""} programada{conflicto.sesiones > 1 ? "s" : ""} en ese rango.
+              </p>
+              <p>{conflicto.fechas.join(", ")}</p>
+              <p>Si las dejas, seguirán saliendo en el PDF de padres aunque el día quede sin escuela.</p>
+            </div>
+            <div className="flex gap-2">
+              <button onClick={() => setConflicto(null)} disabled={saving} className="py-2 px-3 rounded-xl text-sm font-medium border border-gray-200 text-gray-600 hover:bg-gray-50">Cancelar</button>
+              <button onClick={() => handleGuardar("conservar")} disabled={saving} className="flex-1 py-2 rounded-xl text-sm font-medium border border-gray-200 text-gray-600 hover:bg-gray-50 disabled:opacity-50">
+                Marcar y conservarlas
+              </button>
+              <button onClick={() => handleGuardar("borrar")} disabled={saving} className="flex-1 py-2 rounded-xl text-sm font-semibold text-white disabled:opacity-50" style={{ backgroundColor: "#b91c1c" }}>
+                {saving ? "Guardando..." : "Marcar y borrarlas"}
+              </button>
+            </div>
+          </div>
+        ) : confirmDelete ? (
           <div className="flex gap-2 pt-2">
             <button onClick={() => setConfirmDelete(false)} disabled={deleting} className="flex-1 py-2 rounded-xl text-sm font-medium border border-gray-200 text-gray-600 hover:bg-gray-50">Cancelar</button>
             <button onClick={handleBorrar} disabled={deleting} className="flex-1 py-2 rounded-xl text-sm font-semibold text-white disabled:opacity-50" style={{ backgroundColor: "#b91c1c" }}>
@@ -146,7 +173,7 @@ export default function EventoDiaSinEscuelaModal({
             ) : (
               <button onClick={onClose} disabled={saving} className="flex-1 py-2 rounded-xl text-sm font-medium border border-gray-200 text-gray-600 hover:bg-gray-50">Cancelar</button>
             )}
-            <button onClick={handleGuardar} disabled={saving} className="flex-1 py-2 rounded-xl text-sm font-semibold text-white disabled:opacity-50" style={{ backgroundColor: "#1a3a2a" }}>
+            <button onClick={() => handleGuardar()} disabled={saving} className="flex-1 py-2 rounded-xl text-sm font-semibold text-white disabled:opacity-50" style={{ backgroundColor: "#1a3a2a" }}>
               {saving ? "Guardando..." : editId ? "Guardar cambios" : "Guardar"}
             </button>
           </div>
