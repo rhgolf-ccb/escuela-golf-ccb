@@ -14,6 +14,7 @@ import EstacionEditor from "./EstacionEditor";
 import CalentamientoStep from "./CalentamientoStep";
 import EspecialDiaPicker from "./EspecialDiaPicker";
 import { buildJuvenilRow, buildCompetenciaRow, buildDamasRow, descartarFilasSinEscuela } from "./save-builders";
+import { motivoFechaNoValida } from "@/components/MoverSesionModal";
 import { parseExistingToDiaState } from "./parse-existing";
 
 interface Props {
@@ -28,8 +29,13 @@ interface Props {
   diasSinEscuela: DiaSinEscuela[];
   singleDay?: DiaSemana;
   onClose: () => void;
-  onSaved: () => void;
+  // fechaMovida: si el día cambió de fecha, para que la vista salte a esa semana.
+  onSaved: (fechaMovida?: string) => void;
 }
+
+// Destino efectivo de un día tras un cambio de fecha. Vacío = se guarda donde
+// estaba (plan y fecha que ya tenía el wizard).
+type Destino = { fecha?: string; planId?: string; diaSemana?: DiaSemana };
 
 function slotsPara(horariosDefecto: HorarioDefecto[], tipoPlan: TipoPlan, dia: DiaSemana) {
   return horariosDefecto
@@ -105,6 +111,18 @@ export default function WeekWizardModal({ tipoPlan, semana, planId, horariosDefe
   const [profesores, setProfesores] = useState<string[]>([]);
   // Días ya guardados en la base — para marcarlos con ✓ y poder parar/retomar.
   const [guardados, setGuardados] = useState<Set<string>>(() => new Set(sesionesExistentes.map((s) => s.dia_semana)));
+
+  // Cambio de fecha de un día ya guardado. No se aplica al escribirlo: se
+  // guarda con el resto en "Guardar día" (primero se mueve, después se sube el
+  // contenido a la fecha nueva). `movido` recuerda el resultado para no
+  // reintentar el movimiento si se guarda dos veces seguidas.
+  const sesionesDelDiaActual = singleDay ? sesionesExistentes.filter((s) => s.dia_semana === singleDay) : [];
+  const puedeCambiarFecha = !!singleDay && sesionesDelDiaActual.length > 0;
+  const fechaOriginal = singleDay ? getFechaForDia(semana, singleDay) : "";
+  const [fechaNueva, setFechaNueva] = useState(fechaOriginal);
+  const [movido, setMovido] = useState<{ fecha: string; planId: string; diaSemana: DiaSemana } | null>(null);
+  const motivoFechaInvalida = puedeCambiarFecha ? motivoFechaNoValida(fechaNueva, diasSinEscuela) : null;
+  const fechaCambiada = puedeCambiarFecha && !!fechaNueva && fechaNueva !== fechaOriginal;
 
   useEffect(() => {
     supabase
@@ -232,17 +250,47 @@ export default function WeekWizardModal({ tipoPlan, semana, planId, horariosDefe
     setCurrentIndex(0);
   }
 
-  function rowsForDia(dia: DiaSemana, diaState: DiaWizardState): Record<string, unknown>[] {
+  // `destino` llega solo cuando el día cambió de fecha: la fila tiene que ir al
+  // plan de la semana nueva y con el dia_semana que corresponda a esa fecha, o
+  // el upsert pisaría la sesión recién movida con datos incoherentes.
+  function rowsForDia(dia: DiaSemana, diaState: DiaWizardState, destino?: Destino): Record<string, unknown>[] {
     const slots = slotsPara(horariosDefecto, tipoPlan, dia);
-    const fecha = getFechaForDia(semana, dia);
+    const fecha = destino?.fecha ?? getFechaForDia(semana, dia);
     const slotList = slots.length > 0 ? slots : (diaState.horaInicio && diaState.horaFin ? [{ hora_inicio: diaState.horaInicio, hora_fin: diaState.horaFin }] : []);
     if (slotList.length === 0) throw new Error(`No hay horario por defecto para ${dia}; defínelo en horarios_defecto.`);
     return slotList.map((slot) => {
-      const base = { plan_id: planId, dia_semana: dia, fecha, hora_inicio: slot.hora_inicio.slice(0, 5), hora_fin: slot.hora_fin.slice(0, 5) };
+      const base = { plan_id: destino?.planId ?? planId, dia_semana: destino?.diaSemana ?? dia, fecha, hora_inicio: slot.hora_inicio.slice(0, 5), hora_fin: slot.hora_fin.slice(0, 5) };
       return tipoPlan === "juvenil" ? buildJuvenilRow(base, diaState, config)
         : tipoPlan === "competencia" ? buildCompetenciaRow(base, diaState, config)
         : buildDamasRow(base, diaState, config);
     });
+  }
+
+  // Aplica el cambio de fecha (si lo hay) antes de subir el contenido: mueve las
+  // filas existentes con /api/mover-programacion, que conserva los id y con
+  // ellos las reservas de los alumnos. Devuelve el destino efectivo, o null si
+  // falló — en ese caso ya se mostró el error y no hay que guardar nada.
+  async function aplicarCambioDeFecha(dia: DiaSemana): Promise<Destino | null> {
+    if (!fechaCambiada || dia !== singleDay) return {};
+    if (movido && movido.fecha === fechaNueva) return movido;
+    let destino: Destino = {};
+    for (const s of sesionesDelDiaActual) {
+      const res = await fetch("/api/mover-programacion", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ kind: "dia", sesion_id: s.id, nueva_fecha: fechaNueva }),
+      });
+      const data = await res.json();
+      if (res.status === 409 && data.needs_confirm) {
+        const n = data.sesion_destino?.reservas ?? 0;
+        setError(`Ya hay otra sesión ese día a las ${s.hora_inicio?.slice(0, 5) ?? "esa hora"}${n > 0 ? ` (con ${n} reserva${n === 1 ? "" : "s"})` : ""}. Para reemplazarla usa "Cambiar de fecha" desde el calendario.`);
+        return null;
+      }
+      if (!res.ok) { setError(data.error || "No se pudo cambiar la fecha de la sesión."); return null; }
+      destino = { fecha: data.fecha as string, planId: data.plan_id as string, diaSemana: data.dia_semana as DiaSemana };
+    }
+    if (destino.fecha) setMovido(destino as { fecha: string; planId: string; diaSemana: DiaSemana });
+    return destino;
   }
 
   // Guarda un solo día de inmediato — así "Siguiente día" no deja el trabajo
@@ -252,7 +300,9 @@ export default function WeekWizardModal({ tipoPlan, semana, planId, horariosDefe
     setSaving(true);
     setError(null);
     try {
-      const { filas, descartadas } = descartarFilasSinEscuela(rowsForDia(dia, diasState[dia]), diasSinEscuela);
+      const destino = await aplicarCambioDeFecha(dia);
+      if (!destino) return false;
+      const { filas, descartadas } = descartarFilasSinEscuela(rowsForDia(dia, diasState[dia], destino), diasSinEscuela);
       if (filas.length === 0) {
         setError(`${DIA_LABEL[dia]} está marcado como día sin escuela (${descripcionDiaSinEscuela(descartadas[0]?.info.motivo)}). No se guardó nada.`);
         return false;
@@ -281,6 +331,13 @@ export default function WeekWizardModal({ tipoPlan, semana, planId, horariosDefe
   // Guarda TODOS los días completos (no solo el actual) y cierra. Así, si armaste
   // varios días navegando con las flechas y cierras acá, no se pierde ninguno.
   async function handleSave() {
+    // Un día suelto que además cambió de fecha se guarda por el mismo camino que
+    // "Guardar día" (mover + upsert) y recién ahí se cierra.
+    if (singleDay && fechaCambiada) {
+      const ok = await guardarDia(singleDay);
+      if (ok) onSaved(movido?.fecha ?? fechaNueva);
+      return;
+    }
     setSaving(true);
     setError(null);
     try {
@@ -334,6 +391,24 @@ export default function WeekWizardModal({ tipoPlan, semana, planId, horariosDefe
               <p className="text-xs mt-0.5" style={{ color: "#b45309" }}>
                 No se programan: {omitidos.map((o) => etiquetaDiaOmitido(o.dia, o.fecha, o.info)).join(", ")}
               </p>
+            )}
+            {puedeCambiarFecha && (
+              <div className="mt-1.5">
+                <div className="flex items-center gap-1.5">
+                  <span className="text-[11px] font-semibold text-gray-500">Fecha:</span>
+                  <input
+                    type="date"
+                    value={fechaNueva}
+                    onChange={(e) => { setFechaNueva(e.target.value); setMovido(null); }}
+                    disabled={saving}
+                    className="text-xs border border-gray-200 rounded-lg px-2 py-1"
+                  />
+                  {fechaCambiada && !motivoFechaInvalida && (
+                    <span className="text-[11px] font-semibold" style={{ color: "#b45309" }}>se moverá al guardar</span>
+                  )}
+                </div>
+                {motivoFechaInvalida && <p className="text-[11px] mt-0.5" style={{ color: "#b91c1c" }}>{motivoFechaInvalida}</p>}
+              </div>
             )}
           </div>
           <button onClick={() => { if (!saving) onClose(); }} disabled={saving} className="text-gray-400 hover:text-gray-600 disabled:opacity-40">
@@ -579,14 +654,14 @@ export default function WeekWizardModal({ tipoPlan, semana, planId, horariosDefe
                     className="px-3 py-2.5 rounded-xl text-sm font-medium border border-gray-200 text-gray-600 hover:bg-gray-50 disabled:opacity-30" title="Día anterior">←</button>
                   <button onClick={handleSiguienteDia} disabled={esUltimoDia}
                     className="px-3 py-2.5 rounded-xl text-sm font-medium border border-gray-200 text-gray-600 hover:bg-gray-50 disabled:opacity-30" title="Siguiente día">→</button>
-                  <button onClick={guardarDiaActual} disabled={!puedeAvanzar || saving}
+                  <button onClick={guardarDiaActual} disabled={!puedeAvanzar || saving || !!motivoFechaInvalida}
                     className="flex-1 py-2.5 rounded-xl text-sm font-semibold border-2 disabled:opacity-40"
                     style={{ borderColor: config.color, color: config.color }}>
                     {saving ? "Guardando..." : guardados.has(diaActualKey) ? "✓ Guardado — actualizar" : "Guardar día"}
                   </button>
                 </>
               )}
-              <button onClick={handleSave} disabled={(singleDay ? !puedeAvanzar : diasCompletos === 0) || saving}
+              <button onClick={handleSave} disabled={(singleDay ? !puedeAvanzar : diasCompletos === 0) || saving || !!motivoFechaInvalida}
                 className="flex-1 py-2.5 rounded-xl text-sm font-semibold text-white disabled:opacity-40"
                 style={{ background: config.color }}>
                 {saving ? "Guardando..." : singleDay ? "✓ Guardar" : `Guardar todo y cerrar${diasCompletos > 1 ? ` (${diasCompletos} días)` : ""}`}

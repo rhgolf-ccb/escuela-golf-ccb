@@ -18,6 +18,8 @@ import PacoPlanningModal from "./PacoPlanningModal";
 import ActividadEspecialWizard from "./ActividadEspecialWizard";
 import PacoPlanWizard from "./PacoPlanWizard";
 import EventoDiaSinEscuelaModal from "./EventoDiaSinEscuelaModal";
+import MoverSemanaModal from "./MoverSemanaModal";
+import MoverSesionModal, { type SesionMovible } from "./MoverSesionModal";
 import EventosTab from "./EventosTab";
 import WeekWizardModal from "./week-wizard/WeekWizardModal";
 import { isStaff, type Rol } from "@/lib/roles";
@@ -278,21 +280,24 @@ export const CAL_EVENT: Record<string, { bg: string; text: string }> = {
 };
 
 // ── Date helpers ──────────────────────────────────────────────────────────────
-function getMonday(d: Date): Date {
+export function getMonday(d: Date): Date {
   const date = new Date(d); const day = date.getDay();
   date.setDate(date.getDate() + (day === 0 ? -6 : 1 - day));
   date.setHours(0, 0, 0, 0); return date;
 }
 export function toISODate(d: Date): string { return d.toISOString().split("T")[0]; }
-function addDays(d: Date, n: number): Date { const r = new Date(d); r.setDate(r.getDate() + n); return r; }
+export function addDays(d: Date, n: number): Date { const r = new Date(d); r.setDate(r.getDate() + n); return r; }
 export function getFechaForDia(monday: Date, dia: DiaSemana): string { return toISODate(addDays(monday, DIA_OFFSET[dia])); }
 function formatWeekRange(monday: Date): string {
   const dom = addDays(monday, 6);
   return `${monday.toLocaleDateString("es-CO", { day: "numeric", month: "long" })} — ${dom.toLocaleDateString("es-CO", { day: "numeric", month: "long", year: "numeric" })}`;
 }
-function formatDiaFecha(fecha: string): string {
+export function formatDiaFecha(fecha: string): string {
   return new Date(fecha + "T00:00:00").toLocaleDateString("es-CO", { day: "numeric", month: "short" });
 }
+// Fecha ISO -> Date local sin sorpresas de zona horaria (new Date("2026-08-18")
+// se interpreta como UTC y en Colombia retrocede un día).
+export function fechaLocal(fecha: string): Date { return new Date(`${fecha}T00:00:00`); }
 function formatHora(t: string | null): string { return t ? t.slice(0, 5) : ""; }
 
 // Calendar helpers
@@ -547,6 +552,11 @@ export default function ProgramacionModule({ currentRol }: { currentRol: Rol | n
   // Wizard de semana completa — reemplaza el flujo día-por-día que antes
   // vivía en JuvenileClassModal/CompetenciaClassModal/DamasClassModal.
   const [weekWizardCtx, setWeekWizardCtx] = useState<{ tipoPlan: TipoPlan; singleDay?: DiaSemana } | null>(null);
+
+  // Mover programación ya guardada (semana completa o un día suelto) sin
+  // borrarla: recrearla perdería las reservas, que cuelgan de sesion_id.
+  const [moviendoSemana, setMoviendoSemana] = useState(false);
+  const [moviendoSesion, setMoviendoSesion] = useState<SesionMovible | null>(null);
 
   // PDF para padres — tabla bonita por columnas con logo, generada desde un
   // snapshot oculto de WeeklyPlanPDFTemplate (html2canvas + jsPDF).
@@ -1633,6 +1643,14 @@ export default function ProgramacionModule({ currentRol }: { currentRol: Rol | n
                 Armar programación
               </button>
               <button
+                onClick={() => setMoviendoSemana(true)}
+                className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-medium border border-gray-200 text-gray-600 hover:bg-gray-50 transition-colors"
+                title="Mover esta programación a otra semana conservando las reservas"
+              >
+                <svg width="13" height="13" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/><path d="M12 14l3 3-3 3"/></svg>
+                Mover a otra semana
+              </button>
+              <button
                 onClick={openEditTema}
                 className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-medium border border-gray-200 text-gray-600 hover:bg-gray-50 transition-colors"
               >
@@ -2211,6 +2229,18 @@ export default function ProgramacionModule({ currentRol }: { currentRol: Rol | n
                 >
                   Editar sesión
                 </button>
+                <button
+                  onClick={() => {
+                    setMoviendoSesion({
+                      id: calEventDetail.id, fecha: calEventDetail.fecha, dia_semana: calEventDetail.dia_semana,
+                      tipo_plan: calEventDetail.tipo_plan, asistencia_registrada: calEventDetail.asistencia_registrada,
+                    });
+                    setCalEventDetail(null);
+                  }}
+                  className="flex-1 py-1.5 rounded-xl text-xs font-medium text-gray-500 hover:bg-gray-50 border border-gray-100"
+                >
+                  Cambiar de fecha
+                </button>
               </div>
             </div>
           </div>
@@ -2334,9 +2364,12 @@ export default function ProgramacionModule({ currentRol }: { currentRol: Rol | n
             setWeekWizardCtx(null);
             fetchPlan();
           }}
-          onSaved={async () => {
+          onSaved={async (fechaMovida) => {
             setWeekWizardCtx(null);
-            showToast("Programación guardada ✓");
+            showToast(fechaMovida ? "Programación guardada y movida ✓" : "Programación guardada ✓");
+            // Si el día cambió de fecha puede haber saltado de semana: la vista
+            // sigue a la sesión en vez de quedarse en la semana que dejó.
+            if (fechaMovida) setSemana(getMonday(fechaLocal(fechaMovida)));
             await fetchPlan();
           }}
         />
@@ -2384,6 +2417,41 @@ export default function ProgramacionModule({ currentRol }: { currentRol: Rol | n
           onDiaEspecifico={handleWizardDiaEspecifico}
           onActividadEspecial={handleWizardActividadEspecial}
           onEventos={handleWizardEventos}
+        />
+      )}
+
+      {/* ══ MODAL: Mover programación de semana ════════════════════════════════ */}
+      {moviendoSemana && plan && (
+        <MoverSemanaModal
+          plan={plan}
+          sesiones={sesiones}
+          diasSinEscuela={calDiasSinEscuela}
+          onClose={() => setMoviendoSemana(false)}
+          onMoved={(nuevaSemana) => {
+            setMoviendoSemana(false);
+            showToast("Programación movida ✓");
+            // Cambiar la semana dispara fetchPlan (está en sus deps) y deja la
+            // vista en la semana destino, no en la que quedó vacía.
+            setSemana(getMonday(nuevaSemana));
+            fetchDiasSinEscuela();
+          }}
+        />
+      )}
+
+      {/* ══ MODAL: Cambiar de fecha una sesión ═════════════════════════════════ */}
+      {moviendoSesion && (
+        <MoverSesionModal
+          sesion={moviendoSesion}
+          diasSinEscuela={calDiasSinEscuela}
+          onClose={() => setMoviendoSesion(null)}
+          onMoved={(nuevaFecha) => {
+            setMoviendoSesion(null);
+            showToast("Sesión movida ✓");
+            setSemana(getMonday(fechaLocal(nuevaFecha)));
+            fetchPlan();
+            if (viewMode === "semana") fetchCalSemana();
+            else if (viewMode === "mes") fetchCalMes();
+          }}
         />
       )}
 
