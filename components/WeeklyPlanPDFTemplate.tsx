@@ -395,11 +395,16 @@ export default function WeeklyPlanPDFTemplate({ plan, sesiones, tipoPlan, semana
     return oa - ob;
   });
 
-  // Una sesión por día (la primera) para el PDF padres
-  const sesionesPorDia = sesionesOrdenadas.reduce<SesionSemana[]>((acc, s) => {
-    if (!acc.some((x) => x.dia_semana === s.dia_semana)) acc.push(s);
-    return acc;
-  }, []);
+  // Juvenil guarda 2 filas por día de fin de semana (una por horario) con el
+  // MISMO contenido por construcción: ahí sí se colapsa a la primera. En
+  // Competencia y Damas dos sesiones el mismo día son contenido distinto —
+  // colapsarlas hacía desaparecer la segunda del PDF.
+  const sesionesPorDia = tipoPlan === "juvenil"
+    ? sesionesOrdenadas.reduce<SesionSemana[]>((acc, s) => {
+        if (!acc.some((x) => x.dia_semana === s.dia_semana)) acc.push(s);
+        return acc;
+      }, [])
+    : sesionesOrdenadas;
 
   const weekRange = formatWeekRange(semana);
   const numCols = sesionesPorDia.length || 1;

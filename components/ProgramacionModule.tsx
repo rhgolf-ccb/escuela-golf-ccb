@@ -4,6 +4,8 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import WeeklyPlanPDFTemplate from "./WeeklyPlanPDFTemplate";
+import TeacherPlanPDFTemplate from "./TeacherPlanPDFTemplate";
+import DropdownMenu, { type DropdownMenuItem } from "./ui/DropdownMenu";
 import {
   // JuvenileClassModal.tsx ya no se renderiza (WeekWizardModal lo reemplazó)
   // pero sigue siendo la fuente de estos tipos, que PacoPlanningModal.tsx
@@ -383,12 +385,12 @@ const FOCO_DISPLAY: Record<string, string> = {
   contacto_compresion: "Contacto y compresión",
   plano_swing: "Plano de swing",
 };
-function prettyFoco(foco: string | null | undefined): string | null {
+export function prettyFoco(foco: string | null | undefined): string | null {
   if (!foco) return null;
   return FOCO_DISPLAY[foco] ?? foco.replace(/_/g, " ").replace(/^\w/, (c) => c.toUpperCase());
 }
 
-function sesionesToEstaciones(diaySesiones: SesionSemana[], tipoPlan: TipoPlan): EstacionView[] {
+export function sesionesToEstaciones(diaySesiones: SesionSemana[], tipoPlan: TipoPlan): EstacionView[] {
   const views: EstacionView[] = [];
   // Sábado y domingo de Juvenil guardan 2 filas físicas (una por horario) con el
   // MISMO contenido por construcción (ver publish-plan-semanal) — solo se procesa
@@ -546,7 +548,10 @@ export default function ProgramacionModule({ currentRol }: { currentRol: Rol | n
   const [sesionError, setSesionError]   = useState<string | null>(null);
 
   // Delete sesion
-  const [confirmDeleteSesion, setConfirmDeleteSesion] = useState<SesionSemana | null>(null);
+  // Se borra por DÍA, no por fila: sábado/domingo de Juvenil guardan 2 sesiones
+  // (una por horario) con el mismo contenido y borrar solo una dejaba huérfana
+  // la otra. El resto de los casos es una sola fila y se comporta igual que antes.
+  const [confirmDeleteSesiones, setConfirmDeleteSesiones] = useState<SesionSemana[] | null>(null);
   const [deletingSesion, setDeletingSesion]           = useState(false);
 
   // Wizard de semana completa — reemplaza el flujo día-por-día que antes
@@ -558,11 +563,16 @@ export default function ProgramacionModule({ currentRol }: { currentRol: Rol | n
   const [moviendoSemana, setMoviendoSemana] = useState(false);
   const [moviendoSesion, setMoviendoSesion] = useState<SesionMovible | null>(null);
 
-  // PDF para padres — tabla bonita por columnas con logo, generada desde un
-  // snapshot oculto de WeeklyPlanPDFTemplate (html2canvas + jsPDF).
+  // PDF de padres y de profesores — misma técnica para los dos: un snapshot
+  // oculto de la plantilla React (WeeklyPlanPDFTemplate / TeacherPlanPDFTemplate)
+  // capturado con html2canvas y volcado a jsPDF. La vista previa es un solo
+  // modal parametrizado con título y nombre de archivo.
   const padresPdfRef = useRef<HTMLDivElement>(null);
-  const [generatingPdfPadres, setGeneratingPdfPadres] = useState(false);
-  const [pdfPreview, setPdfPreview] = useState<{ dataUrl: string; ratio: number } | null>(null);
+  const profesoresPdfRef = useRef<HTMLDivElement>(null);
+  const [generandoPdf, setGenerandoPdf] = useState<"padres" | "profesores" | null>(null);
+  const [pdfPreview, setPdfPreview] = useState<{
+    dataUrl: string; ratio: number; titulo: string; subtitulo: string; filename: string;
+  } | null>(null);
 
   function openJuvModal(dia: DiaSemana, _fecha: string, _sesion: SesionSemana | null, _extra?: { hi?: string; hf?: string }) {
     abrirWizard("juvenil", dia);
@@ -891,11 +901,12 @@ export default function ProgramacionModule({ currentRol }: { currentRol: Rol | n
     } finally { setSavingSesion(false); }
   }
 
-  async function handleDeleteSesion(sesion: SesionSemana) {
+  async function handleDeleteSesion(aBorrar: SesionSemana[]) {
+    if (aBorrar.length === 0) return;
     setDeletingSesion(true);
-    await supabase.from("sesiones_semana").delete().eq("id", sesion.id);
-    setConfirmDeleteSesion(null);
-    showToast("Sesión eliminada");
+    await supabase.from("sesiones_semana").delete().in("id", aBorrar.map((s) => s.id));
+    setConfirmDeleteSesiones(null);
+    showToast(aBorrar.length > 1 ? "Sesiones eliminadas" : "Sesión eliminada");
     await fetchPlan();
     if (viewMode === "semana") fetchCalSemana();
     setDeletingSesion(false);
@@ -959,64 +970,6 @@ export default function ProgramacionModule({ currentRol }: { currentRol: Rol | n
     return lines.join("\n");
   }
 
-  // Markdown DETALLADO para profesores — incluye responsable, foco y descripciones
-  // completas de cada ejercicio, para que preparen su clase.
-  function buildDiaMarkdownProfesores(dia: DiaSemana, fecha: string, estaciones: EstacionView[]): string {
-    const lines: string[] = [`## ${DIA_LABEL[dia]} — ${formatDiaFecha(fecha)}`];
-    if (estaciones.length === 0) { lines.push("Sin programación para este día."); return lines.join("\n"); }
-    estaciones.forEach((est) => {
-      const titulo = est.numero ? `Estación ${est.numero}: ${est.nombre}` : est.nombre;
-      lines.push(`**${titulo}**`);
-      const meta = [
-        est.horario,
-        est.lugar,
-        est.responsable ? `Responsable: ${est.responsable}` : null,
-        est.foco ? `Foco: ${prettyFoco(est.foco)}` : null,
-      ].filter(Boolean).join(" · ");
-      if (meta) lines.push(meta);
-      est.drills.forEach((d) => lines.push(`- ${d.nombre}${d.descripcion ? `: ${d.descripcion}` : ""}${d.repeticiones ? ` (${d.repeticiones})` : ""}`));
-      if (est.reto) lines.push(`🏆 Reto: ${est.reto}`);
-      lines.push("");
-    });
-    return lines.join("\n");
-  }
-
-  async function handlePdfProfesores() {
-    if (!plan) return;
-    const fechaInicio = formatDiaFecha(toISODate(semana));
-    const fechaFin = formatDiaFecha(toISODate(addDays(semana, 6)));
-    const bloques = diasRequeridos
-      .map((dia) => {
-        const diaySesiones = sesiones.filter((s) => s.dia_semana === dia);
-        if (!diaySesiones.length) return null;
-        return buildDiaMarkdownProfesores(dia, getFechaForDia(semana, dia), sesionesToEstaciones(diaySesiones, activeTab));
-      })
-      .filter((b): b is string => !!b);
-    const { generateCCBPdf } = await import("@/lib/pdf-generator");
-    generateCCBPdf(bloques.join("\n\n---\n\n"), {
-      documentName: `Programación para profesores · ${TIPO_PLAN_LABEL[activeTab]} — semana del ${fechaInicio} al ${fechaFin}`,
-      filenamePrefix: `Profesores-${activeTab}-${toISODate(semana)}`,
-    });
-  }
-
-  async function handlePdfSemana() {
-    if (!plan) return;
-    const fechaInicio = formatDiaFecha(toISODate(semana));
-    const fechaFin = formatDiaFecha(toISODate(addDays(semana, 6)));
-    const bloques = diasRequeridos
-      .map((dia) => {
-        const diaySesiones = sesiones.filter((s) => s.dia_semana === dia);
-        if (!diaySesiones.length) return null;
-        return buildDiaMarkdown(dia, getFechaForDia(semana, dia), sesionesToEstaciones(diaySesiones, activeTab));
-      })
-      .filter((b): b is string => !!b);
-    const { generateCCBPdf } = await import("@/lib/pdf-generator");
-    generateCCBPdf(bloques.join("\n\n---\n\n"), {
-      documentName: `Programación Semanal ${TIPO_PLAN_LABEL[activeTab]} — semana del ${fechaInicio} al ${fechaFin}`,
-      filenamePrefix: `Programacion-${activeTab}-${toISODate(semana)}`,
-    });
-  }
-
   async function handlePdfDia() {
     if (!plan || !selectedDia) return;
     const diaySesiones = sesiones.filter((s) => s.dia_semana === selectedDia);
@@ -1031,21 +984,31 @@ export default function ProgramacionModule({ currentRol }: { currentRol: Rol | n
 
   // Captura el snapshot oculto a imagen (lo que html2canvas pondrá en el PDF) y
   // abre la vista previa — el usuario ve 1:1 cómo queda antes de descargar.
-  async function openPdfPreview() {
+  // Padres y profesores comparten este flujo: solo cambian la plantilla oculta,
+  // el título del modal y el nombre del archivo.
+  async function openPdfPreview(destino: "padres" | "profesores") {
     if (!plan) return;
-    const el = padresPdfRef.current;
+    const el = (destino === "padres" ? padresPdfRef : profesoresPdfRef).current;
     if (!el) return;
-    setGeneratingPdfPadres(true);
+    setGenerandoPdf(destino);
     try {
       const { default: html2canvas } = await import("html2canvas");
       const canvas = await html2canvas(el, { scale: 2, backgroundColor: "#fff", useCORS: true, logging: false });
-      setPdfPreview({ dataUrl: canvas.toDataURL("image/jpeg", 0.95), ratio: canvas.width / canvas.height });
+      setPdfPreview({
+        dataUrl: canvas.toDataURL("image/jpeg", 0.95),
+        ratio: canvas.width / canvas.height,
+        titulo: destino === "padres" ? "Vista previa — PDF padres" : "Vista previa — PDF profesores",
+        subtitulo: destino === "padres"
+          ? "Así se verá el PDF que descargas o envías"
+          : "Documento de trabajo del profesor: estaciones, responsables, foco y drills completos",
+        filename: `${destino === "padres" ? "Programacion" : "Profesores"}_${TIPO_PLAN_LABEL[activeTab]}_${toISODate(semana)}.pdf`,
+      });
     } finally {
-      setGeneratingPdfPadres(false);
+      setGenerandoPdf(null);
     }
   }
 
-  async function downloadPadresPdf() {
+  async function downloadPreviewPdf() {
     if (!pdfPreview) return;
     const { default: jsPDF } = await import("jspdf");
     const pdf = new jsPDF({ orientation: "landscape", unit: "mm", format: "a4" });
@@ -1060,7 +1023,7 @@ export default function ProgramacionModule({ currentRol }: { currentRol: Rol | n
     const offsetX = (pdfW - imgW) / 2;
     const offsetY = (pdfH - imgH) / 2;
     pdf.addImage(pdfPreview.dataUrl, "JPEG", offsetX, offsetY, imgW, imgH);
-    pdf.save(`Programacion_${TIPO_PLAN_LABEL[activeTab]}_${toISODate(semana)}.pdf`);
+    pdf.save(pdfPreview.filename);
     setPdfPreview(null);
   }
 
@@ -1068,6 +1031,78 @@ export default function ProgramacionModule({ currentRol }: { currentRol: Rol | n
   const diasRequeridos = DIAS_POR_TIPO[activeTab];
   const accentColor    = TIPO_PLAN_COLOR[activeTab];
   const groupColor     = GROUP_COLOR_HEX[activeTab];
+
+  // ── Menús de la barra del plan ────────────────────────────────────────────
+  // Todo lo de esta barra es de alcance SEMANA (incluido WhatsApp, que manda el
+  // resumen de la semana completa, no el del día seleccionado).
+  const iconoPdf = <svg width="13" height="13" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>;
+
+  const compartirItems: DropdownMenuItem[] = [
+    { label: "PDF padres", icon: iconoPdf, onSelect: () => openPdfPreview("padres") },
+    {
+      label: "PDF profesores",
+      icon: <svg width="13" height="13" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2M9 11a4 4 0 100-8 4 4 0 000 8zM23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 010 7.75"/></svg>,
+      onSelect: () => openPdfPreview("profesores"),
+    },
+    {
+      label: "Enviar por WhatsApp",
+      icon: <svg width="13" height="13" viewBox="0 0 24 24" fill="#25D366"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>,
+      onSelect: handleWhatsApp,
+    },
+  ];
+
+  // ── Menú de la barra del día ──────────────────────────────────────────────
+  // Solo acciones del día seleccionado. "Cambiar de fecha" reusa MoverSesionModal
+  // (mueve la fila conservando las reservas, que cuelgan de sesion_id).
+  function diaMenuItems(dia: DiaSemana, fecha: string, diaySesiones: SesionSemana[]): DropdownMenuItem[] {
+    const primera = diaySesiones[0] ?? null;
+    return [
+      { label: "PDF de este día", icon: iconoPdf, disabled: diaySesiones.length === 0, onSelect: handlePdfDia },
+      {
+        label: "Cambiar de fecha",
+        icon: <svg width="13" height="13" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/><path d="M12 14l3 3-3 3"/></svg>,
+        disabled: !primera,
+        onSelect: () => {
+          if (!primera) return;
+          setMoviendoSesion({
+            id: primera.id, fecha: primera.fecha ?? fecha, dia_semana: primera.dia_semana ?? dia,
+            tipo_plan: activeTab, asistencia_registrada: primera.asistencia_registrada,
+          });
+        },
+      },
+      {
+        label: "Eliminar sesión",
+        danger: true,
+        separatorBefore: true,
+        disabled: diaySesiones.length === 0,
+        icon: <svg width="13" height="13" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m3 0v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6"/></svg>,
+        onSelect: () => setConfirmDeleteSesiones(diaySesiones),
+      },
+    ];
+  }
+
+  const planMenuItems: DropdownMenuItem[] = [
+    {
+      // openEditTema solo toca tema_semanal/descripcion_tema/objetivo_mensual —
+      // el nombre viejo ("Editar plan") prometía más y se confundía con el
+      // "Editar día" de la barra del día.
+      label: "Tema y objetivo de la semana",
+      icon: <svg width="13" height="13" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>,
+      onSelect: openEditTema,
+    },
+    {
+      label: "Mover a otra semana",
+      icon: <svg width="13" height="13" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/><path d="M12 14l3 3-3 3"/></svg>,
+      onSelect: () => setMoviendoSemana(true),
+    },
+    {
+      label: "Borrar plan",
+      danger: true,
+      separatorBefore: true,
+      icon: <svg width="13" height="13" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m3 0v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6"/></svg>,
+      onSelect: () => setConfirmDeletePlan(true),
+    },
+  ];
 
   // ── Selección de día (vista de dos columnas) ──────────────────────────────
   useEffect(() => {
@@ -1642,28 +1677,31 @@ export default function ProgramacionModule({ currentRol }: { currentRol: Rol | n
                 <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
                 Armar programación
               </button>
-              <button
-                onClick={() => setMoviendoSemana(true)}
-                className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-medium border border-gray-200 text-gray-600 hover:bg-gray-50 transition-colors"
-                title="Mover esta programación a otra semana conservando las reservas"
-              >
-                <svg width="13" height="13" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/><path d="M12 14l3 3-3 3"/></svg>
-                Mover a otra semana
-              </button>
-              <button
-                onClick={openEditTema}
-                className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-medium border border-gray-200 text-gray-600 hover:bg-gray-50 transition-colors"
-              >
-                <svg width="13" height="13" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
-                Editar plan
-              </button>
-              <button
-                onClick={() => setConfirmDeletePlan(true)}
-                className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-medium text-red-600 border border-red-200 hover:bg-red-50 transition-colors"
-              >
-                <svg width="13" height="13" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m3 0v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6"/></svg>
-                Borrar plan
-              </button>
+
+              {/* Compartir — las tres salidas de la SEMANA (los dos PDF y el
+                  resumen de WhatsApp), que antes estaban repartidas entre esta
+                  barra y la del día. */}
+              <DropdownMenu
+                ariaLabel="Compartir la programación de la semana"
+                buttonClassName="flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-medium border border-gray-200 text-gray-600 hover:bg-gray-50 transition-colors disabled:opacity-50"
+                disabled={!!generandoPdf}
+                trigger={
+                  <>
+                    <svg width="13" height="13" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="M8.6 13.5l6.8 4M15.4 6.5l-6.8 4"/></svg>
+                    {generandoPdf ? "Generando…" : "Compartir"}
+                    <svg width="11" height="11" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path d="M6 9l6 6 6-6"/></svg>
+                  </>
+                }
+                items={compartirItems}
+              />
+
+              {/* Acciones menos frecuentes sobre el plan completo */}
+              <DropdownMenu
+                ariaLabel="Más acciones del plan"
+                buttonClassName="flex items-center px-3 py-2 rounded-xl text-sm font-medium border border-gray-200 text-gray-600 hover:bg-gray-50 transition-colors"
+                trigger={<span className="leading-none text-base">⋯</span>}
+                items={planMenuItems}
+              />
             </>
           )}
         </div>
@@ -1802,30 +1840,18 @@ export default function ProgramacionModule({ currentRol }: { currentRol: Rol | n
                           )}
                         </div>
                         <div className="flex items-center gap-1.5 flex-wrap justify-end">
-                          <button onClick={handlePdfSemana} className={btnClass}>
-                            <svg width="12" height="12" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
-                            PDF semana
-                          </button>
-                          <button onClick={handlePdfDia} className={btnClass}>
-                            <svg width="12" height="12" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
-                            PDF día
-                          </button>
-                          <button onClick={handlePdfProfesores} className={btnClass}>
-                            <svg width="12" height="12" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2M9 11a4 4 0 100-8 4 4 0 000 8zM23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 010 7.75"/></svg>
-                            PDF profesores
-                          </button>
-                          <button onClick={openPdfPreview} disabled={generatingPdfPadres} className={btnClass}>
-                            <svg width="12" height="12" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7z"/><circle cx="12" cy="12" r="3"/></svg>
-                            {generatingPdfPadres ? "Generando…" : "Vista previa PDF"}
-                          </button>
-                          <button onClick={handleWhatsApp} className={btnClass}>
-                            <svg width="12" height="12" viewBox="0 0 24 24" fill="#25D366"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>
-                            WhatsApp
-                          </button>
                           <button onClick={openEditDia} className={btnClass}>
                             <svg width="12" height="12" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
-                            Editar
+                            Editar día
                           </button>
+                          {/* Solo acciones de ESTE día: lo de la semana (PDF padres/
+                              profesores y WhatsApp) vive en la barra del plan. */}
+                          <DropdownMenu
+                            ariaLabel={`Más acciones de ${DIA_LABEL[dia]}`}
+                            buttonClassName="flex items-center px-2.5 py-1.5 rounded-lg border border-gray-200 text-xs font-medium text-gray-600 hover:bg-gray-50 transition-colors"
+                            trigger={<span className="leading-none text-sm">⋯</span>}
+                            items={diaMenuItems(dia, fecha, diaySesiones)}
+                          />
                         </div>
                       </div>
                     </div>
@@ -1911,7 +1937,7 @@ export default function ProgramacionModule({ currentRol }: { currentRol: Rol | n
                           ))}
 
                           {diaySesiones.map((sesion) => (
-                            <div key={sesion.id} className="flex items-center justify-between gap-2 pt-1">
+                            <div key={sesion.id} className="flex items-center gap-2 pt-1">
                               <button
                                 onClick={() => router.push(`/programacion/sesion/${sesion.id}`)}
                                 className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-semibold transition-colors ${sesion.asistencia_registrada ? "bg-emerald-50 text-emerald-700 border border-emerald-200" : "text-white"}`}
@@ -1919,9 +1945,6 @@ export default function ProgramacionModule({ currentRol }: { currentRol: Rol | n
                               >
                                 <svg width="13" height="13" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg>
                                 {sesion.asistencia_registrada ? "Ver asistencia" : "Pasar asistencia"}
-                              </button>
-                              <button onClick={() => setConfirmDeleteSesion(sesion)} className="text-xs font-medium text-red-500 hover:text-red-700">
-                                Eliminar sesión
                               </button>
                             </div>
                           ))}
@@ -2248,8 +2271,8 @@ export default function ProgramacionModule({ currentRol }: { currentRol: Rol | n
       )}
 
       {/* ══ MODAL: Confirmar eliminar sesión ════════════════════════════════ */}
-      {confirmDeleteSesion && (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={() => setConfirmDeleteSesion(null)}>
+      {confirmDeleteSesiones && confirmDeleteSesiones.length > 0 && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={() => { if (!deletingSesion) setConfirmDeleteSesiones(null); }}>
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center gap-3 mb-4">
               <div className="w-10 h-10 rounded-full bg-red-100 flex items-center justify-center shrink-0">
@@ -2257,21 +2280,26 @@ export default function ProgramacionModule({ currentRol }: { currentRol: Rol | n
               </div>
               <div>
                 <h3 className="font-bold text-gray-900">Eliminar sesión</h3>
-                <p className="text-xs text-gray-500 mt-0.5">{DIA_LABEL[confirmDeleteSesion.dia_semana]} · {TIPO_SESION_LABEL[confirmDeleteSesion.tipo_sesion]}</p>
+                <p className="text-xs text-gray-500 mt-0.5">{DIA_LABEL[confirmDeleteSesiones[0].dia_semana]} · {confirmDeleteSesiones.map((x) => TIPO_SESION_LABEL[x.tipo_sesion]).join(" · ")}</p>
               </div>
             </div>
-            <p className="text-sm text-gray-600 mb-5">¿Eliminar esta sesión? Esta acción no se puede deshacer.</p>
+            <p className="text-sm text-gray-600 mb-5">
+              {confirmDeleteSesiones.length > 1
+                ? `¿Eliminar las ${confirmDeleteSesiones.length} sesiones de este día? Esta acción no se puede deshacer.`
+                : "¿Eliminar esta sesión? Esta acción no se puede deshacer."}
+            </p>
             <div className="flex gap-2">
               <button
-                onClick={() => handleDeleteSesion(confirmDeleteSesion)}
+                onClick={() => handleDeleteSesion(confirmDeleteSesiones)}
                 disabled={deletingSesion}
                 className="flex-1 py-2.5 rounded-xl text-sm font-semibold text-white bg-red-600 hover:bg-red-700 disabled:opacity-50 transition-colors"
               >
                 {deletingSesion ? "Eliminando..." : "Sí, eliminar"}
               </button>
               <button
-                onClick={() => setConfirmDeleteSesion(null)}
-                className="px-5 py-2.5 rounded-xl text-sm font-medium border border-gray-200 text-gray-600 hover:bg-gray-50 transition-colors"
+                onClick={() => setConfirmDeleteSesiones(null)}
+                disabled={deletingSesion}
+                className="px-5 py-2.5 rounded-xl text-sm font-medium border border-gray-200 text-gray-600 hover:bg-gray-50 transition-colors disabled:opacity-50"
               >
                 Cancelar
               </button>
@@ -2314,19 +2342,22 @@ export default function ProgramacionModule({ currentRol }: { currentRol: Rol | n
         </div>
       )}
 
-      {/* Snapshot oculto para el PDF de padres — html2canvas lo captura fuera de pantalla */}
+      {/* Snapshots ocultos de los dos PDF — html2canvas los captura fuera de pantalla */}
       <div ref={padresPdfRef} style={{ position: "absolute", left: "-9999px", top: 0 }}>
         {plan && <WeeklyPlanPDFTemplate plan={plan} sesiones={sesiones} tipoPlan={activeTab} semana={semana} />}
       </div>
+      <div ref={profesoresPdfRef} style={{ position: "absolute", left: "-9999px", top: 0 }}>
+        {plan && <TeacherPlanPDFTemplate plan={plan} sesiones={sesiones} tipoPlan={activeTab} semana={semana} />}
+      </div>
 
-      {/* Vista previa del PDF de padres — imagen 1:1 de lo que se descargará */}
+      {/* Vista previa del PDF (padres o profesores) — imagen 1:1 de lo que se descargará */}
       {pdfPreview && (
         <div className="fixed inset-0 z-50 bg-black/60 flex flex-col items-center justify-center p-4" onClick={() => setPdfPreview(null)}>
           <div className="bg-white rounded-2xl shadow-xl max-w-5xl w-full max-h-[90vh] flex flex-col overflow-hidden" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between px-5 py-3 border-b border-gray-100">
               <div>
-                <p className="text-sm font-bold text-gray-900">Vista previa — PDF padres</p>
-                <p className="text-xs text-gray-500">Así se verá el PDF que descargas o envías</p>
+                <p className="text-sm font-bold text-gray-900">{pdfPreview.titulo}</p>
+                <p className="text-xs text-gray-500">{pdfPreview.subtitulo}</p>
               </div>
               <button onClick={() => setPdfPreview(null)} className="text-gray-400 hover:text-gray-700">
                 <svg width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path d="M18 6L6 18M6 6l12 12" /></svg>
@@ -2338,7 +2369,7 @@ export default function ProgramacionModule({ currentRol }: { currentRol: Rol | n
             </div>
             <div className="flex items-center justify-end gap-2 px-5 py-3 border-t border-gray-100">
               <button onClick={() => setPdfPreview(null)} className="px-4 py-2 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-100">Cerrar</button>
-              <button onClick={downloadPadresPdf} className="px-4 py-2 rounded-lg text-sm font-semibold text-white flex items-center gap-1.5" style={{ background: "#1a3a2a" }}>
+              <button onClick={downloadPreviewPdf} className="px-4 py-2 rounded-lg text-sm font-semibold text-white flex items-center gap-1.5" style={{ background: "#1a3a2a" }}>
                 <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
                 Descargar PDF
               </button>
