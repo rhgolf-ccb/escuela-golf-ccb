@@ -16,7 +16,6 @@ import {
   type SesionJuvenilEstaciones,
   type SesionJuvenilEspecial,
 } from "./JuvenileClassModal";
-import PacoPlanningModal from "./PacoPlanningModal";
 import ActividadEspecialWizard from "./ActividadEspecialWizard";
 import PacoPlanWizard from "./PacoPlanWizard";
 import EventoDiaSinEscuelaModal from "./EventoDiaSinEscuelaModal";
@@ -488,7 +487,6 @@ export function sesionesToEstaciones(diaySesiones: SesionSemana[], tipoPlan: Tip
 // ── Main component ────────────────────────────────────────────────────────────
 export default function ProgramacionModule({ currentRol }: { currentRol: Rol | null }) {
   const router = useRouter();
-  const [showPacoPlanning, setShowPacoPlanning] = useState(false);
   const [showActividadEspecial, setShowActividadEspecial] = useState(false);
   const [calEspeciales, setCalEspeciales] = useState<ActividadEspecial[]>([]);
   const [calEspecialDetail, setCalEspecialDetail] = useState<ActividadEspecial | null>(null);
@@ -587,12 +585,11 @@ export default function ProgramacionModule({ currentRol }: { currentRol: Rol | n
   }
 
   // ── Wizard "Planificar con Paco" ──────────────────────────────────────────
-  function handleWizardSemanaCompleta(grupoElegido: TipoPlan) {
-    setShowWizard(false);
-    setActiveTab(grupoElegido);
-    setShowPacoPlanning(true);
-  }
-
+  // La opción "Semana completa" está desactivada: publicaba por
+  // /api/publish-plan-semanal, que hacía DELETE de todas las sesiones del plan
+  // antes de insertar y escribía un formato más pobre que el del wizard (sin
+  // calentamiento, foco, responsable ni estaciones_competencia). Volverá cuando
+  // Paco precargue WeekWizardModal en vez de escribir directo en la base.
   function handleWizardDiaEspecifico(grupoElegido: TipoPlan, dia: DiaSemana, fecha: string) {
     setShowWizard(false);
     setSemana(getMonday(new Date(`${fecha}T00:00:00`)));
@@ -1860,13 +1857,10 @@ export default function ProgramacionModule({ currentRol }: { currentRol: Rol | n
                       {diaySesiones.length === 0 ? (
                         <div className="flex flex-col items-center justify-center py-16 text-center">
                           <p className="text-sm font-semibold text-gray-600 mb-1">No hay programación para este día</p>
-                          <p className="text-xs text-gray-400 mb-4">Paco puede generarla, o puedes agregarla manualmente.</p>
+                          <p className="text-xs text-gray-400 mb-4">Ármala en el wizard: sugiere drills de la biblioteca y tú decides cuáles usar.</p>
                           <div className="flex items-center gap-3">
-                            <button onClick={() => setShowPacoPlanning(true)} className="px-4 py-2 rounded-lg text-sm font-medium text-white" style={{ backgroundColor: "#1B4D2E" }}>
-                              Pedir a Paco que la genere
-                            </button>
-                            <button onClick={openEditDia} className="text-xs font-medium text-gray-500 hover:text-gray-700 underline">
-                              Agregar manualmente
+                            <button onClick={openEditDia} className="px-4 py-2 rounded-lg text-sm font-medium text-white" style={{ backgroundColor: "#1B4D2E" }}>
+                              Armar este día
                             </button>
                           </div>
                         </div>
@@ -2406,25 +2400,6 @@ export default function ProgramacionModule({ currentRol }: { currentRol: Rol | n
         />
       )}
 
-      {/* ══ MODAL: Planificar con Paco ══════════════════════════════════════ */}
-      {showPacoPlanning && (
-        <PacoPlanningModal
-          tipoPlan={activeTab}
-          semana={semana}
-          planExistente={plan}
-          sesionesExistentes={sesiones}
-          horariosDefecto={horariosDefecto}
-          onClose={() => setShowPacoPlanning(false)}
-          onPublished={async () => {
-            setShowPacoPlanning(false);
-            showToast("Programación publicada por Paco ✓");
-            await fetchPlan();
-            if (viewMode === "semana") fetchCalSemana();
-            else if (viewMode === "mes") fetchCalMes();
-          }}
-        />
-      )}
-
       {/* ══ MODAL: Nueva actividad especial ══════════════════════════════════ */}
       {showActividadEspecial && (
         <ActividadEspecialWizard
@@ -2444,7 +2419,6 @@ export default function ProgramacionModule({ currentRol }: { currentRol: Rol | n
         <PacoPlanWizard
           fechaSugerida={toISODate(semana)}
           onClose={() => setShowWizard(false)}
-          onSemanaCompleta={handleWizardSemanaCompleta}
           onDiaEspecifico={handleWizardDiaEspecifico}
           onActividadEspecial={handleWizardActividadEspecial}
           onEventos={handleWizardEventos}

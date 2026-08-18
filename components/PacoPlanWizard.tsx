@@ -3,7 +3,15 @@
 import { useState } from "react";
 import { TIPO_PLAN_LABEL, DIAS_POR_TIPO, type TipoPlan, type DiaSemana } from "./ProgramacionModule";
 
-type Mode = "menu" | "semana" | "dia" | "especial";
+// "semana" quedó fuera a propósito. La ruta de semana completa publicaba por
+// /api/publish-plan-semanal, que antes de insertar hacía DELETE de todas las
+// sesiones del plan sin preguntar, y escribía un formato más pobre que el del
+// wizard: sin calentamiento, foco, responsable ni estaciones_competencia, y con
+// drills de texto libre sin id de la biblioteca. Una semana ya armada se perdía
+// y quedaba irrecuperable desde el wizard.
+// Se reactiva cuando Paco pase a precargar WeekWizardModal en vez de escribir
+// directo en la base.
+type Mode = "menu" | "dia" | "especial";
 
 const GRUPOS: TipoPlan[] = ["juvenil", "competencia", "damas"];
 const COLOR = "#1a3a2a";
@@ -15,11 +23,10 @@ function diaSemanaFromFecha(fecha: string): DiaSemana | null {
 }
 
 export default function PacoPlanWizard({
-  fechaSugerida, onClose, onSemanaCompleta, onDiaEspecifico, onActividadEspecial, onEventos,
+  fechaSugerida, onClose, onDiaEspecifico, onActividadEspecial, onEventos,
 }: {
   fechaSugerida: string;
   onClose: () => void;
-  onSemanaCompleta: (grupo: TipoPlan) => void;
   onDiaEspecifico: (grupo: TipoPlan, dia: DiaSemana, fecha: string) => void;
   onActividadEspecial: (grupos: TipoPlan[], fecha: string) => void;
   onEventos: () => void;
@@ -44,7 +51,6 @@ export default function PacoPlanWizard({
   }
 
   const MENU_OPTIONS: { label: string; onClick: () => void }[] = [
-    { label: "Semana completa para un grupo", onClick: () => setMode("semana") },
     { label: "Un día específico para un grupo", onClick: () => setMode("dia") },
     { label: "Una actividad especial", onClick: () => setMode("especial") },
     { label: "Marcar días sin escuela o eventos", onClick: onEventos },
@@ -69,24 +75,10 @@ export default function PacoPlanWizard({
                   {opt.label}
                 </button>
               ))}
-            </>
-          )}
-
-          {mode === "semana" && (
-            <>
-              <p className="text-sm text-gray-500 mb-1">¿Para qué grupo?</p>
-              <div className="flex flex-wrap gap-2">
-                {GRUPOS.map((g) => (
-                  <button key={g} onClick={() => setGrupo(g)} className="text-xs font-semibold px-3 py-1.5 rounded-full border"
-                    style={grupo === g ? { backgroundColor: COLOR, color: "#fff", borderColor: COLOR } : { color: "#6b7280", borderColor: "#e5e7eb" }}>
-                    {TIPO_PLAN_LABEL[g]}
-                  </button>
-                ))}
-              </div>
-              <div className="flex gap-2 pt-2">
-                <button onClick={() => setMode("menu")} className="flex-1 py-2 rounded-xl text-sm font-medium border border-gray-200 text-gray-600 hover:bg-gray-50">Atrás</button>
-                <button onClick={() => onSemanaCompleta(grupo)} className="flex-1 py-2 rounded-xl text-sm font-semibold text-white" style={{ backgroundColor: COLOR }}>Continuar</button>
-              </div>
+              <p className="text-xs text-gray-400 pt-1 leading-relaxed">
+                La semana completa se arma desde <span className="font-medium text-gray-500">Armar programación</span>,
+                que guarda calentamiento, foco y responsable por estación con drills de la biblioteca.
+              </p>
             </>
           )}
 
