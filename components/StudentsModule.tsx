@@ -5,7 +5,31 @@ import { useRouter } from "next/navigation";
 import { supabase, type Student } from "@/lib/supabase";
 import { isStaff, type Rol } from "@/lib/roles";
 import GroupAnalysisModal from "./GroupAnalysisModal";
-import { Search, X, Trophy, Users } from "lucide-react";
+import { Search, X, Trophy, Users, UserPlus } from "lucide-react";
+
+// Grupos asignables a mano. Birdies/Águilas/Albatros/+14 se calculan por edad, pero
+// se dejan elegibles para poder fijar el grupo de un alumno sin fecha de nacimiento.
+const GRUPOS_ASIGNABLES = ["Birdies", "Águilas", "Albatros", "+14", "Damas", "Competencia"];
+
+type NuevoAlumnoForm = {
+  full_name: string;
+  birth_date: string;
+  gender: string;
+  grupo_activo: string;
+  status: "activo" | "inactivo";
+  tiene_talega: string;
+  enrollment_date: string;
+  parent_name: string;
+  parent_phone: string;
+  parent_email: string;
+  observations: string;
+};
+
+const NUEVO_ALUMNO_VACIO: NuevoAlumnoForm = {
+  full_name: "", birth_date: "", gender: "", grupo_activo: "", status: "activo",
+  tiene_talega: "", enrollment_date: "", parent_name: "", parent_phone: "",
+  parent_email: "", observations: "",
+};
 
 type StatusFilter = "todos" | "activo" | "inactivo";
 type GroupFilter = "todos" | "Birdies" | "Águilas" | "Albatros" | "+14" | "Damas" | "Competencia";
@@ -60,6 +84,9 @@ export default function StudentsModule({ currentRol }: { currentRol: Rol | null 
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [bulkSaving, setBulkSaving] = useState(false);
   const [showGroupAnalysis, setShowGroupAnalysis] = useState(false);
+  const [nuevoForm, setNuevoForm] = useState<NuevoAlumnoForm | null>(null);
+  const [creando, setCreando] = useState(false);
+  const [crearError, setCrearError] = useState<string | null>(null);
   const router = useRouter();
 
   useEffect(() => {
@@ -152,6 +179,44 @@ export default function StudentsModule({ currentRol }: { currentRol: Rol | null 
     setSelected(new Set());
   }
 
+  function setNuevoField<K extends keyof NuevoAlumnoForm>(key: K, value: NuevoAlumnoForm[K]) {
+    setNuevoForm((prev) => (prev ? { ...prev, [key]: value } : prev));
+  }
+
+  async function handleCrearAlumno() {
+    if (!nuevoForm) return;
+    const nombre = nuevoForm.full_name.trim();
+    if (!nombre) { setCrearError("El nombre completo es obligatorio."); return; }
+
+    setCreando(true); setCrearError(null);
+    const payload = {
+      full_name: nombre,
+      birth_date: nuevoForm.birth_date || null,
+      gender: nuevoForm.gender || null,
+      grupo_activo: nuevoForm.grupo_activo || null,
+      status: nuevoForm.status,
+      tiene_talega: nuevoForm.tiene_talega || null,
+      enrollment_date: nuevoForm.enrollment_date || null,
+      parent_name: nuevoForm.parent_name.trim() || null,
+      parent_phone: nuevoForm.parent_phone.trim() || null,
+      parent_email: nuevoForm.parent_email.trim() || null,
+      observations: nuevoForm.observations.trim() || null,
+    };
+
+    const { data, error: e } = await supabase
+      .from("students")
+      .insert(payload)
+      .select("id, full_name, birth_date, status, grupo_activo, gender, tiene_talega")
+      .single();
+    setCreando(false);
+    if (e) { setCrearError(e.message); return; }
+
+    // Se inserta en la lista ya cargada para no repetir la paginación completa.
+    setStudents((prev) => [...prev, data as Student].sort((a, b) => a.full_name.localeCompare(b.full_name)));
+    setNuevoForm(null);
+    router.push(`/alumnos/${(data as Student).id}`);
+  }
+
   const groupActiveStudents = useMemo(() => {
     if (groupFilter === "todos") return [];
     return students.filter((s) => {
@@ -194,16 +259,27 @@ export default function StudentsModule({ currentRol }: { currentRol: Rol | null 
             <p className="text-sm text-(--text-muted) mt-0.5">Gestión de alumnos de la Escuela de Golf</p>
           </div>
         </div>
-        <div className="hidden sm:flex items-center gap-3 text-sm">
-          <span className="flex items-center gap-1.5 text-gray-600">
-            <span className="inline-block w-2 h-2 rounded-full bg-ccb-green" />
-            {counts.activo} activos
-          </span>
-          <span className="text-gray-300">·</span>
-          <span className="flex items-center gap-1.5 text-gray-500">
-            <span className="inline-block w-2 h-2 rounded-full bg-gray-300" />
-            {counts.inactivo} inactivos
-          </span>
+        <div className="flex items-center gap-3 text-sm">
+          <div className="hidden sm:flex items-center gap-3">
+            <span className="flex items-center gap-1.5 text-gray-600">
+              <span className="inline-block w-2 h-2 rounded-full bg-ccb-green" />
+              {counts.activo} activos
+            </span>
+            <span className="text-gray-300">·</span>
+            <span className="flex items-center gap-1.5 text-gray-500">
+              <span className="inline-block w-2 h-2 rounded-full bg-gray-300" />
+              {counts.inactivo} inactivos
+            </span>
+          </div>
+          {currentRol && isStaff(currentRol) && (
+            <button
+              onClick={() => { setNuevoForm({ ...NUEVO_ALUMNO_VACIO }); setCrearError(null); }}
+              className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold bg-ccb-green text-white hover:bg-[#245038] transition-colors shrink-0"
+            >
+              <UserPlus size={16} />
+              Nuevo alumno
+            </button>
+          )}
         </div>
       </div>
 
@@ -413,6 +489,115 @@ export default function StudentsModule({ currentRol }: { currentRol: Rol | null 
         )}
       </div>
 
+      {/* MODAL NUEVO ALUMNO */}
+      {nuevoForm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4 py-8" onClick={() => !creando && setNuevoForm(null)}>
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg max-h-full overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 sticky top-0 bg-white rounded-t-2xl">
+              <h2 className="text-base font-bold text-ccb-green">Nuevo alumno</h2>
+              <button onClick={() => setNuevoForm(null)} disabled={creando} className="text-gray-400 hover:text-gray-600 disabled:opacity-40">
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="px-6 py-5 space-y-4">
+              <Campo label="Nombre completo *">
+                <input
+                  type="text" autoFocus value={nuevoForm.full_name}
+                  onChange={(e) => setNuevoField("full_name", e.target.value)}
+                  className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm focus:outline-none focus:border-ccb-gold focus:ring-2 focus:ring-ccb-gold/20"
+                />
+              </Campo>
+
+              <div className="grid grid-cols-2 gap-3">
+                <Campo label="Fecha de nacimiento">
+                  <input type="date" value={nuevoForm.birth_date} onChange={(e) => setNuevoField("birth_date", e.target.value)}
+                    className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm focus:outline-none focus:border-ccb-gold focus:ring-2 focus:ring-ccb-gold/20" />
+                </Campo>
+                <Campo label="Género">
+                  <select value={nuevoForm.gender} onChange={(e) => setNuevoField("gender", e.target.value)}
+                    className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm bg-white focus:outline-none focus:border-ccb-gold focus:ring-2 focus:ring-ccb-gold/20">
+                    <option value="">Sin especificar</option>
+                    <option value="M">Masculino</option>
+                    <option value="F">Femenino</option>
+                  </select>
+                </Campo>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <Campo label="Grupo">
+                  <select value={nuevoForm.grupo_activo} onChange={(e) => setNuevoField("grupo_activo", e.target.value)}
+                    className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm bg-white focus:outline-none focus:border-ccb-gold focus:ring-2 focus:ring-ccb-gold/20">
+                    <option value="">Sin grupo (se calcula por edad)</option>
+                    {GRUPOS_ASIGNABLES.map((g) => <option key={g} value={g}>{g}</option>)}
+                  </select>
+                </Campo>
+                <Campo label="Estado">
+                  <select value={nuevoForm.status} onChange={(e) => setNuevoField("status", e.target.value as "activo" | "inactivo")}
+                    className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm bg-white focus:outline-none focus:border-ccb-gold focus:ring-2 focus:ring-ccb-gold/20">
+                    <option value="activo">Activo</option>
+                    <option value="inactivo">Inactivo</option>
+                  </select>
+                </Campo>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <Campo label="Talega propia">
+                  <select value={nuevoForm.tiene_talega} onChange={(e) => setNuevoField("tiene_talega", e.target.value)}
+                    className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm bg-white focus:outline-none focus:border-ccb-gold focus:ring-2 focus:ring-ccb-gold/20">
+                    <option value="">Sin especificar</option>
+                    <option value="Sí">Sí</option>
+                    <option value="No">No</option>
+                  </select>
+                </Campo>
+                <Campo label="Fecha de ingreso">
+                  <input type="date" value={nuevoForm.enrollment_date} onChange={(e) => setNuevoField("enrollment_date", e.target.value)}
+                    className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm focus:outline-none focus:border-ccb-gold focus:ring-2 focus:ring-ccb-gold/20" />
+                </Campo>
+              </div>
+
+              <div className="pt-2 border-t border-gray-100">
+                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">Acudiente</p>
+                <div className="space-y-3">
+                  <Campo label="Nombre del acudiente">
+                    <input type="text" value={nuevoForm.parent_name} onChange={(e) => setNuevoField("parent_name", e.target.value)}
+                      className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm focus:outline-none focus:border-ccb-gold focus:ring-2 focus:ring-ccb-gold/20" />
+                  </Campo>
+                  <div className="grid grid-cols-2 gap-3">
+                    <Campo label="Teléfono">
+                      <input type="tel" value={nuevoForm.parent_phone} onChange={(e) => setNuevoField("parent_phone", e.target.value)}
+                        className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm focus:outline-none focus:border-ccb-gold focus:ring-2 focus:ring-ccb-gold/20" />
+                    </Campo>
+                    <Campo label="Correo">
+                      <input type="email" value={nuevoForm.parent_email} onChange={(e) => setNuevoField("parent_email", e.target.value)}
+                        className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm focus:outline-none focus:border-ccb-gold focus:ring-2 focus:ring-ccb-gold/20" />
+                    </Campo>
+                  </div>
+                </div>
+              </div>
+
+              <Campo label="Observaciones">
+                <textarea rows={2} value={nuevoForm.observations} onChange={(e) => setNuevoField("observations", e.target.value)}
+                  className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm resize-none focus:outline-none focus:border-ccb-gold focus:ring-2 focus:ring-ccb-gold/20" />
+              </Campo>
+
+              {crearError && <p className="text-xs text-red-600 bg-red-50 px-3 py-2 rounded-lg">{crearError}</p>}
+            </div>
+
+            <div className="flex gap-2 px-6 py-4 border-t border-gray-100 sticky bottom-0 bg-white rounded-b-2xl">
+              <button onClick={() => setNuevoForm(null)} disabled={creando}
+                className="flex-1 py-2.5 rounded-lg text-sm font-medium border border-gray-200 text-gray-600 hover:bg-gray-50 disabled:opacity-40">
+                Cancelar
+              </button>
+              <button onClick={handleCrearAlumno} disabled={creando || !nuevoForm.full_name.trim()}
+                className="flex-1 py-2.5 rounded-lg text-sm font-bold bg-ccb-green text-white hover:bg-[#245038] disabled:opacity-40">
+                {creando ? "Creando…" : "Crear alumno"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {showGroupAnalysis && groupFilter !== "todos" && (
         <GroupAnalysisModal
           grupo={groupFilter}
@@ -424,6 +609,15 @@ export default function StudentsModule({ currentRol }: { currentRol: Rol | null 
   );
 }
 
+
+function Campo({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <label className="block">
+      <span className="block text-xs font-medium text-gray-500 mb-1">{label}</span>
+      {children}
+    </label>
+  );
+}
 
 function GroupBadge({ grupo }: { grupo: string }) {
   return (

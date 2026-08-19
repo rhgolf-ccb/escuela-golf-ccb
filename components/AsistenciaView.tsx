@@ -26,7 +26,9 @@ interface StudentRow {
   id: string;
   full_name: string;
   grupo_activo: string | null;
-  reserva_id: string;
+  // null = alumno del grupo que todavía no tiene reserva para esta sesión.
+  // Se le crea una confirmada al guardar la asistencia.
+  reserva_id: string | null;
 }
 
 type Asistencia = boolean | null; // true=presente, false=ausente, null=sin marcar
@@ -50,6 +52,14 @@ const LUGAR_LABEL: Record<string, string> = {
 };
 
 const SUBGRUPOS_JUVENIL = ["Birdies", "Águilas", "Albatros", "+14"];
+
+// Grupos de `students.grupo_activo` que corresponden a cada tipo de plan. Sirve
+// para poder pasar asistencia sin haber inscrito antes a nadie en Reservas.
+const GRUPOS_POR_PLAN: Record<PlanInfo["tipo_plan"], string[]> = {
+  competencia: ["Competencia"],
+  juvenil: SUBGRUPOS_JUVENIL,
+  damas: ["Damas"],
+};
 
 const GRUPO_COLOR: Record<string, { bg: string; text: string }> = {
   Birdies: { bg: "#dbeafe", text: "#1e40af" },
@@ -80,6 +90,10 @@ export default function AsistenciaView({ sesionId }: { sesionId: string }) {
   const [sesion, setSesion] = useState<SesionInfo | null>(null);
   const [plan, setPlan] = useState<PlanInfo | null>(null);
   const [students, setStudents] = useState<StudentRow[]>([]);
+  const [grupoRoster, setGrupoRoster] = useState<StudentRow[]>([]);
+  const [autoCargadoDelGrupo, setAutoCargadoDelGrupo] = useState(false);
+  const [showAgregar, setShowAgregar] = useState(false);
+  const [buscarAlumno, setBuscarAlumno] = useState("");
   const [asistencias, setAsistencias] = useState<Record<string, Asistencia>>({});
   const [checks, setChecks] = useState<Record<string, CheckResult>>({});
   const [focosDia, setFocosDia] = useState<string[]>([]);
@@ -147,11 +161,30 @@ export default function AsistenciaView({ sesionId }: { sesionId: string }) {
       .sort((a, b) => a.full_name.localeCompare(b.full_name));
 
     const alumnos: StudentRow[] = rows.map(({ id, full_name, grupo_activo, reserva_id }) => ({ id, full_name, grupo_activo, reserva_id }));
-    setStudents(alumnos);
+
+    // 3b. Padrón activo del grupo que corresponde al plan. La asistencia no debe
+    // depender de que alguien haya inscrito antes a cada alumno en Reservas: si la
+    // sesión no tiene ninguna reserva se arranca con el grupo completo, y si tiene
+    // algunas queda disponible el botón "Agregar alumnos del grupo".
+    const { data: rosterData } = await supabase
+      .from("students")
+      .select("id, full_name, grupo_activo")
+      .eq("status", "activo")
+      .in("grupo_activo", GRUPOS_POR_PLAN[p.tipo_plan])
+      .order("full_name", { ascending: true });
+
+    const roster: StudentRow[] = ((rosterData as { id: string; full_name: string; grupo_activo: string | null }[]) ?? [])
+      .map((st) => ({ id: st.id, full_name: st.full_name, grupo_activo: st.grupo_activo, reserva_id: null }));
+    setGrupoRoster(roster);
+
+    const autoCarga = alumnos.length === 0 && roster.length > 0;
+    setAutoCargadoDelGrupo(autoCarga);
+    setStudents(autoCarga ? roster : alumnos);
 
     // 4. Seed local attendance state from reservas.asistio
     const map: Record<string, Asistencia> = {};
     rows.forEach((r) => { map[r.id] = r.asistio; });
+    if (autoCarga) roster.forEach((r) => { map[r.id] = null; });
     setAsistencias(map);
 
     // 5. Cargar checks rápidos ya guardados para esta sesión (si la tabla existe)
@@ -175,7 +208,13 @@ export default function AsistenciaView({ sesionId }: { sesionId: string }) {
   const total = students.length;
   const presentes = students.filter((s) => asistencias[s.id] === true).length;
   const ausentes = students.filter((s) => asistencias[s.id] === false).length;
-  const sinMarcar = students.filter((s) => asistencias[s.id] === null).length;
+  const sinMarcar = students.filter((s) => asistencias[s.id] !== true && asistencias[s.id] !== false).length;
+
+  // Alumnos activos del grupo que todavía no están en la lista de asistencia.
+  const faltantes = grupoRoster.filter((r) => !students.some((s) => s.id === r.id));
+  const faltantesFiltrados = buscarAlumno.trim()
+    ? faltantes.filter((r) => r.full_name.toLowerCase().includes(buscarAlumno.trim().toLowerCase()))
+    : faltantes;
 
   // ── Filter ────────────────────────────────────────────────────────────────
   const studentsFiltered = filtroGrupo === "todos"
@@ -191,6 +230,17 @@ export default function AsistenciaView({ sesionId }: { sesionId: string }) {
     setChecks((prev) => ({ ...prev, [studentId]: prev[studentId] === value ? null : value }));
   }
 
+  function agregarAlumnos(nuevos: StudentRow[]) {
+    if (!nuevos.length) return;
+    setStudents((prev) => [...prev, ...nuevos].sort((a, b) => a.full_name.localeCompare(b.full_name)));
+    setAsistencias((prev) => {
+      const n = { ...prev };
+      nuevos.forEach((s) => { if (n[s.id] === undefined) n[s.id] = null; });
+      return n;
+    });
+    setSaved(false);
+  }
+
   function todosPresentes() {
     const map: Record<string, Asistencia> = {};
     students.forEach((s) => { map[s.id] = true; });
@@ -202,12 +252,45 @@ export default function AsistenciaView({ sesionId }: { sesionId: string }) {
     setSaving(true);
     setError(null);
     try {
-      const updates = students.map((s) => ({
-        id: s.reserva_id,
-        asistio: asistencias[s.id] ?? null,
-      }));
+      // Los alumnos que llegaron desde el padrón del grupo (sin reserva previa)
+      // quedan inscritos como confirmados al guardar, para que la sesión conserve
+      // su lista y Reservas muestre lo mismo que se pasó en clase.
+      const nuevos = students.filter((s) => !s.reserva_id);
+      if (nuevos.length) {
+        // Upsert y no insert: reservas tiene UNIQUE (sesion_id, estudiante_id), y un
+        // alumno del grupo puede venir con una reserva en_espera (que la lista de
+        // asistencia no carga). En ese caso se promueve a confirmado.
+        const { data: creadas, error: insErr } = await supabase
+          .from("reservas")
+          .upsert(nuevos.map((s) => ({
+            sesion_id: sesionId,
+            estudiante_id: s.id,
+            estado: "confirmado",
+            posicion_espera: null,
+            asistio: asistencias[s.id] ?? null,
+          })), { onConflict: "sesion_id,estudiante_id" })
+          .select("id, estudiante_id");
+        if (insErr) throw new Error(insErr.message);
 
-      // Update reservas.asistio in batches of 50 (upsert on PK = plain update per row)
+        const porAlumno = new Map(((creadas as { id: string; estudiante_id: string }[]) ?? []).map((r) => [r.estudiante_id, r.id]));
+        setStudents((prev) => prev.map((s) => (s.reserva_id ? s : { ...s, reserva_id: porAlumno.get(s.id) ?? null })));
+        setAutoCargadoDelGrupo(false);
+      }
+
+      // El upsert va con la fila completa a propósito: PostgREST lo traduce a
+      // INSERT ... ON CONFLICT, y Postgres valida los NOT NULL de la fila
+      // propuesta ANTES de resolver el conflicto. Mandando solo {id, asistio}
+      // reventaba siempre con 'null value in column "sesion_id"'.
+      const updates = students
+        .filter((s) => s.reserva_id)
+        .map((s) => ({
+          id: s.reserva_id as string,
+          sesion_id: sesionId,
+          estudiante_id: s.id,
+          estado: "confirmado",
+          asistio: asistencias[s.id] ?? null,
+        }));
+
       for (let i = 0; i < updates.length; i += 50) {
         const { error: upsertErr } = await supabase
           .from("reservas")
@@ -369,14 +452,71 @@ export default function AsistenciaView({ sesionId }: { sesionId: string }) {
             </select>
           )}
         </div>
-        <button
-          onClick={todosPresentes}
-          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100 transition-colors"
-        >
-          <svg width="12" height="12" viewBox="0 0 20 20" fill="none" stroke="#059669" strokeWidth={2.5}><path d="M3 10l4 4 9-9"/></svg>
-          Todos presentes
-        </button>
+        <div className="flex items-center gap-2">
+          {faltantes.length > 0 && (
+            <button
+              onClick={() => setShowAgregar((v) => !v)}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-gray-50 text-gray-700 border border-gray-200 hover:bg-gray-100 transition-colors"
+            >
+              + Agregar alumnos del grupo ({faltantes.length})
+            </button>
+          )}
+          <button
+            onClick={todosPresentes}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100 transition-colors"
+          >
+            <svg width="12" height="12" viewBox="0 0 20 20" fill="none" stroke="#059669" strokeWidth={2.5}><path d="M3 10l4 4 9-9"/></svg>
+            Todos presentes
+          </button>
+        </div>
       </div>
+
+      {/* Aviso: la lista se armó con el padrón del grupo, no con reservas previas */}
+      {autoCargadoDelGrupo && students.some((s) => !s.reserva_id) && (
+        <div className="mb-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3">
+          <p className="text-xs text-amber-800">
+            Esta sesión no tenía inscritos en Reservas, así que se cargó el grupo completo
+            ({students.length} alumnos activos). Al guardar quedan inscritos automáticamente.
+          </p>
+        </div>
+      )}
+
+      {/* Selector para sumar alumnos del grupo que no están en la lista */}
+      {showAgregar && (
+        <div className="mb-4 rounded-xl border border-gray-200 bg-white shadow-sm overflow-hidden">
+          <div className="flex items-center gap-2 px-4 py-3 border-b border-gray-50">
+            <input
+              type="text"
+              value={buscarAlumno}
+              onChange={(e) => setBuscarAlumno(e.target.value)}
+              placeholder="Buscar alumno del grupo..."
+              className="flex-1 px-3 py-1.5 rounded-lg border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-green-600"
+            />
+            <button
+              onClick={() => { agregarAlumnos(faltantesFiltrados); setShowAgregar(false); setBuscarAlumno(""); }}
+              disabled={faltantesFiltrados.length === 0}
+              className="px-3 py-1.5 rounded-lg text-xs font-semibold text-white disabled:opacity-40 shrink-0"
+              style={{ background: "#1B4D2E" }}
+            >
+              Agregar {faltantesFiltrados.length}
+            </button>
+          </div>
+          <div className="max-h-56 overflow-y-auto divide-y divide-gray-50">
+            {faltantesFiltrados.length === 0 ? (
+              <p className="py-6 text-center text-xs text-gray-400">Sin alumnos por agregar.</p>
+            ) : faltantesFiltrados.map((r) => (
+              <button
+                key={r.id}
+                onClick={() => agregarAlumnos([r])}
+                className="w-full flex items-center justify-between px-4 py-2.5 hover:bg-gray-50 transition-colors text-left"
+              >
+                <span className="text-sm text-gray-800">{r.full_name}</span>
+                <span className="text-[11px] text-gray-400">{r.grupo_activo} · agregar +</span>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Student list */}
       <div ref={listRef} className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden mb-5">
@@ -394,7 +534,9 @@ export default function AsistenciaView({ sesionId }: { sesionId: string }) {
         {studentsFiltered.length === 0 ? (
           <div className="py-12 text-center text-gray-400 text-sm">
             {students.length === 0
-              ? "Sin inscritos para esta sesión — ve a Reservas para inscribir alumnos."
+              ? grupoRoster.length === 0
+                ? "No hay alumnos activos en este grupo — revisa el padrón en Alumnos."
+                : "Sin alumnos en la lista — usa \"Agregar alumnos del grupo\"."
               : "No hay alumnos en este grupo."}
           </div>
         ) : (
