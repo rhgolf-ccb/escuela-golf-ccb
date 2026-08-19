@@ -44,11 +44,40 @@ const GROUPS: { label: string; value: GroupFilter; isSpecial?: boolean }[] = [
   { label: "Competencia", value: "Competencia", isSpecial: true },
 ];
 
+// Los CHECK de `students` sueltan mensajes como
+// 'new row for relation "students" violates check constraint "students_gender_check"',
+// que a quien está llenando el formulario no le dicen qué campo corregir.
+const CHECK_CONSTRAINT_MSG: Record<string, string> = {
+  students_gender_check: "Género: valor no válido. Elige Masculino, Femenino o déjalo sin especificar.",
+  students_grupo_activo_check: "Grupo: valor no válido. Elige uno de la lista o déjalo sin grupo.",
+  students_status_check: "Estado: valor no válido. Debe ser Activo o Inactivo.",
+  students_tiene_talega_check: "Talega propia: valor no válido. Debe ser Sí o No.",
+};
+
+function mensajeErrorAlumno(e: { code?: string; message: string }): string {
+  switch (e.code) {
+    case "23514": {
+      const constraint = e.message.match(/check constraint "([^"]+)"/)?.[1];
+      return (constraint && CHECK_CONSTRAINT_MSG[constraint])
+        ?? "Uno de los campos tiene un valor no válido. Revisa los datos e intenta de nuevo.";
+    }
+    case "23505":
+      return "Ya existe un alumno registrado con esos datos.";
+    case "23502":
+      return "Falta un campo obligatorio.";
+    case "42501":
+      return "Tu usuario no tiene permiso para crear alumnos.";
+    default:
+      return e.message;
+  }
+}
+
 function calcularGrupo(birthDate: string | null, gender: string | null, grupoActivo: string | null): GroupFilter | null {
   if (grupoActivo === "Competencia") return "Competencia";
   if (grupoActivo === "Damas") return "Damas";
   if (!birthDate) {
-    if (gender === "F" || gender === "f" || gender?.toLowerCase() === "damas" || gender?.toLowerCase() === "femenino") return "Damas";
+    // students_gender_check solo admite 'masculino' | 'femenino'.
+    if (gender?.toLowerCase() === "femenino") return "Damas";
     return null;
   }
   const hoy = new Date();
@@ -209,7 +238,7 @@ export default function StudentsModule({ currentRol }: { currentRol: Rol | null 
       .select("id, full_name, birth_date, status, grupo_activo, gender, tiene_talega")
       .single();
     setCreando(false);
-    if (e) { setCrearError(e.message); return; }
+    if (e) { setCrearError(mensajeErrorAlumno(e)); return; }
 
     // Se inserta en la lista ya cargada para no repetir la paginación completa.
     setStudents((prev) => [...prev, data as Student].sort((a, b) => a.full_name.localeCompare(b.full_name)));
@@ -518,8 +547,8 @@ export default function StudentsModule({ currentRol }: { currentRol: Rol | null 
                   <select value={nuevoForm.gender} onChange={(e) => setNuevoField("gender", e.target.value)}
                     className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm bg-white focus:outline-none focus:border-ccb-gold focus:ring-2 focus:ring-ccb-gold/20">
                     <option value="">Sin especificar</option>
-                    <option value="M">Masculino</option>
-                    <option value="F">Femenino</option>
+                    <option value="masculino">Masculino</option>
+                    <option value="femenino">Femenino</option>
                   </select>
                 </Campo>
               </div>
