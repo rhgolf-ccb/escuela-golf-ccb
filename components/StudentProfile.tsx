@@ -1540,25 +1540,11 @@ posPayload[`${key}_score`] = rawScore !== null ? Math.round(rawScore) : null;
     try {
       const ext = photoFile.name.split(".").pop()?.toLowerCase() ?? "jpg";
       const path = `${student.id}/profile_${Date.now()}.${ext}`;
-      const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-      const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
-      const uploadRes = await fetch(
-        `${supabaseUrl}/storage/v1/object/student-photos/${path}`,
-        {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${anonKey}`,
-            "Content-Type": photoFile.type,
-            "x-upsert": "true",
-          },
-          body: photoFile,
-        }
-      );
-      if (!uploadRes.ok) {
-        const err = await uploadRes.json().catch(() => ({}));
-        throw new Error(err.message || `Error al subir (${uploadRes.status})`);
-      }
-      const publicUrl = `${supabaseUrl}/storage/v1/object/public/student-photos/${path}`;
+      const { error: uploadError } = await supabase.storage
+        .from("student-photos")
+        .upload(path, photoFile, { contentType: photoFile.type, upsert: true });
+      if (uploadError) throw new Error(uploadError.message);
+      const publicUrl = supabase.storage.from("student-photos").getPublicUrl(path).data.publicUrl;
       const { error: dbError } = await supabase
         .from("students")
         .update({ foto_url: publicUrl })
