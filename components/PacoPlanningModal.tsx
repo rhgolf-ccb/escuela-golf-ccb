@@ -15,7 +15,7 @@ import {
   TIPO_SESION_LABEL,
   LUGAR_LABEL,
   TIPO_PLAN_LABEL,
-  CAL_EVENT,
+  calEvent,
   CATEGORIA_ESTACION_LABEL,
   type CategoriaEstacionEspecial,
   type TipoPlan,
@@ -670,7 +670,7 @@ export default function PacoPlanningModal({
     doPublish();
   }
 
-  const eventColor = CAL_EVENT[tipoPlan]?.bg ?? "#1a3a2a";
+  const eventColor = calEvent(tipoPlan).bg;
   const diasSemana = DIAS_POR_TIPO[tipoPlan];
   const hasUserSentMessage = messages.some((m) => m.role === "user");
 
