@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import EstacionLibraryPicker, { type EstacionLibraryPick } from "@/components/EstacionLibraryPicker";
-import { FOCOS, FOCO_LABEL, MATERIALES, MATERIAL_LABEL, LUGARES_ESTACION } from "@/lib/estacion-library-constants";
+import { FOCOS, FOCO_LABEL, MATERIAL_LABEL, LUGARES_ESTACION, type Material } from "@/lib/estacion-library-constants";
 import type { CategoriaOption, EstacionWizardState, TransferBlock } from "./types";
 import { TRANSFER_PRESETS } from "./group-configs";
 
@@ -16,6 +16,11 @@ interface Props {
   categoriaOptions: CategoriaOption[]; // ya filtradas para excluir las usadas por otras estaciones del día
   grupos: string[];
   gruposFisico: string[];
+  // Materiales que ofrece el filtro — Birdies no muestra el equipo de los
+  // grupos grandes (ver materialesPara en group-configs).
+  materialesDisponibles: readonly Material[];
+  // Birdies: oculta de la biblioteca los drills sin nivel_recomendado.
+  estrictoDrills?: boolean;
   usadosEnOtrasPartes: string[]; // títulos ya elegidos en otras estaciones/días de la semana
   retosSugeridos?: string[]; // sugerencias de reto de cierre (vacío = sin sugerencia)
   permiteTransferencia?: boolean; // Competencia: habilita secuencia de transferencia en tiro largo
@@ -25,7 +30,7 @@ interface Props {
 
 const FOCOS_LEGACY = new Set<string>(FOCOS);
 
-export default function EstacionEditor({ estacion, index, categoriaOptions, grupos, gruposFisico, usadosEnOtrasPartes, retosSugeridos, permiteTransferencia, profesores, onChange }: Props) {
+export default function EstacionEditor({ estacion, index, categoriaOptions, grupos, gruposFisico, materialesDisponibles, estrictoDrills, usadosEnOtrasPartes, retosSugeridos, permiteTransferencia, profesores, onChange }: Props) {
   const opcionActual = categoriaOptions.find((c) => c.value === estacion.categoria) ?? categoriaOptions[0];
   // Focos del tema (Competencia/Juvenil) o el vocabulario genérico si no define.
   const focoOpciones = opcionActual.focos ?? FOCOS.map((f) => ({ value: f, label: FOCO_LABEL[f] }));
@@ -160,7 +165,7 @@ export default function EstacionEditor({ estacion, index, categoriaOptions, grup
         <div>
           <label className="text-[11px] font-bold text-gray-500 uppercase tracking-wide block mb-1">Material</label>
           <div className="flex flex-wrap gap-1.5">
-            {MATERIALES.map((m) => (
+            {materialesDisponibles.map((m) => (
               <button key={m} type="button" onClick={() => toggleMaterial(m)}
                 className="px-2 py-1 rounded-full text-[11px] font-semibold border transition-all"
                 style={estacion.material.includes(m) ? { background: "#9a3412", color: "#fff", borderColor: "#9a3412" } : { background: "#f9fafb", color: "#374151", borderColor: "#e5e7eb" }}>
@@ -309,6 +314,7 @@ export default function EstacionEditor({ estacion, index, categoriaOptions, grup
             fuente="drills"
             categoriaDrills={opcionActual.drillsCategoria!}
             grupos={grupos}
+            estricto={estrictoDrills}
             foco={focoParaPicker}
             material={estacion.material}
             yaSeleccionados={yaSeleccionados}

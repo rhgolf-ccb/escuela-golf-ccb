@@ -8,7 +8,7 @@ const DIAS_SESION: Record<string, string[]> = {
 };
 
 const GRUPOS_DESC: Record<string, string> = {
-  juvenil: "Birdies (6-8 años), Águilas (9-11 años), Albatros (12-14 años), +14 (mayores de 14 años)",
+  juvenil: "Águilas (6-8 años), Albatros (9-12 años), +14 (mayores de 14 años)",
   competencia: "Jugadores en desarrollo competitivo de alto rendimiento",
   damas: "Damas adultas — sesión de viernes con 3 estaciones rotativas de ~20 min cada una",
 };
@@ -37,7 +37,7 @@ export async function POST(req: NextRequest) {
     ? "[]"
     : esCompetencia
     ? `[{"titulo":"nombre del drill","descripcion":"descripción y ejecución del drill","dificultad_birdies":null,"dificultad_aguilas":null,"dificultad_albatros":null,"dificultad_mas14":null}]`
-    : `[{"titulo":"nombre del drill","descripcion":"descripción general","dificultad_birdies":"cómo lo hacen los Birdies (6-8 años)","dificultad_aguilas":"cómo lo hacen las Águilas (9-11 años)","dificultad_albatros":"cómo lo hacen Albatros (12-14 años)","dificultad_mas14":"cómo lo hacen los +14"}]`;
+    : `[{"titulo":"nombre del drill","descripcion":"descripción general","dificultad_birdies":"cómo lo hacen los Birdies (4-5 años)","dificultad_aguilas":"cómo lo hacen las Águilas (6-8 años)","dificultad_albatros":"cómo lo hacen Albatros (9-12 años)","dificultad_mas14":"cómo lo hacen los +14"}]`;
 
   const estacionSchema = esDamas
     ? `[{"nombre":"nombre estación","lugar":"Campo de práctica / Putting Green / Campo Infantil","duracion_min":20,"descripcion":"qué practican en esta estación"}]`

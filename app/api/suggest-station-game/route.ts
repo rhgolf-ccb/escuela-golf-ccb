@@ -7,6 +7,10 @@ const CATEGORIA_LABEL: Record<string, string> = {
   juego_largo: "Juego Largo (swing)",
   juego_corto: "Juego Corto (chip/pitch)",
   putt:        "Putting",
+  // Vocabulario propio de Birdies (ver GROUP_CONFIGS en week-wizard).
+  contacto:    "Contacto con la pelota",
+  punteria:    "Puntería",
+  juego:       "Juego en Campo Infantil",
 };
 
 function parseJSON(raw: string): unknown {
@@ -21,9 +25,10 @@ function parseJSON(raw: string): unknown {
 export async function POST(req: NextRequest) {
   const body = await req.json() as {
     plan_id?: string;
-    categoria: "juego_largo" | "juego_corto" | "putt";
+    categoria: string;
+    tipo_plan?: string;
   };
-  const { plan_id, categoria } = body;
+  const { plan_id, categoria, tipo_plan } = body;
   const categoriaLabel = CATEGORIA_LABEL[categoria] ?? categoria;
 
   // ── Query Supabase for drills already used this week in this category ─────
@@ -60,7 +65,17 @@ export async function POST(req: NextRequest) {
     ? `\nDRILLS YA USADOS ESTA SEMANA EN ESTA ESTACIÓN: ${titulosUsados.join(", ")}\nREGLA: No repitas ninguno. Los nuevos deben tener títulos completamente diferentes.`
     : "";
 
-  const system = `Sesión de golf para niños/jóvenes 4-17 años (Birdies 4-5a, Águilas 6-8a, Albatros 9-12a, +14).
+  const system = tipo_plan === "birdies"
+    ? `Sesión de golf de 45 min para niños de 4 y 5 años (grupo Birdies).
+ESTACIÓN: ${categoriaLabel}${usadosLine}
+Sugiere 2 a 3 JUEGOS de transferencia al golf para esta estación —cada uno termina en un golpe o en una acción con palo y bola— y 1 reto de cierre corto y contable.
+Nombres divertidos, reglas en máximo 3 pasos, nada de vocabulario técnico de swing ni de posiciones P1-P10.
+Material permitido: palo y bola de su tamaño, conos, aros, tees, cuerdas y dianas. NO uses varas ni palos de velocidad, balones medicinales, bandas de resistencia ni formatos de series y repeticiones.
+Devuelve SOLO JSON:
+{"drills":[{"titulo":"","descripcion":""}],"desafio":""}
+
+${PACO_PLANNING_KNOWLEDGE}`
+    : `Sesión de golf para niños/jóvenes 6-17 años (Águilas 6-8a, Albatros 9-12a, +14).
 ESTACIÓN: ${categoriaLabel}${usadosLine}
 Sugiere 2 a 3 drills técnicos concretos y ejecutables para esta estación (no genéricos), y 1 desafío o juego competitivo de cierre apropiado para la edad del grupo.
 Devuelve SOLO JSON:

@@ -5,7 +5,7 @@ import { supabase } from "@/lib/supabase";
 import type { DiaSemana, DiaSinEscuela, HorarioDefecto, SesionSemana, TipoPlan } from "@/components/ProgramacionModule";
 import { DIAS_POR_TIPO, DIA_LABEL, TIPO_PLAN_LABEL, descripcionDiaSinEscuela, fechaEnRango, getFechaForDia, usaSesionJuvenil } from "@/components/ProgramacionModule";
 import type { EstacionLibraryPick } from "@/components/EstacionLibraryPicker";
-import { GROUP_CONFIGS, gruposParaDrills, gruposParaFisico, categoriaOptionForCanonical, retosSugeridos, CAMPO_GAMES, SUBGRUPOS_JUVENIL } from "./group-configs";
+import { GROUP_CONFIGS, gruposParaDrills, gruposParaFisico, drillSirveAlGrupo, filtroDrillsEstricto, materialesPara, categoriaOptionForCanonical, retosSugeridos, CAMPO_GAMES, SUBGRUPOS_JUVENIL } from "./group-configs";
 import type { DiaWizardState } from "./types";
 import { nuevaEstacion, diaCompleto, diaFaltantes, diaAdvertencias } from "./types";
 import { computeSessionDuration, allocateStationMinutes, defaultStationCount, defaultCategoriasForDia, suggestLugar } from "@/lib/planning-defaults";
@@ -192,7 +192,7 @@ export default function WeekWizardModal({ tipoPlan, semana, planId, horariosDefe
         .eq("categoria", "Calentamiento").overlaps("grupos", gFisico).order("nombre"),
       supabase.from("ejercicios_fisicos").select("id, nombre, instrucciones, series_repeticiones")
         .neq("categoria", "Calentamiento").overlaps("grupos", gFisico).order("nombre"),
-      supabase.from("drills").select("id, titulo, descripcion, rating, categoria")
+      supabase.from("drills").select("id, titulo, descripcion, rating, categoria, nivel_recomendado")
         .eq("aprobado", true).order("rating", { ascending: false }),
     ]);
 
@@ -209,15 +209,21 @@ export default function WeekWizardModal({ tipoPlan, semana, planId, horariosDefe
     const ejercicios = ejRes.data ?? [];
 
     // Drills agrupados por categoría una sola vez, conservando el orden por
-    // rating que trajo la consulta.
+    // rating que trajo la consulta. Se descarta lo que no sirve al grupo: sin
+    // este filtro la semana sugerida de Birdies (4-5 años) se armaba con el
+    // drill mejor calificado de cada categoría aunque fuera de Competencia.
     type DrillRow = NonNullable<typeof drillsRes.data>[number];
+    const gDrills = gruposParaDrills(tipoPlan);
+    const estricto = filtroDrillsEstricto(tipoPlan);
     const drillsPorCategoria = new Map<string, DrillRow[]>();
     for (const d of drillsRes.data ?? []) {
+      if (!drillSirveAlGrupo(d.nivel_recomendado, gDrills, estricto)) continue;
       const arr = drillsPorCategoria.get(d.categoria);
       if (arr) arr.push(d); else drillsPorCategoria.set(d.categoria, [d]);
     }
 
     const usados = new Set<string>();
+    const sinMaterial = new Set<string>();
     const next: Record<string, DiaWizardState> = {};
     for (const dia of dias) {
       const base = initDia(dia, estacionesPorDia);
@@ -240,11 +246,15 @@ export default function WeekWizardModal({ tipoPlan, semana, planId, horariosDefe
           if (candidato) item = { id: candidato.id, titulo: candidato.nombre, descripcion: candidato.instrucciones ?? "", series_repeticiones: candidato.series_repeticiones };
         }
         if (item) usados.add(item.titulo);
+        else sinMaterial.add(opt.label);
         estaciones.push({ ...est, items: item ? [item] : [], desafio: item ? "Reto de cierre — a definir" : "" });
       }
       next[dia] = { ...base, calentamiento, estaciones };
     }
     setDiasState(next);
+    if (sinMaterial.size > 0) {
+      setAviso(`La biblioteca no tiene material de ${TIPO_PLAN_LABEL[tipoPlan]} para ${[...sinMaterial].join(", ")}. Esas estaciones quedaron vacías: agrégales ejercicios a mano o súbelos a la biblioteca marcados para este grupo.`);
+    }
     setSugiriendo(false);
     setStep("dias");
     setCurrentIndex(0);
@@ -595,6 +605,8 @@ export default function WeekWizardModal({ tipoPlan, semana, planId, horariosDefe
                         categoriaOptions={disponiblesParaEsta}
                         grupos={gruposParaDrills(tipoPlan, diaActual.subgrupo)}
                         gruposFisico={gruposParaFisico(tipoPlan, diaActual.subgrupo)}
+                        materialesDisponibles={materialesPara(tipoPlan)}
+                        estrictoDrills={filtroDrillsEstricto(tipoPlan)}
                         usadosEnOtrasPartes={[...titulosUsadosSemana].filter((t) => !est.items.some((i) => i.titulo === t))}
                         retosSugeridos={retosSugeridos(tipoPlan, est.categoria, est.foco)}
                         permiteTransferencia={tipoPlan === "competencia"}

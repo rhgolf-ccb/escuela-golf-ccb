@@ -39,6 +39,7 @@ export async function POST(req: NextRequest) {
 
 Para Competencia los focos deben ser técnicos y medibles (ej: "Velocidad de swing +5 mph", "Corrección de posición P3").
 Para Juvenil más amplios y lúdicos (ej: "Confianza en el short game", "Exploración del campo completo").
+Para Birdies (4-5 años) los focos son de juego y desarrollo, nunca técnicos ni medibles (ej: "Le pego y termino parado", "Puntería a un paso", "Girar y pegar jugando"). Nada de vocabulario de swing ni de equipo de adultos: las varas o palos de velocidad, los balones medicinales y las bandas de resistencia no se usan a esta edad.
 
 Devuelve SOLO JSON:
 {
@@ -55,6 +56,7 @@ Devuelve SOLO JSON:
 
 Para Competencia considera la estructura fija de días:
 Mar=tiro largo, Mié=juego corto/mental, Jue=putt/campo, Sáb=campo práctica/torneo.
+Para Birdies (4-5 años) los temas son juegos de transferencia al golf (contacto, puntería, equilibrio al terminar el golpe, coordinación con palo y bola) — nunca temas técnicos, ni equipo de adultos (varas de velocidad, balones medicinales, bandas de resistencia).
 
 Devuelve SOLO JSON:
 {

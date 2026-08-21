@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { MATERIAL_KEYWORDS, normalizarTexto, type Material } from "@/lib/estacion-library-constants";
+import { drillSirveAlGrupo } from "@/components/week-wizard/group-configs";
 
 export type FuenteLibreria = "drills" | "ejercicios_fisicos";
 
@@ -33,6 +34,10 @@ interface Props {
   // Para ejercicios_fisicos: filtro estricto vía .overlaps("grupos", grupos) —
   // siempre debe venir con al menos un valor.
   grupos: string[];
+  // Solo fuente "drills": con `estricto`, un drill SIN nivel_recomendado deja
+  // de mostrarse en vez de pasar siempre. Lo usa Birdies (4-5 años), donde un
+  // drill sin etiquetar es material de 6+ que no sirve tal cual.
+  estricto?: boolean;
   // Foco — solo aplica a fuente "drills" (ejercicios_fisicos no tiene esa
   // columna). Elegido como paso previo en el flujo guiado, llega ya decidido.
   foco?: string | null;
@@ -68,7 +73,7 @@ function StarRating({ rating }: { rating: number | null }) {
 // según `fuente` — para agregar uno a una estación. Reemplaza a
 // BibliotecaDrillPicker (que solo conocía drills técnicos), usado ahora desde
 // JuvenileClassModal, CompetenciaClassModal, DamasClassModal y PacoPlanningModal.
-export default function EstacionLibraryPicker({ fuente, categoriaDrills, grupos, foco, material, categoria, categoriaExcluida, yaSeleccionados, onAdd, onClose }: Props) {
+export default function EstacionLibraryPicker({ fuente, categoriaDrills, grupos, estricto, foco, material, categoria, categoriaExcluida, yaSeleccionados, onAdd, onClose }: Props) {
   const [items, setItems] = useState<LibraryItem[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -91,7 +96,7 @@ export default function EstacionLibraryPicker({ fuente, categoriaDrills, grupos,
         type Row = LibraryItem & { nivel_recomendado: string[] | null; material: string[] | null };
         const rows = (data as Row[]) ?? [];
         const filtered = rows.filter((d) => {
-          if (d.nivel_recomendado && d.nivel_recomendado.length > 0 && grupos.length > 0 && !d.nivel_recomendado.some((n) => grupos.includes(n))) return false;
+          if (!drillSirveAlGrupo(d.nivel_recomendado, grupos, !!estricto)) return false;
           if (material && material.length > 0) {
             // "ninguno" = sin equipo → incluye drills que no requieren material.
             const equipos = material.filter((m) => m !== "ninguno");
@@ -144,7 +149,7 @@ export default function EstacionLibraryPicker({ fuente, categoriaDrills, grupos,
     return () => {
       cancelled = true;
     };
-  }, [fuente, categoriaDrills, grupos, foco, material, categoria, categoriaExcluida]);
+  }, [fuente, categoriaDrills, grupos, estricto, foco, material, categoria, categoriaExcluida]);
 
   const disponibles = items.filter((d) => !yaSeleccionados.includes(d.titulo));
 

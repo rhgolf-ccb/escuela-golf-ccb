@@ -37,7 +37,8 @@ Lugares — devuelve el valor exacto:
 - "campo_pacos_fabios" → Campo Pacos & Fabios (campo corto par 3)
 - "campo_infantil" → Campo Infantil (niños más pequeños)
 
-Niveles disponibles: birdies (6-8 años), aguilas (9-11 años), albatros (12-14 años), mas14 (+14 años), competencia, damas
+Niveles disponibles: birdies (4-5 años), aguilas (6-8 años), albatros (9-12 años), +14 (mayores de 14), competencia, damas
+Marca "birdies" SOLO si el drill funciona tal cual con un niño de 4 o 5 años: en formato de juego, con palo y bola de su tamaño, sin vocabulario técnico y sin equipo de adultos (varas o palos de velocidad, balones medicinales, bandas de resistencia, pesas).
 
 Posiciones swing TPI: P1 (setup/postura), P2 (takeaway), P3 (media subida), P4 (top backswing), P5 (inicio downswing), P6 (impacto), P7 (follow through), P8, P9, P10
 
@@ -53,7 +54,7 @@ Devuelve exactamente este JSON:
   "categoria": "tecnico|juego_corto|putting|campo",
   "subcategoria": "la subcategoría más específica (ej: P3, chipping, distancia, matchplay)",
   "posicion_swing": ["P3","P4"] o null si no es drill técnico de swing,
-  "nivel_recomendado": ["competencia","mas14"] — lista de niveles apropiados,
+  "nivel_recomendado": ["competencia","+14"] — lista de niveles apropiados,
   "lugar": "campo_practica|putting_green_fundadores|campo_pacos_fabios|campo_infantil",
   "duracion_minutos": número entero o null,
   "repeticiones": "ej: 3 series de 10" o null,

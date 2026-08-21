@@ -1,6 +1,6 @@
 import type { TipoPlan } from "@/components/ProgramacionModule";
 import type { CategoriaOption, FocoOption, GroupConfig } from "./types";
-import { SUBGRUPO_A_GRUPO_FISICO, type SubgrupoJuvenil } from "@/lib/estacion-library-constants";
+import { MATERIALES, SUBGRUPO_A_GRUPO_FISICO, type Material, type SubgrupoJuvenil } from "@/lib/estacion-library-constants";
 import type { EstacionCategoria } from "@/lib/planning-defaults";
 
 // Focos específicos por tema para Competencia — más precisos que el vocabulario
@@ -207,6 +207,33 @@ export const GROUP_CONFIGS: Record<TipoPlan, GroupConfig> = {
 export function gruposParaDrills(tipoPlan: TipoPlan, subgrupo?: SubgrupoJuvenil): string[] {
   if (tipoPlan === "juvenil") return subgrupo ? [subgrupo] : [];
   return [tipoPlan];
+}
+
+// Birdies es el único grupo con filtro estricto de biblioteca: un drill sin
+// nivel_recomendado se le ofrece a todos los demás grupos, pero a los Birdies
+// no. La biblioteca está escrita de 6 años en adelante (la mitad de los drills
+// no tiene nivel), así que "sin etiquetar" a esta edad significaba ofrecerles
+// cosas como "9 bolas: alturas y curvas" o drills de rutina mental de adultos.
+export function filtroDrillsEstricto(tipoPlan: TipoPlan): boolean {
+  return tipoPlan === "birdies";
+}
+
+// Un drill de la biblioteca sirve para este grupo. `grupos` vacío = el grupo no
+// filtra por nivel (Juvenil, que atiende varios subgrupos a la vez).
+export function drillSirveAlGrupo(nivelRecomendado: string[] | null, grupos: string[], estricto: boolean): boolean {
+  const nivel = nivelRecomendado ?? [];
+  if (nivel.length === 0) return !estricto;
+  return grupos.length === 0 || nivel.some((n) => grupos.includes(n));
+}
+
+// Materiales que se ofrecen como filtro de la biblioteca. En Birdies no existe
+// el equipo de trabajo físico de los grupos grandes: las varas de velocidad,
+// los balones medicinales y las bandas de resistencia no se usan con niños de
+// 4 y 5 años — su material es el del juego infantil.
+const MATERIALES_BIRDIES: Material[] = ["conos_escalera", "ninguno"];
+
+export function materialesPara(tipoPlan: TipoPlan): readonly Material[] {
+  return tipoPlan === "birdies" ? MATERIALES_BIRDIES : MATERIALES;
 }
 
 // Subgrupos que ofrece el selector de Juvenil — Birdies salió de aquí al pasar
