@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { CalendarDays } from "lucide-react";
-import { TIPO_PLAN_LABEL, tipoPlanDeAlumno, type TipoPlan } from "@/lib/grupos";
+import { TIPO_PLAN_LABEL, acentoGrupo, acentoGrupoSuave, tipoPlanDeAlumno, type TipoPlan } from "@/lib/grupos";
 
 export type EstudianteVinculado = {
   id: string; full_name: string; grupo_activo: string | null;
@@ -29,7 +29,6 @@ const LUGAR_LABEL: Record<string, string> = {
   campo_practica: "Campo de práctica", putting_green: "Putting Green",
   campo_infantil: "Campo Infantil", campo_pacos_fabios: "Pacos/Fabios", campo_completo: "Campo Completo",
 };
-const GROUP_COLOR: Record<TipoPlan, string> = { birdies: "#1e40af", juvenil: "#1B4D2E", competencia: "#7d5a00", damas: "#4a1070" };
 
 function getMonday(d: Date): Date {
   const date = new Date(d);
@@ -207,7 +206,7 @@ export default function CalendarioPadresModule({
                 return (
                   <div key={`ses-${i}`} className="bg-white rounded-xl border border-gray-100 shadow-sm p-4">
                     <div className="flex items-center gap-2 flex-wrap mb-1">
-                      <span className="text-xs font-bold" style={{ color: GROUP_COLOR[d.grupo] }}>{TIPO_PLAN_LABEL[d.grupo]}</span>
+                      <span className="text-xs font-bold" style={{ color: acentoGrupo(d.grupo) }}>{TIPO_PLAN_LABEL[d.grupo]}</span>
                       <span className="text-xs font-semibold text-gray-500 capitalize">{DIA_LABEL[d.dia_semana] ?? d.dia_semana} · {formatFechaCorta(d.fecha)}</span>
                     </div>
                     <p className="text-sm font-bold text-gray-900">{TIPO_SESION_LABEL[d.tipo_sesion] ?? d.tipo_sesion}</p>
@@ -218,7 +217,7 @@ export default function CalendarioPadresModule({
                     {d.estaciones.length > 0 && (
                       <div className="flex flex-wrap gap-1.5 mt-2">
                         {d.estaciones.map((est, ei) => (
-                          <span key={ei} className="text-[11px] font-medium px-2 py-0.5 rounded-full" style={{ backgroundColor: `${GROUP_COLOR[d.grupo]}18`, color: GROUP_COLOR[d.grupo] }}>
+                          <span key={ei} className="text-[11px] font-medium px-2 py-0.5 rounded-full" style={{ backgroundColor: acentoGrupoSuave(d.grupo), color: acentoGrupo(d.grupo) }}>
                             {est}
                           </span>
                         ))}

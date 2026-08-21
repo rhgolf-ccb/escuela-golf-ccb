@@ -29,6 +29,59 @@ export const GRUPOS_POR_TIPO_PLAN: Record<TipoPlan, GrupoAlumno[]> = {
   damas:       ["Damas"],
 };
 
+// ── Color por grupo ────────────────────────────────────────────────────────
+// Fuente única del color de un grupo. Antes vivía repetido en cuatro mapas
+// (ProgramacionModule tenía TIPO_PLAN_COLOR, GROUP_COLOR_HEX, CAL_COLOR y
+// CAL_EVENT, más las copias de DashboardAgendaCard y CalendarioPadresModule), y
+// Damas terminó con un morado distinto en cada uno.
+//
+// Se devuelven variables CSS, no hex: los valores viven en globals.css, en
+// :root para superficie clara y redefinidos bajo .tema-oscuro. Así el mismo
+// componente se pinta bien en las dos sin saber en cuál está.
+
+export interface ColorGrupo { color: string; background: string }
+
+// El nombre del grupo lleva tilde y símbolos; la variable CSS no.
+const SLUG_GRUPO: Record<string, string> = {
+  "Birdies": "birdies", "Águilas": "aguilas", "Albatros": "albatros",
+  "+14": "mas14", "Damas": "damas", "Competencia": "competencia",
+  // Tipos de plan (minúscula) — Juvenil es un plan, no un grupo del padrón.
+  "birdies": "birdies", "juvenil": "juvenil", "damas": "damas", "competencia": "competencia",
+};
+
+function colorPorSlug(slug: string): ColorGrupo {
+  return { color: `var(--g-${slug}-fg)`, background: `var(--g-${slug}-bg)` };
+}
+
+// Sin grupo (alumno sin fecha de nacimiento, evento sin plan) tiene su propio
+// par neutro en vez de caer en el color de otro grupo.
+export function colorGrupo(grupo: string | null | undefined): ColorGrupo {
+  return colorPorSlug((grupo && SLUG_GRUPO[grupo]) || "ninguno");
+}
+
+export function colorTipoPlan(tipoPlan: TipoPlan): ColorGrupo {
+  return colorPorSlug(SLUG_GRUPO[tipoPlan] ?? "ninguno");
+}
+
+// Acento: un solo color saturado del grupo, para barras, bordes y texto sobre
+// el fondo de la página (no sobre un chip). Es lo que usaban el dashboard y el
+// calendario de padres cuando cada uno tenía su propio mapa de hex.
+export function acentoGrupo(grupo: string | null | undefined): string {
+  return `var(--g-${(grupo && SLUG_GRUPO[grupo]) || "ninguno"}-accent)`;
+}
+
+// El texto que va ENCIMA del acento cuando el acento se usa como fondo. No se
+// puede dejar fijo en blanco: en el tema oscuro el acento es un color claro y
+// el blanco encima desaparece.
+export const TEXTO_SOBRE_ACENTO = "var(--g-on-accent)";
+
+// El acento diluido, para el fondo de una etiqueta sobre superficie clara. Se
+// calcula con color-mix para no tener que declarar un tercer valor por grupo, y
+// funciona igual en el tema oscuro porque parte de la misma variable.
+export function acentoGrupoSuave(grupo: string | null | undefined, porcentaje = 12): string {
+  return `color-mix(in srgb, ${acentoGrupo(grupo)} ${porcentaje}%, transparent)`;
+}
+
 export interface AlumnoParaGrupo {
   birth_date: string | null;
   gender: string | null;

@@ -90,58 +90,109 @@ body {
   animation: fade-in-up 0.3s ease-out;
 }
 
-/* ── Tema oscuro del módulo Alumnos ────────────────────────────────────────
+/* ── Color por grupo ───────────────────────────────────────────────────────
+   Un solo par (texto/fondo) por grupo para toda la app. Vivía repetido en
+   cuatro mapas con valores distintos —ProgramacionModule tenía cuatro él solo,
+   y Damas era un morado diferente en cada uno— así que el mismo grupo se veía
+   de tres colores según la pantalla.
+   Los valores claros van en :root y los oscuros se redefinen bajo .tema-oscuro
+   con los mismos nombres: así un chip de grupo se pinta igual en las dos
+   superficies sin que el componente sepa en cuál está.
+   Los accesores viven en lib/grupos.ts — ningún módulo escribe estos nombres a
+   mano. (AsistenciaView mantiene aparte su propio estilo pastel: es otra
+   convención, fondo claro con texto oscuro, y cambiarla sería otro rediseño.) */
+:root {
+  --g-birdies-fg: #ffffff;      --g-birdies-bg: #1e40af;
+  --g-aguilas-fg: #ffffff;      --g-aguilas-bg: #1B4D2E;
+  --g-albatros-fg: #ffffff;     --g-albatros-bg: #92400e;
+  --g-mas14-fg: #ffffff;        --g-mas14-bg: #4a1070;
+  --g-juvenil-fg: #ffffff;      --g-juvenil-bg: #1B4D2E;
+  --g-damas-fg: #ffffff;        --g-damas-bg: #4a1070;
+  --g-competencia-fg: #ffffff;  --g-competencia-bg: #7d5a00;
+  --g-ninguno-fg: #6b7280;      --g-ninguno-bg: #f3f4f6;
+
+  /* Acento: el color saturado del grupo, para barras, bordes y texto sobre la
+     superficie de la página. En claro coincide con el fondo del chip; en oscuro
+     es el color del texto, que es el que se lee sobre el fondo oscuro. */
+  --g-birdies-accent: #1e40af;
+  --g-aguilas-accent: #1B4D2E;
+  --g-albatros-accent: #92400e;
+  --g-mas14-accent: #4a1070;
+  --g-juvenil-accent: #1B4D2E;
+  --g-damas-accent: #4a1070;
+  --g-competencia-accent: #7d5a00;
+  --g-ninguno-accent: #9ca3af;
+
+  /* Texto sobre el acento. En claro el acento es oscuro y encima va blanco; en
+     oscuro el acento es claro y encima tiene que ir el fondo de la página. Es
+     el mismo valor para todos los grupos, así que va una sola variable. */
+  --g-on-accent: #ffffff;
+}
+
+/* ── Tema oscuro ───────────────────────────────────────────────────────────
    El resto de la app sigue siendo clara, así que el oscuro no va en :root: se
-   activa solo bajo .tema-oscuro-alumnos. Todos los valores viven aquí — el
-   módulo los consume por nombre y no lleva un solo hex suelto — para poder
-   extender el tema a otros módulos cambiando un archivo. */
-.tema-oscuro-alumnos {
-  --al-bg: #0a1710;
-  --al-card: #10241a;
-  --al-card-alt: #0e2118;
-  --al-border: #1e3d2c;
-  --al-border-soft: #16301f;
-  --al-text: #f2f5f2;
-  --al-text-2: #a8bdb0;
-  --al-text-3: #7d9187;
-  --al-gold: #c9a961;
+   activa solo bajo .tema-oscuro. Todos los valores viven aquí — los módulos los
+   consumen por nombre y no llevan un solo hex suelto.
+   El prefijo es --ui-* y no --al-*: empezó en Alumnos, pero ya lo usan también
+   Programación y Reservas. */
+.tema-oscuro {
+  --ui-bg: #0a1710;
+  --ui-card: #10241a;
+  --ui-card-alt: #0e2118;
+  --ui-border: #1e3d2c;
+  --ui-border-soft: #16301f;
+  --ui-text: #f2f5f2;
+  --ui-text-2: #a8bdb0;
+  --ui-text-3: #7d9187;
+  --ui-gold: #c9a961;
 
   /* Semáforo de asistencia y tests. Sin datos usa el texto tenue. */
-  --al-ok: #6ddba0;
-  --al-ok-bg: #10301f;
-  --al-warn: #e8c07f;
-  --al-warn-bg: #2e2512;
-  --al-bad: #e88f8f;
-  --al-bad-bg: #331818;
+  --ui-ok: #6ddba0;
+  --ui-ok-bg: #10301f;
+  --ui-warn: #e8c07f;
+  --ui-warn-bg: #2e2512;
+  --ui-bad: #e88f8f;
+  --ui-bad-bg: #331818;
 
-  /* Un par por grupo: texto y fondo. */
-  --al-g-birdies-fg: #7fb3e8;      --al-g-birdies-bg: #12303f;
-  --al-g-aguilas-fg: #7fd4a8;      --al-g-aguilas-bg: #123024;
-  --al-g-albatros-fg: #e8c07f;     --al-g-albatros-bg: #3a2e12;
-  --al-g-mas14-fg: #c8a8e8;        --al-g-mas14-bg: #2b1a3a;
-  --al-g-damas-fg: #e89bc0;        --al-g-damas-bg: #3a1a2b;
-  --al-g-competencia-fg: #e8c454;  --al-g-competencia-bg: #2a2000;
+  /* Mismos nombres que :root, valores para superficie oscura. */
+  --g-birdies-fg: #7fb3e8;      --g-birdies-bg: #12303f;
+  --g-aguilas-fg: #7fd4a8;      --g-aguilas-bg: #123024;
+  --g-albatros-fg: #e8c07f;     --g-albatros-bg: #3a2e12;
+  --g-mas14-fg: #c8a8e8;        --g-mas14-bg: #2b1a3a;
+  --g-juvenil-fg: #7fd4a8;      --g-juvenil-bg: #123024;
+  --g-damas-fg: #e89bc0;        --g-damas-bg: #3a1a2b;
+  --g-competencia-fg: #e8c454;  --g-competencia-bg: #2a2000;
+  --g-ninguno-fg: #7d9187;      --g-ninguno-bg: #16301f;
+  --g-birdies-accent: #7fb3e8;
+  --g-aguilas-accent: #7fd4a8;
+  --g-albatros-accent: #e8c07f;
+  --g-mas14-accent: #c8a8e8;
+  --g-juvenil-accent: #7fd4a8;
+  --g-damas-accent: #e89bc0;
+  --g-competencia-accent: #e8c454;
+  --g-ninguno-accent: #7d9187;
+  --g-on-accent: #0a1710;
 
-  background: var(--al-bg);
-  color: var(--al-text);
+  background: var(--ui-bg);
+  color: var(--ui-text);
 }
 
 /* El menú "⋯" es el DropdownMenu compartido, que trae estilos claros fijos
    (bg-white, text-gray-700). Se reutiliza tal cual —maneja Escape, clic fuera y
    teclado— y se repinta solo cuando queda dentro del tema oscuro. Fuera de
    @layer para ganarle a las utilidades de Tailwind del propio componente. */
-.tema-oscuro-alumnos [role="menu"] {
-  background: var(--al-card);
-  border-color: var(--al-border);
+.tema-oscuro [role="menu"] {
+  background: var(--ui-card);
+  border-color: var(--ui-border);
 }
-.tema-oscuro-alumnos [role="menuitem"] {
-  color: var(--al-text-2);
+.tema-oscuro [role="menuitem"] {
+  color: var(--ui-text-2);
 }
-.tema-oscuro-alumnos [role="menuitem"]:hover:not(:disabled),
-.tema-oscuro-alumnos [role="menuitem"]:focus:not(:disabled) {
-  background: var(--al-card-alt);
-  color: var(--al-text);
+.tema-oscuro [role="menuitem"]:hover:not(:disabled),
+.tema-oscuro [role="menuitem"]:focus:not(:disabled) {
+  background: var(--ui-card-alt);
+  color: var(--ui-text);
 }
-.tema-oscuro-alumnos [role="menu"] .h-px {
-  background: var(--al-border-soft);
+.tema-oscuro [role="menu"] .h-px {
+  background: var(--ui-border-soft);
 }

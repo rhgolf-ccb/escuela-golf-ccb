@@ -6,7 +6,7 @@ import { Clock, Calendar } from "lucide-react";
 import {
   GLASS_PANEL, GLASS_TITLE, GLASS_SUBTITLE, GLASS_MUTED, GLASS_DIVIDER,
 } from "@/lib/dashboard-glass";
-import { TIPO_PLAN_LABEL, type TipoPlan } from "@/lib/grupos";
+import { TIPO_PLAN_LABEL, acentoGrupo, type TipoPlan } from "@/lib/grupos";
 
 
 const TIPO_SESION_LABEL: Record<string, string> = {
@@ -19,7 +19,6 @@ const LUGAR_LABEL: Record<string, string> = {
   campo_infantil: "Campo Infantil", campo_pacos_fabios: "Pacos/Fabios",
   campo_completo: "Campo Completo",
 };
-const TIPO_PLAN_COLOR: Record<TipoPlan, string> = { birdies: "#1e40af", juvenil: "#1B4D2E", competencia: "#7d5a00", damas: "#86198f" };
 
 function formatHora(t: string | null): string {
   return t ? t.slice(0, 5) : "";
@@ -54,7 +53,7 @@ export type AgendaSesion = {
 };
 
 function SesionRow({ s }: { s: AgendaSesion }) {
-  const color = s.tipo_plan ? TIPO_PLAN_COLOR[s.tipo_plan] : "#9ca3af";
+  const color = acentoGrupo(s.tipo_plan);
   const dur = duracionMin(s.hora_inicio, s.hora_fin);
   return (
     <div className="flex gap-3">

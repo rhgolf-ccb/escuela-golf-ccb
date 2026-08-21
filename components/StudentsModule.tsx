@@ -4,7 +4,7 @@ import { useEffect, useState, useMemo, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { supabase, type Student } from "@/lib/supabase";
 import { isStaff, type Rol } from "@/lib/roles";
-import { calcularGrupo, edadDe } from "@/lib/grupos";
+import { calcularGrupo, colorGrupo, edadDe } from "@/lib/grupos";
 import GroupAnalysisModal from "./GroupAnalysisModal";
 import DropdownMenu from "./ui/DropdownMenu";
 import { Search, X, Trophy, Users, UserPlus, Eye, MoreHorizontal, Pencil, ExternalLink } from "lucide-react";
@@ -67,25 +67,12 @@ const GROUPS: { label: string; value: GroupFilter; isSpecial?: boolean }[] = [
   { label: "Competencia", value: "Competencia", isSpecial: true },
 ];
 
-// Sufijo de las variables CSS de cada grupo (ver .tema-oscuro-alumnos en
-// globals.css). El nombre del grupo lleva tilde y símbolos, la variable no.
-const GRUPO_VAR: Record<string, string> = {
-  "Birdies": "birdies", "Águilas": "aguilas", "Albatros": "albatros",
-  "+14": "mas14", "Damas": "damas", "Competencia": "competencia",
-};
-
 type Tono = { color: string; background: string };
 
-const TONO_NEUTRO: Tono = { color: "var(--al-text-3)", background: "var(--al-border-soft)" };
-const TONO_OK: Tono     = { color: "var(--al-ok)",     background: "var(--al-ok-bg)" };
-const TONO_WARN: Tono   = { color: "var(--al-warn)",   background: "var(--al-warn-bg)" };
-const TONO_BAD: Tono    = { color: "var(--al-bad)",    background: "var(--al-bad-bg)" };
-
-function tonoGrupo(grupo: string | null): Tono {
-  const sufijo = grupo ? GRUPO_VAR[grupo] : undefined;
-  if (!sufijo) return TONO_NEUTRO;
-  return { color: `var(--al-g-${sufijo}-fg)`, background: `var(--al-g-${sufijo}-bg)` };
-}
+const TONO_NEUTRO: Tono = { color: "var(--ui-text-3)", background: "var(--ui-border-soft)" };
+const TONO_OK: Tono     = { color: "var(--ui-ok)",     background: "var(--ui-ok-bg)" };
+const TONO_WARN: Tono   = { color: "var(--ui-warn)",   background: "var(--ui-warn-bg)" };
+const TONO_BAD: Tono    = { color: "var(--ui-bad)",    background: "var(--ui-bad-bg)" };
 
 // null = todavía nadie le marcó asistencia. No es 0 %, que se leería como que
 // faltó a todas las clases — la escuela apenas arranca y casi nadie tiene datos.
@@ -421,36 +408,36 @@ export default function StudentsModule({ currentRol }: { currentRol: Rol | null 
   // regla global porque dentro del módulo también vive GroupAnalysisModal, que
   // sigue siendo claro.
   const inputStyle = {
-    background: "var(--al-card-alt)",
-    border: "1px solid var(--al-border)",
-    color: "var(--al-text)",
+    background: "var(--ui-card-alt)",
+    border: "1px solid var(--ui-border)",
+    color: "var(--ui-text)",
     colorScheme: "dark" as const,
   };
 
   return (
-    <div className="tema-oscuro-alumnos min-h-screen">
+    <div className="tema-oscuro min-h-screen">
       <div className="max-w-7xl mx-auto w-full px-4 sm:px-6 lg:px-8 py-8">
         {/* HEADER */}
         <div className="mb-6 flex items-center justify-between gap-3 flex-wrap">
           <div className="flex items-center gap-3">
             <div className="w-11 h-11 rounded-xl flex items-center justify-center shrink-0"
-              style={{ background: "var(--al-g-aguilas-bg)", border: "1px solid var(--al-border)" }}>
-              <Users size={22} style={{ color: "var(--al-gold)" }} />
+              style={{ background: "var(--g-juvenil-bg)", border: "1px solid var(--ui-border)" }}>
+              <Users size={22} style={{ color: "var(--ui-gold)" }} />
             </div>
             <div>
-              <h1 className="text-2xl font-bold" style={{ color: "var(--al-text)" }}>Alumnos</h1>
-              <p className="text-sm mt-0.5" style={{ color: "var(--al-text-3)" }}>Gestión de alumnos de la Escuela de Golf</p>
+              <h1 className="text-2xl font-bold" style={{ color: "var(--ui-text)" }}>Alumnos</h1>
+              <p className="text-sm mt-0.5" style={{ color: "var(--ui-text-3)" }}>Gestión de alumnos de la Escuela de Golf</p>
             </div>
           </div>
           <div className="flex items-center gap-3 text-sm">
             <div className="hidden sm:flex items-center gap-3">
-              <span className="flex items-center gap-1.5" style={{ color: "var(--al-text-2)" }}>
-                <span className="inline-block w-2 h-2 rounded-full" style={{ background: "var(--al-ok)" }} />
+              <span className="flex items-center gap-1.5" style={{ color: "var(--ui-text-2)" }}>
+                <span className="inline-block w-2 h-2 rounded-full" style={{ background: "var(--ui-ok)" }} />
                 {counts.activo} activos
               </span>
-              <span style={{ color: "var(--al-border)" }}>·</span>
-              <span className="flex items-center gap-1.5" style={{ color: "var(--al-text-3)" }}>
-                <span className="inline-block w-2 h-2 rounded-full" style={{ background: "var(--al-text-3)" }} />
+              <span style={{ color: "var(--ui-border)" }}>·</span>
+              <span className="flex items-center gap-1.5" style={{ color: "var(--ui-text-3)" }}>
+                <span className="inline-block w-2 h-2 rounded-full" style={{ background: "var(--ui-text-3)" }} />
                 {counts.inactivo} inactivos
               </span>
             </div>
@@ -458,7 +445,7 @@ export default function StudentsModule({ currentRol }: { currentRol: Rol | null 
               <button
                 onClick={() => { setNuevoForm({ ...NUEVO_ALUMNO_VACIO }); setCrearError(null); }}
                 className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold transition-opacity hover:opacity-90 shrink-0"
-                style={{ background: "var(--al-gold)", color: "var(--al-bg)" }}
+                style={{ background: "var(--ui-gold)", color: "var(--ui-bg)" }}
               >
                 <UserPlus size={16} />
                 Nuevo alumno
@@ -469,9 +456,9 @@ export default function StudentsModule({ currentRol }: { currentRol: Rol | null 
 
         {/* BARRA BÚSQUEDA + FILTROS */}
         <div className="rounded-xl p-4 mb-3 flex flex-col sm:flex-row gap-3 items-stretch sm:items-center"
-          style={{ background: "var(--al-card)", border: "1px solid var(--al-border)" }}>
+          style={{ background: "var(--ui-card)", border: "1px solid var(--ui-border)" }}>
           <div className="relative flex-1">
-            <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: "var(--al-text-3)" }} />
+            <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: "var(--ui-text-3)" }} />
             <input
               type="text"
               placeholder="Buscar por nombre..."
@@ -481,21 +468,21 @@ export default function StudentsModule({ currentRol }: { currentRol: Rol | null 
               style={inputStyle}
             />
             {search && (
-              <button onClick={() => setSearch("")} className="absolute right-3 top-1/2 -translate-y-1/2" style={{ color: "var(--al-text-3)" }}>
+              <button onClick={() => setSearch("")} className="absolute right-3 top-1/2 -translate-y-1/2" style={{ color: "var(--ui-text-3)" }}>
                 <X size={14} />
               </button>
             )}
           </div>
 
-          <div className="flex gap-1 rounded-lg p-1 self-start sm:self-auto shrink-0" style={{ background: "var(--al-card-alt)" }}>
+          <div className="flex gap-1 rounded-lg p-1 self-start sm:self-auto shrink-0" style={{ background: "var(--ui-card-alt)" }}>
             {(["todos", "activo", "inactivo"] as StatusFilter[]).map((s) => {
               const active = statusFilter === s;
               return (
                 <button key={s} onClick={() => setStatusFilter(s)}
                   className="px-3 py-1.5 rounded-md text-xs font-medium capitalize transition-colors"
                   style={active
-                    ? { background: "var(--al-g-aguilas-bg)", color: "var(--al-g-aguilas-fg)" }
-                    : { color: "var(--al-text-3)" }}>
+                    ? { background: "var(--g-juvenil-bg)", color: "var(--g-juvenil-fg)" }
+                    : { color: "var(--ui-text-3)" }}>
                   {s === "todos" ? `Todos (${counts.todos})` : s === "activo" ? `Activos (${counts.activo})` : `Inactivos (${counts.inactivo})`}
                 </button>
               );
@@ -506,8 +493,8 @@ export default function StudentsModule({ currentRol }: { currentRol: Rol | null 
             onClick={() => setSoloTalegaPropia((v) => !v)}
             className="px-3 py-1.5 rounded-lg text-xs font-medium transition-colors self-start sm:self-auto shrink-0"
             style={soloTalegaPropia
-              ? { background: "var(--al-gold)", color: "var(--al-bg)", border: "1px solid var(--al-gold)" }
-              : { color: "var(--al-text-2)", border: "1px solid var(--al-border)" }}
+              ? { background: "var(--ui-gold)", color: "var(--ui-bg)", border: "1px solid var(--ui-gold)" }
+              : { color: "var(--ui-text-2)", border: "1px solid var(--ui-border)" }}
           >
             Talega propia ({counts.talegaPropia})
           </button>
@@ -515,8 +502,8 @@ export default function StudentsModule({ currentRol }: { currentRol: Rol | null 
             onClick={() => setSoloSinGrupo((v) => !v)}
             className="px-3 py-1.5 rounded-lg text-xs font-medium transition-colors self-start sm:self-auto shrink-0"
             style={soloSinGrupo
-              ? { background: "var(--al-gold)", color: "var(--al-bg)", border: "1px solid var(--al-gold)" }
-              : { color: "var(--al-text-2)", border: "1px solid var(--al-border)" }}
+              ? { background: "var(--ui-gold)", color: "var(--ui-bg)", border: "1px solid var(--ui-gold)" }
+              : { color: "var(--ui-text-2)", border: "1px solid var(--ui-border)" }}
           >
             Sin grupo ({sinGrupoCount})
           </button>
@@ -524,23 +511,23 @@ export default function StudentsModule({ currentRol }: { currentRol: Rol | null 
 
         {/* CHIPS DE GRUPO */}
         <div className="rounded-xl px-4 py-3 mb-4 flex flex-col sm:flex-row gap-3 sm:items-center sm:justify-between"
-          style={{ background: "var(--al-card)", border: "1px solid var(--al-border)" }}>
+          style={{ background: "var(--ui-card)", border: "1px solid var(--ui-border)" }}>
           <div className="flex gap-2 overflow-x-auto scrollbar-hide">
             {GROUPS.map(({ label, value, isSpecial }) => {
               const active = groupFilter === value;
               const count = groupCounts[value];
-              const tono = value === "todos" ? TONO_NEUTRO : tonoGrupo(value);
+              const tono = value === "todos" ? TONO_NEUTRO : colorGrupo(value);
               return (
                 <button key={value} onClick={() => setGroupFilter(value)}
                   className="flex items-center gap-1.5 px-4 py-2 rounded-full text-sm font-medium whitespace-nowrap transition-all shrink-0"
                   style={active
                     ? { background: tono.background, color: tono.color, border: `1px solid ${tono.color}` }
-                    : { background: "transparent", color: "var(--al-text-2)", border: "1px solid var(--al-border)" }}>
+                    : { background: "transparent", color: "var(--ui-text-2)", border: "1px solid var(--ui-border)" }}>
                   {isSpecial && <Trophy size={13} />}
                   {label}
                   {value !== "todos" && (
                     <span className="text-xs rounded-full px-1.5 py-0.5 font-semibold"
-                      style={{ background: "var(--al-bg)", color: active ? tono.color : "var(--al-text-3)" }}>
+                      style={{ background: "var(--ui-bg)", color: active ? tono.color : "var(--ui-text-3)" }}>
                       {count}
                     </span>
                   )}
@@ -555,7 +542,7 @@ export default function StudentsModule({ currentRol }: { currentRol: Rol | null 
               disabled={groupFilter === "todos"}
               title={groupFilter === "todos" ? "Selecciona un grupo primero" : undefined}
               className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium shrink-0 disabled:opacity-40 disabled:cursor-not-allowed transition-opacity hover:opacity-90"
-              style={{ background: "var(--al-g-aguilas-bg)", color: "var(--al-g-aguilas-fg)", border: "1px solid var(--al-border)" }}
+              style={{ background: "var(--g-juvenil-bg)", color: "var(--g-juvenil-fg)", border: "1px solid var(--ui-border)" }}
             >
               Análisis grupal con Paco 🦅
             </button>
@@ -565,7 +552,7 @@ export default function StudentsModule({ currentRol }: { currentRol: Rol | null 
         {/* PERFILES DESTACADOS */}
         {!loading && !error && destacados.length > 0 && (
           <div className="mb-4">
-            <p className="text-[11px] font-bold uppercase tracking-wide mb-2" style={{ color: "var(--al-text-3)" }}>
+            <p className="text-[11px] font-bold uppercase tracking-wide mb-2" style={{ color: "var(--ui-text-3)" }}>
               {groupFilter === "todos" ? "Perfiles destacados" : `Destacados de ${groupFilter}`}
               <span className="font-medium normal-case tracking-normal ml-1.5">— por asistencia</span>
             </p>
@@ -590,38 +577,38 @@ export default function StudentsModule({ currentRol }: { currentRol: Rol | null 
         {/* BARRA DE ACCIÓN EN BLOQUE */}
         {selected.size > 0 && (
           <div className="rounded-xl px-4 py-2.5 mb-3 flex items-center justify-between gap-3 flex-wrap"
-            style={{ background: "var(--al-g-aguilas-bg)", border: "1px solid var(--al-border)" }}>
-            <span className="text-sm font-medium" style={{ color: "var(--al-text)" }}>
+            style={{ background: "var(--g-juvenil-bg)", border: "1px solid var(--ui-border)" }}>
+            <span className="text-sm font-medium" style={{ color: "var(--ui-text)" }}>
               {selected.size} seleccionado{selected.size > 1 ? "s" : ""}
             </span>
             <div className="flex items-center gap-2">
               <button onClick={() => bulkUpdateStatus("inactivo")} disabled={bulkSaving}
                 className="px-3 py-1.5 rounded-lg text-xs font-semibold disabled:opacity-50"
-                style={{ background: "var(--al-card)", color: "var(--al-text)" }}>
+                style={{ background: "var(--ui-card)", color: "var(--ui-text)" }}>
                 {bulkSaving ? "Guardando…" : "Marcar inactivos"}
               </button>
               <button onClick={() => bulkUpdateStatus("activo")} disabled={bulkSaving}
                 className="px-3 py-1.5 rounded-lg text-xs font-semibold disabled:opacity-50"
-                style={{ background: "var(--al-card)", color: "var(--al-text)" }}>
+                style={{ background: "var(--ui-card)", color: "var(--ui-text)" }}>
                 Marcar activos
               </button>
               <button onClick={() => setSelected(new Set())} className="px-3 py-1.5 rounded-lg text-xs font-medium"
-                style={{ color: "var(--al-text-2)" }}>Limpiar</button>
+                style={{ color: "var(--ui-text-2)" }}>Limpiar</button>
             </div>
           </div>
         )}
 
         {metricasError && (
           <div className="rounded-lg px-4 py-2.5 mb-3 text-xs"
-            style={{ background: "var(--al-warn-bg)", color: "var(--al-warn)", border: "1px solid var(--al-border)" }}>
+            style={{ background: "var(--ui-warn-bg)", color: "var(--ui-warn)", border: "1px solid var(--ui-border)" }}>
             No se pudieron cargar asistencia y tests ({metricasError}). El padrón se muestra completo, pero esas dos columnas quedan sin datos.
           </div>
         )}
 
         {/* TABLA */}
-        <div className="rounded-xl overflow-hidden" style={{ background: "var(--al-card)", border: "1px solid var(--al-border)" }}>
+        <div className="rounded-xl overflow-hidden" style={{ background: "var(--ui-card)", border: "1px solid var(--ui-border)" }}>
           {loading ? (
-            <div className="flex items-center justify-center py-20" style={{ color: "var(--al-text-3)" }}>
+            <div className="flex items-center justify-center py-20" style={{ color: "var(--ui-text-3)" }}>
               <svg className="animate-spin mr-3 h-5 w-5" fill="none" viewBox="0 0 24 24">
                 <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                 <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
@@ -629,7 +616,7 @@ export default function StudentsModule({ currentRol }: { currentRol: Rol | null 
               Cargando alumnos...
             </div>
           ) : error ? (
-            <div className="flex flex-col items-center justify-center py-20 gap-2" style={{ color: "var(--al-bad)" }}>
+            <div className="flex flex-col items-center justify-center py-20 gap-2" style={{ color: "var(--ui-bad)" }}>
               <p className="text-sm">Error al cargar los datos: {error}</p>
             </div>
           ) : (
@@ -637,20 +624,20 @@ export default function StudentsModule({ currentRol }: { currentRol: Rol | null 
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead>
-                    <tr style={{ background: "var(--al-card-alt)", borderBottom: "1px solid var(--al-border)" }}>
+                    <tr style={{ background: "var(--ui-card-alt)", borderBottom: "1px solid var(--ui-border)" }}>
                       <th className="px-4 py-3 w-10">
-                        <input type="checkbox" checked={allFilteredSelected} onChange={toggleSelectAll} title="Seleccionar todos los filtrados" className="w-4 h-4 cursor-pointer" style={{ accentColor: "var(--al-gold)", colorScheme: "dark" }} />
+                        <input type="checkbox" checked={allFilteredSelected} onChange={toggleSelectAll} title="Seleccionar todos los filtrados" className="w-4 h-4 cursor-pointer" style={{ accentColor: "var(--ui-gold)", colorScheme: "dark" }} />
                       </th>
                       {["Alumno", "Edad", "Asistencia", "Tests", "Estado"].map((h) => (
-                        <th key={h} className="text-left px-5 py-3 font-semibold tracking-wide text-xs uppercase" style={{ color: "var(--al-text-3)" }}>{h}</th>
+                        <th key={h} className="text-left px-5 py-3 font-semibold tracking-wide text-xs uppercase" style={{ color: "var(--ui-text-3)" }}>{h}</th>
                       ))}
-                      <th className="text-right px-5 py-3 font-semibold tracking-wide text-xs uppercase" style={{ color: "var(--al-text-3)" }}>Acción</th>
+                      <th className="text-right px-5 py-3 font-semibold tracking-wide text-xs uppercase" style={{ color: "var(--ui-text-3)" }}>Acción</th>
                     </tr>
                   </thead>
                   <tbody>
                     {filtered.length === 0 ? (
                       <tr>
-                        <td colSpan={7} className="text-center py-16" style={{ color: "var(--al-text-3)" }}>
+                        <td colSpan={7} className="text-center py-16" style={{ color: "var(--ui-text-3)" }}>
                           {search ? `No se encontraron alumnos con "${search}"` : "No hay alumnos en esta categoría"}
                         </td>
                       </tr>
@@ -664,28 +651,28 @@ export default function StudentsModule({ currentRol }: { currentRol: Rol | null 
                             key={String(student.id)}
                             className="cursor-pointer transition-colors"
                             style={{
-                              background: idx % 2 === 1 ? "var(--al-card-alt)" : "transparent",
-                              borderTop: "1px solid var(--al-border-soft)",
+                              background: idx % 2 === 1 ? "var(--ui-card-alt)" : "transparent",
+                              borderTop: "1px solid var(--ui-border-soft)",
                             }}
                             onClick={() => router.push(`/alumnos/${student.id}`)}
                           >
                             <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
-                              <input type="checkbox" checked={selected.has(String(student.id))} onChange={() => toggleSelect(String(student.id))} className="w-4 h-4 cursor-pointer" style={{ accentColor: "var(--al-gold)", colorScheme: "dark" }} />
+                              <input type="checkbox" checked={selected.has(String(student.id))} onChange={() => toggleSelect(String(student.id))} className="w-4 h-4 cursor-pointer" style={{ accentColor: "var(--ui-gold)", colorScheme: "dark" }} />
                             </td>
                             <td className="px-5 py-3">
                               <div className="flex items-center gap-2.5 min-w-0">
                                 <Avatar alumno={student} grupo={grupoMostrar} size={34} />
                                 <div className="min-w-0">
-                                  <p className="font-medium truncate" style={{ color: "var(--al-text)" }}>{student.full_name}</p>
+                                  <p className="font-medium truncate" style={{ color: "var(--ui-text)" }}>{student.full_name}</p>
                                   {grupoMostrar && (
-                                    <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold mt-0.5" style={tonoGrupo(grupoMostrar)}>
+                                    <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold mt-0.5" style={colorGrupo(grupoMostrar)}>
                                       {grupoMostrar}
                                     </span>
                                   )}
                                 </div>
                               </div>
                             </td>
-                            <td className="px-5 py-3 tabular-nums" style={{ color: "var(--al-text-2)" }}>{textoEdad(student.birth_date)}</td>
+                            <td className="px-5 py-3 tabular-nums" style={{ color: "var(--ui-text-2)" }}>{textoEdad(student.birth_date)}</td>
                             <td className="px-5 py-3">
                               <Indicador texto={pct === null ? "sin datos" : `${pct}%`} tono={tonoAsistencia(pct)} />
                             </td>
@@ -704,7 +691,7 @@ export default function StudentsModule({ currentRol }: { currentRol: Rol | null 
                                   title="Vista rápida"
                                   aria-label={`Vista rápida de ${student.full_name}`}
                                   className="p-1.5 rounded-lg transition-colors hover:opacity-80"
-                                  style={{ color: "var(--al-text-2)" }}
+                                  style={{ color: "var(--ui-text-2)" }}
                                 >
                                   <Eye size={16} />
                                 </button>
@@ -713,7 +700,7 @@ export default function StudentsModule({ currentRol }: { currentRol: Rol | null 
                                   align="right"
                                   minWidth={190}
                                   buttonClassName="p-1.5 rounded-lg transition-colors hover:opacity-80"
-                                  buttonStyle={{ color: "var(--al-text-2)" }}
+                                  buttonStyle={{ color: "var(--ui-text-2)" }}
                                   trigger={<MoreHorizontal size={16} />}
                                   items={[
                                     { label: "Vista rápida", icon: <Eye size={14} />, onSelect: () => abrirVistaRapida(student) },
@@ -736,13 +723,13 @@ export default function StudentsModule({ currentRol }: { currentRol: Rol | null 
                 </table>
               </div>
               {filtered.length > 0 && (
-                <div className="px-5 py-3 text-xs" style={{ borderTop: "1px solid var(--al-border-soft)", color: "var(--al-text-3)" }}>
+                <div className="px-5 py-3 text-xs" style={{ borderTop: "1px solid var(--ui-border-soft)", color: "var(--ui-text-3)" }}>
                   Mostrando {filtered.length} de {students.length} alumnos
                   {groupFilter !== "todos" && (
-                    <span className="ml-1">· filtro: <span className="font-medium" style={{ color: "var(--al-gold)" }}>{groupFilter}</span></span>
+                    <span className="ml-1">· filtro: <span className="font-medium" style={{ color: "var(--ui-gold)" }}>{groupFilter}</span></span>
                   )}
                   {soloTalegaPropia && (
-                    <span className="ml-1">· <span className="font-medium" style={{ color: "var(--al-gold)" }}>talega propia</span></span>
+                    <span className="ml-1">· <span className="font-medium" style={{ color: "var(--ui-gold)" }}>talega propia</span></span>
                   )}
                 </div>
               )}
@@ -766,13 +753,13 @@ export default function StudentsModule({ currentRol }: { currentRol: Rol | null 
         {/* MODAL NUEVO ALUMNO */}
         {nuevoForm && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4 py-8" onClick={() => !creando && setNuevoForm(null)}>
-            <div className="tema-oscuro-alumnos rounded-2xl shadow-xl w-full max-w-lg max-h-full overflow-y-auto"
-              style={{ background: "var(--al-card)", border: "1px solid var(--al-border)" }}
+            <div className="tema-oscuro rounded-2xl shadow-xl w-full max-w-lg max-h-full overflow-y-auto"
+              style={{ background: "var(--ui-card)", border: "1px solid var(--ui-border)" }}
               onClick={(e) => e.stopPropagation()}>
               <div className="flex items-center justify-between px-6 py-4 sticky top-0 rounded-t-2xl"
-                style={{ background: "var(--al-card)", borderBottom: "1px solid var(--al-border)" }}>
-                <h2 className="text-base font-bold" style={{ color: "var(--al-text)" }}>Nuevo alumno</h2>
-                <button onClick={() => setNuevoForm(null)} disabled={creando} className="disabled:opacity-40" style={{ color: "var(--al-text-3)" }}>
+                style={{ background: "var(--ui-card)", borderBottom: "1px solid var(--ui-border)" }}>
+                <h2 className="text-base font-bold" style={{ color: "var(--ui-text)" }}>Nuevo alumno</h2>
+                <button onClick={() => setNuevoForm(null)} disabled={creando} className="disabled:opacity-40" style={{ color: "var(--ui-text-3)" }}>
                   <X size={18} />
                 </button>
               </div>
@@ -831,8 +818,8 @@ export default function StudentsModule({ currentRol }: { currentRol: Rol | null 
                   </Campo>
                 </div>
 
-                <div className="pt-2" style={{ borderTop: "1px solid var(--al-border-soft)" }}>
-                  <p className="text-xs font-semibold uppercase tracking-wide mb-3" style={{ color: "var(--al-text-3)" }}>Acudiente</p>
+                <div className="pt-2" style={{ borderTop: "1px solid var(--ui-border-soft)" }}>
+                  <p className="text-xs font-semibold uppercase tracking-wide mb-3" style={{ color: "var(--ui-text-3)" }}>Acudiente</p>
                   <div className="space-y-3">
                     <Campo label="Nombre del acudiente">
                       <input type="text" value={nuevoForm.parent_name} onChange={(e) => setNuevoField("parent_name", e.target.value)}
@@ -857,20 +844,20 @@ export default function StudentsModule({ currentRol }: { currentRol: Rol | null 
                 </Campo>
 
                 {crearError && (
-                  <p className="text-xs px-3 py-2 rounded-lg" style={{ background: "var(--al-bad-bg)", color: "var(--al-bad)" }}>{crearError}</p>
+                  <p className="text-xs px-3 py-2 rounded-lg" style={{ background: "var(--ui-bad-bg)", color: "var(--ui-bad)" }}>{crearError}</p>
                 )}
               </div>
 
               <div className="flex gap-2 px-6 py-4 sticky bottom-0 rounded-b-2xl"
-                style={{ background: "var(--al-card)", borderTop: "1px solid var(--al-border)" }}>
+                style={{ background: "var(--ui-card)", borderTop: "1px solid var(--ui-border)" }}>
                 <button onClick={() => setNuevoForm(null)} disabled={creando}
                   className="flex-1 py-2.5 rounded-lg text-sm font-medium disabled:opacity-40"
-                  style={{ border: "1px solid var(--al-border)", color: "var(--al-text-2)" }}>
+                  style={{ border: "1px solid var(--ui-border)", color: "var(--ui-text-2)" }}>
                   Cancelar
                 </button>
                 <button onClick={handleCrearAlumno} disabled={creando || !nuevoForm.full_name.trim()}
                   className="flex-1 py-2.5 rounded-lg text-sm font-bold disabled:opacity-40"
-                  style={{ background: "var(--al-gold)", color: "var(--al-bg)" }}>
+                  style={{ background: "var(--ui-gold)", color: "var(--ui-bg)" }}>
                   {creando ? "Creando…" : "Crear alumno"}
                 </button>
               </div>
@@ -906,14 +893,14 @@ function Avatar({ alumno, grupo, size }: { alumno: AlumnoFila; grupo: string | n
         alt={alumno.full_name}
         onError={() => setUrlFallida(alumno.foto_url)}
         className="rounded-full object-cover shrink-0"
-        style={{ width: size, height: size, border: "1px solid var(--al-border)" }}
+        style={{ width: size, height: size, border: "1px solid var(--ui-border)" }}
       />
     );
   }
   return (
     <span
       className="rounded-full inline-flex items-center justify-center font-bold shrink-0"
-      style={{ width: size, height: size, fontSize: Math.round(size * 0.36), ...tonoGrupo(grupo) }}
+      style={{ width: size, height: size, fontSize: Math.round(size * 0.36), ...colorGrupo(grupo) }}
     >
       {initiales(alumno.full_name)}
     </span>
@@ -943,7 +930,7 @@ function TarjetaPerfil({ alumno, pct, metrica, oculta, onVer, onAbrir }: {
   return (
     <div
       className={`${oculta ? "hidden 2xl:flex" : "flex"} flex-col items-center text-center rounded-xl p-4 relative cursor-pointer transition-transform hover:-translate-y-0.5`}
-      style={{ background: "var(--al-card)", border: "1px solid var(--al-border)" }}
+      style={{ background: "var(--ui-card)", border: "1px solid var(--ui-border)" }}
       onClick={onAbrir}
     >
       <button
@@ -951,7 +938,7 @@ function TarjetaPerfil({ alumno, pct, metrica, oculta, onVer, onAbrir }: {
         title="Vista rápida"
         aria-label={`Vista rápida de ${alumno.full_name}`}
         className="absolute top-2 right-2 p-1.5 rounded-lg hover:opacity-80"
-        style={{ color: "var(--al-text-3)" }}
+        style={{ color: "var(--ui-text-3)" }}
       >
         <Eye size={15} />
       </button>
@@ -961,10 +948,10 @@ function TarjetaPerfil({ alumno, pct, metrica, oculta, onVer, onAbrir }: {
       <p className="mt-2.5 text-sm font-semibold leading-tight line-clamp-2 flex items-center justify-center"
         // Dos líneas fijas: sin esto un nombre largo empuja hacia abajo el
         // bloque de asistencia y las tarjetas de la fila dejan de alinear.
-        style={{ color: "var(--al-text)", minHeight: "2.5rem" }}>
+        style={{ color: "var(--ui-text)", minHeight: "2.5rem" }}>
         {alumno.full_name}
       </p>
-      <span className="mt-1.5 inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold" style={tonoGrupo(grupo)}>
+      <span className="mt-1.5 inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold" style={colorGrupo(grupo)}>
         {grupo ?? "Sin grupo"} · {edad === null ? "—" : `${edad} años`}
       </span>
 
@@ -978,15 +965,15 @@ function TarjetaPerfil({ alumno, pct, metrica, oculta, onVer, onAbrir }: {
       </div>
 
       <div className="mt-2 w-full flex gap-2 text-[11px]">
-        <div className="flex-1 rounded-lg py-1.5" style={{ background: "var(--al-card-alt)" }}>
-          <p className="font-semibold" style={{ color: alumno.tiene_talega === "Sí" ? "var(--al-ok)" : "var(--al-text-3)" }}>
+        <div className="flex-1 rounded-lg py-1.5" style={{ background: "var(--ui-card-alt)" }}>
+          <p className="font-semibold" style={{ color: alumno.tiene_talega === "Sí" ? "var(--ui-ok)" : "var(--ui-text-3)" }}>
             {alumno.tiene_talega === "Sí" ? "Sí" : alumno.tiene_talega === "No" ? "No" : "—"}
           </p>
-          <p style={{ color: "var(--al-text-3)" }}>Talega</p>
+          <p style={{ color: "var(--ui-text-3)" }}>Talega</p>
         </div>
-        <div className="flex-1 rounded-lg py-1.5" style={{ background: "var(--al-card-alt)" }}>
+        <div className="flex-1 rounded-lg py-1.5" style={{ background: "var(--ui-card-alt)" }}>
           <p className="font-semibold tabular-nums" style={{ color: tonoTests(metrica.tests).color }}>{metrica.tests}/3</p>
-          <p style={{ color: "var(--al-text-3)" }}>Tests</p>
+          <p style={{ color: "var(--ui-text-3)" }}>Tests</p>
         </div>
       </div>
     </div>
@@ -1014,21 +1001,21 @@ function VistaRapida({ alumno, detalle, detalleError, metrica, onClose, onEditar
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4 py-8" onClick={onClose}>
       <div
-        className="tema-oscuro-alumnos rounded-2xl shadow-xl w-full max-w-xl max-h-full overflow-y-auto"
-        style={{ background: "var(--al-card)", border: "1px solid var(--al-border)" }}
+        className="tema-oscuro rounded-2xl shadow-xl w-full max-w-xl max-h-full overflow-y-auto"
+        style={{ background: "var(--ui-card)", border: "1px solid var(--ui-border)" }}
         onClick={(e) => e.stopPropagation()}
         role="dialog"
         aria-label={`Vista rápida de ${alumno.full_name}`}
       >
-        <div className="flex items-start gap-4 px-6 py-5" style={{ borderBottom: "1px solid var(--al-border)" }}>
+        <div className="flex items-start gap-4 px-6 py-5" style={{ borderBottom: "1px solid var(--ui-border)" }}>
           <Avatar alumno={alumno} grupo={grupo} size={72} />
           <div className="min-w-0 flex-1">
-            <h2 className="text-lg font-bold leading-tight" style={{ color: "var(--al-text)" }}>{alumno.full_name}</h2>
-            <p className="text-xs mt-1" style={{ color: "var(--al-text-3)" }}>
+            <h2 className="text-lg font-bold leading-tight" style={{ color: "var(--ui-text)" }}>{alumno.full_name}</h2>
+            <p className="text-xs mt-1" style={{ color: "var(--ui-text-3)" }}>
               {grupo ?? "Sin grupo"} · {edad === null ? "edad —" : `${edad} años`} · nac. {formatFecha(alumno.birth_date)} · ingreso {detalle ? formatFecha(detalle.enrollment_date) : "…"}
             </p>
           </div>
-          <button onClick={onClose} aria-label="Cerrar" style={{ color: "var(--al-text-3)" }}>
+          <button onClick={onClose} aria-label="Cerrar" style={{ color: "var(--ui-text-3)" }}>
             <X size={18} />
           </button>
         </div>
@@ -1045,7 +1032,7 @@ function VistaRapida({ alumno, detalle, detalleError, metrica, onClose, onEditar
 
         <div className="px-6 pb-5 space-y-3">
           {detalleError && (
-            <p className="text-xs px-3 py-2 rounded-lg" style={{ background: "var(--al-bad-bg)", color: "var(--al-bad)" }}>
+            <p className="text-xs px-3 py-2 rounded-lg" style={{ background: "var(--ui-bad-bg)", color: "var(--ui-bad)" }}>
               No se pudieron cargar los datos del alumno: {detalleError}
             </p>
           )}
@@ -1070,17 +1057,17 @@ function VistaRapida({ alumno, detalle, detalleError, metrica, onClose, onEditar
         </div>
 
         <div className="flex gap-2 px-6 py-4 sticky bottom-0 rounded-b-2xl"
-          style={{ background: "var(--al-card)", borderTop: "1px solid var(--al-border)" }}>
+          style={{ background: "var(--ui-card)", borderTop: "1px solid var(--ui-border)" }}>
           <button onClick={onClose} className="flex-1 py-2.5 rounded-lg text-sm font-medium"
-            style={{ border: "1px solid var(--al-border)", color: "var(--al-text-2)" }}>
+            style={{ border: "1px solid var(--ui-border)", color: "var(--ui-text-2)" }}>
             Cerrar
           </button>
           <button onClick={onEditar} className="flex-1 py-2.5 rounded-lg text-sm font-medium flex items-center justify-center gap-1.5"
-            style={{ border: "1px solid var(--al-border)", color: "var(--al-text)", background: "var(--al-card-alt)" }}>
+            style={{ border: "1px solid var(--ui-border)", color: "var(--ui-text)", background: "var(--ui-card-alt)" }}>
             <Pencil size={14} /> Editar
           </button>
           <button onClick={onAbrirPerfil} className="flex-1 py-2.5 rounded-lg text-sm font-bold flex items-center justify-center gap-1.5"
-            style={{ background: "var(--al-gold)", color: "var(--al-bg)" }}>
+            style={{ background: "var(--ui-gold)", color: "var(--ui-bg)" }}>
             <ExternalLink size={14} /> Perfil completo
           </button>
         </div>
@@ -1100,9 +1087,9 @@ function IndicadorPanel({ etiqueta, valor, tono }: { etiqueta: string; valor: st
 
 function BloqueDato({ titulo, cargando, children }: { titulo: string; cargando: boolean; children: React.ReactNode }) {
   return (
-    <div className="rounded-lg px-3.5 py-3" style={{ background: "var(--al-card-alt)", border: "1px solid var(--al-border-soft)" }}>
-      <p className="text-[10px] font-bold uppercase tracking-wide mb-1.5" style={{ color: "var(--al-text-3)" }}>{titulo}</p>
-      {cargando ? <p className="text-sm" style={{ color: "var(--al-text-3)" }}>Cargando…</p> : <div className="space-y-1">{children}</div>}
+    <div className="rounded-lg px-3.5 py-3" style={{ background: "var(--ui-card-alt)", border: "1px solid var(--ui-border-soft)" }}>
+      <p className="text-[10px] font-bold uppercase tracking-wide mb-1.5" style={{ color: "var(--ui-text-3)" }}>{titulo}</p>
+      {cargando ? <p className="text-sm" style={{ color: "var(--ui-text-3)" }}>Cargando…</p> : <div className="space-y-1">{children}</div>}
     </div>
   );
 }
@@ -1111,8 +1098,8 @@ function Dato({ etiqueta, valor }: { etiqueta?: string; valor?: string | null })
   const vacio = !valor || !valor.trim();
   return (
     <p className="text-sm leading-snug">
-      {etiqueta && <span style={{ color: "var(--al-text-3)" }}>{etiqueta}: </span>}
-      <span style={{ color: vacio ? "var(--al-text-3)" : "var(--al-text)", fontStyle: vacio ? "italic" : "normal" }}>
+      {etiqueta && <span style={{ color: "var(--ui-text-3)" }}>{etiqueta}: </span>}
+      <span style={{ color: vacio ? "var(--ui-text-3)" : "var(--ui-text)", fontStyle: vacio ? "italic" : "normal" }}>
         {vacio ? "Sin registrar" : valor}
       </span>
     </p>
@@ -1122,7 +1109,7 @@ function Dato({ etiqueta, valor }: { etiqueta?: string; valor?: string | null })
 function Campo({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <label className="block">
-      <span className="block text-xs font-medium mb-1" style={{ color: "var(--al-text-3)" }}>{label}</span>
+      <span className="block text-xs font-medium mb-1" style={{ color: "var(--ui-text-3)" }}>{label}</span>
       {children}
     </label>
   );
