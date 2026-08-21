@@ -102,11 +102,56 @@ const FOCOS_JUV_FISICO: FocoOption[] = [
   { value: "agilidad", label: "Agilidad" },
 ];
 
+const FOCOS_BIRD_CONTACTO: FocoOption[] = [
+  { value: "agarre", label: "Agarre del palo" },
+  { value: "postura", label: "Postura frente a la bola" },
+  { value: "contacto", label: "Golpear la bola" },
+  { value: "finish_balance", label: "Terminar en equilibrio" },
+  { value: "distancia", label: "Que ruede o vuele lejos" },
+];
+const FOCOS_BIRD_PUNTERIA: FocoOption[] = [
+  { value: "punteria", label: "Puntería al objetivo" },
+  { value: "fuerza", label: "Cuánta fuerza le pego" },
+  { value: "embocar", label: "Embocar de cerca" },
+  { value: "rodar_bola", label: "Hacer rodar la bola" },
+];
+const FOCOS_BIRD_JUEGO: FocoOption[] = [
+  { value: "juego_diversion", label: "Juego y diversión" },
+  { value: "reglas_etiqueta", label: "Reglas y etiqueta" },
+  { value: "primeros_golpes", label: "Primeros golpes en campo" },
+  { value: "turnos_espera", label: "Esperar el turno" },
+];
+const FOCOS_BIRD_COORD: FocoOption[] = [
+  { value: "coordinacion", label: "Coordinación" },
+  { value: "equilibrio", label: "Equilibrio" },
+  { value: "lateralidad", label: "Lateralidad (izquierda / derecha)" },
+  { value: "agilidad", label: "Agilidad y desplazamiento" },
+  { value: "rotacion", label: "Girar el cuerpo" },
+];
+
 // Vocabularios reales por grupo — cada uno ya existía en su modal propio
 // (JuvenileClassModal/CompetenciaClassModal/DamasClassModal) y otras partes
 // del sistema (PDF, WhatsApp, calendario de padres) esperan exactamente estos
 // valores en sesiones_semana — no se inventa un vocabulario "unificado".
 export const GROUP_CONFIGS: Record<TipoPlan, GroupConfig> = {
+  // Birdies (4-5 años) guarda con el mismo shape que Juvenil (sesion_juvenil),
+  // pero con su propio vocabulario: coordinación, contacto con la pelota y
+  // equilibrio. Nada de posiciones P1-P10 a esta edad.
+  birdies: {
+    tipoPlan: "birdies",
+    color: "#1e40af",
+    categorias: [
+      { value: "contacto", emoji: "🏌️", label: "Contacto con la pelota", drillsCategoria: "tecnico", canonical: "juego_largo", focos: FOCOS_BIRD_CONTACTO },
+      { value: "punteria", emoji: "🎯", label: "Puntería", drillsCategoria: "putting", canonical: "putt", focos: FOCOS_BIRD_PUNTERIA },
+      { value: "juego", emoji: "👶", label: "Juego en Campo Infantil", drillsCategoria: "campo", canonical: "campo_infantil", focos: FOCOS_BIRD_JUEGO },
+      { value: "coordinacion", emoji: "🤸", label: "Coordinación y equilibrio", drillsCategoria: null, canonical: "trabajo_fisico", focos: FOCOS_BIRD_COORD },
+    ],
+    especiales: [
+      { value: "test_tecnico", tipoSesion: "test_tecnico", emoji: "📋", label: "Test técnico", desc: "Protocolo Birdies", lugar: "campo_practica", objetivo: "Test técnico del protocolo Birdies" },
+      { value: "test_fisico", tipoSesion: "test_fisico", emoji: "💪", label: "Test físico", desc: "Protocolo Birdies", lugar: "campo_practica", objetivo: "Test físico del protocolo Birdies" },
+      { value: "campo_infantil", tipoSesion: "campo", emoji: "👶", label: "Campo Infantil", desc: "Día lúdico", lugar: "campo_infantil", objetivo: "Día lúdico en Campo Infantil" },
+    ],
+  },
   juvenil: {
     tipoPlan: "juvenil",
     color: "#1a3a2a",
@@ -164,12 +209,17 @@ export function gruposParaDrills(tipoPlan: TipoPlan, subgrupo?: SubgrupoJuvenil)
   return [tipoPlan];
 }
 
+// Subgrupos que ofrece el selector de Juvenil — Birdies salió de aquí al pasar
+// a ser su propio plan.
+export const SUBGRUPOS_JUVENIL: SubgrupoJuvenil[] = ["aguilas", "albatros", "+14"];
+
 // grupos para el filtro de ejercicios_fisicos.grupos (capitalizado) — Juvenil
 // sin subgrupo elegido cubre las 4 edades a la vez.
 export function gruposParaFisico(tipoPlan: TipoPlan, subgrupo?: SubgrupoJuvenil): string[] {
   if (tipoPlan === "juvenil") {
-    return subgrupo ? [SUBGRUPO_A_GRUPO_FISICO[subgrupo]] : ["Birdies", "Águilas", "Albatros", "+14"];
+    return subgrupo ? [SUBGRUPO_A_GRUPO_FISICO[subgrupo]] : ["Águilas", "Albatros", "+14"];
   }
+  if (tipoPlan === "birdies") return ["Birdies"];
   if (tipoPlan === "competencia") return ["Competencia"];
   return ["Damas"];
 }
@@ -253,6 +303,29 @@ const RETOS_JUVENIL: Record<string, string[]> = {
   fisico: ["Equilibrio: aguanta 20 seg en una pierna.", "Circuito rápido sin perder la técnica.", "¿Quién salta y gira más controlado?"],
 };
 
+const RETOS_BIRDIES: Record<string, string[]> = {
+  contacto: [
+    "Pégale a 3 bolas seguidas sin fallar.",
+    "5 bolas: cuenta cuántas se despegan del piso.",
+    "Termina el golpe de pie y quieto contando hasta 3.",
+  ],
+  punteria: [
+    "Emboca 3 putts desde un paso de distancia.",
+    "Deja 3 de 5 bolas dentro del aro.",
+    "Pasa la bola por la puerta de conos 3 veces.",
+  ],
+  juego: [
+    "Completa el circuito sin saltarte ninguna estación.",
+    "Relevo por equipos: rodea el cono y pega.",
+    "Mete 3 bolas en el balde.",
+  ],
+  coordinacion: [
+    "Aguanta 10 segundos parado en una pierna.",
+    "Salta 5 veces seguidas y cae quieto.",
+    "Camina sobre la línea sin salirte.",
+  ],
+};
+
 const RETOS_DAMAS: Record<string, string[]> = {
   juego_largo: ["5 de 8 bolas dentro del objetivo.", "Mismo tempo en 10 golpes seguidos.", "Draw o fade a pedido: 4 de 6."],
   juego_corto: ["Escalera de distancias: gana la proximidad media más baja.", "Up-and-down desde 3 lies distintos.", "Bunker: 3 de 5 cerca de la bandera."],
@@ -270,6 +343,7 @@ export function retosSugeridos(tipoPlan: TipoPlan, categoria: string, foco: stri
     // El Set evita ofrecer dos veces el mismo texto al combinar las tres fuentes.
     return [...new Set([...porFoco, ...porCategoria, ...porTrackman])];
   }
+  if (tipoPlan === "birdies") return RETOS_BIRDIES[categoria] ?? [];
   if (tipoPlan === "juvenil") return RETOS_JUVENIL[categoria] ?? [];
   if (tipoPlan === "damas") return RETOS_DAMAS[categoria] ?? [];
   return [];

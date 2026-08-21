@@ -1,4 +1,4 @@
-import type { SesionSemana, TipoPlan } from "@/components/ProgramacionModule";
+import { usaSesionJuvenil, type SesionSemana, type TipoPlan } from "@/components/ProgramacionModule";
 import type { EstacionLibraryPick } from "@/components/EstacionLibraryPicker";
 import type { CalentamientoState, DiaWizardState, EstacionWizardState, GroupConfig } from "./types";
 import { suggestLugar } from "@/lib/planning-defaults";
@@ -28,7 +28,8 @@ function hhmm(t: string | null): string {
 export function parseExistingToDiaState(tipoPlan: TipoPlan, config: GroupConfig, sesion: SesionSemana): DiaWizardState | null {
   const calentamiento = parseCalentamiento(sesion);
 
-  if (tipoPlan === "juvenil") {
+  // Birdies comparte el shape de fila de Juvenil (sesion_juvenil).
+  if (usaSesionJuvenil(tipoPlan)) {
     const sj = sesion.sesion_juvenil;
     if (sj && "tipo" in sj) {
       if (sj.tipo === "estaciones" && sj.estaciones.length >= 1) {

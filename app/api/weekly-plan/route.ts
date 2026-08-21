@@ -2,14 +2,23 @@ import type { NextRequest } from "next/server";
 import { PACO_PLANNING_KNOWLEDGE } from "@/lib/paco-planning-knowledge";
 import { ANTHROPIC_MODEL } from "@/lib/anthropic-model";
 
-// Horarios reales de la escuela (sábado y domingo juvenil tienen 2 sesiones)
+// Horarios reales de la escuela — un solo bloque por grupo y día. Birdies y
+// Juvenil coinciden entre semana a las 16:30 a propósito: son grupos distintos,
+// con otro profesor y otra estación.
 const HORARIOS: Record<string, Record<string, { hi: string; hf: string }[]>> = {
+  birdies: {
+    martes:    [{ hi: "16:30", hf: "17:15" }],
+    miercoles: [{ hi: "16:30", hf: "17:15" }],
+    jueves:    [{ hi: "16:30", hf: "17:15" }],
+    sabado:    [{ hi: "09:15", hf: "10:00" }],
+    domingo:   [{ hi: "09:15", hf: "10:00" }],
+  },
   juvenil: {
     martes:    [{ hi: "16:30", hf: "17:30" }],
     miercoles: [{ hi: "16:30", hf: "17:30" }],
     jueves:    [{ hi: "16:30", hf: "17:30" }],
-    sabado:    [{ hi: "09:15", hf: "10:00" }, { hi: "10:00", hf: "11:00" }],
-    domingo:   [{ hi: "09:15", hf: "10:00" }, { hi: "10:00", hf: "11:00" }],
+    sabado:    [{ hi: "10:00", hf: "11:00" }],
+    domingo:   [{ hi: "10:00", hf: "11:00" }],
   },
   competencia: {
     martes:    [{ hi: "16:00", hf: "17:30" }],
@@ -23,6 +32,7 @@ const HORARIOS: Record<string, Record<string, { hi: string; hf: string }[]>> = {
 };
 
 const DIAS: Record<string, string[]> = {
+  birdies: ["martes", "miercoles", "jueves", "sabado", "domingo"],
   juvenil: ["martes", "miercoles", "jueves", "sabado", "domingo"],
   competencia: ["martes", "miercoles", "jueves", "sabado"],
   damas: ["viernes"],
@@ -37,8 +47,30 @@ function buildPrompt(tipoPlan: string, tema: string, contexto: Record<string, un
     ? `\n\nContexto evaluaciones recientes del grupo:\n${JSON.stringify(contexto.evaluaciones_recientes, null, 2)}`
     : "";
 
+  if (tipoPlan === "birdies") {
+    const system = `Diseña una clase divertida de 45 min para niños de 4 y 5 años (grupo Birdies) en una escuela de golf.
+
+TEMA: ${tema}
+LUGAR: campo de práctica
+
+Genera exactamente 2 actividades tipo JUEGO, cortas y muy simples.
+Foco a esta edad: coordinación, contacto con la pelota y equilibrio al terminar el golpe.
+Nada de posiciones P1-P10 ni vocabulario técnico de swing.
+Nombres divertidos, descripciones de máximo 2 líneas, todo contable de una mirada.
+
+Devuelve SOLO este JSON sin texto extra:
+{
+  "nombre_clase": "...",
+  "actividades": [
+    { "nombre": "...", "objetivo": "...", "como_se_juega": "...", "duracion_min": 15 }
+  ]
+}`;
+    const user = `Arma la clase de Birdies para la semana del ${semanaInicio}. Tema: ${tema}.${focoMesLine}${evCtx}`;
+    return { system, user };
+  }
+
   if (tipoPlan === "juvenil") {
-    const system = `Diseña una clase divertida de 60 min para niños de golf (Birdies 4-5a, Águilas 6-8a, Albatros 9-12a).
+    const system = `Diseña una clase divertida de 60 min para niños de golf (Águilas 6-8a, Albatros 9-12a, +14).
 
 TEMA: ${tema}
 LUGAR: campo de prácticas
@@ -371,7 +403,7 @@ export async function POST(req: NextRequest) {
   const contexto = { ...contexto_grupo, semana_inicio, foco_mes: foco_mes ?? null };
   const { system, user } = buildPrompt(tipo_plan, tema_semanal, contexto);
 
-  const maxTokens = tipo_plan === "competencia" ? 8000 : tipo_plan === "juvenil" ? 2000 : 2000;
+  const maxTokens = tipo_plan === "competencia" ? 8000 : 2000;
 
   console.log("[weekly-plan] API key existe:", !!apiKey);
   console.log("[weekly-plan] max_tokens:", maxTokens, "| prompt user length:", user.length, "chars");
@@ -424,10 +456,10 @@ export async function POST(req: NextRequest) {
     parsed = null;
   }
 
-  if (tipo_plan === "juvenil") {
-    console.log("[weekly-plan] JSON Juvenil — tiene actividades:", !!parsed?.actividades, "| count:", parsed?.actividades?.length ?? 0);
+  if (tipo_plan === "juvenil" || tipo_plan === "birdies") {
+    console.log("[weekly-plan] JSON por actividades — tiene actividades:", !!parsed?.actividades, "| count:", parsed?.actividades?.length ?? 0);
     if (!parsed?.actividades) {
-      console.error("[weekly-plan] Respuesta Juvenil inválida. Raw completo:", rawText);
+      console.error("[weekly-plan] Respuesta por actividades inválida. Raw completo:", rawText);
       return Response.json(
         {
           error: stopReason === "max_tokens"

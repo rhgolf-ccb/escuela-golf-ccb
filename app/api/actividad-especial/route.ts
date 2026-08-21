@@ -30,9 +30,9 @@ export async function POST(req: NextRequest) {
     return Response.json({ error: "Describe la actividad especial que quieres planificar" }, { status: 400 });
   }
 
-  const gruposLabel: Record<string, string> = { juvenil: "Juvenil (Birdies/Águilas/Albatros/+14)", competencia: "Competencia", damas: "Damas" };
+  const gruposLabel: Record<string, string> = { birdies: "Birdies (4-5 años)", juvenil: "Juvenil (Águilas/Albatros/+14)", competencia: "Competencia", damas: "Damas" };
   const gruposStr = (grupos ?? []).map((g) => gruposLabel[g] ?? g).join(", ") || "sin especificar";
-  const esJoven = (grupos ?? []).includes("juvenil");
+  const esJoven = (grupos ?? []).some((g) => g === "juvenil" || g === "birdies");
 
   const system = `Eres Paco, asesor experto de golf de la Escuela de Golf CCB. El profesor te pide planificar una ACTIVIDAD ESPECIAL — un evento fuera de la estructura normal de clases (torneo interno, clínica especial, día de campo completo, evaluación masiva, etc.).
 

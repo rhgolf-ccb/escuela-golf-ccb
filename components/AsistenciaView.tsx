@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
+import { GRUPOS_POR_TIPO_PLAN, calcularGrupo, tipoPlanDeAlumno, type GrupoAlumno, type TipoPlan } from "@/lib/grupos";
 
 interface SesionInfo {
   id: string;
@@ -18,14 +19,16 @@ interface SesionInfo {
 }
 
 interface PlanInfo {
-  tipo_plan: "juvenil" | "competencia" | "damas";
+  tipo_plan: TipoPlan;
   tema_semanal: string;
 }
 
 interface StudentRow {
   id: string;
   full_name: string;
-  grupo_activo: string | null;
+  // Grupo calculado por edad (mismo criterio que el módulo Alumnos), no la
+  // columna grupo_activo: casi nadie la tiene cargada y Birdies sale de la edad.
+  grupo: GrupoAlumno | null;
   // null = alumno del grupo que todavía no tiene reserva para esta sesión.
   // Se le crea una confirmada al guardar la asistencia.
   reserva_id: string | null;
@@ -51,15 +54,6 @@ const LUGAR_LABEL: Record<string, string> = {
   campo_completo: "Campo Completo",
 };
 
-const SUBGRUPOS_JUVENIL = ["Birdies", "Águilas", "Albatros", "+14"];
-
-// Grupos de `students.grupo_activo` que corresponden a cada tipo de plan. Sirve
-// para poder pasar asistencia sin haber inscrito antes a nadie en Reservas.
-const GRUPOS_POR_PLAN: Record<PlanInfo["tipo_plan"], string[]> = {
-  competencia: ["Competencia"],
-  juvenil: SUBGRUPOS_JUVENIL,
-  damas: ["Damas"],
-};
 
 const GRUPO_COLOR: Record<string, { bg: string; text: string }> = {
   Birdies: { bg: "#dbeafe", text: "#1e40af" },
@@ -142,14 +136,15 @@ export default function AsistenciaView({ sesionId }: { sesionId: string }) {
     setPlan(p);
 
     // 3. Load students with a confirmed reservation for this session (+ their asistio)
+    type AlumnoRow = { id: string; full_name: string; grupo_activo: string | null; birth_date: string | null; gender: string | null };
     type ReservaRow = {
       id: string;
       asistio: boolean | null;
-      students: { id: string; full_name: string; grupo_activo: string | null } | { id: string; full_name: string; grupo_activo: string | null }[] | null;
+      students: AlumnoRow | AlumnoRow[] | null;
     };
     const { data: rvData } = await supabase
       .from("reservas")
-      .select("id, asistio, students!reservas_estudiante_id_fkey(id, full_name, grupo_activo)")
+      .select("id, asistio, students!reservas_estudiante_id_fkey(id, full_name, grupo_activo, birth_date, gender)")
       .eq("sesion_id", sesionId)
       .eq("estado", "confirmado");
 
@@ -157,26 +152,36 @@ export default function AsistenciaView({ sesionId }: { sesionId: string }) {
       .map((r) => {
         const st = Array.isArray(r.students) ? r.students[0] : r.students;
         if (!st) return null;
-        return { id: st.id, full_name: st.full_name, grupo_activo: st.grupo_activo, reserva_id: r.id, asistio: r.asistio };
+        return {
+          id: st.id, full_name: st.full_name,
+          grupo: calcularGrupo(st.birth_date, st.gender, st.grupo_activo),
+          reserva_id: r.id, asistio: r.asistio,
+        };
       })
-      .filter((r): r is { id: string; full_name: string; grupo_activo: string | null; reserva_id: string; asistio: boolean | null } => r !== null)
+      .filter((r): r is { id: string; full_name: string; grupo: GrupoAlumno | null; reserva_id: string; asistio: boolean | null } => r !== null)
       .sort((a, b) => a.full_name.localeCompare(b.full_name));
 
-    const alumnos: StudentRow[] = rows.map(({ id, full_name, grupo_activo, reserva_id }) => ({ id, full_name, grupo_activo, reserva_id }));
+    const alumnos: StudentRow[] = rows.map(({ id, full_name, grupo, reserva_id }) => ({ id, full_name, grupo, reserva_id }));
 
     // 3b. Padrón activo del grupo que corresponde al plan. La asistencia no debe
     // depender de que alguien haya inscrito antes a cada alumno en Reservas: si la
     // sesión no tiene ninguna reserva se arranca con el grupo completo, y si tiene
     // algunas queda disponible el botón "Agregar alumnos del grupo".
+    // El grupo se calcula por edad, así que el filtro no puede ir en la consulta:
+    // se traen los activos y se resuelve aquí con el mismo criterio que Alumnos.
     const { data: rosterData } = await supabase
       .from("students")
-      .select("id, full_name, grupo_activo")
+      .select("id, full_name, grupo_activo, birth_date, gender")
       .eq("status", "activo")
-      .in("grupo_activo", GRUPOS_POR_PLAN[p.tipo_plan])
       .order("full_name", { ascending: true });
 
-    const roster: StudentRow[] = ((rosterData as { id: string; full_name: string; grupo_activo: string | null }[]) ?? [])
-      .map((st) => ({ id: st.id, full_name: st.full_name, grupo_activo: st.grupo_activo, reserva_id: null }));
+    const roster: StudentRow[] = ((rosterData as AlumnoRow[]) ?? [])
+      .filter((st) => tipoPlanDeAlumno(st) === p.tipo_plan)
+      .map((st) => ({
+        id: st.id, full_name: st.full_name,
+        grupo: calcularGrupo(st.birth_date, st.gender, st.grupo_activo),
+        reserva_id: null,
+      }));
     setGrupoRoster(roster);
 
     const autoCarga = alumnos.length === 0 && roster.length > 0;
@@ -221,7 +226,7 @@ export default function AsistenciaView({ sesionId }: { sesionId: string }) {
   // ── Filter ────────────────────────────────────────────────────────────────
   const studentsFiltered = filtroGrupo === "todos"
     ? students
-    : students.filter((s) => s.grupo_activo === filtroGrupo);
+    : students.filter((s) => s.grupo === filtroGrupo);
 
   // ── Handlers ──────────────────────────────────────────────────────────────
   function marcar(studentId: string, value: Asistencia) {
@@ -348,7 +353,7 @@ export default function AsistenciaView({ sesionId }: { sesionId: string }) {
   function handleExportCSV() {
     const rows = students.map((s) => {
       const a = asistencias[s.id];
-      return [s.full_name, s.grupo_activo ?? "", a === true ? "Presente" : a === false ? "Ausente" : "Sin marcar"];
+      return [s.full_name, s.grupo ?? "", a === true ? "Presente" : a === false ? "Ausente" : "Sin marcar"];
     });
     const header = ["Nombre", "Grupo", "Asistencia"];
     const csv = [header, ...rows].map((r) => r.map((c) => `"${c}"`).join(",")).join("\n");
@@ -453,14 +458,14 @@ export default function AsistenciaView({ sesionId }: { sesionId: string }) {
       {/* Controls */}
       <div className="flex items-center justify-between flex-wrap gap-3 mb-4">
         <div className="flex items-center gap-2">
-          {plan.tipo_plan === "juvenil" && (
+          {GRUPOS_POR_TIPO_PLAN[plan.tipo_plan].length > 1 && (
             <select
               value={filtroGrupo}
               onChange={(e) => setFiltroGrupo(e.target.value)}
               className="border border-gray-200 rounded-lg px-3 py-1.5 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-green-600 bg-white"
             >
               <option value="todos">Todos los subgrupos</option>
-              {SUBGRUPOS_JUVENIL.map((g) => (
+              {GRUPOS_POR_TIPO_PLAN[plan.tipo_plan].map((g) => (
                 <option key={g} value={g}>{g}</option>
               ))}
             </select>
@@ -525,7 +530,7 @@ export default function AsistenciaView({ sesionId }: { sesionId: string }) {
                 className="w-full flex items-center justify-between px-4 py-2.5 hover:bg-gray-50 transition-colors text-left"
               >
                 <span className="text-sm text-gray-800">{r.full_name}</span>
-                <span className="text-[11px] text-gray-400">{r.grupo_activo} · agregar +</span>
+                <span className="text-[11px] text-gray-400">{r.grupo ?? "Sin grupo"} · agregar +</span>
               </button>
             ))}
           </div>
@@ -557,7 +562,7 @@ export default function AsistenciaView({ sesionId }: { sesionId: string }) {
           <div className="divide-y divide-gray-50">
             {studentsFiltered.map((student) => {
               const estado = asistencias[student.id];
-              const gc = GRUPO_COLOR[student.grupo_activo ?? ""] ?? { bg: "#f3f4f6", text: "#6b7280" };
+              const gc = GRUPO_COLOR[student.grupo ?? ""] ?? { bg: "#f3f4f6", text: "#6b7280" };
 
               return (
                 <div key={student.id} className="flex items-center justify-between px-4 py-3 hover:bg-gray-50 transition-colors">
@@ -575,9 +580,9 @@ export default function AsistenciaView({ sesionId }: { sesionId: string }) {
                     </div>
                     <div>
                       <p className="text-sm font-medium text-gray-900">{student.full_name}</p>
-                      {student.grupo_activo && (
+                      {student.grupo && (
                         <span className="text-[11px] font-semibold px-1.5 py-0.5 rounded" style={{ background: gc.bg, color: gc.text }}>
-                          {student.grupo_activo}
+                          {student.grupo}
                         </span>
                       )}
                     </div>

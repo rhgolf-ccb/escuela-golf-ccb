@@ -7,10 +7,9 @@ import DashboardAgendaCard, { type AgendaSesion } from "@/components/DashboardAg
 import {
   GLASS_CARD, GLASS_PANEL, GLASS_TITLE, GLASS_SUBTITLE, GLASS_MUTED, GLASS_ICON, GLASS_DIVIDER,
 } from "@/lib/dashboard-glass";
+import type { TipoPlan } from "@/lib/grupos";
 
 export const metadata = { title: "Inicio | Escuela de Golf CCB" };
-
-type TipoPlan = "juvenil" | "competencia" | "damas";
 
 // Copiado de ProgramacionModule.tsx (mismo valor) — se duplica en vez de
 // importarse porque ese módulo es "use client" y arrastra el cliente de

@@ -17,10 +17,10 @@ export function allocateStationMinutes(totalMin: number, warmupMin: number, nEst
 }
 
 // Competencia parte de 2 estaciones (días más variados, muchos de un solo tema);
-// Juvenil/Damas parten de 3. Siempre ajustable por día en la UI. Punto único de
-// verdad para el default por grupo.
+// Birdies también, porque su clase dura 45 min y a los 4-5 años cada rotación
+// cuesta. Juvenil/Damas parten de 3. Siempre ajustable por día en la UI.
 export function defaultStationCount(tipoPlan: TipoPlan): number {
-  return tipoPlan === "competencia" ? 2 : 3;
+  return tipoPlan === "competencia" || tipoPlan === "birdies" ? 2 : 3;
 }
 
 export type EstacionCategoria = "juego_largo" | "juego_corto" | "putt" | "campo" | "trabajo_fisico" | "campo_infantil";
@@ -28,6 +28,9 @@ export type EstacionCategoria = "juego_largo" | "juego_corto" | "putt" | "campo"
 // Estructura por día — sugerida, siempre editable. Devuelve las categorías en
 // orden (primera = énfasis del día), longitud = defaultStationCount.
 export function defaultCategoriasForDia(tipoPlan: TipoPlan, dia: DiaSemana): EstacionCategoria[] {
+  // Birdies: contacto y puntería como base (siempre disponibles), y el juego en
+  // Campo Infantil como tercera cuando el profe sube el número de estaciones.
+  if (tipoPlan === "birdies") return ["juego_largo", "putt", "campo_infantil"];
   if (tipoPlan === "juvenil" || tipoPlan === "damas") {
     // Juvenil: mismas 3 categorías todos los días. Damas: 3 rotativas, el
     // énfasis en ritmo/giro se refleja en el foco por defecto, no aquí.

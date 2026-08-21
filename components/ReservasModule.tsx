@@ -4,9 +4,11 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import { CalendarCheck } from "lucide-react";
+import {
+  TIPOS_PLAN, TIPO_PLAN_LABEL, alumnoElegibleParaPlan, calcularGrupo, type TipoPlan,
+} from "@/lib/grupos";
 
 // ── Types ──────────────────────────────────────────────────────────────────────
-type TipoPlan = "juvenil" | "competencia" | "damas";
 type DiaSemana = "martes" | "miercoles" | "jueves" | "viernes" | "sabado" | "domingo";
 type FiltroGrupo = "todos" | TipoPlan;
 
@@ -64,11 +66,8 @@ const DIA_LABEL: Record<DiaSemana, string> = {
   viernes: "Viernes", sabado: "Sábado", domingo: "Domingo",
 };
 const CAL_DIAS: DiaSemana[] = ["martes", "miercoles", "jueves", "viernes", "sabado", "domingo"];
-const TIPO_PLAN_LABEL: Record<TipoPlan, string> = {
-  juvenil: "Juvenil", competencia: "Competencia", damas: "Damas",
-};
 const GROUP_COLOR: Record<TipoPlan, string> = {
-  juvenil: "#1B4D2E", competencia: "#7d5a00", damas: "#4a1070",
+  birdies: "#1e40af", juvenil: "#1B4D2E", competencia: "#7d5a00", damas: "#4a1070",
 };
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
@@ -98,21 +97,6 @@ function cupoBarColor(confirmados: number, cupoMax: number): string {
   if (pct >= 0.8) return "#92400e";
   return "#1B4D2E";
 }
-function calcularGrupo(birthDate: string | null, gender: string | null, grupoActivo: string | null): string | null {
-  if (grupoActivo === "Competencia") return "Competencia";
-  if (grupoActivo === "Damas") return "Damas";
-  if (!birthDate) return gender?.toLowerCase() === "femenino" ? "Damas" : null;
-  const hoy = new Date();
-  const nac = new Date(birthDate);
-  let edad = hoy.getFullYear() - nac.getFullYear();
-  const m = hoy.getMonth() - nac.getMonth();
-  if (m < 0 || (m === 0 && hoy.getDate() < nac.getDate())) edad--;
-  if (edad <= 5) return "Birdies";
-  if (edad <= 8) return "Águilas";
-  if (edad <= 12) return "Albatros";
-  return "+14";
-}
-
 function calcularEdad(birthDate: string | null): string {
   if (!birthDate) return "Edad no registrada";
   const hoy = new Date();
@@ -277,15 +261,7 @@ export default function ReservasModule() {
         .order("full_name")
         .limit(60);
 
-      const candidatos = ((data as StudentSearch[]) ?? []).filter((st) => {
-        const grupo = calcularGrupo(st.birth_date, st.gender, st.grupo_activo);
-        if (tipoPlan === "competencia") return st.grupo_activo === "Competencia";
-        if (tipoPlan === "damas") return grupo === "Damas";
-        // Juvenil: cualquier edad cae en un grupo juvenil, así que basta con excluir
-        // a quien está asignado a mano a Competencia o Damas. Los alumnos sin fecha
-        // de nacimiento entran igual: de lo contrario nunca aparecen en el buscador.
-        return st.grupo_activo !== "Competencia" && st.grupo_activo !== "Damas";
-      });
+      const candidatos = ((data as StudentSearch[]) ?? []).filter((st) => alumnoElegibleParaPlan(st, tipoPlan));
 
       setSearchResults(candidatos.slice(0, 15));
       setShowDropdown(true);
@@ -436,7 +412,7 @@ export default function ReservasModule() {
               >
                 Todos
               </button>
-              {(["juvenil", "competencia", "damas"] as TipoPlan[]).map((g) => (
+              {TIPOS_PLAN.map((g) => (
                 <button
                   key={g}
                   onClick={() => setFiltroGrupo(g)}

@@ -4,6 +4,7 @@ import { useEffect, useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { supabase, type Student } from "@/lib/supabase";
 import { isStaff, type Rol } from "@/lib/roles";
+import { calcularGrupo } from "@/lib/grupos";
 import GroupAnalysisModal from "./GroupAnalysisModal";
 import { Search, X, Trophy, Users, UserPlus } from "lucide-react";
 
@@ -70,25 +71,6 @@ function mensajeErrorAlumno(e: { code?: string; message: string }): string {
     default:
       return e.message;
   }
-}
-
-function calcularGrupo(birthDate: string | null, gender: string | null, grupoActivo: string | null): GroupFilter | null {
-  if (grupoActivo === "Competencia") return "Competencia";
-  if (grupoActivo === "Damas") return "Damas";
-  if (!birthDate) {
-    // students_gender_check solo admite 'masculino' | 'femenino'.
-    if (gender?.toLowerCase() === "femenino") return "Damas";
-    return null;
-  }
-  const hoy = new Date();
-  const nac = new Date(birthDate);
-  let edad = hoy.getFullYear() - nac.getFullYear();
-  const m = hoy.getMonth() - nac.getMonth();
-  if (m < 0 || (m === 0 && hoy.getDate() < nac.getDate())) edad--;
-  if (edad <= 5) return "Birdies";
-  if (edad <= 8) return "Águilas";
-  if (edad <= 12) return "Albatros";
-  return "+14";
 }
 
 function formatFecha(dateStr: string | null): string {

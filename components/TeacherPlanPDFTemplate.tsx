@@ -191,10 +191,8 @@ function DayColumn({ dia }: { dia: DiaPlan }) {
 }
 
 export default function TeacherPlanPDFTemplate({ plan, sesiones, tipoPlan, semana }: Props) {
-  // Agrupa TODAS las sesiones de cada día (no solo la primera): en Competencia y
-  // Damas dos sesiones distintas el mismo día son contenido distinto y ambas
-  // deben salir. La duplicación por horario de Juvenil ya la resuelve
-  // sesionesToEstaciones, que solo procesa la primera fila en ese caso.
+  // Agrupa TODAS las sesiones de cada día: en Competencia y Damas dos sesiones
+  // distintas el mismo día son contenido distinto y ambas deben salir.
   const porDia = new Map<DiaSemana, SesionSemana[]>();
   for (const s of sesiones) {
     const lista = porDia.get(s.dia_semana);

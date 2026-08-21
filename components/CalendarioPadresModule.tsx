@@ -2,10 +2,12 @@
 
 import { useState } from "react";
 import { CalendarDays } from "lucide-react";
+import { TIPO_PLAN_LABEL, tipoPlanDeAlumno, type TipoPlan } from "@/lib/grupos";
 
-type TipoPlan = "juvenil" | "competencia" | "damas";
-
-export type EstudianteVinculado = { id: string; full_name: string; grupo_activo: string | null };
+export type EstudianteVinculado = {
+  id: string; full_name: string; grupo_activo: string | null;
+  birth_date: string | null; gender: string | null;
+};
 export type DiaPrograma = {
   grupo: TipoPlan; dia_semana: string; fecha: string; tipo_sesion: string; lugar: string;
   hora_inicio: string | null; hora_fin: string | null; objetivo: string; estaciones: string[];
@@ -27,15 +29,7 @@ const LUGAR_LABEL: Record<string, string> = {
   campo_practica: "Campo de práctica", putting_green: "Putting Green",
   campo_infantil: "Campo Infantil", campo_pacos_fabios: "Pacos/Fabios", campo_completo: "Campo Completo",
 };
-const TIPO_PLAN_LABEL: Record<TipoPlan, string> = { juvenil: "Juvenil", competencia: "Competencia", damas: "Damas" };
-const GROUP_COLOR: Record<TipoPlan, string> = { juvenil: "#1B4D2E", competencia: "#7d5a00", damas: "#4a1070" };
-
-function tipoPlanForGrupo(grupo: string | null): TipoPlan | null {
-  if (grupo === "Competencia") return "competencia";
-  if (grupo === "Damas") return "damas";
-  if (grupo && ["Birdies", "Águilas", "Albatros", "+14"].includes(grupo)) return "juvenil";
-  return null;
-}
+const GROUP_COLOR: Record<TipoPlan, string> = { birdies: "#1e40af", juvenil: "#1B4D2E", competencia: "#7d5a00", damas: "#4a1070" };
 
 function getMonday(d: Date): Date {
   const date = new Date(d);
@@ -90,7 +84,7 @@ export default function CalendarioPadresModule({
   const [semana, setSemana] = useState<Date>(() => getMonday(new Date()));
 
   const selected = estudiantes.find((e) => e.id === selectedId) ?? null;
-  const tipoPlan = selected ? tipoPlanForGrupo(selected.grupo_activo) : null;
+  const tipoPlan = selected ? tipoPlanDeAlumno(selected) : null;
 
   if (estudiantes.length === 0) {
     return (

@@ -1,9 +1,22 @@
 export const PACO_PLANNING_KNOWLEDGE = `ESTRUCTURA DE PLANIFICACIÓN DE LA ESCUELA DE GOLF CCB:
 
-ESCUELA JUVENIL:
+BIRDIES (4-5 años) — grupo con programación propia, separado de la Escuela Juvenil:
+Días y horarios regulares:
+- Martes (solo si el lunes NO es festivo — si lunes es festivo el martes es compensatorio y no hay clase), miércoles y jueves de 4:30 PM a 5:15 PM
+- Sábados y domingos de 9:15 AM a 10:00 AM
+Entre semana coincide con Juvenil a las 4:30 PM a propósito: son grupos distintos, con otro profesor y otra estación. No lo trates como un conflicto de horario.
+
+Estructura de sesión:
+- 2 estaciones cortas (a veces 3 si el día lo permite), siempre en formato de juego
+- Foco de la edad: coordinación y motricidad, contacto con la pelota, equilibrio al terminar el golpe, puntería a corta distancia
+- NO uses posiciones P1-P10 ni vocabulario técnico de swing con este grupo
+- Retos de cierre contables de una mirada y que terminen en el mismo minuto en que se enuncian (ej. "emboca 3 putts desde un paso")
+- Días especiales posibles: test técnico y test físico del protocolo Birdies, o día lúdico en Campo Infantil
+
+ESCUELA JUVENIL (Águilas 6-8, Albatros 9-12, +14):
 Días y horarios regulares:
 - Martes (solo si el lunes NO es festivo — si lunes es festivo el martes es compensatorio y no hay clase), miércoles y jueves de 4:30 PM a 5:30 PM
-- Sábados y domingos: dos horarios — 9:15 AM a 10:00 AM y 10:00 AM a 11:00 AM
+- Sábados y domingos de 10:00 AM a 11:00 AM
 
 Estructura de sesión normal:
 - 2, 3 o 4 estaciones según el día y grupo
@@ -13,7 +26,7 @@ Estructura de sesión normal:
 
 Problemas técnicos frecuentes por grupo que debes considerar al sugerir drills:
 - Águilas: dificultad para rotar centrados en el eje (sway frecuente), no elevan los brazos hasta la altura del hombro derecho en el backswing (P4 deficiente)
-- Birdies: coordinación general, contacto con la pelota, finish en balance
+- Birdies (grupo aparte, ver arriba): coordinación general, contacto con la pelota, finish en balance
 
 Días especiales juvenil:
 - Puede haber días de solo putt, solo juego corto, solo juego largo o salida al campo

@@ -33,7 +33,7 @@ export async function POST(req: NextRequest) {
     return Response.json({ error: "duracion_min debe ser mayor a 0" }, { status: 400 });
   }
 
-  const esJoven = (grupos ?? []).includes("juvenil");
+  const esJoven = (grupos ?? []).some((g) => g === "juvenil" || g === "birdies");
   const gruposStr = (grupos ?? []).map((g) => GRUPOS_LABEL[g] ?? g).join(", ") || "sin especificar";
 
   const system = `Eres Paco, asesor experto de golf de la Escuela de Golf CCB. El profesor necesita el calentamiento de ${duracion_min} minutos para una actividad especial.

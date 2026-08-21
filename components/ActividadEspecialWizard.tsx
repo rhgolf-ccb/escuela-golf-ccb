@@ -9,8 +9,9 @@ import {
   type JuegoEstructurado, type Calentamiento, type Replicas, type ReplicaTurno,
   type EjercicioCalentamiento, type CategoriaEstacionEspecial,
 } from "./ProgramacionModule";
+import { TIPOS_PLAN } from "@/lib/grupos";
 
-const GRUPOS: TipoPlan[] = ["juvenil", "competencia", "damas"];
+const GRUPOS: TipoPlan[] = TIPOS_PLAN;
 const COLOR = "#b45309";
 const CATEGORIAS: CategoriaEstacionEspecial[] = ["juego_largo", "juego_corto", "putt"];
 

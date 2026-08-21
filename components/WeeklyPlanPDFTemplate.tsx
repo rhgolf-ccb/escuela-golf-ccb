@@ -111,6 +111,11 @@ const CAT_LABEL: Record<string, string> = {
   putt: "🎯 Putt",
   campo_infantil: "👶 Campo Infantil",
   fisico: "💪 Físico",
+  // Birdies
+  contacto: "🏌️ Contacto con la pelota",
+  punteria: "🎯 Puntería",
+  juego: "👶 Juego en Campo Infantil",
+  coordinacion: "🤸 Coordinación y equilibrio",
 };
 const ESPECIAL_LABEL: Record<string, string> = {
   test_tecnico: "Test Técnico P1-P10",
@@ -386,7 +391,7 @@ function DayColumn({ sesion }: { sesion: SesionSemana }) {
 
 // ── Componente principal ──────────────────────────────────────────────────────
 export default function WeeklyPlanPDFTemplate({ plan, sesiones, tipoPlan, semana }: Props) {
-  const TIPO_LABEL: Record<string, string> = { juvenil: "Juvenil", competencia: "Competencia", damas: "Damas" };
+  const TIPO_LABEL: Record<string, string> = { birdies: "Birdies", juvenil: "Juvenil", competencia: "Competencia", damas: "Damas" };
 
   // Ordenar sesiones por día
   const sesionesOrdenadas = [...sesiones].sort((a, b) => {
@@ -395,16 +400,10 @@ export default function WeeklyPlanPDFTemplate({ plan, sesiones, tipoPlan, semana
     return oa - ob;
   });
 
-  // Juvenil guarda 2 filas por día de fin de semana (una por horario) con el
-  // MISMO contenido por construcción: ahí sí se colapsa a la primera. En
-  // Competencia y Damas dos sesiones el mismo día son contenido distinto —
-  // colapsarlas hacía desaparecer la segunda del PDF.
-  const sesionesPorDia = tipoPlan === "juvenil"
-    ? sesionesOrdenadas.reduce<SesionSemana[]>((acc, s) => {
-        if (!acc.some((x) => x.dia_semana === s.dia_semana)) acc.push(s);
-        return acc;
-      }, [])
-    : sesionesOrdenadas;
+  // Cada grupo tiene un solo horario por día desde que Birdies se separó de
+  // Juvenil, así que ya no hay filas duplicadas que colapsar. Dos sesiones el
+  // mismo día (Competencia, Damas) son contenido distinto y ambas salen.
+  const sesionesPorDia = sesionesOrdenadas;
 
   const weekRange = formatWeekRange(semana);
   const numCols = sesionesPorDia.length || 1;

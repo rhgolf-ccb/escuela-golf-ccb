@@ -2,7 +2,12 @@ import type { NextRequest } from "next/server";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
 
-const TIPO_PLAN_VALUES = ["juvenil", "competencia", "damas"] as const;
+const TIPO_PLAN_VALUES = ["birdies", "juvenil", "competencia", "damas"] as const;
+
+// Birdies guarda con el mismo shape de fila que Juvenil (sesion_juvenil).
+function usaSesionJuvenil(tipoPlan: string): boolean {
+  return tipoPlan === "juvenil" || tipoPlan === "birdies";
+}
 const DIA_VALUES = ["martes", "miercoles", "jueves", "viernes", "sabado", "domingo"] as const;
 const TIPO_SESION_VALUES = [
   "tiro_largo", "juego_corto", "putt", "campo", "test_tecnico", "test_fisico", "trabajo_fisico",
@@ -76,8 +81,7 @@ function getFechaForDia(semanaInicio: string, dia: string): string {
 interface HorarioSlot { hora_inicio: string; hora_fin: string }
 
 // Única fuente de verdad para las horas de cada sesión — horarios_defecto.
-// Se carga una sola vez por publicación y se agrupa por "tipo_plan:dia_semana"
-// porque juvenil sábado/domingo tienen 2 bloques cada uno.
+// Se carga una sola vez por publicación y se agrupa por "tipo_plan:dia_semana".
 async function cargarHorariosDefecto(admin: SupabaseClient): Promise<Map<string, HorarioSlot[]>> {
   const { data, error } = await admin.from("horarios_defecto").select("tipo_plan, dia_semana, hora_inicio, hora_fin");
   if (error) throw new Error(`No se pudieron cargar los horarios por defecto: ${error.message}`);
@@ -123,7 +127,7 @@ export async function POST(req: NextRequest) {
   // Validación estricta de cada sesión ANTES de tocar la base de datos — si la IA
   // devolvió un valor fuera de los enums reales de la tabla, el insert fallaría
   // silenciosamente por el CHECK constraint y el profesor vería un falso "publicado".
-  if (tipo_plan !== "juvenil") {
+  if (!usaSesionJuvenil(tipo_plan)) {
     if (!sesiones || sesiones.length === 0) {
       return Response.json({ error: "No hay sesiones para publicar" }, { status: 400 });
     }
@@ -170,11 +174,11 @@ export async function POST(req: NextRequest) {
   type Row = Record<string, unknown>;
   let rows: Row[] = [];
 
-  if (tipo_plan === "juvenil" && sesion_juvenil) {
+  if (usaSesionJuvenil(tipo_plan) && sesion_juvenil) {
     for (const dia of JUVENIL_DIA_VALUES) {
-      const slots = resolverSlots(horariosDefecto, "juvenil", dia);
+      const slots = resolverSlots(horariosDefecto, tipo_plan, dia);
       if (slots.length === 0) {
-        return Response.json({ error: `No hay horario por defecto para juvenil el ${dia}; defínelo en horarios_defecto.` }, { status: 400 });
+        return Response.json({ error: `No hay horario por defecto para ${tipo_plan} el ${dia}; defínelo en horarios_defecto.` }, { status: 400 });
       }
       const entry = sesion_juvenil.find((e) => e.dia_semana === dia);
       const tipo = entry?.tipo ?? "estaciones";

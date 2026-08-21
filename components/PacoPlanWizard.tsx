@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { TIPO_PLAN_LABEL, DIAS_POR_TIPO, type TipoPlan, type DiaSemana } from "./ProgramacionModule";
+import { TIPOS_PLAN } from "@/lib/grupos";
 
 // "semana" quedó fuera a propósito. La ruta de semana completa publicaba por
 // /api/publish-plan-semanal, que antes de insertar hacía DELETE de todas las
@@ -13,7 +14,7 @@ import { TIPO_PLAN_LABEL, DIAS_POR_TIPO, type TipoPlan, type DiaSemana } from ".
 // directo en la base.
 type Mode = "menu" | "dia" | "especial";
 
-const GRUPOS: TipoPlan[] = ["juvenil", "competencia", "damas"];
+const GRUPOS: TipoPlan[] = TIPOS_PLAN;
 const COLOR = "#1a3a2a";
 
 const DOW_TO_DIA: Record<number, DiaSemana> = { 0: "domingo", 2: "martes", 3: "miercoles", 4: "jueves", 5: "viernes", 6: "sabado" };

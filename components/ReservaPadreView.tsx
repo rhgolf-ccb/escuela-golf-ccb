@@ -2,11 +2,15 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
+import { tipoPlanDeAlumno } from "@/lib/grupos";
 
-type TipoPlan = "juvenil" | "competencia" | "damas";
+
 type DiaSemana = "martes" | "miercoles" | "jueves" | "viernes" | "sabado" | "domingo";
 
-type Estudiante = { id: string; full_name: string; grupo_activo: string | null };
+type Estudiante = {
+  id: string; full_name: string; grupo_activo: string | null;
+  birth_date: string | null; gender: string | null;
+};
 
 type SesionConInfo = {
   id: string;
@@ -34,12 +38,7 @@ const TIPO_SESION_LABEL: Record<string, string> = {
   competencia: "Competencia", damas_estaciones: "Estaciones",
 };
 
-function tipoPlanForGrupo(grupo: string | null): TipoPlan | null {
-  if (grupo === "Competencia") return "competencia";
-  if (grupo === "Damas") return "damas";
-  if (grupo && ["Birdies", "Águilas", "Albatros", "+14"].includes(grupo)) return "juvenil";
-  return null;
-}
+
 
 function getMonday(d: Date): Date {
   const date = new Date(d);
@@ -74,7 +73,7 @@ export default function ReservaPadreView({ estudiantes }: { estudiantes: Estudia
   const [toast, setToast] = useState<string | null>(null);
 
   const selected = estudiantes.find((e) => e.id === selectedId) ?? null;
-  const tipoPlan = selected ? tipoPlanForGrupo(selected.grupo_activo) : null;
+  const tipoPlan = selected ? tipoPlanDeAlumno(selected) : null;
 
   function showToast(msg: string) { setToast(msg); setTimeout(() => setToast(null), 3500); }
 

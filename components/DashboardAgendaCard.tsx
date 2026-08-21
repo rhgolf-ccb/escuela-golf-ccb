@@ -6,8 +6,8 @@ import { Clock, Calendar } from "lucide-react";
 import {
   GLASS_PANEL, GLASS_TITLE, GLASS_SUBTITLE, GLASS_MUTED, GLASS_DIVIDER,
 } from "@/lib/dashboard-glass";
+import { TIPO_PLAN_LABEL, type TipoPlan } from "@/lib/grupos";
 
-type TipoPlan = "juvenil" | "competencia" | "damas";
 
 const TIPO_SESION_LABEL: Record<string, string> = {
   tiro_largo: "Tiro Largo", juego_corto: "Juego Corto", putt: "Putt",
@@ -19,8 +19,7 @@ const LUGAR_LABEL: Record<string, string> = {
   campo_infantil: "Campo Infantil", campo_pacos_fabios: "Pacos/Fabios",
   campo_completo: "Campo Completo",
 };
-const TIPO_PLAN_LABEL: Record<TipoPlan, string> = { juvenil: "Juvenil", competencia: "Competencia", damas: "Damas" };
-const TIPO_PLAN_COLOR: Record<TipoPlan, string> = { juvenil: "#1B4D2E", competencia: "#1e40af", damas: "#86198f" };
+const TIPO_PLAN_COLOR: Record<TipoPlan, string> = { birdies: "#1e40af", juvenil: "#1B4D2E", competencia: "#7d5a00", damas: "#86198f" };
 
 function formatHora(t: string | null): string {
   return t ? t.slice(0, 5) : "";

@@ -6,6 +6,7 @@ import { createSupabaseAdminClient } from "@/lib/supabase-admin";
 import { STAFF_ROLES, pacoLimitFor, type Rol } from "@/lib/roles";
 import { PACO_PLANNING_KNOWLEDGE, PACO_ADVANCED_PLANNING } from "@/lib/paco-planning-knowledge";
 import { ANTHROPIC_MODEL } from "@/lib/anthropic-model";
+import { TIPOS_PLAN, tipoPlanDeGrupo, type TipoPlan } from "@/lib/grupos";
 
 // La planeación semanal (thinking + tool loop + max_tokens 8000) puede tardar
 // 40-65s medido en la práctica, y hasta ~65s en el peor caso — 60s se quedaba
@@ -484,15 +485,6 @@ function toISODate(d: Date): string {
   return d.toISOString().split("T")[0];
 }
 
-const GRUPO_A_TIPO_PLAN: Record<string, "juvenil" | "competencia" | "damas"> = {
-  Birdies: "juvenil",
-  "Águilas": "juvenil",
-  Albatros: "juvenil",
-  "+14": "juvenil",
-  Competencia: "competencia",
-  Damas: "damas",
-};
-
 async function buscarAlumno(admin: SupabaseClient, nombre: string) {
   const { data, error } = await admin
     .from("students")
@@ -565,7 +557,7 @@ async function obtenerSesionesSemana(admin: SupabaseClient, grupo?: string, fech
   const base = fecha && !Number.isNaN(new Date(fecha).getTime()) ? new Date(fecha) : new Date();
   const semanaInicio = toISODate(getMonday(base));
 
-  const tiposPlan = grupo ? [GRUPO_A_TIPO_PLAN[grupo]].filter((t): t is "juvenil" | "competencia" | "damas" => !!t) : ["juvenil", "competencia", "damas"];
+  const tiposPlan: TipoPlan[] = grupo ? [tipoPlanDeGrupo(grupo)].filter((t): t is TipoPlan => !!t) : TIPOS_PLAN;
   if (grupo && tiposPlan.length === 0) return { error: `Grupo "${grupo}" no reconocido.` };
 
   const { data: planes, error: planesError } = await admin

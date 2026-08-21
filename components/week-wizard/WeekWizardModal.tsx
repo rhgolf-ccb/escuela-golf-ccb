@@ -3,13 +3,13 @@
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import type { DiaSemana, DiaSinEscuela, HorarioDefecto, SesionSemana, TipoPlan } from "@/components/ProgramacionModule";
-import { DIAS_POR_TIPO, DIA_LABEL, TIPO_PLAN_LABEL, descripcionDiaSinEscuela, fechaEnRango, getFechaForDia } from "@/components/ProgramacionModule";
+import { DIAS_POR_TIPO, DIA_LABEL, TIPO_PLAN_LABEL, descripcionDiaSinEscuela, fechaEnRango, getFechaForDia, usaSesionJuvenil } from "@/components/ProgramacionModule";
 import type { EstacionLibraryPick } from "@/components/EstacionLibraryPicker";
-import { GROUP_CONFIGS, gruposParaDrills, gruposParaFisico, categoriaOptionForCanonical, retosSugeridos, CAMPO_GAMES } from "./group-configs";
+import { GROUP_CONFIGS, gruposParaDrills, gruposParaFisico, categoriaOptionForCanonical, retosSugeridos, CAMPO_GAMES, SUBGRUPOS_JUVENIL } from "./group-configs";
 import type { DiaWizardState } from "./types";
 import { nuevaEstacion, diaCompleto, diaFaltantes, diaAdvertencias } from "./types";
 import { computeSessionDuration, allocateStationMinutes, defaultStationCount, defaultCategoriasForDia, suggestLugar } from "@/lib/planning-defaults";
-import { SUBGRUPO_LABEL, type SubgrupoJuvenil } from "@/lib/estacion-library-constants";
+import { SUBGRUPO_LABEL } from "@/lib/estacion-library-constants";
 import EstacionEditor from "./EstacionEditor";
 import CalentamientoStep from "./CalentamientoStep";
 import EspecialDiaPicker from "./EspecialDiaPicker";
@@ -260,7 +260,8 @@ export default function WeekWizardModal({ tipoPlan, semana, planId, horariosDefe
     if (slotList.length === 0) throw new Error(`No hay horario por defecto para ${dia}; defínelo en horarios_defecto.`);
     return slotList.map((slot) => {
       const base = { plan_id: destino?.planId ?? planId, dia_semana: destino?.diaSemana ?? dia, fecha, hora_inicio: slot.hora_inicio.slice(0, 5), hora_fin: slot.hora_fin.slice(0, 5) };
-      return tipoPlan === "juvenil" ? buildJuvenilRow(base, diaState, config)
+      // Birdies escribe con el mismo shape que Juvenil (sesion_juvenil).
+      return usaSesionJuvenil(tipoPlan) ? buildJuvenilRow(base, diaState, config)
         : tipoPlan === "competencia" ? buildCompetenciaRow(base, diaState, config)
         : buildDamasRow(base, diaState, config);
     });
@@ -495,7 +496,7 @@ export default function WeekWizardModal({ tipoPlan, semana, planId, horariosDefe
                       style={!diaActual.subgrupo ? { background: config.color, color: "#fff", borderColor: config.color } : { background: "#f9fafb", color: "#374151", borderColor: "#e5e7eb" }}>
                       Todas las edades
                     </button>
-                    {(["birdies", "aguilas", "albatros", "+14"] as SubgrupoJuvenil[]).map((sg) => (
+                    {SUBGRUPOS_JUVENIL.map((sg) => (
                       <button key={sg} onClick={() => updateDia({ ...diaActual, subgrupo: sg })}
                         className="px-2.5 py-1 rounded-full text-xs font-semibold border"
                         style={diaActual.subgrupo === sg ? { background: config.color, color: "#fff", borderColor: config.color } : { background: "#f9fafb", color: "#374151", borderColor: "#e5e7eb" }}>

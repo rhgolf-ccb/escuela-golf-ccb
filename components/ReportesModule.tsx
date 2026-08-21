@@ -4,6 +4,7 @@ import { useState, useEffect, useMemo, useRef, useCallback, type ReactNode, Frag
 import { createClient } from "@supabase/supabase-js";
 import * as XLSX from "xlsx";
 import { BarChart3 } from "lucide-react";
+import { calcularGrupo, tipoPlanDeAlumno, tipoPlanDeGrupo, type TipoPlan } from "@/lib/grupos";
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -24,6 +25,7 @@ const TABS: { id: Tab; label: string }[] = [
 ];
 
 const GROUP_COLOR: Record<string, { bg: string; text: string; border: string }> = {
+  birdies:      { bg: "#1e40af18", text: "#1e40af", border: "#1e40af25" },
   juvenil:      { bg: "#1B4D2E18", text: "#1B4D2E", border: "#1B4D2E25" },
   competencia:  { bg: "#7d5a0018", text: "#7d5a00", border: "#7d5a0025" },
   damas:        { bg: "#4a107018", text: "#4a1070", border: "#4a107025" },
@@ -73,13 +75,7 @@ function fmtHora(h: string | null | undefined): string {
   return h.slice(0, 5);
 }
 
-function grupoTipo(g: string | null): "juvenil" | "competencia" | "damas" | null {
-  if (!g) return null;
-  if (["Birdies","Águilas","Albatros","+14"].includes(g)) return "juvenil";
-  if (g === "Competencia") return "competencia";
-  if (g === "Damas") return "damas";
-  return null;
-}
+const grupoTipo = tipoPlanDeGrupo;
 
 function pct(n: number, d: number): number {
   if (!d) return 0;
@@ -162,7 +158,7 @@ function fetchStudents<T = Student>(columnas: string, soloActivos: boolean) {
   });
 }
 
-const STUDENT_COLS = "id,full_name,birth_date,grupo_activo,status,tiene_talega";
+const STUDENT_COLS = "id,full_name,birth_date,gender,grupo_activo,status,tiene_talega";
 
 // ── Shared UI components ─────────────────────────────────────────────────────
 
@@ -265,10 +261,11 @@ function PeriodSelector({
   );
 }
 
-type GrupoFilter = "todos" | "juvenil" | "competencia" | "damas";
+type GrupoFilter = "todos" | TipoPlan;
 function GrupoTabs({ value, onChange }: { value: GrupoFilter; onChange: (v: GrupoFilter) => void }) {
   const opts: { id: GrupoFilter; label: string; color?: string }[] = [
     { id: "todos", label: "Todos" },
+    { id: "birdies", label: "Birdies", color: "#1e40af" },
     { id: "juvenil", label: "Juvenil", color: "#1B4D2E" },
     { id: "competencia", label: "Competencia", color: "#7d5a00" },
     { id: "damas", label: "Damas", color: "#4a1070" },
@@ -329,7 +326,7 @@ type Reserva = {
 };
 
 type Student = {
-  id: string; full_name: string; birth_date: string | null;
+  id: string; full_name: string; birth_date: string | null; gender: string | null;
   grupo_activo: string | null; status: string; tiene_talega: string | null;
 };
 
@@ -450,10 +447,7 @@ function TabAsistencia() {
   const sesionesFiltradas = useMemo(() => sesiones.filter((s) => {
     if (grupo === "todos") return true;
     const t = (s.planes_semanales as { tipo_plan: string } | null)?.tipo_plan;
-    if (grupo === "juvenil") return t === "juvenil";
-    if (grupo === "competencia") return t === "competencia";
-    if (grupo === "damas") return t === "damas";
-    return true;
+    return t === grupo;
   }), [sesiones, grupo]);
 
   // Un Set en vez del sesionesFiltradas.some(...) que se repetía en cada
@@ -493,7 +487,7 @@ function TabAsistencia() {
     return students.filter((s) => {
       if (!conReserva.has(s.id)) return false;
       if (grupo === "todos") return true;
-      return grupoTipo(s.grupo_activo) === grupo;
+      return tipoPlanDeAlumno(s) === grupo;
     });
   }, [students, reservas, grupo]);
 
@@ -773,7 +767,7 @@ function TabTests() {
 
   const studentsFiltrados = useMemo(() => students.filter((s) => {
     if (grupo === "todos") return true;
-    return grupoTipo(s.grupo_activo) === grupo;
+    return tipoPlanDeAlumno(s) === grupo;
   }), [students, grupo]);
 
   function getSwingStatus(id: string): TestStatus {
@@ -995,7 +989,7 @@ function TabProgreso() {
 
   const studentsFiltrados = useMemo(() => students.filter((s) => {
     if (grupo === "todos") return true;
-    return grupoTipo(s.grupo_activo) === grupo;
+    return tipoPlanDeAlumno(s) === grupo;
   }), [students, grupo]);
 
   const periodoLabel = semanas.length > 0
@@ -1112,10 +1106,10 @@ function TabEstadisticas() {
       const hoy = new Date();
       const lunes4 = toISO(addDays(getMondayOf(hoy), -3 * 7));
       const domingo = toISO(addDays(getMondayOf(hoy), 6));
-      type ActivoRow = { id: string; grupo_activo: string | null };
+      type ActivoRow = { id: string; grupo_activo: string | null; birth_date: string | null; gender: string | null };
       type RvStats = { sesion_id: string; estudiante_id: string; asistio: boolean | null };
       const [{ rows: activos, error: stsErr }, { data: ses }, { data: sw }] = await Promise.all([
-        fetchStudents<ActivoRow>("id,grupo_activo,status,tiene_talega", true),
+        fetchStudents<ActivoRow>("id,grupo_activo,birth_date,gender,status,tiene_talega", true),
         supabase.from("sesiones_semana").select("id,fecha,planes_semanales(tipo_plan)").gte("fecha", lunes4).lte("fecha", domingo),
         supabase.from("swing_evaluations").select("student_id,score_promedio"),
       ]);
@@ -1152,12 +1146,12 @@ function TabEstadisticas() {
       const pctAsistencia = marcadas.length > 0 ? pct(asistidas, marcadas.length) : 0;
       const grupos = ["Birdies","Águilas","Albatros","+14","Competencia","Damas"];
       const porGrupo = grupos.map((g) => {
-        const alumnos = activos.filter((s) => s.grupo_activo === g);
+        const alumnos = activos.filter((s) => calcularGrupo(s.birth_date, s.gender, s.grupo_activo) === g);
         const ids = alumnos.map((a) => a.id);
         const rvG = rv.filter((r) => ids.includes(r.estudiante_id));
         const asistG = rvG.filter((r) => r.asistio === true).length;
         const marcG = rvG.filter((r) => r.asistio !== null).length;
-        const tipo = g === "Competencia" ? "competencia" : g === "Damas" ? "damas" : "juvenil";
+        const tipo = grupoTipo(g);
         const sesG = sesArr.filter((s) => s.planes_semanales?.tipo_plan === tipo).length;
         const testsG = ids.filter((id) => swSet.has(id)).length;
         return { grupo: g, alumnos: alumnos.length, sesiones: sesG, asistProm: pct(asistG, marcG), testsCompletos: testsG };
@@ -1226,6 +1220,7 @@ function colorHexForGrupo(g: string): string {
   const t = grupoTipo(g);
   if (t === "competencia") return "#7d5a00";
   if (t === "damas") return "#4a1070";
+  if (t === "birdies") return "#1e40af";
   return "#1B4D2E";
 }
 
@@ -1467,6 +1462,7 @@ function TabEdades() {
 // ── Tab 7: RESERVAS LIVE ─────────────────────────────────────────────────────
 
 const GRUPOS_LIVE = [
+  { id: "birdies" as const, label: "Birdies", color: "#1e40af", dias: ["martes", "miercoles", "jueves", "sabado", "domingo"] },
   { id: "juvenil" as const, label: "Juvenil", color: "#1B4D2E", dias: ["martes", "miercoles", "jueves", "sabado", "domingo"] },
   { id: "competencia" as const, label: "Competencia", color: "#7d5a00", dias: ["martes", "miercoles", "jueves", "sabado"] },
   { id: "damas" as const, label: "Damas", color: "#4a1070", dias: ["viernes"] },
@@ -1545,7 +1541,7 @@ function DayColumn({
 }
 
 function TabReservaLive() {
-  const [grupoSel, setGrupoSel] = useState<"juvenil" | "competencia" | "damas">("juvenil");
+  const [grupoSel, setGrupoSel] = useState<TipoPlan>("birdies");
   const [monday, setMonday] = useState<Date>(() => getMondayOf(new Date()));
   const [sesiones, setSesiones] = useState<Sesion[]>([]);
   const [reservas, setReservas] = useState<Reserva[]>([]);

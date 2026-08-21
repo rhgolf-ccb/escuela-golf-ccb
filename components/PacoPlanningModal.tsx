@@ -28,6 +28,7 @@ import {
   type PlanSemanal,
   type SesionSemana,
   type HorarioDefecto,
+  usaSesionJuvenil,
 } from "./ProgramacionModule";
 
 type Message = {
@@ -122,7 +123,7 @@ function buildPreviewFromPlan(semana: Date, plan: RawPlan, tipoPlan: TipoPlan, h
 // no reintroducir el bug de "la vista previa no se actualiza".
 function mergePlanPreview(semana: Date, plan: RawPlan, prev: Preview | null, tipoPlan: TipoPlan, horariosDefecto: HorarioDefecto[]): Preview {
   const candidato = buildPreviewFromPlan(semana, plan, tipoPlan, horariosDefecto);
-  if (tipoPlan !== "juvenil" || !prev || !prev.sesion_juvenil || !candidato.sesion_juvenil) return candidato;
+  if (!usaSesionJuvenil(tipoPlan) || !prev || !prev.sesion_juvenil || !candidato.sesion_juvenil) return candidato;
   const modificados = plan.dias_modificados;
   if (!modificados || modificados.length === 0) return candidato;
 
@@ -156,6 +157,7 @@ function resumenPreviewJuvenil(preview: Preview): string {
 }
 
 const WELCOME_BY_TIPO: Record<TipoPlan, string> = {
+  birdies: "Vamos con Birdies (4-5 años). Marca abajo lo que quieres trabajar y seguimos con la programación.",
   juvenil: "Listo, vamos con Juvenil esta semana. Marca abajo lo que quieres trabajar y seguimos con la programación.",
   competencia:
     "Perfecto, semana de Competencia. Ya sé que el martes es tiro largo, miércoles putt y campo, jueves juego corto y sábado campo de práctica. Marca abajo lo que aplique esta semana y seguimos.",
@@ -194,17 +196,23 @@ const OPCIONES_INICIALES: OpcionesEstado = {
 };
 
 const ESTACIONES_JUVENIL = ["Juego largo", "Juego corto", "Putt", "Física"];
-const ENFOQUE_FISICO_OPCIONES: Record<"juvenil" | "competencia", string[]> = {
+const ESTACIONES_BIRDIES = ["Contacto con la pelota", "Puntería", "Juego en Campo Infantil", "Coordinación y equilibrio"];
+const ENFOQUE_FISICO_OPCIONES: Record<string, string[]> = {
+  birdies: ["Coordinación y motricidad", "Equilibrio", "Agilidad y desplazamiento", "Girar el cuerpo"],
   juvenil: ["Movilidad de cadera y rotación", "Estabilidad de tronco", "Coordinación y equilibrio", "Potencia"],
   competencia: ["Movilidad", "Estabilidad / Core", "Potencia y velocidad", "Prevención de lesiones"],
 };
-const ENFOQUE_TECNICO_OPCIONES: Record<"juvenil" | "competencia", string[]> = {
+const ENFOQUE_TECNICO_OPCIONES: Record<string, string[]> = {
+  birdies: [
+    "Coordinación general",
+    "Contacto con la pelota",
+    "Finish en balance",
+    "Puntería a corta distancia",
+    "Ninguno en particular",
+  ],
   juvenil: [
     "Sway / rotación descentrada (Águilas)",
     "Backswing corto, no llega al hombro (Águilas)",
-    "Coordinación general (Birdies)",
-    "Contacto con la pelota (Birdies)",
-    "Finish en balance (Birdies)",
     "Ninguno en particular",
   ],
   competencia: ["Lag", "Plano del swing", "Setup", "Tempo", "Ninguno en particular"],
@@ -222,11 +230,11 @@ const TIPO_SEMANA_DAMAS_OPCIONES: { value: TipoSemanaDamas; label: string }[] = 
 ];
 
 function buildOpcionesMensaje(tipoPlan: TipoPlan, o: OpcionesEstado): string {
-  if (tipoPlan === "juvenil") {
+  if (usaSesionJuvenil(tipoPlan)) {
     const partes: string[] = [
       o.estaciones.length ? `Estaciones esta semana: ${o.estaciones.join(", ")}.` : "Elige tú las estaciones de esta semana.",
     ];
-    if (o.estaciones.includes("Física")) {
+    if (o.estaciones.some((e) => e === "Física" || e === "Coordinación y equilibrio")) {
       partes.push(o.enfoqueFisico.length ? `Enfoque físico: ${o.enfoqueFisico.join(", ")}.` : "Enfoque físico: el que consideres según el grupo.");
     }
     const tecnico = o.enfoqueTecnico.filter((v) => v !== "Ninguno en particular");
@@ -281,8 +289,10 @@ const MAX_HISTORY = 10;
 const LUGARES: Lugar[] = ["campo_practica", "putting_green", "campo_infantil", "campo_pacos_fabios", "campo_completo"];
 
 const SCHEDULE_DESC: Record<TipoPlan, string> = {
+  birdies:
+    "Martes/Miércoles/Jueves 16:30-17:15. Sábado y Domingo 09:15-10:00. Niños de 4-5 años: 2 estaciones cortas de juego enfocadas en coordinación, contacto con la pelota y equilibrio. Nada de posiciones P1-P10 ni vocabulario técnico. También puede ser un día especial: test técnico o físico del protocolo Birdies, o campo infantil.",
   juvenil:
-    "Martes/Miércoles/Jueves 16:30-17:30 (1 clase). Sábado y Domingo: 2 clases cada día (09:15-10:00 y 10:00-11:00). Cada sesión sigue el modelo de 3 actividades tipo juego con adaptaciones para Birdies/Águilas/Albatros, o puede ser un día especial: test técnico, test físico, campo Pacos y Fabios, o campo infantil.",
+    "Martes/Miércoles/Jueves 16:30-17:30. Sábado y Domingo 10:00-11:00. Cada sesión sigue el modelo de 3 actividades tipo juego con adaptaciones para Águilas/Albatros/+14, o puede ser un día especial: test técnico, test físico, campo Pacos y Fabios, o campo infantil.",
   competencia:
     "Martes/Miércoles/Jueves 16:00-17:30, Sábado 08:30-09:30. Día 1: tiro largo en campo de práctica. Día 2: putting green Fundadores o campo Pacos y Fabios. Día 3: tiro largo o juego corto. Sábado: siempre campo de práctica, nunca campo real.",
   damas: "Viernes 10:30-12:00. Siempre 3 estaciones rotativas de 25 minutos: Juego Largo, Juego Corto, Putt.",
@@ -416,7 +426,7 @@ export default function PacoPlanningModal({
     setToolStatus(null);
 
     const history = nextMessages.filter((m) => !m.isWelcome).slice(-MAX_HISTORY).map((m) => ({ role: m.role, content: m.content }));
-    const resumenActual = tipoPlan === "juvenil" && preview ? resumenPreviewJuvenil(preview) : "";
+    const resumenActual = usaSesionJuvenil(tipoPlan) && preview ? resumenPreviewJuvenil(preview) : "";
     const contextoConPreview = resumenActual ? `${planningContext}\n\n${resumenActual}` : planningContext;
 
     let finalText: string | null = null;
@@ -638,8 +648,8 @@ export default function PacoPlanningModal({
           descripcion_tema: preview.descripcion_tema,
           objetivo_mensual: null,
           foco_mes: null,
-          sesiones: tipoPlan === "juvenil" ? undefined : preview.sesiones,
-          sesion_juvenil: tipoPlan === "juvenil" ? preview.sesion_juvenil : undefined,
+          sesiones: usaSesionJuvenil(tipoPlan) ? undefined : preview.sesiones,
+          sesion_juvenil: usaSesionJuvenil(tipoPlan) ? preview.sesion_juvenil : undefined,
         }),
       });
       const data = await res.json();
@@ -711,21 +721,21 @@ export default function PacoPlanningModal({
 
             {!hasUserSentMessage && !isLoading && (
               <div className="rounded-2xl border border-gray-100 p-3.5 space-y-3">
-                {tipoPlan === "juvenil" && (
+                {usaSesionJuvenil(tipoPlan) && (
                   <>
                     <div>
                       <p className="text-xs font-semibold text-gray-500 mb-1.5">Estaciones esta semana</p>
                       <div className="flex flex-wrap gap-1.5">
-                        {ESTACIONES_JUVENIL.map((op) => (
+                        {(tipoPlan === "birdies" ? ESTACIONES_BIRDIES : ESTACIONES_JUVENIL).map((op) => (
                           <Pill key={op} active={opciones.estaciones.includes(op)} onClick={() => toggleOpcionArray("estaciones", op)}>{op}</Pill>
                         ))}
                       </div>
                     </div>
-                    {opciones.estaciones.includes("Física") && (
+                    {opciones.estaciones.some((e) => e === "Física" || e === "Coordinación y equilibrio") && (
                       <div>
                         <p className="text-xs font-semibold text-gray-500 mb-1.5">Enfoque físico</p>
                         <div className="flex flex-wrap gap-1.5">
-                          {ENFOQUE_FISICO_OPCIONES.juvenil.map((op) => (
+                          {ENFOQUE_FISICO_OPCIONES[tipoPlan].map((op) => (
                             <Pill key={op} active={opciones.enfoqueFisico.includes(op)} onClick={() => toggleOpcionArray("enfoqueFisico", op)}>{op}</Pill>
                           ))}
                         </div>
@@ -734,7 +744,7 @@ export default function PacoPlanningModal({
                     <div>
                       <p className="text-xs font-semibold text-gray-500 mb-1.5">Enfoque técnico</p>
                       <div className="flex flex-wrap gap-1.5">
-                        {ENFOQUE_TECNICO_OPCIONES.juvenil.map((op) => (
+                        {ENFOQUE_TECNICO_OPCIONES[tipoPlan].map((op) => (
                           <Pill key={op} active={opciones.enfoqueTecnico.includes(op)} onClick={() => toggleOpcionArray("enfoqueTecnico", op)}>{op}</Pill>
                         ))}
                       </div>
@@ -900,7 +910,7 @@ export default function PacoPlanningModal({
               <div className="space-y-4">
                 {preview.descripcion_tema && <p className="text-sm text-gray-600 italic">{preview.descripcion_tema}</p>}
 
-                {tipoPlan === "juvenil" && preview.sesion_juvenil?.map((diaPlan, diaIdx) => (
+                {usaSesionJuvenil(tipoPlan) && preview.sesion_juvenil?.map((diaPlan, diaIdx) => (
                   <div key={diaPlan.dia_semana} className="rounded-xl border border-gray-100 overflow-hidden">
                     <div className="px-4 py-2.5 flex items-start justify-between gap-2" style={{ backgroundColor: eventColor }}>
                       <div>

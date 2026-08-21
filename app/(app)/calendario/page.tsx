@@ -3,6 +3,7 @@ import { createSupabaseServerClient } from "@/lib/supabase-server";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
 import { getCurrentAppUser } from "@/lib/current-user";
 import { isStaff } from "@/lib/roles";
+import { tipoPlanDeAlumno, type TipoPlan } from "@/lib/grupos";
 import CalendarioPadresModule, {
   type DiaPrograma, type EventoCalPadre, type DiaSinEscuelaPadre, type ActividadEspecialPadre, type EstudianteVinculado,
 } from "@/components/CalendarioPadresModule";
@@ -11,20 +12,17 @@ export const metadata = {
   title: "Calendario | Escuela de Golf CCB",
 };
 
-type TipoPlan = "juvenil" | "competencia" | "damas";
-
-const CATEGORIA_LABEL: Record<string, string> = { juego_largo: "Juego Largo", juego_corto: "Juego Corto", putt: "Putt" };
+const CATEGORIA_LABEL: Record<string, string> = {
+  juego_largo: "Juego Largo", juego_corto: "Juego Corto", putt: "Putt",
+  campo_infantil: "Campo Infantil", fisico: "Físico",
+  // Birdies
+  contacto: "Contacto con la pelota", punteria: "Puntería",
+  juego: "Juego en Campo Infantil", coordinacion: "Coordinación y equilibrio",
+};
 const COMPETENCIA_CAT_LABEL: Record<string, string> = { tiro_largo: "Tiro Largo", juego_corto: "Juego Corto", putt: "Putt", trabajo_fisico: "Trabajo Físico" };
 const ESPECIAL_LABEL: Record<string, string> = {
   test_tecnico: "Test Técnico", test_fisico: "Test Físico", campo_pacos: "Campo Pacos y Fabios", campo_infantil: "Campo Infantil",
 };
-
-function tipoPlanForGrupo(grupo: string | null): TipoPlan | null {
-  if (grupo === "Competencia") return "competencia";
-  if (grupo === "Damas") return "damas";
-  if (grupo && ["Birdies", "Águilas", "Albatros", "+14"].includes(grupo)) return "juvenil";
-  return null;
-}
 
 // Extrae SOLO los nombres de estación/actividad de una sesión — nunca la
 // descripción/instrucciones del drill, que es contenido interno del profesor.
@@ -79,7 +77,7 @@ export default async function CalendarioPage() {
   // de en cadena (eventos/días sin escuela son institucionales, no dependen
   // del alumno vinculado).
   const [{ data: vinculos }, { data: eventosRaw }, { data: diasSinEscuelaRaw }] = await Promise.all([
-    supabase.from("user_estudiantes").select("students(id, full_name, grupo_activo)").eq("user_id", currentUser.id),
+    supabase.from("user_estudiantes").select("students(id, full_name, grupo_activo, birth_date, gender)").eq("user_id", currentUser.id),
     admin.from("eventos_calendario").select("id, nombre, fecha_inicio, fecha_fin, descripcion, tipo"),
     admin.from("dias_sin_escuela").select("id, fecha_inicio, fecha_fin, motivo"),
   ]);
@@ -93,7 +91,7 @@ export default async function CalendarioPage() {
   let dias: DiaPrograma[] = [];
   let actividades: ActividadEspecialPadre[] = [];
 
-  const tipos = Array.from(new Set(estudiantes.map((e) => tipoPlanForGrupo(e.grupo_activo)).filter((t): t is TipoPlan => !!t)));
+  const tipos = Array.from(new Set(estudiantes.map(tipoPlanDeAlumno).filter((t): t is TipoPlan => !!t)));
 
   if (tipos.length > 0) {
     const inicioVentana = toISODate(addDays(getMonday(new Date()), -14));
