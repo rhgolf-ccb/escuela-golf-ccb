@@ -5,7 +5,8 @@ import { useSearchParams } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import { CalendarCheck } from "lucide-react";
 import {
-  TIPOS_PLAN, TIPO_PLAN_LABEL, alumnoElegibleParaPlan, calcularGrupo, type TipoPlan,
+  TIPOS_PLAN, TIPO_PLAN_LABEL, TEXTO_SOBRE_ACENTO, acentoGrupo, acentoGrupoSuave,
+  alumnoElegibleParaPlan, calcularGrupo, edadDe, type TipoPlan,
 } from "@/lib/grupos";
 
 // ── Types ──────────────────────────────────────────────────────────────────────
@@ -54,6 +55,7 @@ interface StudentSearch {
   grupo_activo: string | null;
   birth_date: string | null;
   gender: string | null;
+  foto_url?: string | null;
   status?: string;
 }
 
@@ -66,9 +68,6 @@ const DIA_LABEL: Record<DiaSemana, string> = {
   viernes: "Viernes", sabado: "Sábado", domingo: "Domingo",
 };
 const CAL_DIAS: DiaSemana[] = ["martes", "miercoles", "jueves", "viernes", "sabado", "domingo"];
-const GROUP_COLOR: Record<TipoPlan, string> = {
-  birdies: "#1e40af", juvenil: "#1B4D2E", competencia: "#7d5a00", damas: "#4a1070",
-};
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 function getMonday(d: Date): Date {
@@ -93,29 +92,43 @@ function getInitials(name: string): string {
 }
 function cupoBarColor(confirmados: number, cupoMax: number): string {
   const pct = cupoMax > 0 ? confirmados / cupoMax : 0;
-  if (pct >= 1) return "#dc2626";
-  if (pct >= 0.8) return "#92400e";
-  return "#1B4D2E";
+  if (pct >= 1) return "var(--ui-bad)";
+  if (pct >= 0.8) return "var(--ui-warn)";
+  return "var(--ui-ok)";
 }
+// Duplicaba edadDe de lib/grupos; solo cambia el texto de salida.
 function calcularEdad(birthDate: string | null): string {
-  if (!birthDate) return "Edad no registrada";
-  const hoy = new Date();
-  const nac = new Date(birthDate);
-  let edad = hoy.getFullYear() - nac.getFullYear();
-  const m = hoy.getMonth() - nac.getMonth();
-  if (m < 0 || (m === 0 && hoy.getDate() < nac.getDate())) edad--;
-  return `${edad} años`;
+  const edad = edadDe(birthDate);
+  return edad === null ? "Edad no registrada" : `${edad} años`;
 }
 function talegaLabel(tiene_talega: string | null): string {
   return tiene_talega === "Sí" ? "Talega propia" : "Talega escuela";
 }
 
 // ── Avatar ────────────────────────────────────────────────────────────────────
-function Avatar({ name, color, size = 8 }: { name: string; color: string; size?: number }) {
+// La foto manda. Ya venía en la consulta de reservas (students.foto_url) pero el
+// avatar la ignoraba y pintaba iniciales siempre. Se recuerda la URL que falló,
+// no un booleano, para que una foto nueva vuelva a intentarse sola.
+function Avatar({ name, color, fotoUrl, size = 8 }: { name: string; color: string; fotoUrl?: string | null; size?: number }) {
+  const [urlFallida, setUrlFallida] = useState<string | null>(null);
+  const lado = size * 4;
+
+  if (fotoUrl && urlFallida !== fotoUrl) {
+    return (
+      // eslint-disable-next-line @next/next/no-img-element
+      <img
+        src={fotoUrl}
+        alt={name}
+        onError={() => setUrlFallida(fotoUrl)}
+        className="rounded-full object-cover flex-shrink-0"
+        style={{ width: lado, height: lado, border: "1px solid var(--ui-border)" }}
+      />
+    );
+  }
   return (
     <div
-      className={`w-${size} h-${size} rounded-full flex items-center justify-center text-xs font-bold text-white flex-shrink-0`}
-      style={{ background: color, width: size * 4, height: size * 4 }}
+      className="rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0"
+      style={{ background: color, color: TEXTO_SOBRE_ACENTO, width: lado, height: lado }}
     >
       {getInitials(name)}
     </div>
@@ -255,7 +268,7 @@ export default function ReservasModule() {
       // después, en el cliente, con la edad del alumno.
       const { data } = await supabase
         .from("students")
-        .select("id, full_name, grupo_activo, birth_date, gender")
+        .select("id, full_name, grupo_activo, birth_date, gender, foto_url")
         .ilike("full_name", `%${searchQuery}%`)
         .eq("status", "activo")
         .order("full_name")
@@ -352,23 +365,25 @@ export default function ReservasModule() {
 
   // ── Render ────────────────────────────────────────────────────────────────
   return (
-    <div className="w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+    <div className="tema-oscuro min-h-screen w-full">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
       {/* Toast */}
       {toast && (
-        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-2 bg-gray-900 text-white text-sm font-medium px-5 py-3 rounded-xl shadow-lg pointer-events-none">
-          <svg width="15" height="15" viewBox="0 0 20 20" fill="none" stroke="#4ade80" strokeWidth={2.5}><path d="M3 10l4 4 9-9"/></svg>
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-2 bg-(--ui-card-alt) text-white text-sm font-medium px-5 py-3 rounded-xl shadow-lg pointer-events-none">
+          <svg width="15" height="15" viewBox="0 0 20 20" fill="none" stroke="var(--ui-ok)" strokeWidth={2.5}><path d="M3 10l4 4 9-9"/></svg>
           {toast}
         </div>
       )}
 
       {/* Page header */}
       <div className="mb-6 flex items-center gap-3">
-        <div className="w-11 h-11 rounded-xl bg-ccb-green flex items-center justify-center shrink-0">
-          <CalendarCheck size={22} className="text-white" />
+        <div className="w-11 h-11 rounded-xl flex items-center justify-center shrink-0"
+          style={{ background: "var(--g-juvenil-bg)", border: "1px solid var(--ui-border)" }}>
+          <CalendarCheck size={22} style={{ color: "var(--ui-gold)" }} />
         </div>
         <div>
-          <h1 className="text-2xl font-bold text-ccb-green">Reservas</h1>
-          <p className="text-sm text-(--text-muted) mt-0.5">Gestión de inscritos por sesión</p>
+          <h1 className="text-2xl font-bold" style={{ color: "var(--ui-text)" }}>Reservas</h1>
+          <p className="text-sm mt-0.5" style={{ color: "var(--ui-text-3)" }}>Gestión de inscritos por sesión</p>
         </div>
       </div>
 
@@ -379,23 +394,23 @@ export default function ReservasModule() {
         <div className={`${sesionSel ? "hidden md:block" : "block"} w-full md:w-72 md:flex-shrink-0 space-y-3`}>
 
           {/* Week navigator + group filter */}
-          <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-3 space-y-3">
+          <div className="bg-(--ui-card) rounded-xl border border-(--ui-border-soft) shadow-sm p-3 space-y-3">
             <div className="flex items-center gap-1">
               <button
                 onClick={() => setSemana((s) => addDays(s, -7))}
-                className="p-1.5 rounded-lg hover:bg-gray-100 transition-colors text-gray-500"
+                className="p-1.5 rounded-lg hover:bg-(--ui-card-alt) transition-colors text-(--ui-text-3)"
               >
                 <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path d="M15 18l-6-6 6-6"/></svg>
               </button>
               <div className="flex-1 text-center">
-                <p className="text-xs font-semibold text-gray-700 leading-snug">{formatWeekRange(semana)}</p>
-                <button onClick={() => setSemana(getMonday(new Date()))} className="text-[10px] text-gray-400 hover:text-gray-600 transition-colors">
+                <p className="text-xs font-semibold text-(--ui-text-2) leading-snug">{formatWeekRange(semana)}</p>
+                <button onClick={() => setSemana(getMonday(new Date()))} className="text-[10px] text-(--ui-text-3) hover:text-(--ui-text-2) transition-colors">
                   esta semana
                 </button>
               </div>
               <button
                 onClick={() => setSemana((s) => addDays(s, 7))}
-                className="p-1.5 rounded-lg hover:bg-gray-100 transition-colors text-gray-500"
+                className="p-1.5 rounded-lg hover:bg-(--ui-card-alt) transition-colors text-(--ui-text-3)"
               >
                 <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path d="M9 18l6-6-6-6"/></svg>
               </button>
@@ -407,8 +422,8 @@ export default function ReservasModule() {
                 onClick={() => setFiltroGrupo("todos")}
                 className="px-2.5 py-1 rounded-full text-[11px] font-semibold border transition-all"
                 style={filtroGrupo === "todos"
-                  ? { background: "#1B4D2E", color: "#fff", borderColor: "#1B4D2E" }
-                  : { background: "#f9fafb", color: "#6b7280", borderColor: "#e5e7eb" }}
+                  ? { background: "var(--g-juvenil-bg)", color: "var(--g-juvenil-fg)", borderColor: "var(--g-juvenil-fg)" }
+                  : { background: "transparent", color: "var(--ui-text-2)", borderColor: "var(--ui-border)" }}
               >
                 Todos
               </button>
@@ -418,8 +433,8 @@ export default function ReservasModule() {
                   onClick={() => setFiltroGrupo(g)}
                   className="px-2.5 py-1 rounded-full text-[11px] font-semibold border transition-all"
                   style={filtroGrupo === g
-                    ? { background: GROUP_COLOR[g], color: "#fff", borderColor: GROUP_COLOR[g] }
-                    : { background: "#f9fafb", color: "#6b7280", borderColor: "#e5e7eb" }}
+                    ? { background: acentoGrupo(g), color: TEXTO_SOBRE_ACENTO, borderColor: acentoGrupo(g) }
+                    : { background: "transparent", color: "var(--ui-text-2)", borderColor: "var(--ui-border)" }}
                 >
                   {TIPO_PLAN_LABEL[g]}
                 </button>
@@ -428,19 +443,19 @@ export default function ReservasModule() {
           </div>
 
           {/* Session list */}
-          <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
+          <div className="bg-(--ui-card) rounded-xl border border-(--ui-border-soft) shadow-sm overflow-hidden">
             {loadingSesiones ? (
               <div className="py-10 text-center">
-                <svg className="animate-spin h-5 w-5 mx-auto mb-2 text-gray-300" fill="none" viewBox="0 0 24 24">
+                <svg className="animate-spin h-5 w-5 mx-auto mb-2 text-(--ui-text-3)" fill="none" viewBox="0 0 24 24">
                   <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
                   <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"/>
                 </svg>
-                <p className="text-xs text-gray-400">Cargando...</p>
+                <p className="text-xs text-(--ui-text-3)">Cargando...</p>
               </div>
             ) : sesionesFiltradas.length === 0 ? (
               <div className="py-10 text-center px-4">
-                <p className="text-sm text-gray-400">Sin sesiones esta semana</p>
-                <p className="text-xs text-gray-300 mt-1">Crea un plan en Programación</p>
+                <p className="text-sm text-(--ui-text-3)">Sin sesiones esta semana</p>
+                <p className="text-xs text-(--ui-text-3) mt-1">Crea un plan en Programación</p>
               </div>
             ) : (
               <div>
@@ -450,10 +465,10 @@ export default function ReservasModule() {
                   const fecha = toISODate(addDays(semana, DIA_OFFSET[dia]));
                   return (
                     <div key={dia}>
-                      <div className="px-3 py-2 bg-gray-50 border-b border-t border-gray-100">
-                        <p className="text-[10px] font-bold text-gray-500 uppercase tracking-wide">
+                      <div className="px-3 py-2 bg-(--ui-card-alt) border-b border-t border-(--ui-border-soft)">
+                        <p className="text-[10px] font-bold text-(--ui-text-3) uppercase tracking-wide">
                           {DIA_LABEL[dia]}{" "}
-                          <span className="font-normal text-gray-400">
+                          <span className="font-normal text-(--ui-text-3)">
                             {new Date(fecha + "T00:00:00").toLocaleDateString("es-CO", { day: "numeric", month: "short" })}
                           </span>
                         </p>
@@ -466,35 +481,35 @@ export default function ReservasModule() {
                           <button
                             key={ses.id}
                             onClick={() => setSesionSel(isSelected ? null : ses)}
-                            className="w-full text-left px-3 py-2.5 border-b border-gray-50 transition-colors hover:bg-gray-50"
-                            style={isSelected ? { background: GROUP_COLOR[ses.tipo_plan] + "12" } : undefined}
+                            className="w-full text-left px-3 py-2.5 border-b border-(--ui-border-soft) transition-colors hover:bg-(--ui-card-alt)"
+                            style={isSelected ? { background: acentoGrupoSuave(ses.tipo_plan, 14) } : undefined}
                           >
                             <div className="flex items-start gap-2">
-                              <div className="w-2 h-2 rounded-full mt-1.5 flex-shrink-0" style={{ background: GROUP_COLOR[ses.tipo_plan] }} />
+                              <div className="w-2 h-2 rounded-full mt-1.5 flex-shrink-0" style={{ background: acentoGrupo(ses.tipo_plan) }} />
                               <div className="flex-1 min-w-0">
                                 <div className="flex items-center gap-1.5 flex-wrap">
-                                  <span className="text-[11px] font-bold" style={{ color: GROUP_COLOR[ses.tipo_plan] }}>
+                                  <span className="text-[11px] font-bold" style={{ color: acentoGrupo(ses.tipo_plan) }}>
                                     {TIPO_PLAN_LABEL[ses.tipo_plan]}
                                   </span>
                                   {ses.hora_inicio && (
-                                    <span className="text-[10px] text-gray-400">{formatHora(ses.hora_inicio)}</span>
+                                    <span className="text-[10px] text-(--ui-text-3)">{formatHora(ses.hora_inicio)}</span>
                                   )}
                                 </div>
                                 {ses.objetivo && (
-                                  <p className="text-xs text-gray-600 truncate mt-0.5">{ses.objetivo}</p>
+                                  <p className="text-xs text-(--ui-text-2) truncate mt-0.5">{ses.objetivo}</p>
                                 )}
                                 <div className="mt-1.5 flex items-center gap-2">
                                   <span className="text-[11px] font-bold" style={{ color: barColor }}>
                                     {ses.confirmados}/{ses.cupo_maximo}
                                   </span>
-                                  <div className="flex-1 h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                                  <div className="flex-1 h-1.5 bg-(--ui-card-alt) rounded-full overflow-hidden">
                                     <div
                                       className="h-full rounded-full transition-all"
                                       style={{ width: `${Math.min(pct * 100, 100)}%`, background: barColor }}
                                     />
                                   </div>
                                   {ses.en_espera > 0 && (
-                                    <span className="text-[10px] text-amber-600 font-semibold">+{ses.en_espera}</span>
+                                    <span className="text-[10px] text-(--ui-warn) font-semibold">+{ses.en_espera}</span>
                                   )}
                                 </div>
                               </div>
@@ -513,53 +528,53 @@ export default function ReservasModule() {
         {/* ── RIGHT COLUMN ──────────────────────────────────────────────────── */}
         <div className={`${sesionSel ? "block" : "hidden md:block"} flex-1 min-w-0`}>
           {!sesionSel ? (
-            <div className="bg-white rounded-xl border border-gray-100 shadow-sm flex flex-col items-center justify-center py-28">
-              <div className="w-14 h-14 rounded-2xl bg-gray-50 flex items-center justify-center mb-4">
-                <svg width="28" height="28" fill="none" viewBox="0 0 24 24" stroke="#d1d5db" strokeWidth={1.5}>
+            <div className="bg-(--ui-card) rounded-xl border border-(--ui-border-soft) shadow-sm flex flex-col items-center justify-center py-28">
+              <div className="w-14 h-14 rounded-2xl bg-(--ui-card-alt) flex items-center justify-center mb-4">
+                <svg width="28" height="28" fill="none" viewBox="0 0 24 24" stroke="var(--ui-text-3)" strokeWidth={1.5}>
                   <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
                   <circle cx="9" cy="7" r="4"/>
                   <path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/>
                 </svg>
               </div>
-              <p className="text-base font-semibold text-gray-600 mb-1">Selecciona una sesión</p>
-              <p className="text-sm text-gray-400">para ver los inscritos y gestionar reservas</p>
+              <p className="text-base font-semibold text-(--ui-text-2) mb-1">Selecciona una sesión</p>
+              <p className="text-sm text-(--ui-text-3)">para ver los inscritos y gestionar reservas</p>
             </div>
           ) : (
-            <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
+            <div className="bg-(--ui-card) rounded-xl border border-(--ui-border-soft) shadow-sm overflow-hidden">
 
               {/* Session header */}
               <div
-                className="px-5 py-4 border-b border-gray-100"
-                style={{ borderLeft: `4px solid ${GROUP_COLOR[sesionSel.tipo_plan]}` }}
+                className="px-5 py-4 border-b border-(--ui-border-soft)"
+                style={{ borderLeft: `4px solid ${acentoGrupo(sesionSel.tipo_plan)}` }}
               >
                 <div className="flex items-start justify-between gap-3">
                   <div>
                     <div className="flex items-center gap-2 flex-wrap mb-0.5">
-                      <span className="text-xs font-bold" style={{ color: GROUP_COLOR[sesionSel.tipo_plan] }}>
+                      <span className="text-xs font-bold" style={{ color: acentoGrupo(sesionSel.tipo_plan) }}>
                         {TIPO_PLAN_LABEL[sesionSel.tipo_plan]}
                       </span>
-                      <span className="text-xs text-gray-300">·</span>
-                      <span className="text-xs text-gray-500 capitalize">
+                      <span className="text-xs text-(--ui-text-3)">·</span>
+                      <span className="text-xs text-(--ui-text-3) capitalize">
                         {new Date(sesionSel.fecha + "T00:00:00").toLocaleDateString("es-CO", {
                           weekday: "long", day: "numeric", month: "long",
                         })}
                       </span>
                       {sesionSel.hora_inicio && (
                         <>
-                          <span className="text-xs text-gray-300">·</span>
-                          <span className="text-xs text-gray-500">
+                          <span className="text-xs text-(--ui-text-3)">·</span>
+                          <span className="text-xs text-(--ui-text-3)">
                             {formatHora(sesionSel.hora_inicio)}–{formatHora(sesionSel.hora_fin)}
                           </span>
                         </>
                       )}
                     </div>
-                    <h2 className="text-base font-bold text-gray-900">
+                    <h2 className="text-base font-bold text-(--ui-text)">
                       {sesionSel.objetivo || "Sesión sin objetivo"}
                     </h2>
                   </div>
                   <button
                     onClick={() => { setSesionSel(null); setReservas([]); }}
-                    className="text-gray-400 hover:text-gray-600 transition-colors flex-shrink-0"
+                    className="text-(--ui-text-3) hover:text-(--ui-text-2) transition-colors flex-shrink-0"
                   >
                     <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path d="M18 6L6 18M6 6l12 12"/></svg>
                   </button>
@@ -567,27 +582,27 @@ export default function ReservasModule() {
               </div>
 
               {/* Cupo summary */}
-              <div className="px-5 py-4 border-b border-gray-100 bg-gray-50">
+              <div className="px-5 py-4 border-b border-(--ui-border-soft) bg-(--ui-card-alt)">
                 <div className="flex items-end gap-6 mb-3">
                   <div>
-                    <p className="text-2xl font-bold text-gray-900">{confirmados.length}</p>
-                    <p className="text-xs text-gray-500">confirmados</p>
+                    <p className="text-2xl font-bold text-(--ui-text)">{confirmados.length}</p>
+                    <p className="text-xs text-(--ui-text-3)">confirmados</p>
                   </div>
                   <div>
                     <p
                       className="text-2xl font-bold"
-                      style={{ color: confirmados.length >= sesionSel.cupo_maximo ? "#dc2626" : "#1B4D2E" }}
+                      style={{ color: confirmados.length >= sesionSel.cupo_maximo ? "var(--ui-bad)" : "var(--ui-ok)" }}
                     >
                       {Math.max(sesionSel.cupo_maximo - confirmados.length, 0)}
                     </p>
-                    <p className="text-xs text-gray-500">disponibles</p>
+                    <p className="text-xs text-(--ui-text-3)">disponibles</p>
                   </div>
                   <div>
-                    <p className="text-2xl font-bold text-gray-400">{sesionSel.cupo_maximo}</p>
-                    <p className="text-xs text-gray-500">cupo máx.</p>
+                    <p className="text-2xl font-bold text-(--ui-text-3)">{sesionSel.cupo_maximo}</p>
+                    <p className="text-xs text-(--ui-text-3)">cupo máx.</p>
                   </div>
                 </div>
-                <div className="h-2.5 bg-gray-200 rounded-full overflow-hidden">
+                <div className="h-2.5 bg-(--ui-border) rounded-full overflow-hidden">
                   <div
                     className="h-full rounded-full transition-all duration-300"
                     style={{
@@ -599,8 +614,8 @@ export default function ReservasModule() {
               </div>
 
               {/* Student search + inscribir */}
-              <div className="px-5 py-4 border-b border-gray-100">
-                <p className="text-xs font-bold text-gray-400 uppercase tracking-wide mb-2">Inscribir alumno</p>
+              <div className="px-5 py-4 border-b border-(--ui-border-soft)">
+                <p className="text-xs font-bold text-(--ui-text-3) uppercase tracking-wide mb-2">Inscribir alumno</p>
                 <div className="flex gap-2 items-start">
                   <div className="flex-1 relative">
                     <input
@@ -614,10 +629,10 @@ export default function ReservasModule() {
                       onFocus={() => { if (searchResults.length > 0) setShowDropdown(true); }}
                       onBlur={() => setTimeout(() => setShowDropdown(false), 150)}
                       placeholder="Buscar alumno por nombre..."
-                      className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-700 pr-8"
+                      className="w-full border border-(--ui-border) rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-700 pr-8"
                     />
                     {searchLoading && (
-                      <svg className="animate-spin h-4 w-4 absolute right-2.5 top-2.5 text-gray-300" fill="none" viewBox="0 0 24 24">
+                      <svg className="animate-spin h-4 w-4 absolute right-2.5 top-2.5 text-(--ui-text-3)" fill="none" viewBox="0 0 24 24">
                         <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
                         <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"/>
                       </svg>
@@ -625,12 +640,12 @@ export default function ReservasModule() {
 
                     {/* Selected badge */}
                     {alumnoSel && (
-                      <div className="flex items-center gap-2 mt-1.5 px-2.5 py-1.5 bg-green-50 border border-green-200 rounded-lg">
-                        <Avatar name={alumnoSel.full_name} color={GROUP_COLOR[sesionSel.tipo_plan]} size={6} />
-                        <span className="text-xs font-semibold text-green-800 flex-1 truncate">{alumnoSel.full_name}</span>
+                      <div className="flex items-center gap-2 mt-1.5 px-2.5 py-1.5 bg-(--ui-ok-bg) border border-(--ui-ok) rounded-lg">
+                        <Avatar name={alumnoSel.full_name} color={acentoGrupo(sesionSel.tipo_plan)} fotoUrl={alumnoSel.foto_url} size={6} />
+                        <span className="text-xs font-semibold text-(--ui-ok) flex-1 truncate">{alumnoSel.full_name}</span>
                         <button
                           onClick={() => { setAlumnoSel(null); setSearchQuery(""); searchInputRef.current?.focus(); }}
-                          className="text-green-500 hover:text-green-700"
+                          className="text-(--ui-ok) hover:text-(--ui-ok)"
                         >
                           <svg width="11" height="11" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path d="M18 6L6 18M6 6l12 12"/></svg>
                         </button>
@@ -639,9 +654,9 @@ export default function ReservasModule() {
 
                     {/* Search dropdown */}
                     {showDropdown && !alumnoSel && (
-                      <div className="absolute left-0 right-0 top-full mt-1 z-30 bg-white border border-gray-200 rounded-xl shadow-lg overflow-hidden">
+                      <div className="absolute left-0 right-0 top-full mt-1 z-30 bg-(--ui-card) border border-(--ui-border) rounded-xl shadow-lg overflow-hidden">
                         {searchResults.length === 0 ? (
-                          <p className="px-4 py-3 text-xs text-gray-400 text-center italic">
+                          <p className="px-4 py-3 text-xs text-(--ui-text-3) text-center italic">
                             No se encontraron alumnos de este grupo
                           </p>
                         ) : searchResults.map((st) => {
@@ -656,18 +671,18 @@ export default function ReservasModule() {
                                 setShowDropdown(false);
                               }}
                               disabled={yaInscrito}
-                              className="w-full text-left px-4 py-2.5 flex items-center gap-3 hover:bg-gray-50 transition-colors border-b border-gray-50 last:border-0"
+                              className="w-full text-left px-4 py-2.5 flex items-center gap-3 hover:bg-(--ui-card-alt) transition-colors border-b border-(--ui-border-soft) last:border-0"
                               style={yaInscrito ? { opacity: 0.4 } : undefined}
                             >
-                              <Avatar name={st.full_name} color={GROUP_COLOR[sesionSel.tipo_plan]} size={8} />
+                              <Avatar name={st.full_name} color={acentoGrupo(sesionSel.tipo_plan)} fotoUrl={st.foto_url} size={8} />
                               <div className="flex-1 min-w-0">
-                                <p className="text-sm font-medium text-gray-900 truncate">{st.full_name}</p>
-                                <p className="text-xs text-gray-400">
+                                <p className="text-sm font-medium text-(--ui-text) truncate">{st.full_name}</p>
+                                <p className="text-xs text-(--ui-text-3)">
                                   {st.grupo_activo ?? calcularGrupo(st.birth_date, st.gender, null) ?? "Sin grupo"} · {calcularEdad(st.birth_date)}
                                 </p>
                               </div>
                               {yaInscrito && (
-                                <span className="text-[10px] font-semibold text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded-full flex-shrink-0">
+                                <span className="text-[10px] font-semibold text-(--ui-text-2) bg-(--ui-card-alt) px-1.5 py-0.5 rounded-full flex-shrink-0">
                                   Ya inscrito
                                 </span>
                               )}
@@ -682,7 +697,7 @@ export default function ReservasModule() {
                     onClick={handleInscribir}
                     disabled={!alumnoSel || inscribiendo}
                     className="px-4 py-2 rounded-lg text-sm font-semibold text-white flex-shrink-0 transition-all disabled:opacity-40 disabled:cursor-not-allowed"
-                    style={{ background: GROUP_COLOR[sesionSel.tipo_plan] }}
+                    style={{ background: acentoGrupo(sesionSel.tipo_plan) }}
                   >
                     {inscribiendo ? "..." : "Inscribir"}
                   </button>
@@ -693,44 +708,45 @@ export default function ReservasModule() {
               <div className="px-5 py-4">
                 {loadingReservas ? (
                   <div className="py-8 text-center">
-                    <svg className="animate-spin h-5 w-5 mx-auto mb-2 text-gray-300" fill="none" viewBox="0 0 24 24">
+                    <svg className="animate-spin h-5 w-5 mx-auto mb-2 text-(--ui-text-3)" fill="none" viewBox="0 0 24 24">
                       <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
                       <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"/>
                     </svg>
-                    <p className="text-xs text-gray-400">Cargando inscritos...</p>
+                    <p className="text-xs text-(--ui-text-3)">Cargando inscritos...</p>
                   </div>
                 ) : reservas.length === 0 ? (
                   <div className="py-8 text-center">
-                    <p className="text-sm text-gray-400 italic">Sin inscritos todavía</p>
+                    <p className="text-sm text-(--ui-text-3) italic">Sin inscritos todavía</p>
                   </div>
                 ) : (
                   <div className="space-y-5">
                     {/* Confirmados */}
                     {confirmados.length > 0 && (
                       <div>
-                        <p className="text-xs font-bold text-gray-400 uppercase tracking-wide mb-2">
+                        <p className="text-xs font-bold text-(--ui-text-3) uppercase tracking-wide mb-2">
                           Confirmados ({confirmados.length})
                         </p>
                         <div className="space-y-1">
                           {confirmados.map((r) => (
                             <div
                               key={r.id}
-                              className="flex items-center gap-3 px-3 py-2.5 rounded-lg bg-gray-50 group hover:bg-gray-100 transition-colors"
+                              className="flex items-center gap-3 px-3 py-2.5 rounded-lg bg-(--ui-card-alt) group hover:bg-(--ui-card-alt) transition-colors"
                             >
-                              <Avatar name={r.students.full_name} color={GROUP_COLOR[sesionSel.tipo_plan]} size={8} />
+                              <Avatar name={r.students.full_name} color={acentoGrupo(sesionSel.tipo_plan)} fotoUrl={r.students.foto_url} size={8} />
                               <div className="flex-1 min-w-0">
-                                <p className="text-sm font-medium text-gray-900 truncate">{r.students.full_name}</p>
-                                <p className="text-xs text-gray-400">{r.students.grupo_activo ?? calcularGrupo(r.students.birth_date, r.students.gender, null) ?? "Sin grupo"} · {calcularEdad(r.students.birth_date)}</p>
+                                <p className="text-sm font-medium text-(--ui-text) truncate">{r.students.full_name}</p>
+                                <p className="text-xs text-(--ui-text-3)">{r.students.grupo_activo ?? calcularGrupo(r.students.birth_date, r.students.gender, null) ?? "Sin grupo"} · {calcularEdad(r.students.birth_date)}</p>
                               </div>
-                              <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full flex-shrink-0 ${r.students.tiene_talega === "Sí" ? "text-emerald-700 bg-emerald-100" : "text-gray-500 bg-gray-100"}`}>
+                              <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full flex-shrink-0"
+                                style={r.students.tiene_talega === "Sí" ? { color: "var(--ui-ok)", background: "var(--ui-ok-bg)" } : { color: "var(--ui-text-3)", background: "var(--ui-border-soft)" }}>
                                 {talegaLabel(r.students.tiene_talega)}
                               </span>
-                              <span className="text-[10px] font-semibold text-green-700 bg-green-100 px-1.5 py-0.5 rounded-full flex-shrink-0">
+                              <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full flex-shrink-0" style={{ color: "var(--ui-ok)", background: "var(--ui-ok-bg)" }}>
                                 Confirmado
                               </span>
                               <button
                                 onClick={() => setConfirmEliminar(r)}
-                                className="opacity-0 group-hover:opacity-100 p-1 rounded text-gray-400 hover:text-red-500 hover:bg-red-50 transition-all"
+                                className="opacity-0 group-hover:opacity-100 p-1 rounded text-(--ui-text-3) hover:text-(--ui-bad) hover:bg-(--ui-bad-bg) transition-all"
                                 title="Eliminar reserva"
                               >
                                 <svg width="13" height="13" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path d="M18 6L6 18M6 6l12 12"/></svg>
@@ -744,31 +760,32 @@ export default function ReservasModule() {
                     {/* En espera */}
                     {enEspera.length > 0 && (
                       <div>
-                        <p className="text-xs font-bold text-gray-400 uppercase tracking-wide mb-2">
+                        <p className="text-xs font-bold text-(--ui-text-3) uppercase tracking-wide mb-2">
                           Lista de espera ({enEspera.length})
                         </p>
                         <div className="space-y-1">
                           {enEspera.map((r) => (
                             <div
                               key={r.id}
-                              className="flex items-center gap-3 px-3 py-2.5 rounded-lg bg-amber-50 group hover:bg-amber-100 transition-colors"
+                              className="flex items-center gap-3 px-3 py-2.5 rounded-lg bg-(--ui-warn-bg) group hover:bg-(--ui-warn-bg) transition-colors"
                             >
-                              <div className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold text-amber-800 bg-amber-200 flex-shrink-0">
+                              <div className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold text-(--ui-warn) bg-(--ui-warn-bg) flex-shrink-0">
                                 {r.posicion_espera}
                               </div>
                               <div className="flex-1 min-w-0">
-                                <p className="text-sm font-medium text-gray-900 truncate">{r.students.full_name}</p>
-                                <p className="text-xs text-gray-400">{r.students.grupo_activo ?? calcularGrupo(r.students.birth_date, r.students.gender, null) ?? "Sin grupo"} · {calcularEdad(r.students.birth_date)}</p>
+                                <p className="text-sm font-medium text-(--ui-text) truncate">{r.students.full_name}</p>
+                                <p className="text-xs text-(--ui-text-3)">{r.students.grupo_activo ?? calcularGrupo(r.students.birth_date, r.students.gender, null) ?? "Sin grupo"} · {calcularEdad(r.students.birth_date)}</p>
                               </div>
-                              <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full flex-shrink-0 ${r.students.tiene_talega === "Sí" ? "text-emerald-700 bg-emerald-100" : "text-gray-500 bg-gray-100"}`}>
+                              <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full flex-shrink-0"
+                                style={r.students.tiene_talega === "Sí" ? { color: "var(--ui-ok)", background: "var(--ui-ok-bg)" } : { color: "var(--ui-text-3)", background: "var(--ui-border-soft)" }}>
                                 {talegaLabel(r.students.tiene_talega)}
                               </span>
-                              <span className="text-[10px] font-semibold text-amber-700 bg-amber-100 border border-amber-200 px-1.5 py-0.5 rounded-full flex-shrink-0">
+                              <span className="text-[10px] font-semibold text-(--ui-warn) bg-(--ui-warn-bg) border border-(--ui-warn) px-1.5 py-0.5 rounded-full flex-shrink-0">
                                 Espera #{r.posicion_espera}
                               </span>
                               <button
                                 onClick={() => setConfirmEliminar(r)}
-                                className="opacity-0 group-hover:opacity-100 p-1 rounded text-gray-400 hover:text-red-500 hover:bg-red-50 transition-all"
+                                className="opacity-0 group-hover:opacity-100 p-1 rounded text-(--ui-text-3) hover:text-(--ui-bad) hover:bg-(--ui-bad-bg) transition-all"
                                 title="Eliminar de lista de espera"
                               >
                                 <svg width="13" height="13" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path d="M18 6L6 18M6 6l12 12"/></svg>
@@ -792,20 +809,20 @@ export default function ReservasModule() {
           className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4"
           onClick={() => { if (!eliminando) setConfirmEliminar(null); }}
         >
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6" onClick={(e) => e.stopPropagation()}>
+          <div className="bg-(--ui-card) rounded-2xl shadow-2xl w-full max-w-sm p-6" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center gap-3 mb-4">
-              <div className="w-10 h-10 rounded-full bg-red-100 flex items-center justify-center shrink-0">
-                <svg width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="#dc2626" strokeWidth={2}>
+              <div className="w-10 h-10 rounded-full bg-(--ui-bad-bg) flex items-center justify-center shrink-0">
+                <svg width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="var(--ui-bad)" strokeWidth={2}>
                   <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
                   <circle cx="9" cy="7" r="4"/>
                 </svg>
               </div>
               <div>
-                <h3 className="font-bold text-gray-900">Eliminar reserva</h3>
-                <p className="text-xs text-gray-500 mt-0.5">{confirmEliminar.students.full_name}</p>
+                <h3 className="font-bold text-(--ui-text)">Eliminar reserva</h3>
+                <p className="text-xs text-(--ui-text-3) mt-0.5">{confirmEliminar.students.full_name}</p>
               </div>
             </div>
-            <p className="text-sm text-gray-600 mb-5">
+            <p className="text-sm text-(--ui-text-2) mb-5">
               {confirmEliminar.estado === "confirmado"
                 ? "Al eliminar un confirmado, el primero en lista de espera pasará automáticamente a confirmado."
                 : "¿Eliminar a este alumno de la lista de espera?"}
@@ -821,7 +838,7 @@ export default function ReservasModule() {
               <button
                 onClick={() => setConfirmEliminar(null)}
                 disabled={eliminando}
-                className="px-5 py-2.5 rounded-xl text-sm font-medium border border-gray-200 text-gray-600 hover:bg-gray-50 transition-colors disabled:opacity-50"
+                className="px-5 py-2.5 rounded-xl text-sm font-medium border border-(--ui-border) text-(--ui-text-2) hover:bg-(--ui-card-alt) transition-colors disabled:opacity-50"
               >
                 Cancelar
               </button>
@@ -829,6 +846,7 @@ export default function ReservasModule() {
           </div>
         </div>
       )}
+      </div>
     </div>
   );
 }
