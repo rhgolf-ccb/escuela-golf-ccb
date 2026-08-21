@@ -1,8 +1,10 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
+import Cropper from "react-easy-crop";
+import type { Area } from "react-easy-crop";
 import ParentReportModal from "./ParentReportModal";
 import PacoContextChat from "./PacoContextChat";
 import PlanParaCasaModal from "./PlanParaCasaModal";
@@ -373,6 +375,35 @@ function scoreLabel(score: number|null): string {
   return "Bajo";
 }
 
+// Genera un Blob cuadrado a partir del área que el usuario encuadró en el cropper.
+// Mismo criterio que StaffModule: 400x400 basta para un avatar y mantiene el peso bajo.
+async function getCroppedImg(imageSrc: string, cropPixels: { x: number; y: number; width: number; height: number }): Promise<Blob> {
+  const image = new Image();
+  image.crossOrigin = "anonymous";
+  image.src = imageSrc;
+  await new Promise((resolve, reject) => {
+    image.onload = resolve;
+    image.onerror = reject;
+  });
+
+  const canvas = document.createElement("canvas");
+  const OUTPUT = 400;
+  canvas.width = OUTPUT;
+  canvas.height = OUTPUT;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) throw new Error("No se pudo procesar la imagen");
+
+  ctx.drawImage(image, cropPixels.x, cropPixels.y, cropPixels.width, cropPixels.height, 0, 0, OUTPUT, OUTPUT);
+
+  return new Promise((resolve, reject) => {
+    canvas.toBlob(
+      (blob) => { if (blob) resolve(blob); else reject(new Error("No se pudo generar la imagen recortada")); },
+      "image/jpeg",
+      0.9
+    );
+  });
+}
+
 function calcularEdad(birthDate: string|null): string {
   if (!birthDate) return "—";
   const hoy = new Date(); const nac = new Date(birthDate);
@@ -688,13 +719,18 @@ export default function StudentProfile({ studentId, currentRol }: { studentId: s
   const [analyzingProfileIntegrated, setAnalyzingProfileIntegrated] = useState(false);
   const [profileIntegratedError, setProfileIntegratedError] = useState<string | null>(null);
   const [showParentReport, setShowParentReport] = useState(false);
-  // Foto de perfil
-  const [photoFile, setPhotoFile] = useState<File | null>(null);
-  const [photoPreview, setPhotoPreview] = useState<string | null>(null);
+  // Foto de perfil (se encuadra con el cropper antes de subir)
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
   const [photoError, setPhotoError] = useState<string | null>(null);
   const [photoToast, setPhotoToast] = useState<string | null>(null);
   const photoInputRef = useRef<HTMLInputElement>(null);
+  const [cropSrc, setCropSrc] = useState<string | null>(null);
+  const [crop, setCrop] = useState({ x: 0, y: 0 });
+  const [zoom, setZoom] = useState(1);
+  const [croppedAreaPixels, setCroppedAreaPixels] = useState<Area | null>(null);
+  const onCropComplete = useCallback((_: Area, areaPixels: Area) => {
+    setCroppedAreaPixels(areaPixels);
+  }, []);
   const [notas, setNotas] = useState<NotaProfesor[]>([]);
   const [notasLoading, setNotasLoading] = useState(false);
   const [showNotaForm, setShowNotaForm] = useState(false);
@@ -1454,29 +1490,51 @@ posPayload[`${key}_score`] = rawScore !== null ? Math.round(rawScore) : null;
     setDownloadingPDF(false);
   }
 
+  // Al elegir archivo no se sube directo: se abre el cropper para encuadrar la foto.
   function handlePhotoSelect(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
-    if (file.size > 5 * 1024 * 1024) {
-      setPhotoError("La imagen no puede superar 5 MB.");
+    if (file.size > 25 * 1024 * 1024) {
+      setPhotoError("La imagen no puede superar 25 MB.");
+      if (photoInputRef.current) photoInputRef.current.value = "";
       return;
     }
     setPhotoError(null);
-    setPhotoFile(file);
-    const reader = new FileReader();
-    reader.onload = (ev) => setPhotoPreview(ev.target?.result as string);
-    reader.readAsDataURL(file);
+    setCrop({ x: 0, y: 0 });
+    setZoom(1);
+    setCroppedAreaPixels(null);
+    setCropSrc(URL.createObjectURL(file));
   }
 
-  function handlePhotoCancelPreview() {
-    setPhotoFile(null);
-    setPhotoPreview(null);
-    setPhotoError(null);
+  function handleCropCancel() {
+    if (cropSrc) URL.revokeObjectURL(cropSrc);
+    setCropSrc(null);
     if (photoInputRef.current) photoInputRef.current.value = "";
   }
 
-  async function handlePhotoUpload() {
-    if (!photoFile || !student) return;
+  async function handleCropConfirm() {
+    if (!cropSrc || !croppedAreaPixels) return;
+    setUploadingPhoto(true);
+    setPhotoError(null);
+    try {
+      const blob = await getCroppedImg(cropSrc, croppedAreaPixels);
+      await handlePhotoUpload(new File([blob], "foto.jpg", { type: "image/jpeg" }));
+      URL.revokeObjectURL(cropSrc);
+      setCropSrc(null);
+      if (photoInputRef.current) photoInputRef.current.value = "";
+    } catch (err) {
+      setPhotoError(
+        err instanceof Error && err.message
+          ? err.message
+          : "No se pudo procesar la imagen. Intenta con otra foto o guárdala como JPG."
+      );
+    } finally {
+      setUploadingPhoto(false);
+    }
+  }
+
+  async function handlePhotoUpload(photoFile: File) {
+    if (!student) return;
     setUploadingPhoto(true);
     setPhotoError(null);
     try {
@@ -1507,13 +1565,11 @@ posPayload[`${key}_score`] = rawScore !== null ? Math.round(rawScore) : null;
         .eq("id", student.id);
       if (dbError) throw new Error(dbError.message);
       setStudent((s) => s ? { ...s, foto_url: publicUrl } : s);
-      setPhotoFile(null);
-      setPhotoPreview(null);
-      if (photoInputRef.current) photoInputRef.current.value = "";
       setPhotoToast("Foto actualizada correctamente");
       setTimeout(() => setPhotoToast(null), 3000);
     } catch (err) {
       setPhotoError(err instanceof Error ? err.message : "Error al subir la foto");
+      throw err;
     } finally {
       setUploadingPhoto(false);
     }
@@ -1617,15 +1673,74 @@ posPayload[`${key}_score`] = rawScore !== null ? Math.round(rawScore) : null;
           {photoToast}
         </div>
       )}
+
+      {/* ── Encuadre de la foto de perfil ─────────────── */}
+      {cropSrc && (
+        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-[60] p-4">
+          <div className="bg-white rounded-xl w-full max-w-md p-5">
+            <h3 className="text-sm font-semibold text-gray-900 mb-3">Ajustar foto</h3>
+            <p className="text-xs text-gray-500 mb-4">Arrastra para mover y usa el control para acercar. La foto se recorta en círculo.</p>
+
+            <div className="relative w-full h-64 bg-gray-900 rounded-lg overflow-hidden">
+              <Cropper
+                image={cropSrc}
+                crop={crop}
+                zoom={zoom}
+                aspect={1}
+                cropShape="round"
+                showGrid={false}
+                onCropChange={setCrop}
+                onZoomChange={setZoom}
+                onCropComplete={onCropComplete}
+              />
+            </div>
+
+            <div className="flex items-center gap-3 mt-4">
+              <span className="text-xs text-gray-500 shrink-0">Zoom</span>
+              <input
+                type="range"
+                min={1}
+                max={3}
+                step={0.05}
+                value={zoom}
+                onChange={(e) => setZoom(Number(e.target.value))}
+                className="w-full accent-ccb-green"
+              />
+            </div>
+
+            {photoError && <p className="text-xs text-red-500 mt-3">{photoError}</p>}
+
+            <div className="flex justify-end gap-2 mt-5">
+              <button
+                onClick={handleCropCancel}
+                disabled={uploadingPhoto}
+                className="px-4 py-2 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-100 disabled:opacity-50"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={handleCropConfirm}
+                disabled={uploadingPhoto || !croppedAreaPixels}
+                className="px-4 py-2 rounded-lg text-sm font-medium text-white disabled:opacity-50"
+                style={{ backgroundColor: "#1B4D2E" }}
+              >
+                {uploadingPhoto ? "Subiendo..." : "Aplicar"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <button onClick={() => router.back()} className="flex items-center gap-2 text-sm text-gray-500 hover:text-gray-700 mb-6 transition-colors">
         <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path d="M19 12H5M12 5l-7 7 7 7"/></svg>
         Volver a alumnos
       </button>
 
       <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6 mb-4">
-        <div className="flex items-center gap-4">
+        <div className="flex flex-col lg:flex-row lg:items-center gap-4">
+          <div className="flex items-center gap-4 flex-1 min-w-0">
           <span className="inline-flex items-center justify-center w-16 h-16 rounded-full text-xl font-bold shrink-0" style={{ backgroundColor:"#1B4D2E1A", color:"#1B4D2E" }}>{initiales(student.full_name)}</span>
-          <div className="flex-1">
+          <div className="flex-1 min-w-0">
             <div className="flex items-center gap-3 flex-wrap">
               <h1 className="text-xl font-bold text-gray-900">{student.full_name}</h1>
               {student.grupo_activo ? (
@@ -1646,7 +1761,8 @@ posPayload[`${key}_score`] = rawScore !== null ? Math.round(rawScore) : null;
             </div>
             <p className="text-sm text-gray-500 mt-1">{calcularEdad(student.birth_date)}{student.enrollment_date && <span className="ml-3 text-gray-400">· Ingresó {formatFecha(student.enrollment_date)}</span>}</p>
           </div>
-          <div className="flex items-center gap-2 shrink-0">
+          </div>
+          <div className="flex flex-wrap items-center gap-2 lg:justify-end">
             {currentRol && isStaff(currentRol) && (
               <button
                 onClick={async () => {
@@ -1711,9 +1827,9 @@ posPayload[`${key}_score`] = rawScore !== null ? Math.round(rawScore) : null;
             <div className="sm:col-span-2 flex flex-col items-center gap-3 pb-5 border-b border-gray-100">
               {/* Avatar */}
               <div className="relative w-24 h-24 rounded-full overflow-hidden bg-gray-100 ring-2 ring-gray-200 flex items-center justify-center shrink-0">
-                {(photoPreview ?? student.foto_url) ? (
-                  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                  <img src={(photoPreview ?? student.foto_url) as string} alt={student.full_name} className="w-full h-full object-cover" />
+                {student.foto_url ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={student.foto_url} alt={student.full_name} className="w-full h-full object-cover" />
                 ) : (
                   <span className="text-2xl font-bold text-gray-400 select-none">
                     {student.full_name.split(" ").map((n) => n[0]).slice(0, 2).join("").toUpperCase()}
@@ -1721,45 +1837,20 @@ posPayload[`${key}_score`] = rawScore !== null ? Math.round(rawScore) : null;
                 )}
               </div>
 
-              {/* Confirmar / Cancelar preview */}
-              {photoFile ? (
-                <div className="flex flex-col items-center gap-2">
-                  <p className="text-xs text-gray-500">{photoFile.name}</p>
-                  {photoError && <p className="text-xs text-red-500">{photoError}</p>}
-                  <div className="flex gap-2">
-                    <button
-                      onClick={handlePhotoUpload}
-                      disabled={uploadingPhoto}
-                      className="px-4 py-1.5 rounded-lg text-xs font-semibold text-white disabled:opacity-50"
-                      style={{ background: "#1B4D2E" }}
-                    >
-                      {uploadingPhoto ? "Subiendo..." : "Confirmar"}
-                    </button>
-                    <button
-                      onClick={handlePhotoCancelPreview}
-                      disabled={uploadingPhoto}
-                      className="px-4 py-1.5 rounded-lg text-xs font-medium text-gray-600 border border-gray-200 hover:bg-gray-50 disabled:opacity-50"
-                    >
-                      Cancelar
-                    </button>
-                  </div>
-                </div>
-              ) : (
-                <div className="flex flex-col items-center gap-1.5">
-                  <button
-                    onClick={() => photoInputRef.current?.click()}
-                    className="px-4 py-1.5 rounded-lg text-xs font-medium text-gray-700 border border-gray-200 hover:bg-gray-50 transition-colors"
-                  >
-                    {student.foto_url ? "Cambiar foto" : "Subir foto"}
-                  </button>
-                  {photoError && <p className="text-xs text-red-500">{photoError}</p>}
-                </div>
-              )}
+              <div className="flex flex-col items-center gap-1.5">
+                <button
+                  onClick={() => photoInputRef.current?.click()}
+                  className="px-4 py-1.5 rounded-lg text-xs font-medium text-gray-700 border border-gray-200 hover:bg-gray-50 transition-colors"
+                >
+                  {student.foto_url ? "Cambiar foto" : "Subir foto"}
+                </button>
+                {photoError && <p className="text-xs text-red-500">{photoError}</p>}
+              </div>
 
               <input
                 ref={photoInputRef}
                 type="file"
-                accept="image/jpeg,image/png,image/webp"
+                accept="image/*"
                 className="hidden"
                 onChange={handlePhotoSelect}
               />

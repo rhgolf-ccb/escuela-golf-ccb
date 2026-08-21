@@ -102,6 +102,8 @@ export default function AsistenciaView({ sesionId }: { sesionId: string }) {
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [filtroGrupo, setFiltroGrupo] = useState<string>("todos");
+  // Guardar sin ninguna marca borra la asistencia que hubiera: se pide confirmar.
+  const [confirmarVacio, setConfirmarVacio] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -223,11 +225,14 @@ export default function AsistenciaView({ sesionId }: { sesionId: string }) {
 
   // ── Handlers ──────────────────────────────────────────────────────────────
   function marcar(studentId: string, value: Asistencia) {
-    setAsistencias((prev) => ({ ...prev, [studentId]: value }));
+    setAsistencias((prev) => (prev[studentId] === value ? prev : { ...prev, [studentId]: value }));
+    setSaved(false);
+    setConfirmarVacio(false);
   }
 
   function setCheckFor(studentId: string, value: CheckResult) {
     setChecks((prev) => ({ ...prev, [studentId]: prev[studentId] === value ? null : value }));
+    setSaved(false);
   }
 
   function agregarAlumnos(nuevos: StudentRow[]) {
@@ -245,10 +250,19 @@ export default function AsistenciaView({ sesionId }: { sesionId: string }) {
     const map: Record<string, Asistencia> = {};
     students.forEach((s) => { map[s.id] = true; });
     setAsistencias(map);
+    setSaved(false);
+    setConfirmarVacio(false);
   }
 
   async function handleGuardar() {
     if (!sesion) return;
+    const marcados = students.filter((s) => asistencias[s.id] === true || asistencias[s.id] === false).length;
+    if (students.length > 0 && marcados === 0 && !confirmarVacio) {
+      setConfirmarVacio(true);
+      setError("No hay ningún alumno marcado como presente o ausente. Si guardas así, la sesión queda registrada sin asistencia. Vuelve a pulsar Guardar para confirmar.");
+      return;
+    }
+    setConfirmarVacio(false);
     setSaving(true);
     setError(null);
     try {
@@ -595,14 +609,14 @@ export default function AsistenciaView({ sesionId }: { sesionId: string }) {
                     )}
                     <div className="flex gap-1.5 border-l border-gray-100 pl-2">
                       <button
-                        onClick={() => marcar(student.id, estado === true ? null : true)}
+                        onClick={() => marcar(student.id, true)}
                         className={`w-9 h-9 rounded-lg text-sm font-bold transition-all ${estado === true ? "bg-emerald-500 text-white shadow-sm" : "bg-emerald-50 text-emerald-700 hover:bg-emerald-100"}`}
                         title="Presente"
                       >
                         ✓
                       </button>
                       <button
-                        onClick={() => marcar(student.id, estado === false ? null : false)}
+                        onClick={() => marcar(student.id, false)}
                         className={`w-9 h-9 rounded-lg text-sm font-bold transition-all ${estado === false ? "bg-red-500 text-white shadow-sm" : "bg-red-50 text-red-600 hover:bg-red-100"}`}
                         title="Ausente"
                       >
@@ -626,9 +640,9 @@ export default function AsistenciaView({ sesionId }: { sesionId: string }) {
           onClick={handleGuardar}
           disabled={saving || saved}
           className="w-full py-3 rounded-xl text-sm font-bold text-white disabled:opacity-60 transition-all"
-          style={{ background: "#1B4D2E" }}
+          style={{ background: confirmarVacio ? "#b91c1c" : "#1B4D2E" }}
         >
-          {saving ? "Guardando..." : saved ? "✓ Asistencia guardada" : "Guardar asistencia"}
+          {saving ? "Guardando..." : saved ? "✓ Asistencia guardada" : confirmarVacio ? "Guardar sin asistencia" : "Guardar asistencia"}
         </button>
 
         <div className="flex gap-2">

@@ -33,6 +33,7 @@ interface StudentRow {
   foto_url?: string | null;
   tiene_talega: string | null;
   birth_date: string | null;
+  gender: string | null;
 }
 
 interface ReservaConEstudiante {
@@ -49,7 +50,9 @@ interface StudentSearch {
   id: string;
   full_name: string;
   grupo_activo: string | null;
-  status: string;
+  birth_date: string | null;
+  gender: string | null;
+  status?: string;
 }
 
 // ── Constants ──────────────────────────────────────────────────────────────────
@@ -95,6 +98,21 @@ function cupoBarColor(confirmados: number, cupoMax: number): string {
   if (pct >= 0.8) return "#92400e";
   return "#1B4D2E";
 }
+function calcularGrupo(birthDate: string | null, gender: string | null, grupoActivo: string | null): string | null {
+  if (grupoActivo === "Competencia") return "Competencia";
+  if (grupoActivo === "Damas") return "Damas";
+  if (!birthDate) return gender?.toLowerCase() === "femenino" ? "Damas" : null;
+  const hoy = new Date();
+  const nac = new Date(birthDate);
+  let edad = hoy.getFullYear() - nac.getFullYear();
+  const m = hoy.getMonth() - nac.getMonth();
+  if (m < 0 || (m === 0 && hoy.getDate() < nac.getDate())) edad--;
+  if (edad <= 5) return "Birdies";
+  if (edad <= 8) return "Águilas";
+  if (edad <= 12) return "Albatros";
+  return "+14";
+}
+
 function calcularEdad(birthDate: string | null): string {
   if (!birthDate) return "Edad no registrada";
   const hoy = new Date();
@@ -215,7 +233,7 @@ export default function ReservasModule() {
     setLoadingReservas(true);
     const { data, error } = await supabase
       .from("reservas")
-      .select("id, sesion_id, estudiante_id, estado, posicion_espera, created_at, students!reservas_estudiante_id_fkey(id, full_name, grupo_activo, foto_url, tiene_talega, birth_date)")
+      .select("id, sesion_id, estudiante_id, estado, posicion_espera, created_at, students!reservas_estudiante_id_fkey(id, full_name, grupo_activo, foto_url, tiene_talega, birth_date, gender)")
       .eq("sesion_id", sesionId)
       .order("estado")
       .order("posicion_espera", { ascending: true, nullsFirst: false })
@@ -249,22 +267,27 @@ export default function ReservasModule() {
     debounceRef.current = setTimeout(async () => {
       setSearchLoading(true);
       const tipoPlan = sesionSel.tipo_plan;
-      let q = supabase
+      // Se traen más filas de las que se muestran porque el grupo se resuelve
+      // después, en el cliente, con la edad del alumno.
+      const { data } = await supabase
         .from("students")
-        .select("id, full_name, grupo_activo")
+        .select("id, full_name, grupo_activo, birth_date, gender")
         .ilike("full_name", `%${searchQuery}%`)
         .eq("status", "activo")
         .order("full_name")
-        .limit(10);
-      if (tipoPlan === "competencia") {
-        q = q.eq("grupo_activo", "Competencia");
-      } else if (tipoPlan === "juvenil") {
-        q = q.in("grupo_activo", ["Birdies", "Águilas", "Albatros", "+14"]);
-      } else if (tipoPlan === "damas") {
-        q = q.eq("grupo_activo", "Damas");
-      }
-      const { data } = await q;
-      setSearchResults((data as StudentSearch[]) ?? []);
+        .limit(60);
+
+      const candidatos = ((data as StudentSearch[]) ?? []).filter((st) => {
+        const grupo = calcularGrupo(st.birth_date, st.gender, st.grupo_activo);
+        if (tipoPlan === "competencia") return st.grupo_activo === "Competencia";
+        if (tipoPlan === "damas") return grupo === "Damas";
+        // Juvenil: cualquier edad cae en un grupo juvenil, así que basta con excluir
+        // a quien está asignado a mano a Competencia o Damas. Los alumnos sin fecha
+        // de nacimiento entran igual: de lo contrario nunca aparecen en el buscador.
+        return st.grupo_activo !== "Competencia" && st.grupo_activo !== "Damas";
+      });
+
+      setSearchResults(candidatos.slice(0, 15));
       setShowDropdown(true);
       setSearchLoading(false);
     }, 300);
@@ -663,7 +686,9 @@ export default function ReservasModule() {
                               <Avatar name={st.full_name} color={GROUP_COLOR[sesionSel.tipo_plan]} size={8} />
                               <div className="flex-1 min-w-0">
                                 <p className="text-sm font-medium text-gray-900 truncate">{st.full_name}</p>
-                                <p className="text-xs text-gray-400">{st.grupo_activo}</p>
+                                <p className="text-xs text-gray-400">
+                                  {st.grupo_activo ?? calcularGrupo(st.birth_date, st.gender, null) ?? "Sin grupo"} · {calcularEdad(st.birth_date)}
+                                </p>
                               </div>
                               {yaInscrito && (
                                 <span className="text-[10px] font-semibold text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded-full flex-shrink-0">
@@ -719,7 +744,7 @@ export default function ReservasModule() {
                               <Avatar name={r.students.full_name} color={GROUP_COLOR[sesionSel.tipo_plan]} size={8} />
                               <div className="flex-1 min-w-0">
                                 <p className="text-sm font-medium text-gray-900 truncate">{r.students.full_name}</p>
-                                <p className="text-xs text-gray-400">{r.students.grupo_activo ?? "Sin grupo"} · {calcularEdad(r.students.birth_date)}</p>
+                                <p className="text-xs text-gray-400">{r.students.grupo_activo ?? calcularGrupo(r.students.birth_date, r.students.gender, null) ?? "Sin grupo"} · {calcularEdad(r.students.birth_date)}</p>
                               </div>
                               <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full flex-shrink-0 ${r.students.tiene_talega === "Sí" ? "text-emerald-700 bg-emerald-100" : "text-gray-500 bg-gray-100"}`}>
                                 {talegaLabel(r.students.tiene_talega)}
@@ -757,7 +782,7 @@ export default function ReservasModule() {
                               </div>
                               <div className="flex-1 min-w-0">
                                 <p className="text-sm font-medium text-gray-900 truncate">{r.students.full_name}</p>
-                                <p className="text-xs text-gray-400">{r.students.grupo_activo ?? "Sin grupo"} · {calcularEdad(r.students.birth_date)}</p>
+                                <p className="text-xs text-gray-400">{r.students.grupo_activo ?? calcularGrupo(r.students.birth_date, r.students.gender, null) ?? "Sin grupo"} · {calcularEdad(r.students.birth_date)}</p>
                               </div>
                               <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full flex-shrink-0 ${r.students.tiene_talega === "Sí" ? "text-emerald-700 bg-emerald-100" : "text-gray-500 bg-gray-100"}`}>
                                 {talegaLabel(r.students.tiene_talega)}
