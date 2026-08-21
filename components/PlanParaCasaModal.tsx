@@ -183,11 +183,11 @@ export default function PlanParaCasaModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ backgroundColor: "rgba(0,0,0,0.45)" }} onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
-      <div className="flex flex-col bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[85vh]">
-        <div className="flex items-center justify-between px-5 py-4 shrink-0" style={{ backgroundColor: "#1a3a2a" }}>
+      <div className="flex flex-col bg-(--ui-card) rounded-2xl shadow-2xl w-full max-w-lg max-h-[85vh]">
+        <div className="flex items-center justify-between px-5 py-4 shrink-0" style={{ backgroundColor: "var(--ui-gold)" }}>
           <div>
-            <p className="text-sm font-semibold text-white">Plan para casa 🏠</p>
-            <p className="text-[11px] text-white/70">{studentName}</p>
+            <p className="text-sm font-semibold text-(--ui-bg)">Plan para casa 🏠</p>
+            <p className="text-[11px] text-(--ui-bg)/70">{studentName}</p>
           </div>
           <button onClick={onClose} aria-label="Cerrar" className="text-white/70 hover:text-white p-1">
             <i className="ti ti-x" style={{ fontSize: 18 }} />
@@ -197,16 +197,16 @@ export default function PlanParaCasaModal({
         <div className="flex-1 overflow-y-auto px-5 py-5">
           {step === "choose" && (
             <div className="flex flex-col gap-3">
-              <p className="text-sm text-gray-600 mb-1">¿Para qué semana quieres generar el plan de trabajo en casa?</p>
+              <p className="text-sm text-(--ui-text-2) mb-1">¿Para qué semana quieres generar el plan de trabajo en casa?</p>
               <button
                 onClick={() => handleSelectSemana(0)}
-                className="text-left px-4 py-3 rounded-lg border border-gray-200 text-sm font-medium text-gray-700 hover:bg-gray-50"
+                className="text-left px-4 py-3 rounded-lg border border-(--ui-border) text-sm font-medium text-(--ui-text-2) hover:bg-(--ui-card-alt)"
               >
                 Semana actual
               </button>
               <button
                 onClick={() => handleSelectSemana(1)}
-                className="text-left px-4 py-3 rounded-lg border border-gray-200 text-sm font-medium text-gray-700 hover:bg-gray-50"
+                className="text-left px-4 py-3 rounded-lg border border-(--ui-border) text-sm font-medium text-(--ui-text-2) hover:bg-(--ui-card-alt)"
               >
                 Próxima semana
               </button>
@@ -215,13 +215,13 @@ export default function PlanParaCasaModal({
 
           {step === "generating" && (
             <div className="flex flex-col items-center justify-center py-10 gap-3">
-              <div className="animate-spin rounded-full h-8 w-8 border-2 border-[#1a3a2a] border-t-transparent" />
-              <p className="text-sm text-gray-500">Paco está generando el plan...</p>
+              <div className="animate-spin rounded-full h-8 w-8 border-2 border-[var(--ui-gold)] border-t-transparent" />
+              <p className="text-sm text-(--ui-text-3)">Paco está generando el plan...</p>
             </div>
           )}
 
           {step === "error" && (
-            <div className="py-6 text-sm text-red-600">{errorMsg}</div>
+            <div className="py-6 text-sm text-(--ui-bad)">{errorMsg}</div>
           )}
 
           {step === "result" && plan && (
@@ -234,17 +234,17 @@ export default function PlanParaCasaModal({
         </div>
 
         {step === "result" && plan && (
-          <div className="flex items-center gap-1.5 px-5 py-3 border-t border-gray-100 shrink-0 flex-wrap">
-            <button onClick={handleDownloadPdf} className="flex items-center gap-1 text-[11px] font-medium px-2 py-1.5 rounded-md border border-gray-200 text-gray-600 hover:bg-gray-50">
+          <div className="flex items-center gap-1.5 px-5 py-3 border-t border-(--ui-border-soft) shrink-0 flex-wrap">
+            <button onClick={handleDownloadPdf} className="flex items-center gap-1 text-[11px] font-medium px-2 py-1.5 rounded-md border border-(--ui-border) text-(--ui-text-2) hover:bg-(--ui-card-alt)">
               <i className="ti ti-file-type-pdf" style={{ fontSize: 12 }} /> Descargar PDF
             </button>
-            <button onClick={handleSendWhatsApp} className="flex items-center gap-1 text-[11px] font-medium px-2 py-1.5 rounded-md border border-gray-200 text-gray-600 hover:bg-gray-50">
+            <button onClick={handleSendWhatsApp} className="flex items-center gap-1 text-[11px] font-medium px-2 py-1.5 rounded-md border border-(--ui-border) text-(--ui-text-2) hover:bg-(--ui-card-alt)">
               <i className="ti ti-brand-whatsapp" style={{ fontSize: 12 }} /> Enviar por WhatsApp
             </button>
             {savedNotes ? (
-              <span className="text-[11px] font-medium px-2 py-1.5 rounded-md text-emerald-700 bg-emerald-50">✓ Guardado en notas</span>
+              <span className="text-[11px] font-medium px-2 py-1.5 rounded-md text-(--ui-ok) bg-(--ui-ok-bg)">✓ Guardado en notas</span>
             ) : (
-              <button onClick={handleSaveNotes} disabled={savingNotes} className="text-[11px] font-medium px-2 py-1.5 rounded-md border border-gray-200 text-gray-600 hover:bg-gray-50 disabled:opacity-50">
+              <button onClick={handleSaveNotes} disabled={savingNotes} className="text-[11px] font-medium px-2 py-1.5 rounded-md border border-(--ui-border) text-(--ui-text-2) hover:bg-(--ui-card-alt) disabled:opacity-50">
                 {savingNotes ? "Guardando..." : "Guardar en notas"}
               </button>
             )}

@@ -209,11 +209,11 @@ export default function PacoContextChat({
 
   return (
     <div className="fixed inset-0 z-50 flex justify-end" style={{ backgroundColor: "rgba(0,0,0,0.45)" }} onClick={(e) => { if (e.target === e.currentTarget) handleClose(); }}>
-      <div className="flex flex-col h-full w-full sm:w-[440px] bg-white shadow-2xl">
-        <div className="flex items-center justify-between px-4 py-3.5 shrink-0" style={{ backgroundColor: "#1a3a2a" }}>
+      <div className="flex flex-col h-full w-full sm:w-[440px] bg-(--ui-card) shadow-2xl">
+        <div className="flex items-center justify-between px-4 py-3.5 shrink-0" style={{ backgroundColor: "var(--ui-gold)" }}>
           <div className="min-w-0">
-            <p className="text-sm font-semibold text-white truncate">Consultar a Paco 🦅</p>
-            <p className="text-[11px] text-white/70 truncate">Contexto: {studentName}</p>
+            <p className="text-sm font-semibold text-(--ui-bg) truncate">Consultar a Paco 🦅</p>
+            <p className="text-[11px] text-(--ui-bg)/70 truncate">Contexto: {studentName}</p>
           </div>
           <button onClick={handleClose} aria-label="Cerrar" className="text-white/70 hover:text-white p-1 shrink-0">
             <i className="ti ti-x" style={{ fontSize: 18 }} />
@@ -227,8 +227,8 @@ export default function PacoContextChat({
                 className="max-w-[90%] rounded-2xl px-3.5 py-2.5 text-sm"
                 style={
                   m.role === "user"
-                    ? { backgroundColor: "#1a3a2a", color: "#ffffff" }
-                    : { backgroundColor: "#f8f9fa", color: m.isError ? "#b91c1c" : "#1f2937", border: "0.5px solid #e5e7eb" }
+                    ? { backgroundColor: "var(--ui-gold)", color: "var(--ui-bg)" }
+                    : { backgroundColor: "var(--ui-card-alt)", color: m.isError ? "var(--ui-bad)" : "var(--ui-text)", border: "0.5px solid var(--ui-border)" }
                 }
               >
                 {m.role === "assistant" && !m.isError ? (
@@ -245,26 +245,26 @@ export default function PacoContextChat({
                   {shouldOfferActions(m.content) && (
                     <>
                       {m.savedToNotes ? (
-                        <span className="text-[11px] font-medium px-2 py-1 rounded-md text-emerald-700 bg-emerald-50">✓ Guardado en notas</span>
+                        <span className="text-[11px] font-medium px-2 py-1 rounded-md text-(--ui-ok) bg-(--ui-ok-bg)">✓ Guardado en notas</span>
                       ) : (
                         <button
                           onClick={() => handleSaveToNotes(i, m.content)}
                           disabled={savingNotesIdx === i}
-                          className="text-[11px] font-medium px-2 py-1 rounded-md border border-gray-200 text-gray-600 hover:bg-gray-50 disabled:opacity-50"
+                          className="text-[11px] font-medium px-2 py-1 rounded-md border border-(--ui-border) text-(--ui-text-2) hover:bg-(--ui-card-alt) disabled:opacity-50"
                         >
                           {savingNotesIdx === i ? "Guardando..." : `Guardar en notas de ${studentName.split(" ")[0]}`}
                         </button>
                       )}
                       <button
                         onClick={() => handleDownloadPdf(m.content)}
-                        className="flex items-center gap-1 text-[11px] font-medium px-2 py-1 rounded-md border border-gray-200 text-gray-600 hover:bg-gray-50"
+                        className="flex items-center gap-1 text-[11px] font-medium px-2 py-1 rounded-md border border-(--ui-border) text-(--ui-text-2) hover:bg-(--ui-card-alt)"
                       >
                         <i className="ti ti-file-type-pdf" style={{ fontSize: 12 }} /> Descargar PDF
                       </button>
                       {(m.isHomePlan || detectPlanKind(m.content)) && (
                         <button
                           onClick={() => handleSendWhatsApp(m.content, !!m.isHomePlan)}
-                          className="flex items-center gap-1 text-[11px] font-medium px-2 py-1 rounded-md border border-gray-200 text-gray-600 hover:bg-gray-50"
+                          className="flex items-center gap-1 text-[11px] font-medium px-2 py-1 rounded-md border border-(--ui-border) text-(--ui-text-2) hover:bg-(--ui-card-alt)"
                         >
                           <i className="ti ti-brand-whatsapp" style={{ fontSize: 12 }} /> Enviar por WhatsApp
                         </button>
@@ -273,12 +273,12 @@ export default function PacoContextChat({
                   )}
                   {shouldOfferSaveDrills(m.content) && (
                     m.drillsResult ? (
-                      <span className="text-[11px] font-medium px-2 py-1 rounded-md text-emerald-700 bg-emerald-50">{m.drillsResult}</span>
+                      <span className="text-[11px] font-medium px-2 py-1 rounded-md text-(--ui-ok) bg-(--ui-ok-bg)">{m.drillsResult}</span>
                     ) : (
                       <button
                         onClick={() => handleSaveDrills(i, m.content)}
                         disabled={savingDrillsIdx === i}
-                        className="text-[11px] font-medium px-2 py-1 rounded-md border border-gray-200 text-gray-600 hover:bg-gray-50 disabled:opacity-50"
+                        className="text-[11px] font-medium px-2 py-1 rounded-md border border-(--ui-border) text-(--ui-text-2) hover:bg-(--ui-card-alt) disabled:opacity-50"
                       >
                         {savingDrillsIdx === i ? "Analizando..." : "Guardar drills en librería"}
                       </button>
@@ -289,11 +289,11 @@ export default function PacoContextChat({
 
               <div className="flex items-center gap-1.5 mt-1 px-1">
                 {m.usedWebSearch && (
-                  <span className="text-[10px] text-gray-400 flex items-center gap-0.5">
+                  <span className="text-[10px] text-(--ui-text-3) flex items-center gap-0.5">
                     <i className="ti ti-search" style={{ fontSize: 10 }} /> Consultó fuentes web
                   </span>
                 )}
-                <span className="text-[10px] text-gray-400">{formatTime(m.timestamp)}</span>
+                <span className="text-[10px] text-(--ui-text-3)">{formatTime(m.timestamp)}</span>
               </div>
             </div>
           ))}
@@ -304,7 +304,7 @@ export default function PacoContextChat({
                 <button
                   key={a.label}
                   onClick={() => sendMessage(a.query, a.homePlan)}
-                  className="text-left text-xs px-3 py-2 rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 transition-colors"
+                  className="text-left text-xs px-3 py-2 rounded-lg border border-(--ui-border) text-(--ui-text-2) hover:bg-(--ui-card-alt) transition-colors"
                 >
                   {a.label}
                 </button>
@@ -314,17 +314,17 @@ export default function PacoContextChat({
 
           {isLoading && (
             <div className="flex items-center gap-1.5 px-1">
-              <span className="text-xs text-gray-400">{toolStatus ? TOOL_STATUS_LABELS[toolStatus] ?? "Consultando..." : "Pensando..."}</span>
+              <span className="text-xs text-(--ui-text-3)">{toolStatus ? TOOL_STATUS_LABELS[toolStatus] ?? "Consultando..." : "Pensando..."}</span>
               <span className="flex gap-0.5">
-                <span className="w-1 h-1 rounded-full bg-gray-300 animate-bounce" style={{ animationDelay: "0ms" }} />
-                <span className="w-1 h-1 rounded-full bg-gray-300 animate-bounce" style={{ animationDelay: "120ms" }} />
-                <span className="w-1 h-1 rounded-full bg-gray-300 animate-bounce" style={{ animationDelay: "240ms" }} />
+                <span className="w-1 h-1 rounded-full bg-(--ui-text-3) animate-bounce" style={{ animationDelay: "0ms" }} />
+                <span className="w-1 h-1 rounded-full bg-(--ui-text-3) animate-bounce" style={{ animationDelay: "120ms" }} />
+                <span className="w-1 h-1 rounded-full bg-(--ui-text-3) animate-bounce" style={{ animationDelay: "240ms" }} />
               </span>
             </div>
           )}
         </div>
 
-        <div className="flex items-center gap-2 px-4 py-3 border-t border-gray-100 shrink-0">
+        <div className="flex items-center gap-2 px-4 py-3 border-t border-(--ui-border-soft) shrink-0">
           <input
             type="text"
             value={input}
@@ -332,16 +332,16 @@ export default function PacoContextChat({
             onKeyDown={handleKeyDown}
             disabled={isLoading}
             placeholder={`Pregunta sobre ${studentName.split(" ")[0]}...`}
-            className="flex-1 min-w-0 text-sm px-3 py-2 rounded-full border border-gray-200 focus:outline-none focus:border-[#1a3a2a] disabled:opacity-60"
+            className="flex-1 min-w-0 text-sm px-3 py-2 rounded-full border border-(--ui-border) focus:outline-none focus:border-[var(--ui-gold)] disabled:opacity-60"
           />
           <button
             onClick={() => sendMessage(input)}
             disabled={isLoading || !input.trim()}
             aria-label="Enviar"
             className="flex items-center justify-center w-9 h-9 rounded-full shrink-0 disabled:opacity-40 transition-opacity"
-            style={{ backgroundColor: "#1a3a2a" }}
+            style={{ backgroundColor: "var(--ui-gold)" }}
           >
-            <i className="ti ti-send" style={{ color: "#ffffff", fontSize: 16 }} />
+            <i className="ti ti-send" style={{ color: "var(--ui-bg)", fontSize: 16 }} />
           </button>
         </div>
       </div>

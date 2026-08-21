@@ -93,8 +93,8 @@ export default function EstacionEditor({ estacion, index, categoriaOptions, grup
   const completa = estacion.items.length > 0 || bloques.length > 0;
 
   return (
-    <div className="border rounded-xl overflow-hidden" style={{ borderColor: completa ? "#1B4D2E" : "#e5e7eb" }}>
-      <div className="flex items-center gap-2 px-3 py-2.5" style={{ background: completa ? "#f0faf2" : "#f9fafb" }}>
+    <div className="border rounded-xl overflow-hidden" style={{ borderColor: completa ? "var(--ui-gold)" : "var(--ui-border)" }}>
+      <div className="flex items-center gap-2 px-3 py-2.5" style={{ background: completa ? "var(--ui-ok-bg)" : "var(--ui-card-alt)" }}>
         <span className="text-lg shrink-0">{opcionActual.emoji}</span>
         <select
           value={estacion.categoria}
@@ -104,21 +104,21 @@ export default function EstacionEditor({ estacion, index, categoriaOptions, grup
             onChange({ categoria: opt.value, foco: null, material: [], items: [], desafio: "", lugar: estacion.lugar });
           }}
           className="text-xs font-bold uppercase tracking-wide bg-transparent border-none focus:outline-none focus:ring-1 focus:ring-green-300 rounded px-1 py-0.5"
-          style={{ color: "#1B4D2E" }}
+          style={{ color: "var(--ui-gold)" }}
         >
           {categoriaOptions.map((c) => (
             <option key={c.value} value={c.value}>Estación {index + 1} — {c.label}</option>
           ))}
         </select>
         {estacion.items.length > 0 && (
-          <span className="ml-auto text-xs font-semibold text-gray-600">{estacion.items.length} ejercicio{estacion.items.length > 1 ? "s" : ""}</span>
+          <span className="ml-auto text-xs font-semibold text-(--ui-text-2)">{estacion.items.length} ejercicio{estacion.items.length > 1 ? "s" : ""}</span>
         )}
       </div>
 
       <div className="p-3 space-y-3">
         {mostrarFoco && (
           <div>
-            <label className="text-[11px] font-bold text-gray-500 uppercase tracking-wide block mb-1">Foco</label>
+            <label className="text-[11px] font-bold text-(--ui-text-3) uppercase tracking-wide block mb-1">Foco</label>
             <select
               value={enModoLibre ? "__otro__" : estacion.foco ?? ""}
               onChange={(e) => {
@@ -134,7 +134,7 @@ export default function EstacionEditor({ estacion, index, categoriaOptions, grup
                 const filtra = v != null && FOCOS_LEGACY.has(v);
                 onChange(filtra ? { ...estacion, foco: v, items: [] } : { ...estacion, foco: v });
               }}
-              className="w-full text-xs border border-gray-200 rounded-lg px-2.5 py-1.5 bg-white"
+              className="w-full text-xs border border-(--ui-border) rounded-lg px-2.5 py-1.5 bg-(--ui-card)"
             >
               <option value="">Cualquiera</option>
               {focoOpciones.map((f) => <option key={f.value} value={f.value}>{f.label}</option>)}
@@ -148,12 +148,12 @@ export default function EstacionEditor({ estacion, index, categoriaOptions, grup
                   onChange={(e) => onChange({ ...estacion, foco: e.target.value })}
                   placeholder="Escribe el foco de esta estación"
                   maxLength={60}
-                  className="flex-1 min-w-0 text-xs border border-gray-200 rounded-lg px-2.5 py-1.5"
+                  className="flex-1 min-w-0 text-xs border border-(--ui-border) rounded-lg px-2.5 py-1.5"
                 />
                 <button
                   type="button"
                   onClick={() => { setFocoLibre(false); onChange({ ...estacion, foco: null }); }}
-                  className="text-[11px] font-medium text-blue-700 hover:text-blue-900 shrink-0"
+                  className="text-[11px] font-medium text-(--g-birdies-fg) hover:text-blue-900 shrink-0"
                 >
                   volver a la lista
                 </button>
@@ -163,12 +163,12 @@ export default function EstacionEditor({ estacion, index, categoriaOptions, grup
         )}
 
         <div>
-          <label className="text-[11px] font-bold text-gray-500 uppercase tracking-wide block mb-1">Material</label>
+          <label className="text-[11px] font-bold text-(--ui-text-3) uppercase tracking-wide block mb-1">Material</label>
           <div className="flex flex-wrap gap-1.5">
             {materialesDisponibles.map((m) => (
               <button key={m} type="button" onClick={() => toggleMaterial(m)}
                 className="px-2 py-1 rounded-full text-[11px] font-semibold border transition-all"
-                style={estacion.material.includes(m) ? { background: "#9a3412", color: "#fff", borderColor: "#9a3412" } : { background: "#f9fafb", color: "#374151", borderColor: "#e5e7eb" }}>
+                style={estacion.material.includes(m) ? { background: "var(--ui-warn)", color: "var(--g-on-accent)", borderColor: "var(--ui-warn)" } : { background: "var(--ui-card-alt)", color: "var(--ui-text-2)", borderColor: "var(--ui-border)" }}>
                 {MATERIAL_LABEL[m]}
               </button>
             ))}
@@ -177,25 +177,25 @@ export default function EstacionEditor({ estacion, index, categoriaOptions, grup
 
         {esTiroLargo && (
           <div>
-            <label className="text-[11px] font-bold text-gray-500 uppercase tracking-wide block mb-1">
-              Secuencia de transferencia <span className="text-gray-400 normal-case font-medium">— físico → técnico</span>
+            <label className="text-[11px] font-bold text-(--ui-text-3) uppercase tracking-wide block mb-1">
+              Secuencia de transferencia <span className="text-(--ui-text-3) normal-case font-medium">— físico → técnico</span>
             </label>
             <div className="space-y-1.5">
               {bloques.map((b, i) => (
                 <div key={b.id} className="flex items-center gap-1.5">
                   <div className="flex flex-col text-[10px] leading-none">
-                    <button type="button" onClick={() => moveBloque(i, -1)} disabled={i === 0} className="text-gray-300 hover:text-gray-600 disabled:opacity-20">▲</button>
-                    <button type="button" onClick={() => moveBloque(i, 1)} disabled={i === bloques.length - 1} className="text-gray-300 hover:text-gray-600 disabled:opacity-20">▼</button>
+                    <button type="button" onClick={() => moveBloque(i, -1)} disabled={i === 0} className="text-(--ui-text-3) hover:text-(--ui-text-2) disabled:opacity-20">▲</button>
+                    <button type="button" onClick={() => moveBloque(i, 1)} disabled={i === bloques.length - 1} className="text-(--ui-text-3) hover:text-(--ui-text-2) disabled:opacity-20">▼</button>
                   </div>
                   <input value={b.prep} onChange={(e) => updateBloque(i, { prep: e.target.value })}
                     placeholder="Preparación (ej. bandas + backswing)"
-                    className="flex-1 min-w-0 text-xs border border-gray-200 rounded-lg px-2 py-1.5" />
-                  <span className="text-gray-400 text-xs shrink-0">→</span>
+                    className="flex-1 min-w-0 text-xs border border-(--ui-border) rounded-lg px-2 py-1.5" />
+                  <span className="text-(--ui-text-3) text-xs shrink-0">→</span>
                   <input type="number" min={0} value={b.bolas}
                     onChange={(e) => updateBloque(i, { bolas: Math.max(0, parseInt(e.target.value) || 0) })}
-                    className="w-12 text-xs border border-gray-200 rounded-lg px-1.5 py-1.5 text-center" />
-                  <span className="text-[11px] text-gray-500 shrink-0">bolas</span>
-                  <button type="button" onClick={() => removeBloque(i)} className="text-gray-300 hover:text-red-500 shrink-0">
+                    className="w-12 text-xs border border-(--ui-border) rounded-lg px-1.5 py-1.5 text-center" />
+                  <span className="text-[11px] text-(--ui-text-3) shrink-0">bolas</span>
+                  <button type="button" onClick={() => removeBloque(i)} className="text-(--ui-text-3) hover:text-(--ui-bad) shrink-0">
                     <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path d="M18 6L6 18M6 6l12 12" /></svg>
                   </button>
                 </div>
@@ -205,22 +205,22 @@ export default function EstacionEditor({ estacion, index, categoriaOptions, grup
               {TRANSFER_PRESETS.map((p) => (
                 <button key={p.prep} type="button" onClick={() => addBloque(p.prep, p.bolas)}
                   className="px-2 py-1 rounded-full text-[11px] font-semibold border"
-                  style={{ background: "#fff8e1", color: "#7d5a00", borderColor: "#f0d98c" }}>+ {p.prep}</button>
+                  style={{ background: "var(--ui-warn-bg)", color: "var(--g-competencia-fg)", borderColor: "var(--g-competencia-fg)" }}>+ {p.prep}</button>
               ))}
               <button type="button" onClick={() => addBloque()}
-                className="px-2 py-1 rounded-full text-[11px] font-semibold border border-gray-200 text-gray-600">+ Bloque vacío</button>
+                className="px-2 py-1 rounded-full text-[11px] font-semibold border border-(--ui-border) text-(--ui-text-2)">+ Bloque vacío</button>
             </div>
           </div>
         )}
 
         <div className="space-y-2">
           {estacion.items.map((item) => (
-            <div key={item.id} className="border border-gray-100 rounded-lg p-2.5 bg-gray-50 flex items-start gap-2">
+            <div key={item.id} className="border border-(--ui-border-soft) rounded-lg p-2.5 bg-(--ui-card-alt) flex items-start gap-2">
               <div className="min-w-0 flex-1">
-                <p className="text-sm font-semibold text-gray-900">{item.titulo}</p>
-                {item.descripcion && <p className="text-xs text-gray-500 mt-0.5">{item.descripcion}</p>}
+                <p className="text-sm font-semibold text-(--ui-text)">{item.titulo}</p>
+                {item.descripcion && <p className="text-xs text-(--ui-text-3) mt-0.5">{item.descripcion}</p>}
               </div>
-              <button onClick={() => removeItem(item.id)} className="text-gray-300 hover:text-red-500 shrink-0">
+              <button onClick={() => removeItem(item.id)} className="text-(--ui-text-3) hover:text-(--ui-bad) shrink-0">
                 <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path d="M18 6L6 18M6 6l12 12" /></svg>
               </button>
             </div>
@@ -230,25 +230,25 @@ export default function EstacionEditor({ estacion, index, categoriaOptions, grup
         <button
           onClick={() => setShowPicker(true)}
           disabled={estacion.items.length >= 3}
-          className="text-xs font-medium text-blue-700 hover:text-blue-900 disabled:opacity-40"
+          className="text-xs font-medium text-(--g-birdies-fg) hover:text-blue-900 disabled:opacity-40"
         >
           + Agregar de la biblioteca
         </button>
 
         <div>
-          <label className="text-[11px] font-bold text-gray-500 uppercase tracking-wide block mb-1">
-            Reto de cierre <span className="text-gray-400 normal-case font-medium">— sugerido, opcional</span>
+          <label className="text-[11px] font-bold text-(--ui-text-3) uppercase tracking-wide block mb-1">
+            Reto de cierre <span className="text-(--ui-text-3) normal-case font-medium">— sugerido, opcional</span>
           </label>
           {sugerenciaActual && (
-            <div className="mb-2 rounded-lg px-2.5 py-2 flex items-start gap-2" style={{ background: "#fff8e1", border: "1px solid #f0d98c" }}>
+            <div className="mb-2 rounded-lg px-2.5 py-2 flex items-start gap-2" style={{ background: "var(--ui-warn-bg)", border: "1px solid var(--g-competencia-fg)" }}>
               <span className="text-sm shrink-0">🏆</span>
-              <p className="text-xs flex-1 min-w-0" style={{ color: "#7d5a00" }}>{sugerenciaActual}</p>
+              <p className="text-xs flex-1 min-w-0" style={{ color: "var(--g-competencia-fg)" }}>{sugerenciaActual}</p>
               <div className="flex flex-col gap-1 shrink-0">
                 <button type="button" onClick={() => onChange({ ...estacion, desafio: sugerenciaActual })}
-                  className="text-[10px] font-bold px-2 py-0.5 rounded" style={{ background: "#7d5a00", color: "#fff" }}>Usar</button>
+                  className="text-[10px] font-bold px-2 py-0.5 rounded" style={{ background: "var(--g-competencia-fg)", color: "var(--g-on-accent)" }}>Usar</button>
                 {sugerencias.length > 1 && (
                   <button type="button" onClick={() => setRetoIdx((i) => i + 1)}
-                    className="text-[10px] font-semibold px-2 py-0.5 rounded border" style={{ color: "#7d5a00", borderColor: "#f0d98c" }}>Otro</button>
+                    className="text-[10px] font-semibold px-2 py-0.5 rounded border" style={{ color: "var(--g-competencia-fg)", borderColor: "var(--g-competencia-fg)" }}>Otro</button>
                 )}
               </div>
             </div>
@@ -258,16 +258,16 @@ export default function EstacionEditor({ estacion, index, categoriaOptions, grup
             onChange={(e) => onChange({ ...estacion, desafio: e.target.value })}
             rows={2}
             placeholder="Reto o juego competitivo de cierre para esta estación (opcional)"
-            className="w-full text-xs border border-gray-200 rounded-lg px-2.5 py-1.5 resize-none"
+            className="w-full text-xs border border-(--ui-border) rounded-lg px-2.5 py-1.5 resize-none"
           />
         </div>
 
         <div>
-          <label className="text-[11px] font-bold text-gray-500 uppercase tracking-wide block mb-1">Sitio de práctica</label>
+          <label className="text-[11px] font-bold text-(--ui-text-3) uppercase tracking-wide block mb-1">Sitio de práctica</label>
           <select
             value={estacion.lugar}
             onChange={(e) => onChange({ ...estacion, lugar: e.target.value })}
-            className="w-full text-xs border border-gray-200 rounded-lg px-2.5 py-1.5 bg-white"
+            className="w-full text-xs border border-(--ui-border) rounded-lg px-2.5 py-1.5 bg-(--ui-card)"
           >
             {LUGARES_ESTACION.map((l) => <option key={l.value} value={l.value}>{l.label}</option>)}
           </select>
@@ -280,15 +280,15 @@ export default function EstacionEditor({ estacion, index, categoriaOptions, grup
           const setResp = (a: string, b: string) => onChange({ ...estacion, responsable: [a, b].filter(Boolean).join(" · ") || undefined });
           return (
             <div>
-              <label className="text-[11px] font-bold text-gray-500 uppercase tracking-wide block mb-1">Responsable(s) <span className="text-gray-400 normal-case font-medium">— hasta 2</span></label>
+              <label className="text-[11px] font-bold text-(--ui-text-3) uppercase tracking-wide block mb-1">Responsable(s) <span className="text-(--ui-text-3) normal-case font-medium">— hasta 2</span></label>
               <div className="flex gap-2">
                 <select value={r1} onChange={(e) => setResp(e.target.value, r2)}
-                  className="flex-1 min-w-0 text-xs border border-gray-200 rounded-lg px-2.5 py-1.5 bg-white">
+                  className="flex-1 min-w-0 text-xs border border-(--ui-border) rounded-lg px-2.5 py-1.5 bg-(--ui-card)">
                   <option value="">Sin asignar</option>
                   {profesores.map((p) => <option key={p} value={p}>{p}</option>)}
                 </select>
                 <select value={r2} onChange={(e) => setResp(r1, e.target.value)} disabled={!r1}
-                  className="flex-1 min-w-0 text-xs border border-gray-200 rounded-lg px-2.5 py-1.5 bg-white disabled:opacity-40">
+                  className="flex-1 min-w-0 text-xs border border-(--ui-border) rounded-lg px-2.5 py-1.5 bg-(--ui-card) disabled:opacity-40">
                   <option value="">— 2º profe (opcional)</option>
                   {profesores.filter((p) => p !== r1).map((p) => <option key={p} value={p}>{p}</option>)}
                 </select>

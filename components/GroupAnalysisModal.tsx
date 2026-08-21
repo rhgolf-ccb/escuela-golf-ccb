@@ -280,11 +280,11 @@ export default function GroupAnalysisModal({
 
   return (
     <div className="fixed inset-0 z-50 flex justify-end" style={{ backgroundColor: "rgba(0,0,0,0.45)" }} onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
-      <div className="flex flex-col h-full w-full sm:w-[480px] bg-white shadow-2xl">
-        <div className="flex items-center justify-between px-4 py-3.5 shrink-0" style={{ backgroundColor: "#1a3a2a" }}>
+      <div className="flex flex-col h-full w-full sm:w-[480px] bg-(--ui-card) shadow-2xl">
+        <div className="flex items-center justify-between px-4 py-3.5 shrink-0" style={{ backgroundColor: "var(--ui-gold)" }}>
           <div className="min-w-0">
-            <p className="text-sm font-semibold text-white truncate">Análisis grupal con Paco 🦅</p>
-            <p className="text-[11px] text-white/70 truncate">{grupo} · {students.length} alumnos</p>
+            <p className="text-sm font-semibold text-(--ui-bg) truncate">Análisis grupal con Paco 🦅</p>
+            <p className="text-[11px] text-(--ui-bg)/70 truncate">{grupo} · {students.length} alumnos</p>
           </div>
           <button onClick={onClose} aria-label="Cerrar" className="text-white/70 hover:text-white p-1 shrink-0">
             <i className="ti ti-x" style={{ fontSize: 18 }} />
@@ -292,16 +292,16 @@ export default function GroupAnalysisModal({
         </div>
 
         {initialAnalysis && (
-          <div className="flex items-center gap-1.5 px-4 py-2 border-b border-gray-100 shrink-0 flex-wrap">
+          <div className="flex items-center gap-1.5 px-4 py-2 border-b border-(--ui-border-soft) shrink-0 flex-wrap">
             <button
               onClick={handleDownloadPdf}
-              className="flex items-center gap-1 text-[11px] font-medium px-2 py-1 rounded-md border border-gray-200 text-gray-600 hover:bg-gray-50"
+              className="flex items-center gap-1 text-[11px] font-medium px-2 py-1 rounded-md border border-(--ui-border) text-(--ui-text-2) hover:bg-(--ui-card-alt)"
             >
               <i className="ti ti-file-type-pdf" style={{ fontSize: 12 }} /> Descargar reporte grupal PDF
             </button>
             <button
               onClick={handleSendWhatsApp}
-              className="flex items-center gap-1 text-[11px] font-medium px-2 py-1 rounded-md border border-gray-200 text-gray-600 hover:bg-gray-50"
+              className="flex items-center gap-1 text-[11px] font-medium px-2 py-1 rounded-md border border-(--ui-border) text-(--ui-text-2) hover:bg-(--ui-card-alt)"
             >
               <i className="ti ti-brand-whatsapp" style={{ fontSize: 12 }} /> Compartir resumen por WhatsApp
             </button>
@@ -315,8 +315,8 @@ export default function GroupAnalysisModal({
                 className="max-w-[95%] rounded-2xl px-3.5 py-2.5 text-sm"
                 style={
                   m.role === "user"
-                    ? { backgroundColor: "#1a3a2a", color: "#ffffff" }
-                    : { backgroundColor: "#f8f9fa", color: m.isError ? "#b91c1c" : "#1f2937", border: "0.5px solid #e5e7eb" }
+                    ? { backgroundColor: "var(--ui-gold)", color: "var(--ui-bg)" }
+                    : { backgroundColor: "var(--ui-card-alt)", color: m.isError ? "var(--ui-bad)" : "var(--ui-text)", border: "0.5px solid var(--ui-border)" }
                 }
               >
                 {m.role === "assistant" && !m.isError ? (
@@ -327,7 +327,7 @@ export default function GroupAnalysisModal({
                   <span className="whitespace-pre-wrap">{m.content}</span>
                 )}
               </div>
-              <span className="text-[10px] text-gray-400 mt-1 px-1">{formatTime(m.timestamp)}</span>
+              <span className="text-[10px] text-(--ui-text-3) mt-1 px-1">{formatTime(m.timestamp)}</span>
             </div>
           ))}
 
@@ -337,7 +337,7 @@ export default function GroupAnalysisModal({
                 <button
                   key={a.label}
                   onClick={() => sendMessage(a.query)}
-                  className="text-left text-xs px-3 py-2 rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 transition-colors"
+                  className="text-left text-xs px-3 py-2 rounded-lg border border-(--ui-border) text-(--ui-text-2) hover:bg-(--ui-card-alt) transition-colors"
                 >
                   {a.label}
                 </button>
@@ -347,19 +347,19 @@ export default function GroupAnalysisModal({
 
           {isLoading && (
             <div className="flex items-center gap-1.5 px-1">
-              <span className="text-xs text-gray-400">
+              <span className="text-xs text-(--ui-text-3)">
                 {toolStatus ? TOOL_STATUS_LABELS[toolStatus] ?? "Consultando..." : messages.length === 0 ? "Analizando al grupo..." : "Pensando..."}
               </span>
               <span className="flex gap-0.5">
-                <span className="w-1 h-1 rounded-full bg-gray-300 animate-bounce" style={{ animationDelay: "0ms" }} />
-                <span className="w-1 h-1 rounded-full bg-gray-300 animate-bounce" style={{ animationDelay: "120ms" }} />
-                <span className="w-1 h-1 rounded-full bg-gray-300 animate-bounce" style={{ animationDelay: "240ms" }} />
+                <span className="w-1 h-1 rounded-full bg-(--ui-text-3) animate-bounce" style={{ animationDelay: "0ms" }} />
+                <span className="w-1 h-1 rounded-full bg-(--ui-text-3) animate-bounce" style={{ animationDelay: "120ms" }} />
+                <span className="w-1 h-1 rounded-full bg-(--ui-text-3) animate-bounce" style={{ animationDelay: "240ms" }} />
               </span>
             </div>
           )}
         </div>
 
-        <div className="flex items-center gap-2 px-4 py-3 border-t border-gray-100 shrink-0">
+        <div className="flex items-center gap-2 px-4 py-3 border-t border-(--ui-border-soft) shrink-0">
           <input
             type="text"
             value={input}
@@ -367,16 +367,16 @@ export default function GroupAnalysisModal({
             onKeyDown={handleKeyDown}
             disabled={isLoading}
             placeholder="Pregunta sobre el grupo..."
-            className="flex-1 min-w-0 text-sm px-3 py-2 rounded-full border border-gray-200 focus:outline-none focus:border-[#1a3a2a] disabled:opacity-60"
+            className="flex-1 min-w-0 text-sm px-3 py-2 rounded-full border border-(--ui-border) focus:outline-none focus:border-[var(--ui-gold)] disabled:opacity-60"
           />
           <button
             onClick={() => sendMessage(input)}
             disabled={isLoading || !input.trim()}
             aria-label="Enviar"
             className="flex items-center justify-center w-9 h-9 rounded-full shrink-0 disabled:opacity-40 transition-opacity"
-            style={{ backgroundColor: "#1a3a2a" }}
+            style={{ backgroundColor: "var(--ui-gold)" }}
           >
-            <i className="ti ti-send" style={{ color: "#ffffff", fontSize: 16 }} />
+            <i className="ti ti-send" style={{ color: "var(--ui-bg)", fontSize: 16 }} />
           </button>
         </div>
       </div>

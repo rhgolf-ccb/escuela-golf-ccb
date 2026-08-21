@@ -1,7 +1,11 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { BookOpen } from "lucide-react";
+import { BookOpen, ExternalLink, Trash2, Upload } from "lucide-react";
+import {
+  BotonPrimario, BotonSecundario, CAMPO, CLASE_CAMPO, Campo, EmptyState, Encabezado,
+  Loading, Modal, ModalHeader, Pagina, Toast,
+} from "@/components/ui/tema";
 
 type Documento = {
   id: string;
@@ -91,56 +95,76 @@ export default function PacoKnowledgeModule() {
   }
 
   return (
-    <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-      {toast && (
-        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-2 bg-gray-900 text-white text-sm font-medium px-5 py-3 rounded-xl shadow-lg pointer-events-none">
-          <svg width="15" height="15" viewBox="0 0 20 20" fill="none" stroke="#4ade80" strokeWidth={2.5}><path d="M3 10l4 4 9-9" /></svg>
-          {toast}
-        </div>
-      )}
+    <Pagina>
+      <Toast msg={toast} />
 
-      <div className="flex items-center justify-between mb-6">
-        <div className="flex items-center gap-3">
-          <div className="w-11 h-11 rounded-xl bg-ccb-green flex items-center justify-center shrink-0">
-            <BookOpen size={22} className="text-white" />
-          </div>
-          <div>
-            <h1 className="text-2xl font-bold text-ccb-green">Base de conocimiento de Paco</h1>
-            <p className="text-sm text-(--text-muted)">Documentos que Paco usa como contexto adicional en todas sus respuestas.</p>
-          </div>
-        </div>
-        <button onClick={() => setShowUpload(true)} className="px-4 py-2 rounded-lg text-sm font-medium text-white shrink-0" style={{ backgroundColor: "#1B4D2E" }}>
+      <Encabezado
+        icono={BookOpen}
+        titulo="Base de conocimiento de Paco"
+        bajada="Documentos que Paco usa como contexto en todas sus respuestas"
+      >
+        <BotonPrimario onClick={() => setShowUpload(true)}>
+          <Upload size={16} />
           Subir documento
-        </button>
-      </div>
+        </BotonPrimario>
+      </Encabezado>
 
       {loading ? (
-        <div className="flex items-center justify-center py-16"><div className="animate-spin rounded-full h-7 w-7 border-2 border-[#1B4D2E] border-t-transparent" /></div>
+        <Loading />
       ) : documentos.length === 0 ? (
-        <div className="py-16 text-center text-sm text-gray-400">Sin documentos cargados todavía.</div>
+        <EmptyState
+          msg="Sin documentos cargados todavía"
+          sub="Lo que subas aquí entra en el contexto de Paco en todas sus respuestas"
+          accion={<BotonPrimario onClick={() => setShowUpload(true)}><Upload size={16} />Subir el primero</BotonPrimario>}
+        />
       ) : (
         <div className="space-y-2">
           {documentos.map((doc) => (
-            <div key={doc.id} className="flex items-center gap-3 border border-gray-100 rounded-xl px-4 py-3">
+            <div key={doc.id} className="flex items-center gap-3 rounded-xl px-4 py-3"
+              style={{
+                background: "var(--ui-card)",
+                border: "1px solid var(--ui-border-soft)",
+                // Un documento inactivo no se borra pero deja de contar: se
+                // atenúa entero en vez de cambiar solo la etiqueta, que era el
+                // único indicio y se perdía en una lista larga.
+                opacity: doc.activo ? 1 : 0.55,
+              }}>
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2 flex-wrap">
-                  <p className="text-sm font-medium text-gray-800 truncate">{doc.titulo}</p>
-                  {doc.tema && <span className="text-xs font-medium px-2 py-0.5 rounded-full" style={{ backgroundColor: "#1B4D2E18", color: "#1B4D2E" }}>{doc.tema}</span>}
+                  <p className="text-sm font-semibold truncate" style={{ color: "var(--ui-text)" }}>{doc.titulo}</p>
+                  {doc.tema && (
+                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full"
+                      style={{ background: "var(--g-juvenil-bg)", color: "var(--g-juvenil-fg)" }}>
+                      {doc.tema}
+                    </span>
+                  )}
                 </div>
-                <p className="text-xs text-gray-400 mt-0.5">{formatFecha(doc.created_at)}</p>
+                <p className="text-xs mt-0.5" style={{ color: "var(--ui-text-3)" }}>{formatFecha(doc.created_at)}</p>
               </div>
+
               {doc.archivo_url && (
-                <a href={doc.archivo_url} target="_blank" rel="noreferrer" className="text-xs text-blue-600 hover:underline shrink-0">Ver archivo</a>
+                <a href={doc.archivo_url} target="_blank" rel="noreferrer"
+                  className="flex items-center gap-1 text-xs font-semibold hover:underline shrink-0"
+                  style={{ color: "var(--ui-gold)" }}>
+                  <ExternalLink size={12} />
+                  Ver archivo
+                </a>
               )}
+
               <button
                 onClick={() => handleToggleActivo(doc)}
-                className="text-xs font-medium px-3 py-1.5 rounded-full shrink-0"
-                style={doc.activo ? { backgroundColor: "#dcfce7", color: "#166534" } : { backgroundColor: "#f3f4f6", color: "#6b7280" }}
-              >
+                title={doc.activo ? "Dejar de usarlo como contexto" : "Volver a usarlo como contexto"}
+                className="text-[11px] font-bold px-3 py-1.5 rounded-full shrink-0 transition-opacity hover:opacity-80"
+                style={doc.activo
+                  ? { background: "var(--ui-ok-bg)", color: "var(--ui-ok)" }
+                  : { background: "var(--ui-card-alt)", color: "var(--ui-text-3)" }}>
                 {doc.activo ? "Activo" : "Inactivo"}
               </button>
-              <button onClick={() => handleDelete(doc)} className="text-gray-300 hover:text-red-500 shrink-0">
-                <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m3 0v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6" /></svg>
+
+              <button onClick={() => handleDelete(doc)} title="Eliminar documento"
+                className="shrink-0 p-1.5 rounded-lg transition-colors hover:bg-(--ui-bad-bg)"
+                style={{ color: "var(--ui-text-3)" }}>
+                <Trash2 size={15} />
               </button>
             </div>
           ))}
@@ -148,22 +172,39 @@ export default function PacoKnowledgeModule() {
       )}
 
       {showUpload && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ backgroundColor: "rgba(0,0,0,0.45)" }} onClick={(e) => { if (e.target === e.currentTarget && !uploading) { setShowUpload(false); resetUpload(); } }}>
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6 space-y-3">
-            <h3 className="font-bold text-gray-900">Subir documento</h3>
-            <input value={titulo} onChange={(e) => setTitulo(e.target.value)} placeholder="Título" className="w-full text-sm px-3 py-2 rounded-lg border border-gray-200 focus:outline-none" />
-            <input value={tema} onChange={(e) => setTema(e.target.value)} placeholder="Tema (ej: Metodología TPI)" className="w-full text-sm px-3 py-2 rounded-lg border border-gray-200 focus:outline-none" />
-            <input type="file" accept=".pdf,.txt,application/pdf,text/plain" onChange={(e) => setFile(e.target.files?.[0] ?? null)} className="w-full text-sm" />
-            {uploadError && <p className="text-xs text-red-600">{uploadError}</p>}
-            <div className="flex gap-2 pt-2">
-              <button onClick={() => { setShowUpload(false); resetUpload(); }} disabled={uploading} className="flex-1 py-2 rounded-xl text-sm font-medium border border-gray-200 text-gray-600 hover:bg-gray-50">Cancelar</button>
-              <button onClick={handleUpload} disabled={uploading} className="flex-1 py-2 rounded-xl text-sm font-semibold text-white disabled:opacity-50" style={{ backgroundColor: "#1B4D2E" }}>
-                {uploading ? "Subiendo..." : "Subir"}
-              </button>
+        <Modal onClose={() => { if (!uploading) { setShowUpload(false); resetUpload(); } }} ancho="sm">
+          <ModalHeader
+            titulo="Subir documento"
+            sub="PDF o texto plano"
+            onClose={() => { if (!uploading) { setShowUpload(false); resetUpload(); } }}
+          />
+          <div className="p-5 space-y-3">
+            <Campo label="Título">
+              <input value={titulo} onChange={(e) => setTitulo(e.target.value)}
+                placeholder="Metodología de juego corto" className={CLASE_CAMPO} style={CAMPO} />
+            </Campo>
+            <Campo label="Tema" hint="Opcional — agrupa el documento en la lista">
+              <input value={tema} onChange={(e) => setTema(e.target.value)}
+                placeholder="Metodología TPI" className={CLASE_CAMPO} style={CAMPO} />
+            </Campo>
+            <Campo label="Archivo">
+              <input type="file" accept=".pdf,.txt,application/pdf,text/plain"
+                onChange={(e) => setFile(e.target.files?.[0] ?? null)}
+                className="w-full text-xs file:mr-3 file:px-3 file:py-1.5 file:rounded-lg file:border-0 file:text-xs file:font-bold"
+                style={{ color: "var(--ui-text-2)" }} />
+            </Campo>
+            {uploadError && <p className="text-xs font-semibold" style={{ color: "var(--ui-bad)" }}>{uploadError}</p>}
+            <div className="flex gap-2 pt-1">
+              <BotonSecundario onClick={() => { setShowUpload(false); resetUpload(); }} disabled={uploading}>
+                Cancelar
+              </BotonSecundario>
+              <BotonPrimario onClick={handleUpload} disabled={uploading}>
+                {uploading ? "Subiendo…" : "Subir"}
+              </BotonPrimario>
             </div>
           </div>
-        </div>
+        </Modal>
       )}
-    </div>
+    </Pagina>
   );
 }

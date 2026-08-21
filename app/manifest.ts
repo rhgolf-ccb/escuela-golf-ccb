@@ -9,8 +9,10 @@ export default function manifest(): MetadataRoute.Manifest {
     scope: "/",
     display: "standalone",
     orientation: "portrait-primary",
-    theme_color: "#1a3a2a",
-    background_color: "#1a3a2a",
+    // Colores de la PWA (barra de estado y pantalla de arranque). Siguen al
+    // fondo del tema oscuro, que es el de todas las pantallas de staff.
+    theme_color: "#0a1710",
+    background_color: "#0a1710",
     lang: "es",
     icons: [
       { src: "/icon.png", sizes: "192x192", type: "image/png", purpose: "any" },

@@ -64,13 +64,15 @@ body {
   }
 }
 
-/* Sin backdrop-filter el vidrio al 70 % es ilegible: se opaca la tarjeta. */
+/* Sin backdrop-filter el vidrio translúcido es ilegible: se opaca la tarjeta.
+   El tinte sigue al del vidrio (oscuro desde que el dashboard pasó al tema del
+   resto de la app); en blanco el texto claro de dentro desaparecía. */
 @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
   .glass-card {
-    background-color: rgba(255, 255, 255, 0.92);
+    background-color: rgba(10, 23, 16, 0.93);
   }
   .glass-panel {
-    background-color: rgba(255, 255, 255, 0.96);
+    background-color: rgba(10, 23, 16, 0.96);
   }
 }
 
@@ -99,8 +101,8 @@ body {
    con los mismos nombres: así un chip de grupo se pinta igual en las dos
    superficies sin que el componente sepa en cuál está.
    Los accesores viven en lib/grupos.ts — ningún módulo escribe estos nombres a
-   mano. (AsistenciaView mantiene aparte su propio estilo pastel: es otra
-   convención, fondo claro con texto oscuro, y cambiarla sería otro rediseño.) */
+   mano. Desde ago-2026 no queda ninguna excepción: toda la superficie de staff
+   los consume, incluida AsistenciaView, que tenía su propio pastel aparte. */
 :root {
   --g-birdies-fg: #ffffff;      --g-birdies-bg: #1e40af;
   --g-aguilas-fg: #ffffff;      --g-aguilas-bg: #1B4D2E;
@@ -146,7 +148,14 @@ body {
   --ui-text-3: #7d9187;
   --ui-gold: #c9a961;
 
-  /* Semáforo de asistencia y tests. Sin datos usa el texto tenue. */
+  /* Semáforo de asistencia y tests. Sin datos usa el texto tenue.
+     --ui-info es el cuarto peldaño: "por encima de lo esperado", que no es lo
+     mismo que "cumple". Solo lo usa el handicap de test.
+     Estos cinco pares existen únicamente aquí, no en :root, y eso es a
+     propósito: lo que se comparte entre una pantalla oscura y una clara los usa
+     con respaldo —var(--ui-ok, #1B4D2E)— y así cada superficie toma el suyo. */
+  --ui-info: #7fb3e8;
+  --ui-info-bg: #12303f;
   --ui-ok: #6ddba0;
   --ui-ok-bg: #10301f;
   --ui-warn: #e8c07f;
@@ -175,6 +184,13 @@ body {
 
   background: var(--ui-bg);
   color: var(--ui-text);
+
+  /* Sin color-scheme el navegador pinta en claro las partes del campo que no
+     controla el CSS: el calendario del input date, el caret, la lista del
+     select y las barras de desplazamiento internas. Va aquí y no campo por
+     campo porque aplica a todos los formularios de staff; las vistas de padres,
+     que siguen claras, están fuera de .tema-oscuro y no se ven afectadas. */
+  color-scheme: dark;
 }
 
 /* El menú "⋯" es el DropdownMenu compartido, que trae estilos claros fijos

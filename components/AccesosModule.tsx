@@ -1,7 +1,11 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
-import { Shield } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Shield, Users, KeyRound, ScrollText, UserPlus, Trash2, X } from "lucide-react";
+import {
+  Badge, BotonPrimario, BotonSecundario, CAMPO, CLASE_CAMPO, Campo, EmptyState,
+  Encabezado, Loading, Modal, ModalHeader, Pagina, Panel, Tabs, Toast,
+} from "@/components/ui/tema";
 import { supabase } from "@/lib/supabase";
 import { ROLE_ALLOW, STAFF_ROLES, type Rol } from "@/lib/roles";
 
@@ -202,315 +206,297 @@ export default function AccesosModule({ currentUserId, initialSessionDays }: { c
     setSavingConfig(false);
   }
 
+  // El listado mezclaba staff y familias en una sola lista plana, y son dos
+  // cosas distintas: el staff entra a los módulos, las familias solo ven a su
+  // alumno. Se separan y cada grupo dice cuántos hay.
+  const { staff, familias } = useMemo(() => ({
+    staff: users.filter((u) => STAFF_ROLES.includes(u.rol)),
+    familias: users.filter((u) => !STAFF_ROLES.includes(u.rol)),
+  }), [users]);
+
+  function FilaUsuario({ u }: { u: AppUser }) {
+    return (
+      <div className="flex items-center justify-between gap-3 px-4 py-3 flex-wrap"
+        style={{ borderTop: "1px solid var(--ui-border-soft)" }}>
+        <div className="min-w-0">
+          <p className="text-sm font-semibold" style={{ color: "var(--ui-text)" }}>{u.nombre || u.email}</p>
+          <p className="text-xs" style={{ color: "var(--ui-text-3)" }}>{u.email} · {ROL_LABEL[u.rol]}</p>
+          {vinculos[u.id]?.length > 0 && (
+            <p className="text-xs mt-0.5" style={{ color: "var(--ui-text-2)" }}>Alumnos: {vinculos[u.id].join(", ")}</p>
+          )}
+          <p className="text-[11px] mt-0.5" style={{ color: "var(--ui-text-3)" }}>
+            {u.last_sign_in ? `Último ingreso: ${formatFecha(u.last_sign_in)}` : "Nunca ha entrado"}
+          </p>
+        </div>
+        <div className="flex items-center gap-2 shrink-0 flex-wrap">
+          <Badge label={u.activo ? "Activo" : "Suspendido"} tono={u.activo ? "ok" : "bad"} />
+          {STAFF_ROLES.includes(u.rol) && (
+            <button
+              onClick={() => { setPwdTarget(u); setPwdValue(""); setPwdError(null); }}
+              className="text-xs font-semibold rounded-lg px-2.5 py-1 transition-colors hover:bg-(--ui-card-alt)"
+              style={{ color: "var(--ui-text-2)", border: "1px solid var(--ui-border)" }}>
+              Fijar contraseña
+            </button>
+          )}
+          {u.id !== currentUserId && (
+            <button
+              onClick={() => handleToggleActivo(u)}
+              className="text-xs font-semibold rounded-lg px-2.5 py-1 transition-opacity hover:opacity-80"
+              style={u.activo
+                ? { color: "var(--ui-warn)", border: "1px solid var(--ui-warn)" }
+                : { color: "var(--ui-ok)", border: "1px solid var(--ui-ok)" }}>
+              {u.activo ? "Suspender" : "Reactivar"}
+            </button>
+          )}
+          {u.id !== currentUserId && (
+            <button
+              onClick={() => { setDeleteTarget(u); setDeleteError(null); }}
+              title="Eliminar usuario"
+              className="p-1.5 rounded-lg transition-colors hover:bg-(--ui-bad-bg)"
+              style={{ color: "var(--ui-text-3)" }}>
+              <Trash2 size={15} />
+            </button>
+          )}
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div className="max-w-5xl mx-auto px-4 sm:px-6 py-8">
-      {toast && (
-        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 bg-gray-900 text-white text-sm font-medium px-5 py-3 rounded-xl shadow-lg pointer-events-none">
-          {toast}
-        </div>
-      )}
+    <Pagina>
+      <Toast msg={toast} />
 
-      <div className="mb-6 flex items-center gap-3">
-        <div className="w-11 h-11 rounded-xl bg-ccb-green flex items-center justify-center shrink-0">
-          <Shield size={22} className="text-white" />
-        </div>
-        <div>
-          <h1 className="text-2xl font-bold text-ccb-green">Accesos</h1>
-          <p className="text-sm text-(--text-muted)">Gestión de usuarios, roles y registro de actividad</p>
-        </div>
-      </div>
+      <Encabezado icono={Shield} titulo="Accesos" bajada="Usuarios, roles y registro de actividad">
+        <BotonPrimario onClick={() => setShowInvite(true)}>
+          <UserPlus size={16} />
+          Invitar usuario
+        </BotonPrimario>
+      </Encabezado>
 
-      <div className="flex gap-1 mb-6 border-b border-gray-100">
-        {([
-          { id: "usuarios", label: "Usuarios" },
-          { id: "roles", label: "Roles y Permisos" },
-          { id: "registro", label: "Registro de accesos" },
-        ] as { id: Tab; label: string }[]).map((t) => (
-          <button
-            key={t.id}
-            onClick={() => setTab(t.id)}
-            className="px-4 py-2 text-sm font-semibold border-b-2 transition-colors"
-            style={tab === t.id ? { borderColor: "#1B4D2E", color: "#1B4D2E" } : { borderColor: "transparent", color: "#9ca3af" }}
-          >
-            {t.label}
-          </button>
-        ))}
-      </div>
+      <Tabs
+        value={tab}
+        onChange={setTab}
+        options={[
+          { id: "usuarios" as Tab, label: "Usuarios", icono: Users, count: users.length, hint: "Quién puede entrar y con qué alcance" },
+          { id: "roles" as Tab, label: "Roles y permisos", icono: KeyRound, hint: "Qué módulos abre cada rol" },
+          { id: "registro" as Tab, label: "Registro", icono: ScrollText, hint: "Últimos 100 movimientos de acceso" },
+        ]}
+      />
 
       {tab === "usuarios" && (
-        <div>
-          <div className="flex items-center justify-between mb-4 gap-3 flex-wrap">
-            <div className="flex items-center gap-2">
-              <label className="text-xs text-gray-500">Duración de sesión (días)</label>
+        <div className="space-y-4">
+          {/* La duración de sesión aplica a todos y no es parte de ningún
+              usuario: va en su propia franja y no perdida entre los botones. */}
+          <div className="rounded-xl px-4 py-3 flex items-center gap-3 flex-wrap"
+            style={{ background: "var(--ui-card)", border: "1px solid var(--ui-border)" }}>
+            <div className="min-w-0">
+              <p className="text-sm font-semibold" style={{ color: "var(--ui-text)" }}>Duración de sesión</p>
+              <p className="text-xs" style={{ color: "var(--ui-text-3)" }}>Días antes de volver a pedir contraseña. Vacío = sin límite.</p>
+            </div>
+            <div className="flex items-center gap-2 ml-auto">
               <input
                 type="number"
                 value={sessionDays}
                 onChange={(e) => setSessionDays(e.target.value)}
                 placeholder="sin límite"
-                className="w-24 border border-gray-200 rounded-lg px-2 py-1.5 text-sm"
+                className="w-28 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2"
+                style={CAMPO}
               />
-              <button
-                onClick={handleSaveConfig}
-                disabled={savingConfig}
-                className="text-xs font-semibold px-3 py-1.5 rounded-lg border border-gray-200 hover:bg-gray-50 disabled:opacity-50"
-              >
-                {savingConfig ? "..." : "Guardar"}
-              </button>
+              <BotonSecundario onClick={handleSaveConfig} disabled={savingConfig}>
+                {savingConfig ? "…" : "Guardar"}
+              </BotonSecundario>
             </div>
-            <button
-              onClick={() => setShowInvite(true)}
-              className="px-4 py-2 rounded-lg text-sm font-semibold text-white"
-              style={{ background: "#1B4D2E" }}
-            >
-              + Invitar usuario
-            </button>
           </div>
 
-          {loadingUsers ? (
-            <p className="text-sm text-gray-400 text-center py-10">Cargando...</p>
+          {loadingUsers ? <Loading /> : users.length === 0 ? (
+            <Panel><EmptyState msg="Sin usuarios todavía" sub="Invita al primero desde el botón de arriba" /></Panel>
           ) : (
-            <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
-              <div className="divide-y divide-gray-50">
-                {users.map((u) => (
-                  <div key={u.id} className="flex items-center justify-between gap-3 px-4 py-3 flex-wrap">
-                    <div className="min-w-0">
-                      <p className="text-sm font-medium text-gray-900">{u.nombre || u.email}</p>
-                      <p className="text-xs text-gray-400">{u.email} · {ROL_LABEL[u.rol]}</p>
-                      {vinculos[u.id]?.length > 0 && (
-                        <p className="text-xs text-gray-400 mt-0.5">Alumnos: {vinculos[u.id].join(", ")}</p>
-                      )}
-                      <p className="text-[11px] text-gray-300 mt-0.5">Último ingreso: {formatFecha(u.last_sign_in)}</p>
-                    </div>
-                    <div className="flex items-center gap-2 shrink-0">
-                      <span
-                        className="text-xs font-semibold px-2 py-1 rounded-full"
-                        style={u.activo ? { background: "#dcfce7", color: "#166534" } : { background: "#fee2e2", color: "#991b1b" }}
-                      >
-                        {u.activo ? "Activo" : "Suspendido"}
-                      </span>
-                      {STAFF_ROLES.includes(u.rol) && (
-                        <button
-                          onClick={() => { setPwdTarget(u); setPwdValue(""); setPwdError(null); }}
-                          className="text-xs font-semibold text-gray-500 hover:text-gray-700 border border-gray-200 rounded-lg px-2.5 py-1"
-                        >
-                          Fijar contraseña
-                        </button>
-                      )}
-                      {u.id !== currentUserId && (
-                        <button
-                          onClick={() => handleToggleActivo(u)}
-                          className="text-xs font-semibold rounded-lg px-2.5 py-1 border"
-                          style={u.activo ? { color: "#991b1b", borderColor: "#fecaca" } : { color: "#166534", borderColor: "#bbf7d0" }}
-                        >
-                          {u.activo ? "Suspender" : "Reactivar"}
-                        </button>
-                      )}
-                      {u.id !== currentUserId && (
-                        <button
-                          onClick={() => { setDeleteTarget(u); setDeleteError(null); }}
-                          className="text-xs font-semibold text-red-700 border border-red-200 rounded-lg px-2.5 py-1 hover:bg-red-50"
-                        >
-                          Eliminar
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                ))}
-                {users.length === 0 && <p className="text-sm text-gray-400 text-center py-10">Sin usuarios todavía.</p>}
-              </div>
-            </div>
+            <>
+              <Panel title="Staff" sub={`${staff.length} ${staff.length === 1 ? "cuenta" : "cuentas"}`}>
+                {staff.length === 0
+                  ? <EmptyState msg="Ninguna cuenta de staff" />
+                  : staff.map((u) => <FilaUsuario key={u.id} u={u} />)}
+              </Panel>
+              <Panel title="Familias y alumnos" sub={`${familias.length} ${familias.length === 1 ? "cuenta" : "cuentas"}`}>
+                {familias.length === 0
+                  ? <EmptyState msg="Ninguna cuenta de familia" />
+                  : familias.map((u) => <FilaUsuario key={u.id} u={u} />)}
+              </Panel>
+            </>
           )}
         </div>
       )}
 
       {tab === "roles" && (
-        <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
-          <div className="divide-y divide-gray-50">
-            {ROLES.map((r) => {
-              const allow = ROLE_ALLOW[r];
-              return (
-                <div key={r} className="px-4 py-3">
-                  <p className="text-sm font-semibold text-gray-900">{ROL_LABEL[r]}</p>
-                  <p className="text-xs text-gray-500 mt-0.5">
-                    {allow === "all" ? "Acceso completo a todos los módulos" : `Acceso a: ${allow.join(", ")}`}
-                    {r === "coordinador" || r === "director" || r === "administrativo" ? " + Accesos" : ""}
-                  </p>
+        <div className="grid gap-3 sm:grid-cols-2">
+          {ROLES.map((r) => {
+            const allow = ROLE_ALLOW[r];
+            const esStaff = STAFF_ROLES.includes(r);
+            const conAccesos = r === "coordinador" || r === "director" || r === "administrativo";
+            return (
+              <div key={r} className="rounded-xl px-4 py-3"
+                style={{ background: "var(--ui-card)", border: "1px solid var(--ui-border-soft)" }}>
+                <div className="flex items-center gap-2 mb-1.5">
+                  <p className="text-sm font-bold" style={{ color: "var(--ui-text)" }}>{ROL_LABEL[r]}</p>
+                  <Badge label={esStaff ? "Staff" : "Familia"} tono={esStaff ? "ok" : "neutro"} />
                 </div>
-              );
-            })}
-          </div>
+                {allow === "all" ? (
+                  <p className="text-xs" style={{ color: "var(--ui-text-2)" }}>Acceso completo a todos los módulos</p>
+                ) : (
+                  <div className="flex flex-wrap gap-1">
+                    {allow.map((m) => (
+                      <span key={m} className="text-[10px] font-semibold px-2 py-0.5 rounded-full capitalize"
+                        style={{ background: "var(--ui-card-alt)", color: "var(--ui-text-2)" }}>
+                        {m}
+                      </span>
+                    ))}
+                    {conAccesos && (
+                      <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full"
+                        style={{ background: "var(--g-juvenil-bg)", color: "var(--g-juvenil-fg)" }}>
+                        accesos
+                      </span>
+                    )}
+                  </div>
+                )}
+              </div>
+            );
+          })}
         </div>
       )}
 
       {tab === "registro" && (
-        loadingLogs ? (
-          <p className="text-sm text-gray-400 text-center py-10">Cargando...</p>
-        ) : (
-          <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
-            <div className="divide-y divide-gray-50">
-              {logs.map((log) => {
-                const au = Array.isArray(log.app_users) ? log.app_users[0] : log.app_users;
-                return (
-                  <div key={log.id} className="px-4 py-3 flex items-center justify-between gap-3">
-                    <div>
-                      <p className="text-sm text-gray-900">{au?.email ?? "—"} · <span className="font-semibold">{log.accion}</span></p>
-                      {log.detalle && <p className="text-xs text-gray-400">{log.detalle}</p>}
-                    </div>
-                    <p className="text-xs text-gray-400 shrink-0">{formatFecha(log.created_at)}</p>
+        loadingLogs ? <Loading /> : (
+          <Panel>
+            {logs.length === 0 ? <EmptyState msg="Sin actividad registrada" /> : logs.map((log, i) => {
+              const au = Array.isArray(log.app_users) ? log.app_users[0] : log.app_users;
+              return (
+                <div key={log.id} className="px-4 py-2.5 flex items-center justify-between gap-3"
+                  style={{ borderTop: i === 0 ? undefined : "1px solid var(--ui-border-soft)" }}>
+                  <div className="min-w-0">
+                    <p className="text-sm" style={{ color: "var(--ui-text-2)" }}>
+                      {au?.email ?? "—"} · <span className="font-bold" style={{ color: "var(--ui-text)" }}>{log.accion}</span>
+                    </p>
+                    {log.detalle && <p className="text-xs truncate" style={{ color: "var(--ui-text-3)" }}>{log.detalle}</p>}
                   </div>
-                );
-              })}
-              {logs.length === 0 && <p className="text-sm text-gray-400 text-center py-10">Sin actividad registrada.</p>}
-            </div>
-          </div>
+                  <p className="text-xs shrink-0" style={{ color: "var(--ui-text-3)" }}>{formatFecha(log.created_at)}</p>
+                </div>
+              );
+            })}
+          </Panel>
         )
       )}
 
       {showInvite && (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={() => { if (!inviteSaving) { setShowInvite(false); resetInvite(); } }}>
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6" onClick={(e) => e.stopPropagation()}>
-            <h3 className="font-bold text-gray-900 mb-4">Invitar usuario</h3>
-            <div className="space-y-3">
-              <input
-                type="email"
-                placeholder="Email"
-                value={inviteEmail}
-                onChange={(e) => setInviteEmail(e.target.value)}
-                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm"
-              />
-              <input
-                type="text"
-                placeholder="Nombre (opcional)"
-                value={inviteNombre}
-                onChange={(e) => setInviteNombre(e.target.value)}
-                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm"
-              />
-              <select
-                value={inviteRol}
-                onChange={(e) => setInviteRol(e.target.value as Rol)}
-                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white"
-              >
+        <Modal onClose={() => { if (!inviteSaving) { setShowInvite(false); resetInvite(); } }} ancho="sm">
+          <ModalHeader titulo="Invitar usuario" sub="Recibe un correo para fijar su contraseña"
+            onClose={() => { if (!inviteSaving) { setShowInvite(false); resetInvite(); } }} />
+          <div className="p-5 space-y-3">
+            <Campo label="Email">
+              <input type="email" placeholder="nombre@ejemplo.com" value={inviteEmail}
+                onChange={(e) => setInviteEmail(e.target.value)} className={CLASE_CAMPO} style={CAMPO} />
+            </Campo>
+            <Campo label="Nombre" hint="Opcional">
+              <input type="text" placeholder="Nombre y apellido" value={inviteNombre}
+                onChange={(e) => setInviteNombre(e.target.value)} className={CLASE_CAMPO} style={CAMPO} />
+            </Campo>
+            <Campo label="Rol">
+              <select value={inviteRol} onChange={(e) => setInviteRol(e.target.value as Rol)}
+                className={CLASE_CAMPO} style={CAMPO}>
                 {ROLES.map((r) => <option key={r} value={r}>{ROL_LABEL[r]}</option>)}
               </select>
+            </Campo>
 
-              {isParentRole(inviteRol) && (
-                <div>
-                  <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-1.5">Alumno(s) vinculado(s)</p>
-                  {inviteEstudiantes.map((s) => (
-                    <div key={s.id} className="flex items-center justify-between px-3 py-1.5 mb-1 bg-green-50 border border-green-200 rounded-lg">
-                      <span className="text-xs font-medium text-green-800">{s.full_name}</span>
-                      <button onClick={() => setInviteEstudiantes((prev) => prev.filter((x) => x.id !== s.id))} className="text-green-500 hover:text-green-700 text-xs">✕</button>
+            {isParentRole(inviteRol) && (
+              <Campo label="Alumno(s) vinculado(s)" hint="Solo verá a los alumnos que vincules aquí">
+                <div className="space-y-1 mb-1">
+                  {inviteEstudiantes.map((st) => (
+                    <div key={st.id} className="flex items-center justify-between px-3 py-1.5 rounded-lg"
+                      style={{ background: "var(--g-juvenil-bg)" }}>
+                      <span className="text-xs font-semibold" style={{ color: "var(--g-juvenil-fg)" }}>{st.full_name}</span>
+                      <button onClick={() => setInviteEstudiantes((prev) => prev.filter((x) => x.id !== st.id))}
+                        title="Quitar" style={{ color: "var(--g-juvenil-fg)" }}>
+                        <X size={13} />
+                      </button>
                     </div>
                   ))}
-                  <div className="relative">
-                    <input
-                      type="text"
-                      placeholder="Buscar alumno por nombre..."
-                      value={inviteSearch}
-                      onChange={(e) => setInviteSearch(e.target.value)}
-                      className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm"
-                    />
-                    {inviteResults.length > 0 && (
-                      <div className="absolute left-0 right-0 top-full mt-1 z-10 bg-white border border-gray-200 rounded-xl shadow-lg overflow-hidden max-h-48 overflow-y-auto">
-                        {inviteResults.filter((r) => !inviteEstudiantes.some((s) => s.id === r.id)).map((s) => (
-                          <button
-                            key={s.id}
-                            onClick={() => { setInviteEstudiantes((prev) => [...prev, s]); setInviteSearch(""); setInviteResults([]); }}
-                            className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50 border-b border-gray-50 last:border-0"
-                          >
-                            {s.full_name} <span className="text-xs text-gray-400">{s.grupo_activo}</span>
-                          </button>
-                        ))}
-                      </div>
-                    )}
-                  </div>
                 </div>
-              )}
+                <div className="relative">
+                  <input type="text" placeholder="Buscar alumno por nombre…" value={inviteSearch}
+                    onChange={(e) => setInviteSearch(e.target.value)} className={CLASE_CAMPO} style={CAMPO} />
+                  {inviteResults.length > 0 && (
+                    <div className="absolute left-0 right-0 top-full mt-1 z-10 rounded-xl shadow-lg overflow-hidden max-h-48 overflow-y-auto"
+                      style={{ background: "var(--ui-card)", border: "1px solid var(--ui-border)" }}>
+                      {inviteResults.filter((r) => !inviteEstudiantes.some((st) => st.id === r.id)).map((st) => (
+                        <button key={st.id}
+                          onClick={() => { setInviteEstudiantes((prev) => [...prev, st]); setInviteSearch(""); setInviteResults([]); }}
+                          className="w-full text-left px-3 py-2 text-sm transition-colors hover:bg-(--ui-card-alt)"
+                          style={{ color: "var(--ui-text)", borderBottom: "1px solid var(--ui-border-soft)" }}>
+                          {st.full_name} <span className="text-xs" style={{ color: "var(--ui-text-3)" }}>{st.grupo_activo}</span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </Campo>
+            )}
 
-              {inviteError && <p className="text-xs text-red-600">{inviteError}</p>}
-            </div>
-            <div className="flex gap-2 mt-5">
-              <button
-                onClick={handleInvite}
-                disabled={inviteSaving || !inviteEmail.trim()}
-                className="flex-1 py-2.5 rounded-xl text-sm font-semibold text-white disabled:opacity-50"
-                style={{ background: "#1B4D2E" }}
-              >
-                {inviteSaving ? "Invitando..." : "Invitar"}
-              </button>
-              <button
-                onClick={() => { setShowInvite(false); resetInvite(); }}
-                disabled={inviteSaving}
-                className="px-5 py-2.5 rounded-xl text-sm font-medium border border-gray-200 text-gray-600 hover:bg-gray-50 disabled:opacity-50"
-              >
+            {inviteError && <p className="text-xs font-semibold" style={{ color: "var(--ui-bad)" }}>{inviteError}</p>}
+
+            <div className="flex gap-2 pt-1">
+              <BotonPrimario onClick={handleInvite} disabled={inviteSaving || !inviteEmail.trim()}>
+                {inviteSaving ? "Invitando…" : "Invitar"}
+              </BotonPrimario>
+              <BotonSecundario onClick={() => { setShowInvite(false); resetInvite(); }} disabled={inviteSaving}>
                 Cancelar
-              </button>
+              </BotonSecundario>
             </div>
           </div>
-        </div>
+        </Modal>
       )}
 
       {deleteTarget && (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={() => { if (!deleteSaving) setDeleteTarget(null); }}>
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6" onClick={(e) => e.stopPropagation()}>
-            <h3 className="font-bold text-gray-900 mb-1">Eliminar usuario</h3>
-            <p className="text-xs text-gray-500 mb-4">
-              Esta acción es irreversible. Se eliminará <span className="font-semibold">{deleteTarget.email}</span>, su registro de accesos y sus vínculos con alumnos.
-            </p>
-            {deleteError && <p className="text-xs text-red-600 mb-2">{deleteError}</p>}
+        <Modal onClose={() => { if (!deleteSaving) setDeleteTarget(null); }} ancho="sm">
+          <ModalHeader titulo="Eliminar usuario" sub={deleteTarget.email} onClose={() => setDeleteTarget(null)} />
+          <div className="p-5">
+            <div className="rounded-lg px-3 py-2.5 mb-4"
+              style={{ background: "var(--ui-bad-bg)", border: "1px solid var(--ui-border-soft)" }}>
+              <p className="text-xs" style={{ color: "var(--ui-text-2)" }}>
+                Esta acción es irreversible. Se elimina{" "}
+                <span className="font-bold" style={{ color: "var(--ui-bad)" }}>{deleteTarget.email}</span>,
+                su registro de accesos y sus vínculos con alumnos.
+              </p>
+            </div>
+            {deleteError && <p className="text-xs font-semibold mb-2" style={{ color: "var(--ui-bad)" }}>{deleteError}</p>}
             <div className="flex gap-2">
-              <button
-                onClick={handleDeleteUser}
-                disabled={deleteSaving}
-                className="flex-1 py-2.5 rounded-xl text-sm font-semibold text-white bg-red-700 disabled:opacity-50"
-              >
-                {deleteSaving ? "Eliminando..." : "Eliminar definitivamente"}
+              <button onClick={handleDeleteUser} disabled={deleteSaving}
+                className="flex-1 py-2.5 rounded-lg text-sm font-bold disabled:opacity-50 transition-opacity hover:opacity-90"
+                style={{ background: "var(--ui-bad)", color: "var(--ui-bg)" }}>
+                {deleteSaving ? "Eliminando…" : "Eliminar definitivamente"}
               </button>
-              <button
-                onClick={() => setDeleteTarget(null)}
-                disabled={deleteSaving}
-                className="px-5 py-2.5 rounded-xl text-sm font-medium border border-gray-200 text-gray-600 hover:bg-gray-50 disabled:opacity-50"
-              >
-                Cancelar
-              </button>
+              <BotonSecundario onClick={() => setDeleteTarget(null)} disabled={deleteSaving}>Cancelar</BotonSecundario>
             </div>
           </div>
-        </div>
+        </Modal>
       )}
 
       {pwdTarget && (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={() => { if (!pwdSaving) setPwdTarget(null); }}>
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6" onClick={(e) => e.stopPropagation()}>
-            <h3 className="font-bold text-gray-900 mb-1">Fijar contraseña</h3>
-            <p className="text-xs text-gray-500 mb-4">{pwdTarget.email}</p>
-            <input
-              type="password"
-              placeholder="Nueva contraseña (mín. 8 caracteres)"
-              value={pwdValue}
-              onChange={(e) => setPwdValue(e.target.value)}
-              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm"
-            />
-            {pwdError && <p className="text-xs text-red-600 mt-2">{pwdError}</p>}
-            <div className="flex gap-2 mt-4">
-              <button
-                onClick={handleSetPassword}
-                disabled={pwdSaving || pwdValue.length < 8}
-                className="flex-1 py-2.5 rounded-xl text-sm font-semibold text-white disabled:opacity-50"
-                style={{ background: "#1B4D2E" }}
-              >
-                {pwdSaving ? "Guardando..." : "Guardar"}
-              </button>
-              <button
-                onClick={() => setPwdTarget(null)}
-                disabled={pwdSaving}
-                className="px-5 py-2.5 rounded-xl text-sm font-medium border border-gray-200 text-gray-600 hover:bg-gray-50 disabled:opacity-50"
-              >
-                Cancelar
-              </button>
+        <Modal onClose={() => { if (!pwdSaving) setPwdTarget(null); }} ancho="sm">
+          <ModalHeader titulo="Fijar contraseña" sub={pwdTarget.email} onClose={() => setPwdTarget(null)} />
+          <div className="p-5 space-y-3">
+            <Campo label="Nueva contraseña" hint="Mínimo 8 caracteres">
+              <input type="password" placeholder="••••••••" value={pwdValue}
+                onChange={(e) => setPwdValue(e.target.value)} className={CLASE_CAMPO} style={CAMPO} />
+            </Campo>
+            {pwdError && <p className="text-xs font-semibold" style={{ color: "var(--ui-bad)" }}>{pwdError}</p>}
+            <div className="flex gap-2">
+              <BotonPrimario onClick={handleSetPassword} disabled={pwdSaving || pwdValue.length < 8}>
+                {pwdSaving ? "Guardando…" : "Guardar"}
+              </BotonPrimario>
+              <BotonSecundario onClick={() => setPwdTarget(null)} disabled={pwdSaving}>Cancelar</BotonSecundario>
             </div>
           </div>
-        </div>
+        </Modal>
       )}
-    </div>
+    </Pagina>
   );
 }

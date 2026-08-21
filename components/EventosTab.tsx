@@ -127,14 +127,14 @@ export default function EventosTab({ currentRol }: { currentRol: Rol | null }) {
   return (
     <div>
       <div className="flex items-center justify-between mb-4">
-        <p className="text-sm text-gray-500">
+        <p className="text-sm text-(--ui-text-3)">
           Torneos, medallas mensuales, festivales y demás eventos institucionales — se marcan automáticamente en el calendario de padres.
         </p>
         {staff && (
           <button
             onClick={openCrear}
-            className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold text-white shadow-sm hover:brightness-110 transition-all shrink-0 ml-4"
-            style={{ background: "#1B4D2E" }}
+            className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold text-(--g-on-accent) shadow-sm hover:brightness-110 transition-all shrink-0 ml-4"
+            style={{ background: "var(--ui-gold)" }}
           >
             <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>
             Nuevo evento
@@ -143,7 +143,7 @@ export default function EventosTab({ currentRol }: { currentRol: Rol | null }) {
       </div>
 
       {loading ? (
-        <div className="flex items-center gap-2 text-sm text-gray-400 py-10 justify-center">
+        <div className="flex items-center gap-2 text-sm text-(--ui-text-3) py-10 justify-center">
           <svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
             <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
             <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
@@ -151,35 +151,35 @@ export default function EventosTab({ currentRol }: { currentRol: Rol | null }) {
           Cargando eventos...
         </div>
       ) : error ? (
-        <div className="bg-red-50 border border-red-100 rounded-lg px-4 py-3 text-sm text-red-700">{error}</div>
+        <div className="bg-(--ui-bad-bg) border border-(--ui-bad) rounded-lg px-4 py-3 text-sm text-(--ui-bad)">{error}</div>
       ) : eventos.length === 0 ? (
-        <div className="flex flex-col items-center justify-center py-16 text-gray-400 text-center">
+        <div className="flex flex-col items-center justify-center py-16 text-(--ui-text-3) text-center">
           <p className="text-sm">Aún no hay eventos agendados.</p>
-          {staff && <p className="text-xs text-gray-300 mt-1">Usa &quot;Nuevo evento&quot; para agregar el primero.</p>}
+          {staff && <p className="text-xs text-(--ui-text-3) mt-1">Usa &quot;Nuevo evento&quot; para agregar el primero.</p>}
         </div>
       ) : (
         <div className="space-y-2">
           {eventos.map((ev) => (
-            <div key={ev.id} className="flex items-center gap-3 border border-gray-100 rounded-xl px-4 py-3 bg-white">
+            <div key={ev.id} className="flex items-center gap-3 border border-(--ui-border-soft) rounded-xl px-4 py-3 bg-(--ui-card)">
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-2 flex-wrap">
-                  <p className="text-sm font-semibold text-gray-900">{ev.nombre}</p>
+                  <p className="text-sm font-semibold text-(--ui-text)">{ev.nombre}</p>
                   <span
                     className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full shrink-0"
-                    style={ev.tipo === "especial" ? { background: "#fef3c7", color: "#92400e" } : { background: "#dbeafe", color: "#1e40af" }}
+                    style={ev.tipo === "especial" ? { background: "var(--ui-warn-bg)", color: "var(--ui-warn)" } : { background: "var(--g-birdies-bg)", color: "var(--g-birdies-fg)" }}
                   >
                     {ev.tipo === "especial" ? "Especial" : "Institucional"}
                   </span>
                 </div>
-                <p className="text-xs text-gray-500 mt-0.5">{formatRango(ev.fecha_inicio, ev.fecha_fin)}</p>
-                {ev.descripcion && <p className="text-xs text-gray-400 mt-1">{ev.descripcion}</p>}
+                <p className="text-xs text-(--ui-text-3) mt-0.5">{formatRango(ev.fecha_inicio, ev.fecha_fin)}</p>
+                {ev.descripcion && <p className="text-xs text-(--ui-text-3) mt-1">{ev.descripcion}</p>}
               </div>
               {staff && (
                 <div className="flex items-center gap-1 shrink-0">
-                  <button onClick={() => openEditar(ev)} className="p-1.5 text-gray-400 hover:text-gray-700 rounded-lg hover:bg-gray-50">
+                  <button onClick={() => openEditar(ev)} className="p-1.5 text-(--ui-text-3) hover:text-(--ui-text-2) rounded-lg hover:bg-(--ui-card-alt)">
                     <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" /><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" /></svg>
                   </button>
-                  <button onClick={() => setConfirmDeleteId(ev.id)} className="p-1.5 text-gray-400 hover:text-red-600 rounded-lg hover:bg-red-50">
+                  <button onClick={() => setConfirmDeleteId(ev.id)} className="p-1.5 text-(--ui-text-3) hover:text-(--ui-bad) rounded-lg hover:bg-(--ui-bad-bg)">
                     <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m3 0v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6" /></svg>
                   </button>
                 </div>
@@ -192,30 +192,30 @@ export default function EventosTab({ currentRol }: { currentRol: Rol | null }) {
       {/* ── Crear / editar evento ── */}
       {form && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ backgroundColor: "rgba(0,0,0,0.45)" }} onClick={(e) => { if (e.target === e.currentTarget && !saving) setForm(null); }}>
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6 space-y-3">
-            <h3 className="font-bold text-gray-900">{editId ? "Editar evento" : "Nuevo evento"}</h3>
+          <div className="bg-(--ui-card) rounded-2xl shadow-2xl w-full max-w-md p-6 space-y-3">
+            <h3 className="font-bold text-(--ui-text)">{editId ? "Editar evento" : "Nuevo evento"}</h3>
 
             <input
               value={form.nombre}
               onChange={(e) => setForm({ ...form, nombre: e.target.value })}
               placeholder="Nombre del evento (ej: Torneo interno juvenil)"
-              className="w-full text-sm px-3 py-2 rounded-lg border border-gray-200"
+              className="w-full text-sm px-3 py-2 rounded-lg border border-(--ui-border)"
             />
 
             <div className="flex gap-2">
               <button onClick={() => setForm({ ...form, tipo: "institucional" })} className="flex-1 text-xs font-semibold px-3 py-1.5 rounded-full"
-                style={form.tipo === "institucional" ? { backgroundColor: "#1565c018", color: "#1565c0" } : { color: "#9ca3af", backgroundColor: "#f9fafb" }}>
+                style={form.tipo === "institucional" ? { backgroundColor: "color-mix(in srgb, var(--g-birdies-fg) 9%, transparent)", color: "var(--g-birdies-fg)" } : { color: "var(--ui-text-3)", backgroundColor: "var(--ui-card-alt)" }}>
                 Institucional
               </button>
               <button onClick={() => setForm({ ...form, tipo: "especial" })} className="flex-1 text-xs font-semibold px-3 py-1.5 rounded-full"
-                style={form.tipo === "especial" ? { backgroundColor: "#b4530918", color: "#b45309" } : { color: "#9ca3af", backgroundColor: "#f9fafb" }}>
+                style={form.tipo === "especial" ? { backgroundColor: "color-mix(in srgb, var(--ui-warn) 9%, transparent)", color: "var(--ui-warn)" } : { color: "var(--ui-text-3)", backgroundColor: "var(--ui-card-alt)" }}>
                 Especial
               </button>
             </div>
 
             <div className="flex gap-2">
-              <input type="date" value={form.fecha_inicio} onChange={(e) => setForm({ ...form, fecha_inicio: e.target.value })} className="flex-1 text-sm px-3 py-2 rounded-lg border border-gray-200" />
-              <input type="date" value={form.fecha_fin} onChange={(e) => setForm({ ...form, fecha_fin: e.target.value })} placeholder="Fecha fin (opcional)" className="flex-1 text-sm px-3 py-2 rounded-lg border border-gray-200" />
+              <input type="date" value={form.fecha_inicio} onChange={(e) => setForm({ ...form, fecha_inicio: e.target.value })} className="flex-1 text-sm px-3 py-2 rounded-lg border border-(--ui-border)" />
+              <input type="date" value={form.fecha_fin} onChange={(e) => setForm({ ...form, fecha_fin: e.target.value })} placeholder="Fecha fin (opcional)" className="flex-1 text-sm px-3 py-2 rounded-lg border border-(--ui-border)" />
             </div>
 
             <textarea
@@ -223,16 +223,16 @@ export default function EventosTab({ currentRol }: { currentRol: Rol | null }) {
               onChange={(e) => setForm({ ...form, descripcion: e.target.value })}
               rows={2}
               placeholder="Descripción (opcional)"
-              className="w-full text-sm px-3 py-2 rounded-lg border border-gray-200 resize-none"
+              className="w-full text-sm px-3 py-2 rounded-lg border border-(--ui-border) resize-none"
             />
 
-            {formError && <p className="text-xs text-red-600">{formError}</p>}
+            {formError && <p className="text-xs text-(--ui-bad)">{formError}</p>}
 
             <div className="flex gap-2 pt-2">
-              <button onClick={() => setForm(null)} disabled={saving} className="flex-1 py-2 rounded-xl text-sm font-medium border border-gray-200 text-gray-600 hover:bg-gray-50">
+              <button onClick={() => setForm(null)} disabled={saving} className="flex-1 py-2 rounded-xl text-sm font-medium border border-(--ui-border) text-(--ui-text-2) hover:bg-(--ui-card-alt)">
                 Cancelar
               </button>
-              <button onClick={handleGuardar} disabled={saving} className="flex-1 py-2 rounded-xl text-sm font-semibold text-white disabled:opacity-50" style={{ backgroundColor: "#1a3a2a" }}>
+              <button onClick={handleGuardar} disabled={saving} className="flex-1 py-2 rounded-xl text-sm font-semibold text-(--ui-bg) disabled:opacity-50" style={{ backgroundColor: "var(--ui-gold)" }}>
                 {saving ? "Guardando..." : "Guardar"}
               </button>
             </div>
@@ -243,14 +243,14 @@ export default function EventosTab({ currentRol }: { currentRol: Rol | null }) {
       {/* ── Confirmar borrar ── */}
       {confirmDeleteId && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ backgroundColor: "rgba(0,0,0,0.45)" }} onClick={(e) => { if (e.target === e.currentTarget && !deleting) setConfirmDeleteId(null); }}>
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6 space-y-3">
-            <h3 className="font-bold text-gray-900">¿Borrar este evento?</h3>
-            <p className="text-sm text-gray-500">Esta acción no se puede deshacer. El evento desaparecerá del calendario de padres.</p>
+          <div className="bg-(--ui-card) rounded-2xl shadow-2xl w-full max-w-sm p-6 space-y-3">
+            <h3 className="font-bold text-(--ui-text)">¿Borrar este evento?</h3>
+            <p className="text-sm text-(--ui-text-3)">Esta acción no se puede deshacer. El evento desaparecerá del calendario de padres.</p>
             <div className="flex gap-2 pt-2">
-              <button onClick={() => setConfirmDeleteId(null)} disabled={deleting} className="flex-1 py-2 rounded-xl text-sm font-medium border border-gray-200 text-gray-600 hover:bg-gray-50">
+              <button onClick={() => setConfirmDeleteId(null)} disabled={deleting} className="flex-1 py-2 rounded-xl text-sm font-medium border border-(--ui-border) text-(--ui-text-2) hover:bg-(--ui-card-alt)">
                 Cancelar
               </button>
-              <button onClick={handleBorrar} disabled={deleting} className="flex-1 py-2 rounded-xl text-sm font-semibold text-white disabled:opacity-50 bg-red-600 hover:brightness-110">
+              <button onClick={handleBorrar} disabled={deleting} className="flex-1 py-2 rounded-xl text-sm font-semibold text-(--ui-bg) disabled:opacity-50 bg-(--ui-bad) hover:brightness-110">
                 {deleting ? "Borrando..." : "Borrar"}
               </button>
             </div>

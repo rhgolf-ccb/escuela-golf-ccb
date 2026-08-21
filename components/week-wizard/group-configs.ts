@@ -2,6 +2,7 @@ import type { TipoPlan } from "@/components/ProgramacionModule";
 import type { CategoriaOption, FocoOption, GroupConfig } from "./types";
 import { MATERIALES, SUBGRUPO_A_GRUPO_FISICO, type Material, type SubgrupoJuvenil } from "@/lib/estacion-library-constants";
 import type { EstacionCategoria } from "@/lib/planning-defaults";
+import { acentoGrupo } from "@/lib/grupos";
 
 // Focos específicos por tema para Competencia — más precisos que el vocabulario
 // genérico FOCOS. Se muestran en el selector de "Foco" según la categoría de la
@@ -139,7 +140,7 @@ export const GROUP_CONFIGS: Record<TipoPlan, GroupConfig> = {
   // equilibrio. Nada de posiciones P1-P10 a esta edad.
   birdies: {
     tipoPlan: "birdies",
-    color: "#1e40af",
+    color: acentoGrupo("birdies"),
     categorias: [
       { value: "contacto", emoji: "🏌️", label: "Contacto con la pelota", drillsCategoria: "tecnico", canonical: "juego_largo", focos: FOCOS_BIRD_CONTACTO },
       { value: "punteria", emoji: "🎯", label: "Puntería", drillsCategoria: "putting", canonical: "putt", focos: FOCOS_BIRD_PUNTERIA },
@@ -154,7 +155,7 @@ export const GROUP_CONFIGS: Record<TipoPlan, GroupConfig> = {
   },
   juvenil: {
     tipoPlan: "juvenil",
-    color: "#1a3a2a",
+    color: acentoGrupo("juvenil"),
     categorias: [
       { value: "juego_largo", emoji: "🏌️", label: "Juego Largo", drillsCategoria: "tecnico", canonical: "juego_largo", focos: FOCOS_JUV_LARGO },
       { value: "juego_corto", emoji: "⛳", label: "Juego Corto", drillsCategoria: "juego_corto", canonical: "juego_corto", focos: FOCOS_JUV_CORTO },
@@ -171,7 +172,7 @@ export const GROUP_CONFIGS: Record<TipoPlan, GroupConfig> = {
   },
   competencia: {
     tipoPlan: "competencia",
-    color: "#7d5a00",
+    color: acentoGrupo("competencia"),
     categorias: [
       { value: "tiro_largo", emoji: "🏌️", label: "Tiro Largo", drillsCategoria: "tecnico", canonical: "juego_largo", focos: FOCOS_TIRO_LARGO },
       { value: "juego_corto", emoji: "⛳", label: "Juego Corto", drillsCategoria: "juego_corto", canonical: "juego_corto", focos: FOCOS_JUEGO_CORTO },
@@ -186,7 +187,7 @@ export const GROUP_CONFIGS: Record<TipoPlan, GroupConfig> = {
   },
   damas: {
     tipoPlan: "damas",
-    color: "#4a1070",
+    color: acentoGrupo("damas"),
     categorias: [
       { value: "juego_largo", emoji: "🏌️", label: "Juego Largo", drillsCategoria: "tecnico", canonical: "juego_largo" },
       { value: "juego_corto", emoji: "⛳", label: "Juego Corto", drillsCategoria: "juego_corto", canonical: "juego_corto" },

@@ -56,12 +56,12 @@ const LUGAR_LABEL: Record<string, string> = {
 
 
 const GRUPO_COLOR: Record<string, { bg: string; text: string }> = {
-  Birdies: { bg: "#dbeafe", text: "#1e40af" },
-  "Águilas": { bg: "#dcfce7", text: "#166534" },
-  Albatros: { bg: "#fef9c3", text: "#854d0e" },
-  "+14": { bg: "#ede9fe", text: "#6d28d9" },
-  Competencia: { bg: "#fff7ed", text: "#9a3412" },
-  Damas: { bg: "#fdf2f8", text: "#86198f" },
+  Birdies: { bg: "var(--g-birdies-bg)", text: "var(--g-birdies-fg)" },
+  "Águilas": { bg: "var(--ui-ok-bg)", text: "var(--ui-ok)" },
+  Albatros: { bg: "var(--ui-warn-bg)", text: "var(--ui-warn)" },
+  "+14": { bg: "var(--g-mas14-bg)", text: "var(--g-mas14-fg)" },
+  Competencia: { bg: "var(--ui-warn-bg)", text: "var(--ui-warn)" },
+  Damas: { bg: "var(--g-damas-bg)", text: "var(--g-damas-fg)" },
 };
 
 function formatFecha(dateStr: string): string {
@@ -388,7 +388,7 @@ export default function AsistenciaView({ sesionId }: { sesionId: string }) {
   // ── Render ────────────────────────────────────────────────────────────────
   if (loading) {
     return (
-      <div className="max-w-3xl mx-auto px-4 py-12 flex items-center justify-center text-gray-400">
+      <div className="tema-oscuro min-h-screen flex items-center justify-center py-12 text-(--ui-text-3)">
         <svg className="animate-spin mr-3 h-5 w-5" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"/></svg>
         Cargando asistencia...
       </div>
@@ -397,44 +397,45 @@ export default function AsistenciaView({ sesionId }: { sesionId: string }) {
 
   if (!sesion || !plan) {
     return (
-      <div className="max-w-3xl mx-auto px-4 py-12 text-center">
-        <p className="text-gray-500">Sesión no encontrada.</p>
-        <button onClick={() => router.push("/programacion")} className="mt-4 text-sm text-blue-600 hover:underline">Volver a Programación</button>
+      <div className="tema-oscuro min-h-screen max-w-3xl mx-auto px-4 py-12 text-center">
+        <p className="text-(--ui-text-3)">Sesión no encontrada.</p>
+        <button onClick={() => router.push("/programacion")} className="mt-4 text-sm text-(--g-birdies-fg) hover:underline">Volver a Programación</button>
       </div>
     );
   }
 
   return (
+    <div className="tema-oscuro min-h-screen w-full">
     <div className="max-w-3xl mx-auto px-4 sm:px-6 py-8">
       {/* Back */}
-      <button onClick={() => router.push("/programacion")} className="flex items-center gap-2 text-sm text-gray-500 hover:text-gray-700 mb-6 transition-colors">
+      <button onClick={() => router.push("/programacion")} className="flex items-center gap-2 text-sm text-(--ui-text-3) hover:text-(--ui-text-2) mb-6 transition-colors">
         <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path d="M19 12H5M12 5l-7 7 7 7"/></svg>
         Volver a Programación
       </button>
 
       {/* Session info card */}
-      <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5 mb-5">
+      <div className="bg-(--ui-card) rounded-xl shadow-sm border border-(--ui-border-soft) p-5 mb-5">
         <div className="flex items-start justify-between gap-4">
           <div>
-            <p className="text-xs text-gray-400 font-medium uppercase tracking-wide mb-1">{plan.tema_semanal}</p>
-            <h1 className="text-lg font-bold text-gray-900 capitalize mb-1">{formatFecha(sesion.fecha)}</h1>
+            <p className="text-xs text-(--ui-text-3) font-medium uppercase tracking-wide mb-1">{plan.tema_semanal}</p>
+            <h1 className="text-lg font-bold text-(--ui-text) capitalize mb-1">{formatFecha(sesion.fecha)}</h1>
             <div className="flex items-center gap-2 flex-wrap mt-1">
-              <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-blue-50 text-blue-700">
+              <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-(--g-birdies-bg) text-(--g-birdies-fg)">
                 {TIPO_SESION_LABEL[sesion.tipo_sesion] ?? sesion.tipo_sesion}
               </span>
-              <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-600">
+              <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-(--ui-card-alt) text-(--ui-text-2)">
                 {LUGAR_LABEL[sesion.lugar] ?? sesion.lugar}
               </span>
               {sesion.hora_inicio && (
-                <span className="text-xs text-gray-400">{formatHora(sesion.hora_inicio)} – {formatHora(sesion.hora_fin)}</span>
+                <span className="text-xs text-(--ui-text-3)">{formatHora(sesion.hora_inicio)} – {formatHora(sesion.hora_fin)}</span>
               )}
             </div>
-            {sesion.objetivo && <p className="text-xs text-gray-500 mt-2">{sesion.objetivo}</p>}
+            {sesion.objetivo && <p className="text-xs text-(--ui-text-3) mt-2">{sesion.objetivo}</p>}
           </div>
           {sesion.asistencia_registrada && (
-            <div className="flex items-center gap-1.5 bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-1.5 shrink-0">
-              <svg width="12" height="12" viewBox="0 0 20 20" fill="none" stroke="#059669" strokeWidth={2.5}><path d="M3 10l4 4 9-9"/></svg>
-              <span className="text-xs font-semibold text-emerald-700">Asistencia guardada</span>
+            <div className="flex items-center gap-1.5 bg-(--ui-ok-bg) border border-(--ui-ok) rounded-lg px-3 py-1.5 shrink-0">
+              <svg width="12" height="12" viewBox="0 0 20 20" fill="none" stroke="var(--ui-ok)" strokeWidth={2.5}><path d="M3 10l4 4 9-9"/></svg>
+              <span className="text-xs font-semibold text-(--ui-ok)">Asistencia guardada</span>
             </div>
           )}
         </div>
@@ -443,14 +444,14 @@ export default function AsistenciaView({ sesionId }: { sesionId: string }) {
       {/* Counters */}
       <div className="grid grid-cols-4 gap-3 mb-5">
         {[
-          { label: "Total", value: total, color: "#6b7280" },
-          { label: "Presentes", value: presentes, color: "#059669" },
-          { label: "Ausentes", value: ausentes, color: "#dc2626" },
-          { label: "Sin marcar", value: sinMarcar, color: "#d97706" },
+          { label: "Total", value: total, color: "var(--ui-text-3)" },
+          { label: "Presentes", value: presentes, color: "var(--ui-ok)" },
+          { label: "Ausentes", value: ausentes, color: "var(--ui-bad)" },
+          { label: "Sin marcar", value: sinMarcar, color: "var(--ui-warn)" },
         ].map((item) => (
-          <div key={item.label} className="bg-white rounded-xl border border-gray-100 shadow-sm p-3 text-center">
+          <div key={item.label} className="bg-(--ui-card) rounded-xl border border-(--ui-border-soft) shadow-sm p-3 text-center">
             <p className="text-2xl font-bold" style={{ color: item.color }}>{item.value}</p>
-            <p className="text-[11px] text-gray-400 mt-0.5">{item.label}</p>
+            <p className="text-[11px] text-(--ui-text-3) mt-0.5">{item.label}</p>
           </div>
         ))}
       </div>
@@ -462,7 +463,7 @@ export default function AsistenciaView({ sesionId }: { sesionId: string }) {
             <select
               value={filtroGrupo}
               onChange={(e) => setFiltroGrupo(e.target.value)}
-              className="border border-gray-200 rounded-lg px-3 py-1.5 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-green-600 bg-white"
+              className="border border-(--ui-border) rounded-lg px-3 py-1.5 text-sm text-(--ui-text-2) focus:outline-none focus:ring-2 focus:ring-green-600 bg-(--ui-card)"
             >
               <option value="todos">Todos los subgrupos</option>
               {GRUPOS_POR_TIPO_PLAN[plan.tipo_plan].map((g) => (
@@ -475,16 +476,16 @@ export default function AsistenciaView({ sesionId }: { sesionId: string }) {
           {faltantes.length > 0 && (
             <button
               onClick={() => setShowAgregar((v) => !v)}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-gray-50 text-gray-700 border border-gray-200 hover:bg-gray-100 transition-colors"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-(--ui-card-alt) text-(--ui-text-2) border border-(--ui-border) hover:bg-(--ui-card-alt) transition-colors"
             >
               + Agregar alumnos del grupo ({faltantes.length})
             </button>
           )}
           <button
             onClick={todosPresentes}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100 transition-colors"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-(--ui-ok-bg) text-(--ui-ok) border border-(--ui-ok) hover:bg-(--ui-ok-bg) transition-colors"
           >
-            <svg width="12" height="12" viewBox="0 0 20 20" fill="none" stroke="#059669" strokeWidth={2.5}><path d="M3 10l4 4 9-9"/></svg>
+            <svg width="12" height="12" viewBox="0 0 20 20" fill="none" stroke="var(--ui-ok)" strokeWidth={2.5}><path d="M3 10l4 4 9-9"/></svg>
             Todos presentes
           </button>
         </div>
@@ -492,8 +493,8 @@ export default function AsistenciaView({ sesionId }: { sesionId: string }) {
 
       {/* Aviso: la lista se armó con el padrón del grupo, no con reservas previas */}
       {autoCargadoDelGrupo && students.some((s) => !s.reserva_id) && (
-        <div className="mb-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3">
-          <p className="text-xs text-amber-800">
+        <div className="mb-4 rounded-xl border border-(--ui-warn) bg-(--ui-warn-bg) px-4 py-3">
+          <p className="text-xs text-(--ui-warn)">
             Esta sesión no tenía inscritos en Reservas, así que se cargó el grupo completo
             ({students.length} alumnos activos). Al guardar quedan inscritos automáticamente.
           </p>
@@ -502,35 +503,35 @@ export default function AsistenciaView({ sesionId }: { sesionId: string }) {
 
       {/* Selector para sumar alumnos del grupo que no están en la lista */}
       {showAgregar && (
-        <div className="mb-4 rounded-xl border border-gray-200 bg-white shadow-sm overflow-hidden">
-          <div className="flex items-center gap-2 px-4 py-3 border-b border-gray-50">
+        <div className="mb-4 rounded-xl border border-(--ui-border) bg-(--ui-card) shadow-sm overflow-hidden">
+          <div className="flex items-center gap-2 px-4 py-3 border-b border-(--ui-border-soft)">
             <input
               type="text"
               value={buscarAlumno}
               onChange={(e) => setBuscarAlumno(e.target.value)}
               placeholder="Buscar alumno del grupo..."
-              className="flex-1 px-3 py-1.5 rounded-lg border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-green-600"
+              className="flex-1 px-3 py-1.5 rounded-lg border border-(--ui-border) text-sm focus:outline-none focus:ring-2 focus:ring-green-600"
             />
             <button
               onClick={() => { agregarAlumnos(faltantesFiltrados); setShowAgregar(false); setBuscarAlumno(""); }}
               disabled={faltantesFiltrados.length === 0}
-              className="px-3 py-1.5 rounded-lg text-xs font-semibold text-white disabled:opacity-40 shrink-0"
-              style={{ background: "#1B4D2E" }}
+              className="px-3 py-1.5 rounded-lg text-xs font-semibold text-(--g-on-accent) disabled:opacity-40 shrink-0"
+              style={{ background: "var(--ui-gold)" }}
             >
               Agregar {faltantesFiltrados.length}
             </button>
           </div>
-          <div className="max-h-56 overflow-y-auto divide-y divide-gray-50">
+          <div className="max-h-56 overflow-y-auto divide-y divide-(--ui-border-soft)">
             {faltantesFiltrados.length === 0 ? (
-              <p className="py-6 text-center text-xs text-gray-400">Sin alumnos por agregar.</p>
+              <p className="py-6 text-center text-xs text-(--ui-text-3)">Sin alumnos por agregar.</p>
             ) : faltantesFiltrados.map((r) => (
               <button
                 key={r.id}
                 onClick={() => agregarAlumnos([r])}
-                className="w-full flex items-center justify-between px-4 py-2.5 hover:bg-gray-50 transition-colors text-left"
+                className="w-full flex items-center justify-between px-4 py-2.5 hover:bg-(--ui-card-alt) transition-colors text-left"
               >
-                <span className="text-sm text-gray-800">{r.full_name}</span>
-                <span className="text-[11px] text-gray-400">{r.grupo ?? "Sin grupo"} · agregar +</span>
+                <span className="text-sm text-(--ui-text)">{r.full_name}</span>
+                <span className="text-[11px] text-(--ui-text-3)">{r.grupo ?? "Sin grupo"} · agregar +</span>
               </button>
             ))}
           </div>
@@ -538,20 +539,20 @@ export default function AsistenciaView({ sesionId }: { sesionId: string }) {
       )}
 
       {/* Student list */}
-      <div ref={listRef} className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden mb-5">
-        <div className="px-4 py-3 border-b border-gray-50 bg-gray-50">
-          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
+      <div ref={listRef} className="bg-(--ui-card) rounded-xl shadow-sm border border-(--ui-border-soft) overflow-hidden mb-5">
+        <div className="px-4 py-3 border-b border-(--ui-border-soft) bg-(--ui-card-alt)">
+          <p className="text-xs font-semibold text-(--ui-text-3) uppercase tracking-wide">
             {studentsFiltered.length} alumnos{filtroGrupo !== "todos" ? ` · ${filtroGrupo}` : ""}
           </p>
           {focosDia.length > 0 && (
-            <p className="text-[11px] text-gray-500 mt-1">
-              Check del día sobre <span className="font-semibold" style={{ color: "#7d5a00" }}>{focosDia.map(prettifyFoco).join(", ")}</span>
-              <span className="text-gray-400"> · ↑ bien · → regular · ↓ bajo</span>
+            <p className="text-[11px] text-(--ui-text-3) mt-1">
+              Check del día sobre <span className="font-semibold" style={{ color: "var(--g-competencia-fg)" }}>{focosDia.map(prettifyFoco).join(", ")}</span>
+              <span className="text-(--ui-text-3)"> · ↑ bien · → regular · ↓ bajo</span>
             </p>
           )}
         </div>
         {studentsFiltered.length === 0 ? (
-          <div className="py-12 text-center text-gray-400 text-sm">
+          <div className="py-12 text-center text-(--ui-text-3) text-sm">
             {students.length === 0
               ? grupoRoster.length === 0
                 ? "No hay alumnos activos en este grupo — revisa el padrón en Alumnos."
@@ -559,27 +560,27 @@ export default function AsistenciaView({ sesionId }: { sesionId: string }) {
               : "No hay alumnos en este grupo."}
           </div>
         ) : (
-          <div className="divide-y divide-gray-50">
+          <div className="divide-y divide-(--ui-border-soft)">
             {studentsFiltered.map((student) => {
               const estado = asistencias[student.id];
-              const gc = GRUPO_COLOR[student.grupo ?? ""] ?? { bg: "#f3f4f6", text: "#6b7280" };
+              const gc = GRUPO_COLOR[student.grupo ?? ""] ?? { bg: "var(--ui-card-alt)", text: "var(--ui-text-3)" };
 
               return (
-                <div key={student.id} className="flex items-center justify-between px-4 py-3 hover:bg-gray-50 transition-colors">
+                <div key={student.id} className="flex items-center justify-between px-4 py-3 hover:bg-(--ui-card-alt) transition-colors">
                   <div className="flex items-center gap-3">
                     {/* Avatar */}
                     <div
                       className="w-9 h-9 rounded-full flex items-center justify-center text-xs font-bold shrink-0"
                       style={
-                        estado === true ? { background: "#dcfce7", color: "#166534" }
-                        : estado === false ? { background: "#fee2e2", color: "#991b1b" }
-                        : { background: "#f3f4f6", color: "#6b7280" }
+                        estado === true ? { background: "var(--ui-ok-bg)", color: "var(--ui-ok)" }
+                        : estado === false ? { background: "var(--ui-bad-bg)", color: "var(--ui-bad)" }
+                        : { background: "var(--ui-card-alt)", color: "var(--ui-text-3)" }
                       }
                     >
                       {initiales(student.full_name)}
                     </div>
                     <div>
-                      <p className="text-sm font-medium text-gray-900">{student.full_name}</p>
+                      <p className="text-sm font-medium text-(--ui-text)">{student.full_name}</p>
                       {student.grupo && (
                         <span className="text-[11px] font-semibold px-1.5 py-0.5 rounded" style={{ background: gc.bg, color: gc.text }}>
                           {student.grupo}
@@ -593,9 +594,9 @@ export default function AsistenciaView({ sesionId }: { sesionId: string }) {
                     {estado === true && (
                       <div className="flex gap-1" title="Check rápido sobre el foco del día">
                         {([
-                          ["cumple", "#16a34a", "↑", "Bien"],
-                          ["progreso", "#d97706", "→", "Regular"],
-                          ["bajo", "#dc2626", "↓", "Bajo"],
+                          ["cumple", "var(--ui-ok)", "↑", "Bien"],
+                          ["progreso", "var(--ui-warn)", "→", "Regular"],
+                          ["bajo", "var(--ui-bad)", "↓", "Bajo"],
                         ] as const).map(([val, color, sym, tit]) => {
                           const on = checks[student.id] === val;
                           return (
@@ -603,7 +604,7 @@ export default function AsistenciaView({ sesionId }: { sesionId: string }) {
                               key={val}
                               onClick={() => setCheckFor(student.id, val)}
                               className="w-7 h-7 rounded-md text-sm font-bold transition-all"
-                              style={on ? { background: color, color: "#fff" } : { background: "#f3f4f6", color }}
+                              style={on ? { background: color, color: "#fff" } : { background: "var(--ui-card-alt)", color }}
                               title={tit}
                             >
                               {sym}
@@ -612,17 +613,17 @@ export default function AsistenciaView({ sesionId }: { sesionId: string }) {
                         })}
                       </div>
                     )}
-                    <div className="flex gap-1.5 border-l border-gray-100 pl-2">
+                    <div className="flex gap-1.5 border-l border-(--ui-border-soft) pl-2">
                       <button
                         onClick={() => marcar(student.id, true)}
-                        className={`w-9 h-9 rounded-lg text-sm font-bold transition-all ${estado === true ? "bg-emerald-500 text-white shadow-sm" : "bg-emerald-50 text-emerald-700 hover:bg-emerald-100"}`}
+                        className={`w-9 h-9 rounded-lg text-sm font-bold transition-all ${estado === true ? "bg-(--ui-ok) text-(--ui-bg) shadow-sm" : "bg-(--ui-ok-bg) text-(--ui-ok) hover:bg-(--ui-ok-bg)"}`}
                         title="Presente"
                       >
                         ✓
                       </button>
                       <button
                         onClick={() => marcar(student.id, false)}
-                        className={`w-9 h-9 rounded-lg text-sm font-bold transition-all ${estado === false ? "bg-red-500 text-white shadow-sm" : "bg-red-50 text-red-600 hover:bg-red-100"}`}
+                        className={`w-9 h-9 rounded-lg text-sm font-bold transition-all ${estado === false ? "bg-(--ui-bad) text-(--ui-bg) shadow-sm" : "bg-(--ui-bad-bg) text-(--ui-bad) hover:bg-(--ui-bad-bg)"}`}
                         title="Ausente"
                       >
                         ✕
@@ -637,15 +638,15 @@ export default function AsistenciaView({ sesionId }: { sesionId: string }) {
       </div>
 
       {/* Error */}
-      {error && <p className="mb-4 text-xs text-red-500 bg-red-50 px-4 py-2 rounded-lg">{error}</p>}
+      {error && <p className="mb-4 text-xs text-(--ui-bad) bg-(--ui-bad-bg) px-4 py-2 rounded-lg">{error}</p>}
 
       {/* Save + Export */}
       <div className="flex flex-col gap-3">
         <button
           onClick={handleGuardar}
           disabled={saving || saved}
-          className="w-full py-3 rounded-xl text-sm font-bold text-white disabled:opacity-60 transition-all"
-          style={{ background: confirmarVacio ? "#b91c1c" : "#1B4D2E" }}
+          className="w-full py-3 rounded-xl text-sm font-bold text-(--g-on-accent) disabled:opacity-60 transition-all"
+          style={{ background: confirmarVacio ? "var(--ui-bad)" : "var(--ui-gold)" }}
         >
           {saving ? "Guardando..." : saved ? "✓ Asistencia guardada" : confirmarVacio ? "Guardar sin asistencia" : "Guardar asistencia"}
         </button>
@@ -653,20 +654,21 @@ export default function AsistenciaView({ sesionId }: { sesionId: string }) {
         <div className="flex gap-2">
           <button
             onClick={handleExportCSV}
-            className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl text-xs font-semibold border border-gray-200 text-gray-600 hover:bg-gray-50 transition-colors"
+            className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl text-xs font-semibold border border-(--ui-border) text-(--ui-text-2) hover:bg-(--ui-card-alt) transition-colors"
           >
             <svg width="13" height="13" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
             Excel cobros (CSV)
           </button>
           <button
             onClick={handleExportPDF}
-            className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl text-xs font-semibold border border-gray-200 text-gray-600 hover:bg-gray-50 transition-colors"
+            className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl text-xs font-semibold border border-(--ui-border) text-(--ui-text-2) hover:bg-(--ui-card-alt) transition-colors"
           >
             <svg width="13" height="13" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
             PDF coordinador
           </button>
         </div>
       </div>
+    </div>
     </div>
   );
 }

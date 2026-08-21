@@ -61,7 +61,7 @@ export const DRILLS_CATEGORIA_JUVENIL: Record<CategoriaEstacion, string | null> 
 };
 
 // ── Constants ──────────────────────────────────────────────────────────────────
-const GREEN = "#1B4D2E";
+const GREEN = "var(--ui-gold)";
 
 const CATEGORIAS: { value: CategoriaEstacion; emoji: string; label: string }[] = [
   { value: "juego_largo",    emoji: "🏌️", label: "Juego Largo" },
@@ -372,19 +372,19 @@ export default function JuvenileClassModal({
   return (
     <div className="fixed inset-0 bg-black/60 z-50 flex items-start justify-center p-4 overflow-y-auto"
       onClick={() => { if (!busy) onClose(); }}>
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-xl my-6"
+      <div className="bg-(--ui-card) rounded-2xl shadow-2xl w-full max-w-xl my-6"
         onClick={(e) => e.stopPropagation()}>
 
         {/* Header */}
-        <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 sticky top-0 bg-white rounded-t-2xl z-10">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-(--ui-border-soft) sticky top-0 bg-(--ui-card) rounded-t-2xl z-10">
           <div>
-            <h2 className="font-bold text-gray-900 text-sm">
+            <h2 className="font-bold text-(--ui-text) text-sm">
               {sesionExistente ? "Cambiar sesión" : "Asignar sesión"} — {diaLabel}
             </h2>
-            <p className="text-xs text-gray-400 mt-0.5">{diaLabel} {formatFecha(fecha)}{horarioHeader ? ` · ${horarioHeader}` : ""}</p>
+            <p className="text-xs text-(--ui-text-3) mt-0.5">{diaLabel} {formatFecha(fecha)}{horarioHeader ? ` · ${horarioHeader}` : ""}</p>
           </div>
           <button onClick={() => { if (!busy) onClose(); }} disabled={busy}
-            className="text-gray-400 hover:text-gray-600 disabled:opacity-40">
+            className="text-(--ui-text-3) hover:text-(--ui-text-2) disabled:opacity-40">
             <svg width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <path d="M18 6L6 18M6 6l12 12" />
             </svg>
@@ -394,19 +394,19 @@ export default function JuvenileClassModal({
         {/* ── Paso 1: cuántas estaciones ── */}
         {mode === "count" && (
           <div className="p-5 space-y-3">
-            <p className="text-xs font-bold text-gray-500 uppercase tracking-wide">¿Cuántas estaciones tiene este día?</p>
+            <p className="text-xs font-bold text-(--ui-text-3) uppercase tracking-wide">¿Cuántas estaciones tiene este día?</p>
             <div className="grid grid-cols-4 gap-2">
               {[1, 2, 3, 4].map((n) => (
                 <button
                   key={n}
                   onClick={() => handleChooseCount(n)}
-                  className="flex flex-col items-center justify-center py-4 rounded-xl border-2 border-gray-200 hover:border-green-400 hover:bg-green-50 transition-all font-bold text-lg text-gray-800"
+                  className="flex flex-col items-center justify-center py-4 rounded-xl border-2 border-(--ui-border) hover:border-green-400 hover:bg-(--ui-ok-bg) transition-all font-bold text-lg text-(--ui-text)"
                 >
                   {n}
                 </button>
               ))}
             </div>
-            <p className="text-xs text-gray-500">
+            <p className="text-xs text-(--ui-text-3)">
               <strong>1</strong> convierte el día en especial (test técnico, test físico o salida al campo).{" "}
               <strong>2 a 4</strong> arma estaciones normales, cada una con sus propios drills/ejercicios y un desafío de cierre.
             </p>
@@ -422,9 +422,9 @@ export default function JuvenileClassModal({
                 const catInfo = CATEGORIAS.find((c) => c.value === st.categoria)!;
                 return (
                   <div key={stIdx} className="border rounded-xl overflow-hidden"
-                    style={{ borderColor: filled ? GREEN : "#e5e7eb" }}>
+                    style={{ borderColor: filled ? GREEN : "var(--ui-border)" }}>
                     {/* Station header: categoría (dropdown) + toggle */}
-                    <div className="flex items-center gap-2 px-3 py-2.5" style={{ background: filled ? "#f0faf2" : "#f9fafb" }}>
+                    <div className="flex items-center gap-2 px-3 py-2.5" style={{ background: filled ? "var(--ui-ok-bg)" : "var(--ui-card-alt)" }}>
                       <span className="text-lg flex-shrink-0">{catInfo.emoji}</span>
                       <select
                         value={st.categoria}
@@ -438,17 +438,17 @@ export default function JuvenileClassModal({
                         ))}
                       </select>
                       <button onClick={() => toggleStation(stIdx)} className="ml-auto flex items-center gap-2 flex-shrink-0">
-                        <span className="text-sm font-semibold text-gray-800 truncate max-w-[140px]">
+                        <span className="text-sm font-semibold text-(--ui-text) truncate max-w-[140px]">
                           {st.drills.length > 0
                             ? `${st.drills.length} drill${st.drills.length > 1 ? "s" : ""}${st.desafio ? " + desafío" : ""}`
-                            : <span className="text-gray-400 font-normal">Ver opciones →</span>}
+                            : <span className="text-(--ui-text-3) font-normal">Ver opciones →</span>}
                         </span>
                         {filled && (
                           <div className="w-5 h-5 rounded-full flex items-center justify-center" style={{ background: GREEN }}>
                             <svg width="10" height="10" viewBox="0 0 20 20" fill="none" stroke="#fff" strokeWidth={3}><path d="M3 10l4 4 9-9" /></svg>
                           </div>
                         )}
-                        <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="#9ca3af" strokeWidth={2}
+                        <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="var(--ui-text-3)" strokeWidth={2}
                           className={`transition-transform ${st.open ? "rotate-180" : ""}`}>
                           <path d="M19 9l-7 7-7-7" />
                         </svg>
@@ -457,9 +457,9 @@ export default function JuvenileClassModal({
 
                     {/* Station content */}
                     {st.open && (
-                      <div className="border-t border-gray-100 p-3 space-y-3">
+                      <div className="border-t border-(--ui-border-soft) p-3 space-y-3">
                         {st.loading ? (
-                          <div className="flex items-center gap-2 text-xs text-gray-400 py-4 justify-center">
+                          <div className="flex items-center gap-2 text-xs text-(--ui-text-3) py-4 justify-center">
                             <svg className="animate-spin h-3.5 w-3.5" fill="none" viewBox="0 0 24 24">
                               <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                               <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
@@ -471,11 +471,11 @@ export default function JuvenileClassModal({
                             {/* 1) Foco — solo aplica a estaciones basadas en drills técnicos */}
                             {st.categoria !== "fisico" && (
                               <div>
-                                <label className="text-[11px] font-bold text-gray-500 uppercase tracking-wide block mb-1">1 · Foco</label>
+                                <label className="text-[11px] font-bold text-(--ui-text-3) uppercase tracking-wide block mb-1">1 · Foco</label>
                                 <select
                                   value={st.foco ?? ""}
                                   onChange={(e) => updateFoco(stIdx, e.target.value)}
-                                  className="w-full text-xs border border-gray-200 rounded-lg px-2.5 py-1.5 bg-white"
+                                  className="w-full text-xs border border-(--ui-border) rounded-lg px-2.5 py-1.5 bg-(--ui-card)"
                                 >
                                   <option value="">Cualquiera</option>
                                   {FOCOS.map((f) => <option key={f} value={f}>{FOCO_LABEL[f]}</option>)}
@@ -485,12 +485,12 @@ export default function JuvenileClassModal({
 
                             {/* 2) Material */}
                             <div>
-                              <label className="text-[11px] font-bold text-gray-500 uppercase tracking-wide block mb-1">2 · Material</label>
+                              <label className="text-[11px] font-bold text-(--ui-text-3) uppercase tracking-wide block mb-1">2 · Material</label>
                               <div className="flex flex-wrap gap-1.5">
                                 {MATERIALES.map((m) => (
                                   <button key={m} type="button" onClick={() => toggleMaterial(stIdx, m)}
                                     className="px-2 py-1 rounded-full text-[11px] font-semibold border transition-all"
-                                    style={st.material.includes(m) ? { background: "#9a3412", color: "#fff", borderColor: "#9a3412" } : { background: "#f9fafb", color: "#374151", borderColor: "#e5e7eb" }}>
+                                    style={st.material.includes(m) ? { background: "var(--ui-warn)", color: "var(--g-on-accent)", borderColor: "var(--ui-warn)" } : { background: "var(--ui-card-alt)", color: "var(--ui-text-2)", borderColor: "var(--ui-border)" }}>
                                     {MATERIAL_LABEL[m]}
                                   </button>
                                 ))}
@@ -498,9 +498,9 @@ export default function JuvenileClassModal({
                             </div>
 
                             {st.failed && (
-                              <div className="flex items-center justify-between gap-2 px-3 py-2 rounded-lg bg-amber-50 border border-amber-200">
-                                <p className="text-xs text-amber-700">No se generaron sugerencias.</p>
-                                <button onClick={() => fetchSuggestion(stIdx)} className="text-xs font-semibold text-amber-800 hover:underline whitespace-nowrap shrink-0">
+                              <div className="flex items-center justify-between gap-2 px-3 py-2 rounded-lg bg-(--ui-warn-bg) border border-(--ui-warn)">
+                                <p className="text-xs text-(--ui-warn)">No se generaron sugerencias.</p>
+                                <button onClick={() => fetchSuggestion(stIdx)} className="text-xs font-semibold text-(--ui-warn) hover:underline whitespace-nowrap shrink-0">
                                   🔄 Reintentar
                                 </button>
                               </div>
@@ -508,18 +508,18 @@ export default function JuvenileClassModal({
 
                             {/* 3) Ejercicios */}
                             <div>
-                              <label className="text-[11px] font-bold text-gray-500 uppercase tracking-wide block mb-1">3 · Ejercicios</label>
+                              <label className="text-[11px] font-bold text-(--ui-text-3) uppercase tracking-wide block mb-1">3 · Ejercicios</label>
                               <div className="space-y-2">
                                 {st.drills.map((d, dIdx) => (
-                                  <div key={dIdx} className="border border-gray-100 rounded-lg p-2.5 bg-gray-50 flex items-start gap-2">
+                                  <div key={dIdx} className="border border-(--ui-border-soft) rounded-lg p-2.5 bg-(--ui-card-alt) flex items-start gap-2">
                                     <div className="min-w-0 flex-1">
-                                      <p className="text-sm font-semibold text-gray-900">{d.titulo}</p>
-                                      <p className="text-xs text-gray-500 mt-0.5">{d.descripcion}</p>
+                                      <p className="text-sm font-semibold text-(--ui-text)">{d.titulo}</p>
+                                      <p className="text-xs text-(--ui-text-3) mt-0.5">{d.descripcion}</p>
                                     </div>
                                     <button
                                       onClick={() => removeDrill(stIdx, dIdx)}
                                       disabled={st.drills.length <= 1}
-                                      className="text-gray-300 hover:text-red-500 disabled:opacity-30 disabled:hover:text-gray-300 shrink-0"
+                                      className="text-(--ui-text-3) hover:text-(--ui-bad) disabled:opacity-30 disabled:hover:text-(--ui-text-3) shrink-0"
                                     >
                                       <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path d="M18 6L6 18M6 6l12 12" /></svg>
                                     </button>
@@ -532,14 +532,14 @@ export default function JuvenileClassModal({
                               <button
                                 onClick={() => togglePicker(stIdx, true)}
                                 disabled={st.drills.length >= 3}
-                                className="text-xs font-medium text-blue-700 hover:text-blue-900 disabled:opacity-40 disabled:hover:text-blue-700"
+                                className="text-xs font-medium text-(--g-birdies-fg) hover:text-blue-900 disabled:opacity-40 disabled:hover:text-(--g-birdies-fg)"
                               >
                                 + Agregar de la biblioteca
                               </button>
                               {CATEGORIAS_CON_IA.has(st.categoria) && (
                                 <button
                                   onClick={() => fetchSuggestion(stIdx)}
-                                  className="flex items-center gap-1.5 text-xs font-medium text-purple-700 hover:text-purple-900"
+                                  className="flex items-center gap-1.5 text-xs font-medium text-(--g-mas14-fg) hover:text-purple-900"
                                 >
                                   🔄 Regenerar con IA
                                 </button>
@@ -547,23 +547,23 @@ export default function JuvenileClassModal({
                             </div>
 
                             <div>
-                              <label className="text-[11px] font-bold text-gray-500 uppercase tracking-wide block mb-1">Desafío</label>
+                              <label className="text-[11px] font-bold text-(--ui-text-3) uppercase tracking-wide block mb-1">Desafío</label>
                               <textarea
                                 value={st.desafio}
                                 onChange={(e) => updateDesafio(stIdx, e.target.value)}
                                 rows={2}
                                 placeholder="Reto o juego competitivo de cierre para esta estación"
-                                className="w-full text-xs border border-gray-200 rounded-lg px-2.5 py-1.5 resize-none"
+                                className="w-full text-xs border border-(--ui-border) rounded-lg px-2.5 py-1.5 resize-none"
                               />
                             </div>
 
                             {/* 4) Sitio de práctica — al final, ya con material/ejercicios decididos */}
                             <div>
-                              <label className="text-[11px] font-bold text-gray-500 uppercase tracking-wide block mb-1">4 · Sitio de práctica</label>
+                              <label className="text-[11px] font-bold text-(--ui-text-3) uppercase tracking-wide block mb-1">4 · Sitio de práctica</label>
                               <select
                                 value={st.lugar}
                                 onChange={(e) => updateLugar(stIdx, e.target.value)}
-                                className="w-full text-xs border border-gray-200 rounded-lg px-2.5 py-1.5 bg-white"
+                                className="w-full text-xs border border-(--ui-border) rounded-lg px-2.5 py-1.5 bg-(--ui-card)"
                               >
                                 {LUGARES_ESTACION.map((l) => <option key={l.value} value={l.value}>{l.label}</option>)}
                               </select>
@@ -600,19 +600,19 @@ export default function JuvenileClassModal({
               })}
 
               {error && (
-                <div className="bg-red-50 border border-red-100 rounded-lg px-4 py-3 text-sm text-red-700">{error}</div>
+                <div className="bg-(--ui-bad-bg) border border-(--ui-bad) rounded-lg px-4 py-3 text-sm text-(--ui-bad)">{error}</div>
               )}
             </div>
 
-            <div className="px-5 pb-5 pt-3 flex gap-2 border-t border-gray-100">
+            <div className="px-5 pb-5 pt-3 flex gap-2 border-t border-(--ui-border-soft)">
               <button onClick={() => setMode("count")}
-                className="px-4 py-2.5 rounded-xl text-sm font-medium border border-gray-200 text-gray-600 hover:bg-gray-50">
+                className="px-4 py-2.5 rounded-xl text-sm font-medium border border-(--ui-border) text-(--ui-text-2) hover:bg-(--ui-card-alt)">
                 ← Volver
               </button>
               <button
                 onClick={handleSave}
                 disabled={!allStationsFilled || saving}
-                className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-semibold text-white disabled:opacity-40 transition-all hover:brightness-110"
+                className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-semibold text-(--g-on-accent) disabled:opacity-40 transition-all hover:brightness-110"
                 style={{ background: GREEN }}
               >
                 {saving ? "Guardando..." : allStationsFilled ? "✓ Guardar sesión" : `Completa las estaciones (${stations.filter((s) => s.drills.length > 0 && s.desafio.trim()).length}/${stations.length})`}
@@ -625,43 +625,43 @@ export default function JuvenileClassModal({
         {mode === "especial_tipo" && (
           <>
             <div className="p-5 space-y-2">
-              <p className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-3">Tipo de día especial</p>
+              <p className="text-xs font-bold text-(--ui-text-3) uppercase tracking-wide mb-3">Tipo de día especial</p>
               {ESPECIALES.map((esp) => (
                 <button
                   key={esp.value}
                   onClick={() => setTipoEspecial(esp.value)}
                   className="w-full flex items-center gap-3 px-4 py-3 rounded-xl border-2 text-left transition-all"
                   style={tipoEspecial === esp.value
-                    ? { borderColor: "#7c3aed", background: "#f5f3ff" }
-                    : { borderColor: "#e5e7eb", background: "#f9fafb" }}
+                    ? { borderColor: "var(--g-mas14-fg)", background: "var(--g-mas14-bg)" }
+                    : { borderColor: "var(--ui-border)", background: "var(--ui-card-alt)" }}
                 >
                   <span className="text-xl">{esp.emoji}</span>
                   <div>
-                    <p className="text-sm font-semibold text-gray-900">{esp.label}</p>
-                    <p className="text-xs text-gray-500">{esp.desc}</p>
+                    <p className="text-sm font-semibold text-(--ui-text)">{esp.label}</p>
+                    <p className="text-xs text-(--ui-text-3)">{esp.desc}</p>
                   </div>
                   {tipoEspecial === esp.value && (
-                    <div className="ml-auto w-5 h-5 rounded-full flex items-center justify-center" style={{ background: "#7c3aed" }}>
+                    <div className="ml-auto w-5 h-5 rounded-full flex items-center justify-center" style={{ background: "var(--g-mas14-fg)" }}>
                       <svg width="10" height="10" viewBox="0 0 20 20" fill="none" stroke="#fff" strokeWidth={3}><path d="M3 10l4 4 9-9" /></svg>
                     </div>
                   )}
                 </button>
               ))}
               {error && (
-                <div className="bg-red-50 border border-red-100 rounded-lg px-4 py-3 text-sm text-red-700">{error}</div>
+                <div className="bg-(--ui-bad-bg) border border-(--ui-bad) rounded-lg px-4 py-3 text-sm text-(--ui-bad)">{error}</div>
               )}
             </div>
 
-            <div className="px-5 pb-5 pt-3 flex gap-2 border-t border-gray-100">
+            <div className="px-5 pb-5 pt-3 flex gap-2 border-t border-(--ui-border-soft)">
               <button onClick={() => setMode("count")}
-                className="px-4 py-2.5 rounded-xl text-sm font-medium border border-gray-200 text-gray-600 hover:bg-gray-50">
+                className="px-4 py-2.5 rounded-xl text-sm font-medium border border-(--ui-border) text-(--ui-text-2) hover:bg-(--ui-card-alt)">
                 ← Volver
               </button>
               <button
                 onClick={handleSave}
                 disabled={!tipoEspecial || saving}
-                className="flex-1 py-2.5 rounded-xl text-sm font-semibold text-white disabled:opacity-40 transition-all"
-                style={{ background: "#7c3aed" }}
+                className="flex-1 py-2.5 rounded-xl text-sm font-semibold text-(--g-on-accent) disabled:opacity-40 transition-all"
+                style={{ background: "var(--g-mas14-fg)" }}
               >
                 {saving ? "Guardando..." : "✓ Guardar día especial"}
               </button>

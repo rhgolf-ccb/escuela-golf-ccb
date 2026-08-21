@@ -90,34 +90,34 @@ export default function MoverSemanaModal({ plan, sesiones, diasSinEscuela, onClo
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ backgroundColor: "rgba(0,0,0,0.45)" }} onClick={(e) => { if (e.target === e.currentTarget && !saving) onClose(); }}>
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6 space-y-3">
+      <div className="bg-(--ui-card) rounded-2xl shadow-2xl w-full max-w-md p-6 space-y-3">
         <div>
-          <h3 className="font-bold text-gray-900">Mover a otra semana</h3>
-          <p className="text-xs text-gray-500 mt-0.5">{TIPO_PLAN_LABEL[plan.tipo_plan]} · {plan.tema_semanal}</p>
+          <h3 className="font-bold text-(--ui-text)">Mover a otra semana</h3>
+          <p className="text-xs text-(--ui-text-3) mt-0.5">{TIPO_PLAN_LABEL[plan.tipo_plan]} · {plan.tema_semanal}</p>
         </div>
 
         {omitidas ? (
           <>
-            <div className="rounded-lg px-3 py-2 text-xs space-y-1" style={{ backgroundColor: "#fffbeb", border: "1px solid #fde68a", color: "#92400e" }}>
+            <div className="rounded-lg px-3 py-2 text-xs space-y-1" style={{ backgroundColor: "var(--ui-warn-bg)", border: "1px solid var(--ui-warn)", color: "var(--ui-warn)" }}>
               <p className="font-semibold">La programación se movió, pero {omitidas.length} sesión{omitidas.length > 1 ? "es" : ""} se quedó en su fecha original:</p>
               {omitidas.map((o) => (
                 <p key={o.id}>· {formatDiaFecha(o.fecha_destino)} — {descripcionDiaSinEscuela(o.motivo)}</p>
               ))}
               <p>Quedaron sin mover para que decidas qué hacer con ellas.</p>
             </div>
-            <button onClick={() => onMoved(fechaLocal(destino))} className="w-full py-2 rounded-xl text-sm font-semibold text-white" style={{ backgroundColor: "#1a3a2a" }}>
+            <button onClick={() => onMoved(fechaLocal(destino))} className="w-full py-2 rounded-xl text-sm font-semibold text-(--ui-bg)" style={{ backgroundColor: "var(--ui-gold)" }}>
               Entendido
             </button>
           </>
         ) : conflicto ? (
           <>
-            <div className="rounded-lg px-3 py-2 text-xs space-y-1" style={{ backgroundColor: "#fef2f2", border: "1px solid #fecaca", color: "#991b1b" }}>
+            <div className="rounded-lg px-3 py-2 text-xs space-y-1" style={{ backgroundColor: "var(--ui-bad-bg)", border: "1px solid var(--ui-bad)", color: "var(--ui-bad)" }}>
               <p className="font-semibold">Esa semana ya tiene un plan de {TIPO_PLAN_LABEL[plan.tipo_plan]}: “{conflicto.tema_semanal}”.</p>
               <p>Reemplazarlo borra {conflicto.sesiones} sesión{conflicto.sesiones === 1 ? "" : "es"}{conflicto.reservas > 0 ? ` y ${conflicto.reservas} reserva${conflicto.reservas === 1 ? "" : "s"} de alumnos` : ""}. No se puede deshacer.</p>
             </div>
             <div className="flex gap-2">
-              <button onClick={() => setConflicto(null)} disabled={saving} className="flex-1 py-2 rounded-xl text-sm font-medium border border-gray-200 text-gray-600 hover:bg-gray-50">Cancelar</button>
-              <button onClick={() => mover("reemplazar")} disabled={saving} className="flex-1 py-2 rounded-xl text-sm font-semibold text-white disabled:opacity-50" style={{ backgroundColor: "#b91c1c" }}>
+              <button onClick={() => setConflicto(null)} disabled={saving} className="flex-1 py-2 rounded-xl text-sm font-medium border border-(--ui-border) text-(--ui-text-2) hover:bg-(--ui-card-alt)">Cancelar</button>
+              <button onClick={() => mover("reemplazar")} disabled={saving} className="flex-1 py-2 rounded-xl text-sm font-semibold text-(--ui-bg) disabled:opacity-50" style={{ backgroundColor: "var(--ui-bad)" }}>
                 {saving ? "Moviendo..." : "Reemplazar"}
               </button>
             </div>
@@ -125,17 +125,17 @@ export default function MoverSemanaModal({ plan, sesiones, diasSinEscuela, onClo
         ) : (
           <>
             <div>
-              <label className="text-[11px] font-bold text-gray-500 uppercase tracking-wide block mb-1">Nueva semana</label>
+              <label className="text-[11px] font-bold text-(--ui-text-3) uppercase tracking-wide block mb-1">Nueva semana</label>
               <input
                 type="date"
                 value={destino}
                 onChange={(e) => { if (e.target.value) setDestino(toISODate(getMonday(fechaLocal(e.target.value)))); }}
-                className="w-full text-sm px-3 py-2 rounded-lg border border-gray-200"
+                className="w-full text-sm px-3 py-2 rounded-lg border border-(--ui-border)"
               />
-              <p className="text-[11px] text-gray-400 mt-1">Cualquier día que elijas se ajusta al lunes de esa semana.</p>
+              <p className="text-[11px] text-(--ui-text-3) mt-1">Cualquier día que elijas se ajusta al lunes de esa semana.</p>
             </div>
 
-            <div className="rounded-lg px-3 py-2 text-xs" style={{ backgroundColor: "#f9fafb", border: "1px solid #e5e7eb", color: "#374151" }}>
+            <div className="rounded-lg px-3 py-2 text-xs" style={{ backgroundColor: "var(--ui-card-alt)", border: "1px solid var(--ui-border)", color: "var(--ui-text-2)" }}>
               {destinoInvalido ? (
                 <p>La programación ya está en esa semana.</p>
               ) : (
@@ -145,12 +145,12 @@ export default function MoverSemanaModal({ plan, sesiones, diasSinEscuela, onClo
                 </p>
               )}
               {reservas !== null && reservas > 0 && (
-                <p className="mt-1" style={{ color: "#92400e" }}>
+                <p className="mt-1" style={{ color: "var(--ui-warn)" }}>
                   {reservas} reserva{reservas === 1 ? "" : "s"} de alumnos {reservas === 1 ? "sigue" : "siguen"} apuntando a estas sesiones: cambian de fecha, hay que avisarles.
                 </p>
               )}
               {chocanConSinEscuela.length > 0 && (
-                <div className="mt-1" style={{ color: "#92400e" }}>
+                <div className="mt-1" style={{ color: "var(--ui-warn)" }}>
                   {chocanConSinEscuela.map((c, i) => (
                     <p key={i}>{formatDiaFecha(c.fecha)} no tiene escuela ({descripcionDiaSinEscuela(c.motivo)}): esa sesión no se moverá.</p>
                   ))}
@@ -159,17 +159,17 @@ export default function MoverSemanaModal({ plan, sesiones, diasSinEscuela, onClo
             </div>
 
             {dictadas > 0 && (
-              <label className="flex items-start gap-2 text-xs rounded-lg px-3 py-2" style={{ backgroundColor: "#fffbeb", border: "1px solid #fde68a", color: "#92400e" }}>
+              <label className="flex items-start gap-2 text-xs rounded-lg px-3 py-2" style={{ backgroundColor: "var(--ui-warn-bg)", border: "1px solid var(--ui-warn)", color: "var(--ui-warn)" }}>
                 <input type="checkbox" checked={asumeDictadas} onChange={(e) => setAsumeDictadas(e.target.checked)} className="mt-0.5" />
                 <span>{dictadas} sesión{dictadas === 1 ? " ya tiene" : "es ya tienen"} asistencia registrada. Mover una clase ya dictada casi siempre es un error — confirmo que quiero moverla.</span>
               </label>
             )}
 
-            {error && <p className="text-xs text-red-600">{error}</p>}
+            {error && <p className="text-xs text-(--ui-bad)">{error}</p>}
 
             <div className="flex gap-2 pt-1">
-              <button onClick={onClose} disabled={saving} className="flex-1 py-2 rounded-xl text-sm font-medium border border-gray-200 text-gray-600 hover:bg-gray-50">Cancelar</button>
-              <button onClick={() => mover()} disabled={saving || destinoInvalido || bloqueadoPorDictadas} className="flex-1 py-2 rounded-xl text-sm font-semibold text-white disabled:opacity-50" style={{ backgroundColor: "#1a3a2a" }}>
+              <button onClick={onClose} disabled={saving} className="flex-1 py-2 rounded-xl text-sm font-medium border border-(--ui-border) text-(--ui-text-2) hover:bg-(--ui-card-alt)">Cancelar</button>
+              <button onClick={() => mover()} disabled={saving || destinoInvalido || bloqueadoPorDictadas} className="flex-1 py-2 rounded-xl text-sm font-semibold text-(--ui-bg) disabled:opacity-50" style={{ backgroundColor: "var(--ui-gold)" }}>
                 {saving ? "Moviendo..." : "Mover"}
               </button>
             </div>

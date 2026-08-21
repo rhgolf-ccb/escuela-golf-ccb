@@ -72,7 +72,7 @@ export default function ParentReportModal({
         import("jspdf"),
         import("html2canvas"),
       ]);
-      const canvas = await html2canvas(reportRef.current, { scale: 2, useCORS: true, backgroundColor: "#ffffff" });
+      const canvas = await html2canvas(reportRef.current, { scale: 2, useCORS: true, backgroundColor: "var(--ui-card)" });
       const imgData = canvas.toDataURL("image/jpeg", 0.95);
       const pdf = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
       const pdfW = pdf.internal.pageSize.getWidth();
@@ -114,21 +114,21 @@ export default function ParentReportModal({
   return (
     <div className="fixed inset-0 bg-black/60 z-50 flex items-start justify-center p-4 overflow-y-auto" onClick={onClose}>
       <div
-        className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl my-6"
+        className="bg-(--ui-card) rounded-2xl shadow-2xl w-full max-w-2xl my-6"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Modal header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-(--ui-border-soft)">
           <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-lg flex items-center justify-center" style={{ background: "#1B4D2E" }}>
+            <div className="w-9 h-9 rounded-lg flex items-center justify-center" style={{ background: "var(--ui-gold)" }}>
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth={2}><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
             </div>
             <div>
-              <h2 className="font-bold text-gray-900 text-base">Informe para padres</h2>
-              <p className="text-xs text-gray-500">{studentName}</p>
+              <h2 className="font-bold text-(--ui-text) text-base">Informe para padres</h2>
+              <p className="text-xs text-(--ui-text-3)">{studentName}</p>
             </div>
           </div>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 transition-colors">
+          <button onClick={onClose} className="text-(--ui-text-3) hover:text-(--ui-text-2) transition-colors">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path d="M18 6L6 18M6 6l12 12"/></svg>
           </button>
         </div>
@@ -136,10 +136,10 @@ export default function ParentReportModal({
         <div className="px-6 py-5">
           {!report && (
             <>
-              <p className="text-sm text-gray-600 mb-4">Selecciona las fuentes de datos a incluir en el informe:</p>
+              <p className="text-sm text-(--ui-text-2) mb-4">Selecciona las fuentes de datos a incluir en el informe:</p>
 
               <div className="space-y-3 mb-6">
-                <label className={`flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition-colors ${hasSwingEvals ? "hover:bg-gray-50" : "opacity-40 cursor-not-allowed"}`}>
+                <label className={`flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition-colors ${hasSwingEvals ? "hover:bg-(--ui-card-alt)" : "opacity-40 cursor-not-allowed"}`}>
                   <input
                     type="checkbox"
                     checked={incluirTecnico}
@@ -148,12 +148,12 @@ export default function ParentReportModal({
                     className="w-4 h-4 accent-emerald-700"
                   />
                   <div>
-                    <div className="font-medium text-sm text-gray-800">Evaluación técnica</div>
-                    <div className="text-xs text-gray-500">{hasSwingEvals ? "Última evaluación del swing" : "No disponible"}</div>
+                    <div className="font-medium text-sm text-(--ui-text)">Evaluación técnica</div>
+                    <div className="text-xs text-(--ui-text-3)">{hasSwingEvals ? "Última evaluación del swing" : "No disponible"}</div>
                   </div>
                 </label>
 
-                <label className={`flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition-colors ${hasPhysicalEvals ? "hover:bg-gray-50" : "opacity-40 cursor-not-allowed"}`}>
+                <label className={`flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition-colors ${hasPhysicalEvals ? "hover:bg-(--ui-card-alt)" : "opacity-40 cursor-not-allowed"}`}>
                   <input
                     type="checkbox"
                     checked={incluirFisico}
@@ -162,12 +162,12 @@ export default function ParentReportModal({
                     className="w-4 h-4 accent-emerald-700"
                   />
                   <div>
-                    <div className="font-medium text-sm text-gray-800">Evaluación física TPI</div>
-                    <div className="text-xs text-gray-500">{hasPhysicalEvals ? "Última evaluación física" : "No disponible"}</div>
+                    <div className="font-medium text-sm text-(--ui-text)">Evaluación física TPI</div>
+                    <div className="text-xs text-(--ui-text-3)">{hasPhysicalEvals ? "Última evaluación física" : "No disponible"}</div>
                   </div>
                 </label>
 
-                <label className={`flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition-colors ${hasTrackmanData ? "hover:bg-gray-50" : "opacity-40 cursor-not-allowed"}`}>
+                <label className={`flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition-colors ${hasTrackmanData ? "hover:bg-(--ui-card-alt)" : "opacity-40 cursor-not-allowed"}`}>
                   <input
                     type="checkbox"
                     checked={incluirTrackman}
@@ -176,21 +176,21 @@ export default function ParentReportModal({
                     className="w-4 h-4 accent-emerald-700"
                   />
                   <div>
-                    <div className="font-medium text-sm text-gray-800">Datos Trackman</div>
-                    <div className="text-xs text-gray-500">{hasTrackmanData ? "Última sesión Trackman" : "No disponible"}</div>
+                    <div className="font-medium text-sm text-(--ui-text)">Datos Trackman</div>
+                    <div className="text-xs text-(--ui-text-3)">{hasTrackmanData ? "Última sesión Trackman" : "No disponible"}</div>
                   </div>
                 </label>
               </div>
 
               {error && (
-                <div className="mb-4 bg-red-50 border border-red-200 rounded-lg px-4 py-3 text-sm text-red-700">{error}</div>
+                <div className="mb-4 bg-(--ui-bad-bg) border border-(--ui-bad) rounded-lg px-4 py-3 text-sm text-(--ui-bad)">{error}</div>
               )}
 
               <button
                 onClick={handleGenerate}
                 disabled={loading || noneSelected}
-                className="w-full py-3 rounded-xl text-white font-semibold text-sm transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-                style={{ background: loading || noneSelected ? undefined : "#1B4D2E" }}
+                className="w-full py-3 rounded-xl text-(--g-on-accent) font-semibold text-sm transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                style={{ background: loading || noneSelected ? undefined : "var(--ui-gold)" }}
               >
                 {loading ? (
                   <span className="flex items-center justify-center gap-2">
@@ -208,7 +208,7 @@ export default function ParentReportModal({
               <div className="flex gap-2 mb-4 flex-wrap">
                 <button
                   onClick={() => { setReport(null); setMeta(null); setInformeId(null); }}
-                  className="flex items-center gap-1.5 px-3 py-2 rounded-lg border border-gray-200 text-xs font-medium text-gray-600 hover:bg-gray-50 transition-colors"
+                  className="flex items-center gap-1.5 px-3 py-2 rounded-lg border border-(--ui-border) text-xs font-medium text-(--ui-text-2) hover:bg-(--ui-card-alt) transition-colors"
                 >
                   <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5}><path d="M19 12H5M12 5l-7 7 7 7"/></svg>
                   Nuevo informe
@@ -217,7 +217,7 @@ export default function ParentReportModal({
                 <button
                   onClick={handleDownloadPdf}
                   disabled={downloadingPdf}
-                  className="flex items-center gap-1.5 px-3 py-2 rounded-lg border border-gray-200 text-xs font-medium text-gray-600 hover:bg-gray-50 transition-colors disabled:opacity-50"
+                  className="flex items-center gap-1.5 px-3 py-2 rounded-lg border border-(--ui-border) text-xs font-medium text-(--ui-text-2) hover:bg-(--ui-card-alt) transition-colors disabled:opacity-50"
                 >
                   {downloadingPdf ? (
                     <svg className="animate-spin" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/></svg>
@@ -240,10 +240,10 @@ export default function ParentReportModal({
 
                     <button
                       onClick={handleCopyLink}
-                      className="flex items-center gap-1.5 px-3 py-2 rounded-lg border border-gray-200 text-xs font-medium text-gray-600 hover:bg-gray-50 transition-colors"
+                      className="flex items-center gap-1.5 px-3 py-2 rounded-lg border border-(--ui-border) text-xs font-medium text-(--ui-text-2) hover:bg-(--ui-card-alt) transition-colors"
                     >
                       {copied ? (
-                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#16a34a" strokeWidth={2.5}><path d="M20 6L9 17l-5-5"/></svg>
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--ui-ok)" strokeWidth={2.5}><path d="M20 6L9 17l-5-5"/></svg>
                       ) : (
                         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5}><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
                       )}
@@ -254,7 +254,7 @@ export default function ParentReportModal({
               </div>
 
               {/* Preview */}
-              <div className="border border-gray-200 rounded-xl overflow-hidden">
+              <div className="border border-(--ui-border) rounded-xl overflow-hidden">
                 <div className="overflow-y-auto max-h-[calc(100vh-320px)]">
                   <div ref={reportRef}>
                     <ReportCard report={report} meta={meta} />

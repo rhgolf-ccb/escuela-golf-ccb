@@ -147,8 +147,11 @@ export default function AsesorGolfChat({ rol }: { rol: Rol | null }) {
       <button
         onClick={() => setIsOpen((v) => !v)}
         aria-label="Paco — Asesor de Golf"
-        className="fixed flex items-center justify-center rounded-full shadow-lg transition-all hover:opacity-90 hover:scale-105"
-        style={{ bottom: 24, right: 24, width: 52, height: 52, backgroundColor: "#1a3a2a", zIndex: 50 }}
+        // El botón y el panel se montan al final del layout, no dentro de
+        // ningún módulo: cada uno tiene que activar el tema por su cuenta o las
+        // variables --ui-* no existen para ellos y el color sale vacío.
+        className="tema-oscuro fixed flex items-center justify-center rounded-full shadow-lg transition-all hover:opacity-90 hover:scale-105"
+        style={{ bottom: 24, right: 24, width: 52, height: 52, backgroundColor: "var(--ui-gold)", zIndex: 50 }}
       >
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img src="/Paco_transparente.png" alt="Paco" className="w-8 h-8 object-contain" />
@@ -156,40 +159,40 @@ export default function AsesorGolfChat({ rol }: { rol: Rol | null }) {
 
       {isOpen && (
         <div
-          className="fixed flex flex-col overflow-hidden shadow-xl asesor-golf-panel-enter w-[90vw] sm:w-[380px]"
+          className="tema-oscuro fixed flex flex-col overflow-hidden shadow-xl asesor-golf-panel-enter w-[90vw] sm:w-[380px]"
           style={{
             bottom: 88,
             right: 24,
             height: 520,
             maxHeight: "70vh",
             borderRadius: 16,
-            backgroundColor: "var(--surface-2)",
-            border: "0.5px solid var(--border-strong)",
+            backgroundColor: "var(--ui-card)",
+            border: "1px solid var(--ui-border)",
             zIndex: 50,
           }}
         >
-          <div className="flex items-center justify-between px-4 py-3 shrink-0" style={{ backgroundColor: "#1a3a2a" }}>
+          <div className="flex items-center justify-between px-4 py-3 shrink-0" style={{ backgroundColor: "var(--ui-gold)" }}>
             <div className="flex items-center gap-2.5 min-w-0">
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img src="/Paco_transparente.png" alt="Paco" className="w-6 h-6 object-contain shrink-0" />
               <div className="min-w-0">
                 <div className="flex items-center gap-1.5">
-                  <p className="text-sm font-semibold text-white truncate">Paco — Asesor de Golf</p>
-                  <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded-full bg-white/15 text-white shrink-0">Sonnet 5</span>
+                  <p className="text-sm font-semibold text-(--ui-bg) truncate">Paco — Asesor de Golf</p>
+                  <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded-full bg-(--ui-bg)/15 text-(--ui-bg) shrink-0">Sonnet 5</span>
                 </div>
-                <p className="text-[11px] text-white/70 truncate">Especialista en TPI · Swing · Pedagogía</p>
+                <p className="text-[11px] text-(--ui-bg)/70 truncate">Especialista en TPI · Swing · Pedagogía</p>
               </div>
               {usage && usage.limit !== null && (
-                <span className="text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-white/10 text-white/70 shrink-0">
+                <span className="text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-(--ui-bg)/10 text-(--ui-bg)/70 shrink-0">
                   Consultas hoy: {usage.count}/{usage.limit}
                 </span>
               )}
             </div>
             <div className="flex items-center gap-1 shrink-0">
-              <button onClick={handleNuevaConsulta} title="Nueva consulta" className="text-white/70 hover:text-white p-1">
+              <button onClick={handleNuevaConsulta} title="Nueva consulta" className="text-(--ui-bg)/70 hover:text-(--ui-bg) p-1">
                 <i className="ti ti-refresh" style={{ fontSize: 16 }} />
               </button>
-              <button onClick={() => setIsOpen(false)} aria-label="Cerrar" className="text-white/70 hover:text-white p-1">
+              <button onClick={() => setIsOpen(false)} aria-label="Cerrar" className="text-(--ui-bg)/70 hover:text-(--ui-bg) p-1">
                 <i className="ti ti-x" style={{ fontSize: 18 }} />
               </button>
             </div>
@@ -202,8 +205,8 @@ export default function AsesorGolfChat({ rol }: { rol: Rol | null }) {
                   className="max-w-[85%] rounded-2xl px-3 py-2 text-sm"
                   style={
                     m.role === "user"
-                      ? { backgroundColor: "#1a3a2a", color: "#ffffff" }
-                      : { backgroundColor: "var(--surface-1)", color: m.isError ? "#b91c1c" : "#1f2937", border: "0.5px solid var(--border-strong)" }
+                      ? { backgroundColor: "var(--ui-gold)", color: "var(--ui-bg)" }
+                      : { backgroundColor: "var(--ui-card-alt)", color: m.isError ? "var(--ui-bad)" : "var(--ui-text)", border: "1px solid var(--ui-border)" }
                   }
                 >
                   {m.role === "assistant" && !m.isError ? (
@@ -219,7 +222,7 @@ export default function AsesorGolfChat({ rol }: { rol: Rol | null }) {
                     {shouldOfferPdf(m.content) && (
                       <button
                         onClick={() => handleDownloadPdf(m.content)}
-                        className="flex items-center gap-1 text-[11px] font-medium px-2 py-1 rounded-md border border-gray-200 text-gray-600 hover:bg-gray-50 transition-colors"
+                        className="flex items-center gap-1 text-[11px] font-medium px-2 py-1 rounded-md border border-(--ui-border) text-(--ui-text-2) hover:bg-(--ui-card-alt) transition-colors"
                       >
                         <i className="ti ti-file-type-pdf" style={{ fontSize: 12 }} /> Descargar PDF
                       </button>
@@ -227,7 +230,7 @@ export default function AsesorGolfChat({ rol }: { rol: Rol | null }) {
                     {detectPlanKind(m.content) && (
                       <button
                         onClick={() => handleSendWhatsApp(m.content)}
-                        className="flex items-center gap-1 text-[11px] font-medium px-2 py-1 rounded-md border border-gray-200 text-gray-600 hover:bg-gray-50 transition-colors"
+                        className="flex items-center gap-1 text-[11px] font-medium px-2 py-1 rounded-md border border-(--ui-border) text-(--ui-text-2) hover:bg-(--ui-card-alt) transition-colors"
                       >
                         <i className="ti ti-brand-whatsapp" style={{ fontSize: 12 }} /> Enviar por WhatsApp
                       </button>
@@ -236,11 +239,11 @@ export default function AsesorGolfChat({ rol }: { rol: Rol | null }) {
                 )}
                 <div className="flex items-center gap-1.5 mt-0.5 px-1">
                   {m.usedWebSearch && (
-                    <span className="text-[10px] text-gray-400 flex items-center gap-0.5">
+                    <span className="text-[10px] text-(--ui-text-3) flex items-center gap-0.5">
                       <i className="ti ti-search" style={{ fontSize: 10 }} /> Consultó fuentes web
                     </span>
                   )}
-                  <span className="text-[10px] text-gray-400">{formatTime(m.timestamp)}</span>
+                  <span className="text-[10px] text-(--ui-text-3)">{formatTime(m.timestamp)}</span>
                 </div>
               </div>
             ))}
@@ -251,8 +254,8 @@ export default function AsesorGolfChat({ rol }: { rol: Rol | null }) {
                   <button
                     key={s}
                     onClick={() => sendMessage(s)}
-                    className="text-left text-xs px-3 py-2 rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 transition-colors"
-                    style={{ backgroundColor: "var(--surface-1)" }}
+                    className="text-left text-xs px-3 py-2 rounded-lg border border-(--ui-border) text-(--ui-text-2) hover:bg-(--ui-card-alt) transition-colors"
+                    style={{ backgroundColor: "var(--ui-card-alt)", color: "var(--ui-text)", border: "1px solid var(--ui-border)" }}
                   >
                     {s}
                   </button>
@@ -262,17 +265,17 @@ export default function AsesorGolfChat({ rol }: { rol: Rol | null }) {
 
             {isLoading && (
               <div className="flex items-center gap-1.5 px-1">
-                <span className="text-xs text-gray-400">{toolStatus ? TOOL_STATUS_LABELS[toolStatus] ?? "Consultando..." : "Pensando..."}</span>
+                <span className="text-xs text-(--ui-text-3)">{toolStatus ? TOOL_STATUS_LABELS[toolStatus] ?? "Consultando..." : "Pensando..."}</span>
                 <span className="flex gap-0.5">
-                  <span className="w-1 h-1 rounded-full bg-gray-300 animate-bounce" style={{ animationDelay: "0ms" }} />
-                  <span className="w-1 h-1 rounded-full bg-gray-300 animate-bounce" style={{ animationDelay: "120ms" }} />
-                  <span className="w-1 h-1 rounded-full bg-gray-300 animate-bounce" style={{ animationDelay: "240ms" }} />
+                  <span className="w-1 h-1 rounded-full bg-(--ui-text-3) animate-bounce" style={{ animationDelay: "0ms" }} />
+                  <span className="w-1 h-1 rounded-full bg-(--ui-text-3) animate-bounce" style={{ animationDelay: "120ms" }} />
+                  <span className="w-1 h-1 rounded-full bg-(--ui-text-3) animate-bounce" style={{ animationDelay: "240ms" }} />
                 </span>
               </div>
             )}
           </div>
 
-          <div className="flex items-center gap-2 px-3 py-2.5 border-t shrink-0" style={{ borderColor: "var(--border-strong)" }}>
+          <div className="flex items-center gap-2 px-3 py-2.5 border-t shrink-0" style={{ borderColor: "var(--ui-border)" }}>
             <input
               type="text"
               value={input}
@@ -280,17 +283,17 @@ export default function AsesorGolfChat({ rol }: { rol: Rol | null }) {
               onKeyDown={handleKeyDown}
               disabled={isLoading || limitReached}
               placeholder={limitReached ? "Límite diario alcanzado" : "Pregunta sobre swing, TPI, benchmarks..."}
-              className="flex-1 min-w-0 text-sm px-3 py-2 rounded-full border border-gray-200 focus:outline-none focus:border-[#1a3a2a] disabled:opacity-60"
-              style={{ backgroundColor: "var(--surface-1)" }}
+              className="flex-1 min-w-0 text-sm px-3 py-2 rounded-full border border-(--ui-border) focus:outline-none focus:border-[var(--ui-gold)] disabled:opacity-60"
+              style={{ backgroundColor: "var(--ui-card-alt)", color: "var(--ui-text)", border: "1px solid var(--ui-border)" }}
             />
             <button
               onClick={() => sendMessage(input)}
               disabled={isLoading || !input.trim() || limitReached}
               aria-label="Enviar"
               className="flex items-center justify-center w-9 h-9 rounded-full shrink-0 disabled:opacity-40 transition-opacity"
-              style={{ backgroundColor: "#1a3a2a" }}
+              style={{ backgroundColor: "var(--ui-gold)" }}
             >
-              <i className="ti ti-send" style={{ color: "#ffffff", fontSize: 16 }} />
+              <i className="ti ti-send" style={{ color: "var(--ui-bg)", fontSize: 16 }} />
             </button>
           </div>
         </div>

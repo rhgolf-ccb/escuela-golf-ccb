@@ -3,8 +3,16 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import * as XLSX from "xlsx";
 import { supabase } from "@/lib/supabase";
-import { Dumbbell } from "lucide-react";
+import {
+  BookOpen, ChevronDown, ChevronUp, Download, Flag, MapPin, Package, Pencil, Plus,
+  RotateCw, Search, Sparkles, Star, Target, Trash2, Upload, X, Clock, Check,
+} from "lucide-react";
 import { FOCOS, FOCO_LABEL, MATERIALES, MATERIAL_LABEL } from "@/lib/estacion-library-constants";
+import { colorGrupo } from "@/lib/grupos";
+import {
+  BotonPrimario, BotonSecundario, CAMPO, CLASE_CAMPO, Campo, CampoLabel, EmptyState,
+  Encabezado, Loading, Modal, ModalConfirmar, ModalHeader, Pagina, Tabs, Toast,
+} from "@/components/ui/tema";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 type Categoria = "tecnico" | "juego_corto" | "putting" | "campo";
@@ -40,11 +48,11 @@ interface Drill {
 type DrillForm = Omit<Drill, "id" | "created_at" | "veces_usado">;
 
 // ── Constants ─────────────────────────────────────────────────────────────────
-const TABS: { id: Categoria; label: string; icon: string }[] = [
-  { id: "tecnico",     label: "Técnico",          icon: "🏌️" },
-  { id: "juego_corto", label: "Juego corto",       icon: "⛳" },
-  { id: "putting",     label: "Putting",           icon: "🟢" },
-  { id: "campo",       label: "Juegos de campo",   icon: "🌿" },
+const TABS: { id: Categoria; label: string }[] = [
+  { id: "tecnico",     label: "Técnico" },
+  { id: "juego_corto", label: "Juego corto" },
+  { id: "putting",     label: "Putting" },
+  { id: "campo",       label: "Juegos de campo" },
 ];
 
 const TAB_FILTERS: Record<Categoria, string[]> = {
@@ -64,6 +72,31 @@ const NIVEL_LABEL: Record<string,string> = {
   birdies:"Birdies", aguilas:"Águilas", albatros:"Albatros",
   mas14:"+14", competencia:"Competencia", damas:"Damas",
 };
+
+// El nivel de un drill es un grupo del padrón, así que se pinta con el color de
+// ese grupo en vez del azul único que llevaban todas las etiquetas de nivel.
+function tonoNivel(n: string) {
+  return colorGrupo(NIVEL_LABEL[n] ?? n);
+}
+
+/** Chip de filtro genérico: apagado con contorno, encendido con su color. */
+function Chip({ label, activo, onClick, tono, icono: Icono }: {
+  label: string; activo: boolean; onClick: () => void;
+  tono?: { background: string; color: string };
+  icono?: React.ComponentType<{ size?: number }>;
+}) {
+  const on = tono ?? { background: "var(--ui-gold)", color: "var(--ui-bg)" };
+  return (
+    <button type="button" onClick={onClick}
+      className="flex items-center gap-1 px-3 py-1.5 rounded-full text-xs font-semibold transition-all whitespace-nowrap"
+      style={activo
+        ? { background: on.background, color: on.color, border: `1px solid ${on.color}` }
+        : { background: "transparent", color: "var(--ui-text-2)", border: "1px solid var(--ui-border)" }}>
+      {Icono && <Icono size={11} />}
+      {label}
+    </button>
+  );
+}
 
 // Foco pedagógico — vocabulario nuevo y universal (aplica a cualquier
 // categoría), independiente de las subcategorías específicas por categoría
@@ -110,22 +143,18 @@ function emptyForm(): DrillForm {
 function Stars({ value, onChange }: { value: number; onChange?: (v: number) => void }) {
   return (
     <div className="flex gap-0.5">
-      {[1,2,3,4,5].map(n => (
-        <button key={n} type="button" onClick={() => onChange?.(n)}
-          className={`text-base leading-none ${onChange ? "cursor-pointer hover:scale-110 transition-transform" : "cursor-default"}`}
-          style={{ color: n <= value ? "#f59e0b" : "#d1d5db" }}>
-          ★
-        </button>
-      ))}
-    </div>
-  );
-}
-
-// ── Toast ─────────────────────────────────────────────────────────────────────
-function Toast({ msg }: { msg: string }) {
-  return (
-    <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[100] bg-gray-900 text-white text-sm font-medium px-5 py-3 rounded-xl shadow-xl">
-      {msg}
+      {[1,2,3,4,5].map(n => {
+        const lleno = n <= value;
+        return (
+          <button key={n} type="button" onClick={() => onChange?.(n)}
+            title={onChange ? `${n} de 5` : undefined}
+            className={`leading-none ${onChange ? "cursor-pointer hover:scale-110 transition-transform" : "cursor-default"}`}>
+            <Star size={13}
+              style={{ color: lleno ? "var(--ui-gold)" : "var(--ui-border)" }}
+              fill={lleno ? "var(--ui-gold)" : "none"} />
+          </button>
+        );
+      })}
     </div>
   );
 }
@@ -168,6 +197,11 @@ export default function DrillsModule() {
 
   const [libraryProgress, setLibraryProgress] = useState<Record<BatchKey, BatchState> | null>(null);
   const [toast, setToast]                   = useState<string | null>(null);
+
+  // Los dos confirm() del módulo bloqueaban la pestaña y no alcanzaban a decir
+  // qué drill se iba ni qué implica generar la biblioteca.
+  const [borrarDrill, setBorrarDrill]       = useState<Drill | null>(null);
+  const [confirmarBiblioteca, setConfirmarBiblioteca] = useState(false);
 
   const [importing, setImporting]           = useState(false);
   const [importResult, setImportResult]     = useState<{ insertados: number; omitidos: { fila: number; motivo: string }[] } | null>(null);
@@ -251,10 +285,12 @@ export default function DrillsModule() {
   }
 
   // ── Delete drill ─────────────────────────────────────────────────────────────
-  async function handleDelete(id: string) {
-    if (!confirm("¿Eliminar este drill?")) return;
-    await supabase.from("drills").delete().eq("id", id);
-    setDrills(prev => prev.filter(d => d.id !== id));
+  async function handleDelete() {
+    const d = borrarDrill;
+    if (!d) return;
+    await supabase.from("drills").delete().eq("id", d.id);
+    setDrills(prev => prev.filter(x => x.id !== d.id));
+    setBorrarDrill(null);
     showToast("Drill eliminado");
   }
 
@@ -360,7 +396,7 @@ export default function DrillsModule() {
   }
 
   async function handleGenerarBiblioteca() {
-    if (!confirm("¿Generar los 52 drills base? Este proceso hace 5 llamadas a la IA y puede tardar 1-2 minutos.")) return;
+    setConfirmarBiblioteca(false);
     setLibraryProgress(initBatches());
     await runBatchSequence(["tecnico", "juego_corto", "putting", "campo"]);
   }
@@ -470,85 +506,113 @@ export default function DrillsModule() {
   // ── Drill Card ───────────────────────────────────────────────────────────────
   function DrillCard({ d, compact = false }: { d: Drill; compact?: boolean }) {
     return (
-      <div className={`bg-white rounded-xl border shadow-sm overflow-hidden transition-shadow hover:shadow-md ${!d.aprobado ? "border-amber-200" : "border-gray-100"}`}>
+      <div className="rounded-xl overflow-hidden transition-colors"
+        style={{
+          background: "var(--ui-card)",
+          border: `1px solid ${d.aprobado ? "var(--ui-border-soft)" : "var(--ui-warn)"}`,
+        }}>
         {!d.aprobado && (
-          <div className="flex items-center gap-1.5 px-3 py-1 bg-amber-50 border-b border-amber-200">
-            <span className="text-xs text-amber-700 font-semibold">⚠️ Pendiente de aprobación</span>
-            {d.generado_por_ia && <span className="text-[10px] text-amber-600 bg-amber-100 px-1.5 py-0.5 rounded-full">IA</span>}
+          <div className="flex items-center gap-1.5 px-3 py-1"
+            style={{ background: "var(--ui-warn-bg)", borderBottom: "1px solid var(--ui-border-soft)" }}>
+            <span className="text-[11px] font-bold" style={{ color: "var(--ui-warn)" }}>Pendiente de aprobación</span>
+            {d.generado_por_ia && (
+              <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full"
+                style={{ background: "var(--ui-card-alt)", color: "var(--ui-warn)" }}>IA</span>
+            )}
           </div>
         )}
         <div className="p-4">
           <div className="flex items-start justify-between gap-2 mb-2">
-            <h3 className="text-sm font-bold text-gray-900 leading-snug flex-1">{d.titulo}</h3>
+            <h3 className="text-sm font-bold leading-snug flex-1" style={{ color: "var(--ui-text)" }}>{d.titulo}</h3>
             <Stars value={d.rating} />
           </div>
 
-          {/* Badges */}
+          {/* Etiquetas */}
           <div className="flex flex-wrap gap-1 mb-2">
             {d.posicion_swing?.map(p => (
-              <span key={p} className="text-[10px] font-bold px-1.5 py-0.5 rounded-full" style={{ background:"#e8f5e9", color:"#2d5a27" }}>{p}</span>
+              <span key={p} className="text-[10px] font-bold px-1.5 py-0.5 rounded-full"
+                style={{ background: "var(--g-juvenil-bg)", color: "var(--g-juvenil-fg)" }}>{p}</span>
             ))}
             {d.subcategoria && !d.posicion_swing?.length && (
-              <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full" style={{ background:"#e8f5e9", color:"#2d5a27" }}>{FOCO_LABEL[d.subcategoria] ?? d.subcategoria}</span>
+              <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full"
+                style={{ background: "var(--g-juvenil-bg)", color: "var(--g-juvenil-fg)" }}>
+                {FOCO_LABEL[d.subcategoria] ?? d.subcategoria}
+              </span>
             )}
             {d.nivel_recomendado?.map(n => (
-              <span key={n} className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full" style={{ background:"#e3f2fd", color:"#1565c0" }}>{NIVEL_LABEL[n] ?? n}</span>
+              <span key={n} className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full" style={tonoNivel(n)}>
+                {NIVEL_LABEL[n] ?? n}
+              </span>
             ))}
             {d.material?.filter(m => m !== "ninguno").map(m => (
-              <span key={m} className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full" style={{ background:"#ffedd5", color:"#9a3412" }}>🎒 {MATERIAL_LABEL[m] ?? m}</span>
+              <span key={m} className="inline-flex items-center gap-1 text-[10px] font-semibold px-1.5 py-0.5 rounded-full"
+                style={{ background: "var(--ui-card-alt)", color: "var(--ui-text-2)" }}>
+                <Package size={9} />{MATERIAL_LABEL[m] ?? m}
+              </span>
             ))}
-            <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full" style={{ background:"#f3e5f5", color:"#6a1b9a" }}>
-              📍 {LUGAR_LABEL[d.lugar] ?? d.lugar}
+            <span className="inline-flex items-center gap-1 text-[10px] font-semibold px-1.5 py-0.5 rounded-full"
+              style={{ background: "var(--ui-card-alt)", color: "var(--ui-text-2)" }}>
+              <MapPin size={9} />{LUGAR_LABEL[d.lugar] ?? d.lugar}
             </span>
           </div>
 
-          <p className="text-xs text-gray-500 leading-snug mb-3 line-clamp-2">{d.descripcion}</p>
+          <p className="text-xs leading-snug mb-3 line-clamp-2" style={{ color: "var(--ui-text-2)" }}>{d.descripcion}</p>
 
-          <div className="flex items-center gap-3 text-[10px] text-gray-400 mb-3">
-            {d.duracion_minutos && <span>⏱ {d.duracion_minutos} min</span>}
-            {d.repeticiones && <span>🔄 {d.repeticiones}</span>}
-            {d.metrica_exito && !compact && <span className="truncate max-w-[120px]">🎯 {d.metrica_exito}</span>}
+          <div className="flex items-center gap-3 text-[10px] mb-3" style={{ color: "var(--ui-text-3)" }}>
+            {d.duracion_minutos && <span className="flex items-center gap-1"><Clock size={10} />{d.duracion_minutos} min</span>}
+            {d.repeticiones && <span className="flex items-center gap-1"><RotateCw size={10} />{d.repeticiones}</span>}
+            {d.metrica_exito && !compact && (
+              <span className="flex items-center gap-1 truncate max-w-[140px]"><Target size={10} />{d.metrica_exito}</span>
+            )}
           </div>
 
-          {/* Reglas de campo (para tab campo) */}
+          {/* Reglas de campo (para la pestaña de juegos de campo) */}
           {d.reglas_campo && d.reglas_campo.length > 0 && !compact && (
-            <div className="bg-green-50 rounded-lg p-2.5 mb-3">
-              <p className="text-[10px] font-bold text-green-800 mb-1.5">REGLAS DEL JUEGO</p>
+            <div className="rounded-lg p-2.5 mb-3" style={{ background: "var(--g-juvenil-bg)" }}>
+              <p className="text-[10px] font-bold mb-1.5 uppercase tracking-wide" style={{ color: "var(--g-juvenil-fg)" }}>Reglas del juego</p>
               <ul className="space-y-1">
                 {d.reglas_campo.map((r, i) => (
-                  <li key={i} className="flex gap-1.5 text-[10px] text-green-700">
-                    <span>⛳</span><span>{r.texto}</span>
+                  <li key={i} className="flex gap-1.5 text-[10px]" style={{ color: "var(--g-juvenil-fg)" }}>
+                    <Flag size={10} className="shrink-0 mt-0.5" /><span>{r.texto}</span>
                   </li>
                 ))}
               </ul>
             </div>
           )}
 
-          <div className="border-t border-gray-100 pt-2.5 flex items-center gap-1.5">
+          <div className="pt-2.5 flex items-center gap-1.5" style={{ borderTop: "1px solid var(--ui-border-soft)" }}>
             <button
-              onClick={() => { showToast("✓ Drill copiado al portapapeles del plan"); }}
-              className="flex-1 text-[10px] font-semibold px-2 py-1.5 rounded-lg bg-green-50 text-green-800 hover:bg-green-100 transition-colors text-center"
-            >+ Al plan</button>
+              onClick={() => { showToast("Drill copiado al portapapeles del plan"); }}
+              className="flex-1 flex items-center justify-center gap-1 text-[11px] font-bold px-2 py-1.5 rounded-lg transition-opacity hover:opacity-90"
+              style={{ background: "var(--ui-gold)", color: "var(--ui-bg)" }}
+            ><Plus size={11} />Al plan</button>
             <button
               onClick={() => openEdit(d)}
-              className="text-[10px] font-semibold px-2 py-1.5 rounded-lg bg-gray-50 text-gray-600 hover:bg-gray-100 transition-colors"
-            >Editar</button>
+              className="flex items-center gap-1 text-[11px] font-bold px-2 py-1.5 rounded-lg transition-colors hover:bg-(--ui-card-alt)"
+              style={{ color: "var(--ui-text-2)", border: "1px solid var(--ui-border)" }}
+            ><Pencil size={11} />Editar</button>
             <button
               onClick={() => handleFavorito(d)}
-              className="text-sm px-1.5 py-1 rounded-lg hover:bg-yellow-50 transition-colors"
-              title={d.favorito ? "Quitar favorito" : "Marcar favorito"}
-            >{d.favorito ? "⭐" : "☆"}</button>
+              className="p-1.5 rounded-lg transition-colors hover:bg-(--ui-card-alt)"
+              title={d.favorito ? "Quitar de favoritos" : "Marcar favorito"}
+            >
+              <Star size={13}
+                style={{ color: d.favorito ? "var(--ui-gold)" : "var(--ui-text-3)" }}
+                fill={d.favorito ? "var(--ui-gold)" : "none"} />
+            </button>
             {!d.aprobado && (
               <button
                 onClick={() => handleAprobar(d.id)}
-                className="text-[10px] font-bold px-2 py-1.5 rounded-lg bg-amber-50 text-amber-700 hover:bg-amber-100 transition-colors whitespace-nowrap"
-              >✓ Aprobar</button>
+                className="flex items-center gap-1 text-[11px] font-bold px-2 py-1.5 rounded-lg transition-opacity hover:opacity-80 whitespace-nowrap"
+                style={{ background: "var(--ui-warn-bg)", color: "var(--ui-warn)" }}
+              ><Check size={11} />Aprobar</button>
             )}
             <button
-              onClick={() => handleDelete(d.id)}
-              className="text-[10px] px-1.5 py-1 rounded-lg text-gray-300 hover:text-red-400 hover:bg-red-50 transition-colors"
+              onClick={() => setBorrarDrill(d)}
+              className="p-1.5 rounded-lg transition-colors hover:bg-(--ui-bad-bg)"
+              style={{ color: "var(--ui-text-3)" }}
               title="Eliminar"
-            >✕</button>
+            ><Trash2 size={13} /></button>
           </div>
         </div>
       </div>
@@ -556,111 +620,80 @@ export default function DrillsModule() {
   }
 
   const total = drills.length;
+  const hayFiltros = activeFilters.length > 0 || !!searchText || hayFiltrosAvanzados;
+
+  function limpiarTodo() {
+    setActiveFilters([]); setSearchText(""); limpiarFiltrosAvanzados();
+  }
 
   // ─────────────────────────────────────────────────────────────────────────────
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 py-8">
+    <Pagina>
+      <Encabezado icono={BookOpen} titulo="Biblioteca de drills" bajada={`${total} drill${total !== 1 ? "s" : ""} en total`}>
+        {!loading && drills.length === 0 && !libraryProgress && (
+          <BotonSecundario onClick={() => setConfirmarBiblioteca(true)}>
+            <Sparkles size={14} />Generar biblioteca base
+          </BotonSecundario>
+        )}
+        <BotonSecundario onClick={openCreate}><Plus size={14} />Agregar drill</BotonSecundario>
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept=".xlsx,.xls"
+          className="hidden"
+          onChange={e => { const f = e.target.files?.[0]; if (f) handleImportFile(f); e.target.value = ""; }}
+        />
+        <BotonSecundario onClick={() => fileInputRef.current?.click()} disabled={importing}>
+          <Upload size={14} />{importing ? "Importando…" : "Importar Excel"}
+        </BotonSecundario>
+        <BotonSecundario onClick={descargarPlantilla} title="Plantilla_Drills_CCB.xlsx">
+          <Download size={14} />Plantilla
+        </BotonSecundario>
+        <BotonPrimario onClick={() => { setShowAIModal(true); setAiText(""); setAiPreview(null); setAiError(null); }}>
+          <Sparkles size={16} />Generar con IA
+        </BotonPrimario>
+      </Encabezado>
 
-      {/* ── Header ── */}
-      <div className="flex items-start justify-between mb-8">
-        <div className="flex items-center gap-3">
-          <div className="w-11 h-11 rounded-xl bg-ccb-green flex items-center justify-center shrink-0">
-            <Dumbbell size={22} className="text-white" />
-          </div>
-          <div>
-            <h1 className="text-2xl font-bold text-ccb-green">Biblioteca de Drills</h1>
-            <p className="text-sm text-(--text-muted) mt-0.5">
-              {total} drill{total !== 1 ? "s" : ""} en total ·{" "}
-              <button onClick={descargarPlantilla} className="text-green-700 hover:underline font-medium">Descargar Plantilla_Drills_CCB</button>
-            </p>
-          </div>
-        </div>
-        <div className="flex gap-2">
-          {!loading && drills.length === 0 && !libraryProgress && (
-            <button
-              onClick={handleGenerarBiblioteca}
-              className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-semibold border border-amber-300 text-amber-800 bg-amber-50 hover:bg-amber-100 shadow-sm transition-colors"
-            >
-              📚 Generar biblioteca base
-            </button>
-          )}
-          <button
-            onClick={openCreate}
-            className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-semibold bg-white border border-gray-200 text-gray-700 hover:bg-gray-50 shadow-sm transition-colors"
-          >
-            <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path d="M12 5v14M5 12h14"/></svg>
-            Agregar drill
-          </button>
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept=".xlsx,.xls"
-            className="hidden"
-            onChange={e => { const f = e.target.files?.[0]; if (f) handleImportFile(f); e.target.value = ""; }}
-          />
-          <button
-            onClick={() => fileInputRef.current?.click()}
-            disabled={importing}
-            className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-semibold bg-white border border-gray-200 text-gray-700 hover:bg-gray-50 shadow-sm transition-colors disabled:opacity-50"
-          >
-            {importing
-              ? <svg className="animate-spin h-3.5 w-3.5" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"/></svg>
-              : <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>}
-            {importing ? "Importando..." : "Importar Excel"}
-          </button>
-          <button
-            onClick={() => { setShowAIModal(true); setAiText(""); setAiPreview(null); setAiError(null); }}
-            className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-semibold text-white shadow-sm transition-all hover:brightness-110"
-            style={{ background: "#1B4D2E" }}
-          >
-            ✨ Generar con IA
-          </button>
-        </div>
-      </div>
-
-      {/* ── Library generation progress ── */}
+      {/* ── Progreso de generación de biblioteca ── */}
       {libraryProgress && (
-        <div className="mb-6 border border-amber-200 rounded-xl bg-amber-50 p-4">
+        <div className="mb-6 rounded-xl p-4"
+          style={{ background: "var(--ui-warn-bg)", border: "1px solid var(--ui-warn)" }}>
           <div className="flex items-center justify-between mb-3">
-            <h3 className="text-sm font-bold text-amber-900">Generando biblioteca base</h3>
-            <span className="text-xs text-amber-600 font-medium">
+            <h3 className="text-sm font-bold" style={{ color: "var(--ui-warn)" }}>Generando biblioteca base</h3>
+            <span className="text-xs font-semibold" style={{ color: "var(--ui-text-2)" }}>
               {Object.values(libraryProgress).filter(b => b.status === "done").length}/4 completados
             </span>
           </div>
           <div className="space-y-2.5">
             {BATCH_CONFIGS.map(({ key, label, step }) => {
               const b = libraryProgress[key];
+              const color =
+                b.status === "done"    ? "var(--ui-ok)" :
+                b.status === "error"   ? "var(--ui-bad)" :
+                b.status === "loading" ? "var(--ui-warn)" : "var(--ui-text-3)";
               return (
                 <div key={key} className="flex items-center gap-3">
                   <div className="w-5 h-5 shrink-0 flex items-center justify-center">
                     {b.status === "loading" && (
-                      <svg className="animate-spin h-4 w-4 text-amber-600" fill="none" viewBox="0 0 24 24">
-                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
-                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"/>
-                      </svg>
+                      <div className="animate-spin rounded-full h-4 w-4 border-2"
+                        style={{ borderColor: "var(--ui-warn)", borderTopColor: "transparent" }} />
                     )}
-                    {b.status === "done" && <span className="text-green-600 font-bold text-sm">✓</span>}
-                    {b.status === "error" && <span className="text-red-500 font-bold text-sm">✕</span>}
-                    {b.status === "pending" && <span className="w-2 h-2 rounded-full bg-amber-300 block" />}
+                    {b.status === "done" && <Check size={14} style={{ color: "var(--ui-ok)" }} />}
+                    {b.status === "error" && <X size={14} style={{ color: "var(--ui-bad)" }} />}
+                    {b.status === "pending" && <span className="w-2 h-2 rounded-full block" style={{ background: "var(--ui-text-3)" }} />}
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
-                      <span className={`text-sm font-medium ${
-                        b.status === "done"    ? "text-green-800" :
-                        b.status === "error"   ? "text-red-700" :
-                        b.status === "loading" ? "text-amber-800" : "text-gray-400"
-                      }`}>
-                        {b.status === "loading"
-                          ? `Generando ${label.toLowerCase()}...`
-                          : label}
+                      <span className="text-sm font-semibold" style={{ color }}>
+                        {b.status === "loading" ? `Generando ${label.toLowerCase()}…` : label}
                         <span className="text-xs font-normal ml-1 opacity-60">({step}/4)</span>
                       </span>
                       {b.status === "done" && (
-                        <span className="text-xs text-green-600 font-semibold">{b.insertados} drills</span>
+                        <span className="text-xs font-bold" style={{ color: "var(--ui-ok)" }}>{b.insertados} drills</span>
                       )}
                     </div>
                     {b.status === "error" && b.errorMsg && (
-                      <p className="text-xs text-red-600 mt-0.5 leading-snug">{b.errorMsg}</p>
+                      <p className="text-xs mt-0.5 leading-snug" style={{ color: "var(--ui-bad)" }}>{b.errorMsg}</p>
                     )}
                   </div>
                   {b.status === "error" && (
@@ -669,9 +702,10 @@ export default function DrillsModule() {
                         const idx = BATCH_CONFIGS.findIndex(x => x.key === key);
                         runBatchSequence(BATCH_CONFIGS.slice(idx).map(x => x.key));
                       }}
-                      className="text-xs font-semibold px-2.5 py-1.5 rounded-lg bg-red-100 text-red-700 hover:bg-red-200 transition-colors whitespace-nowrap shrink-0"
+                      className="flex items-center gap-1 text-xs font-bold px-2.5 py-1.5 rounded-lg transition-opacity hover:opacity-80 whitespace-nowrap shrink-0"
+                      style={{ background: "var(--ui-bad-bg)", color: "var(--ui-bad)" }}
                     >
-                      ↩ Reintentar
+                      <RotateCw size={11} />Reintentar
                     </button>
                   )}
                 </div>
@@ -681,150 +715,147 @@ export default function DrillsModule() {
         </div>
       )}
 
-      {/* ── Tabs ── */}
-      <div className="flex gap-1 border-b border-gray-200 mb-4">
-        {TABS.map(t => (
-          <button
-            key={t.id}
-            onClick={() => setActiveTab(t.id)}
-            className={`flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium border-b-2 transition-all -mb-px ${
-              activeTab === t.id
-                ? "border-green-700 text-green-800 font-semibold"
-                : "border-transparent text-gray-500 hover:text-gray-700"
-            }`}
-          >
-            <span>{t.icon}</span>
-            {t.label}
-            <span className="ml-1 text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-gray-100 text-gray-500">
-              {drills.filter(d => d.categoria === t.id).length}
-            </span>
-          </button>
-        ))}
-      </div>
+      <Tabs
+        value={activeTab}
+        onChange={setActiveTab}
+        options={TABS.map(t => ({
+          id: t.id,
+          label: t.label,
+          count: drills.filter(d => d.categoria === t.id).length,
+        }))}
+      />
 
-      {/* ── Filter bar ── */}
-      <div className="flex items-center gap-3 mb-6 flex-wrap">
+      {/* ── Búsqueda + filtros de la pestaña ── */}
+      <div className="rounded-xl px-3 py-2.5 mb-3 flex flex-wrap items-center gap-x-4 gap-y-2"
+        style={{ background: "var(--ui-card)", border: "1px solid var(--ui-border)" }}>
         <div className="relative flex-1 min-w-[200px] max-w-xs">
-          <svg className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none"
+            style={{ color: "var(--ui-text-3)" }} />
           <input
             value={searchText}
             onChange={e => setSearchText(e.target.value)}
-            placeholder="Buscar drills..."
-            className="w-full pl-8 pr-3 py-2 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-green-600"
+            placeholder="Buscar drills…"
+            className="w-full pl-9 pr-3 py-2 rounded-lg text-sm focus:outline-none focus:ring-2"
+            style={CAMPO}
           />
         </div>
         <div className="flex flex-wrap gap-1.5">
           {TAB_FILTERS[activeTab].map(f => (
-            <button
-              key={f}
-              onClick={() => toggleFilter(f)}
-              className="px-3 py-1.5 rounded-full text-xs font-semibold border transition-all"
-              style={activeFilters.includes(f)
-                ? { background: "#1B4D2E", color: "#fff", borderColor: "#1B4D2E" }
-                : { background: "#f9fafb", color: "#374151", borderColor: "#e5e7eb" }}
-            >{f}</button>
+            <Chip key={f} label={f} activo={activeFilters.includes(f)} onClick={() => toggleFilter(f)} />
           ))}
-          {(activeFilters.length > 0 || searchText) && (
-            <button
-              onClick={() => { setActiveFilters([]); setSearchText(""); }}
-              className="px-3 py-1.5 rounded-full text-xs font-semibold border border-red-200 text-red-500 bg-red-50 hover:bg-red-100 transition-all"
-            >✕ Limpiar</button>
-          )}
         </div>
+        {hayFiltros && (
+          <button onClick={limpiarTodo}
+            className="flex items-center gap-1 px-3 py-1.5 rounded-full text-xs font-semibold transition-colors hover:opacity-80 ml-auto"
+            style={{ color: "var(--ui-bad)", border: "1px solid var(--ui-bad)" }}
+          ><X size={12} />Limpiar todo</button>
+        )}
       </div>
 
-      {/* ── Filtros combinables (Grupo / Foco / Material / Posición) ── */}
-      <div className="mb-6 border border-gray-200 rounded-xl p-3.5 space-y-3 bg-gray-50/50">
-        <div className="flex items-center justify-between">
-          <p className="text-xs font-bold text-gray-500 uppercase tracking-wide">Filtros para asignar rápido</p>
+      {/* ── Filtros combinables ── */}
+      <details className="mb-6 rounded-xl overflow-hidden"
+        style={{ background: "var(--ui-card)", border: "1px solid var(--ui-border)" }} open={hayFiltrosAvanzados}>
+        {/* Cuatro filas de chips ocupaban media pantalla antes de ver un solo
+            drill. Plegadas por defecto, se abren solas si hay alguno activo. */}
+        <summary className="px-3 py-2.5 cursor-pointer flex items-center gap-2 select-none">
+          <CampoLabel>Filtros para asignar rápido</CampoLabel>
           {hayFiltrosAvanzados && (
-            <button onClick={limpiarFiltrosAvanzados} className="text-xs font-semibold text-red-500 hover:underline">✕ Limpiar filtros</button>
+            <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full tabular-nums"
+              style={{ background: "var(--ui-gold)", color: "var(--ui-bg)" }}>
+              {filtroGrupo.length + filtroFoco.length + filtroMaterial.length + filtroPosicion.length}
+            </span>
           )}
-        </div>
-        <div>
-          <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wide mb-1.5">Grupo</p>
-          <div className="flex flex-wrap gap-1.5">
-            {NIVELES.map(n => (
-              <button key={n} onClick={() => toggleFacet(setFiltroGrupo, n)}
-                className="px-2.5 py-1 rounded-full text-xs font-semibold border transition-all"
-                style={filtroGrupo.includes(n) ? { background: "#1565c0", color: "#fff", borderColor: "#1565c0" } : { background: "#fff", color: "#374151", borderColor: "#e5e7eb" }}>
-                {NIVEL_LABEL[n]}
-              </button>
-            ))}
-          </div>
-        </div>
-        <div>
-          <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wide mb-1.5">Foco</p>
-          <div className="flex flex-wrap gap-1.5">
-            {FOCOS.map(f => (
-              <button key={f} onClick={() => toggleFacet(setFiltroFoco, f)}
-                className="px-2.5 py-1 rounded-full text-xs font-semibold border transition-all"
-                style={filtroFoco.includes(f) ? { background: "#1B4D2E", color: "#fff", borderColor: "#1B4D2E" } : { background: "#fff", color: "#374151", borderColor: "#e5e7eb" }}>
-                {FOCO_LABEL[f]}
-              </button>
-            ))}
-          </div>
-        </div>
-        <div>
-          <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wide mb-1.5">Material</p>
-          <div className="flex flex-wrap gap-1.5">
-            {MATERIALES.map(m => (
-              <button key={m} onClick={() => toggleFacet(setFiltroMaterial, m)}
-                className="px-2.5 py-1 rounded-full text-xs font-semibold border transition-all"
-                style={filtroMaterial.includes(m) ? { background: "#9a3412", color: "#fff", borderColor: "#9a3412" } : { background: "#fff", color: "#374151", borderColor: "#e5e7eb" }}>
-                {MATERIAL_LABEL[m]}
-              </button>
-            ))}
-          </div>
-        </div>
-        <div>
-          <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wide mb-1.5">Posición de swing</p>
-          <div className="flex flex-wrap gap-1.5">
-            {POSICIONES.map(p => (
-              <button key={p} onClick={() => toggleFacet(setFiltroPosicion, p)}
-                className="px-2.5 py-1 rounded-full text-xs font-semibold border transition-all"
-                style={filtroPosicion.includes(p) ? { background: "#6d28d9", color: "#fff", borderColor: "#6d28d9" } : { background: "#fff", color: "#374151", borderColor: "#e5e7eb" }}>
-                {p}
-              </button>
-            ))}
-          </div>
-        </div>
-      </div>
+          {hayFiltrosAvanzados && (
+            <button onClick={(e) => { e.preventDefault(); limpiarFiltrosAvanzados(); }}
+              className="ml-auto text-xs font-semibold hover:underline" style={{ color: "var(--ui-bad)" }}>
+              Limpiar
+            </button>
+          )}
+        </summary>
 
-      {/* ── Content ── */}
+        <div className="px-3 pb-3 space-y-3" style={{ borderTop: "1px solid var(--ui-border-soft)" }}>
+          <div className="pt-3">
+            <p className="text-[10px] font-bold uppercase tracking-wide mb-1.5" style={{ color: "var(--ui-text-3)" }}>Grupo</p>
+            <div className="flex flex-wrap gap-1.5">
+              {NIVELES.map(n => (
+                <Chip key={n} label={NIVEL_LABEL[n]} activo={filtroGrupo.includes(n)}
+                  onClick={() => toggleFacet(setFiltroGrupo, n)} tono={tonoNivel(n)} />
+              ))}
+            </div>
+          </div>
+          <div>
+            <p className="text-[10px] font-bold uppercase tracking-wide mb-1.5" style={{ color: "var(--ui-text-3)" }}>Foco</p>
+            <div className="flex flex-wrap gap-1.5">
+              {FOCOS.map(f => (
+                <Chip key={f} label={FOCO_LABEL[f]} activo={filtroFoco.includes(f)}
+                  onClick={() => toggleFacet(setFiltroFoco, f)} />
+              ))}
+            </div>
+          </div>
+          <div>
+            <p className="text-[10px] font-bold uppercase tracking-wide mb-1.5" style={{ color: "var(--ui-text-3)" }}>Material</p>
+            <div className="flex flex-wrap gap-1.5">
+              {MATERIALES.map(m => (
+                <Chip key={m} label={MATERIAL_LABEL[m]} activo={filtroMaterial.includes(m)}
+                  onClick={() => toggleFacet(setFiltroMaterial, m)} icono={Package} />
+              ))}
+            </div>
+          </div>
+          <div>
+            <p className="text-[10px] font-bold uppercase tracking-wide mb-1.5" style={{ color: "var(--ui-text-3)" }}>Posición de swing</p>
+            <div className="flex flex-wrap gap-1.5">
+              {POSICIONES.map(p => (
+                <Chip key={p} label={p} activo={filtroPosicion.includes(p)}
+                  onClick={() => toggleFacet(setFiltroPosicion, p)} />
+              ))}
+            </div>
+          </div>
+        </div>
+      </details>
+
+      {/* ── Contenido ── */}
       {loading ? (
-        <div className="flex items-center justify-center py-20 text-gray-400">
-          <svg className="animate-spin h-6 w-6 mr-3" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"/></svg>
-          Cargando drills...
-        </div>
+        <Loading msg="Cargando drills…" />
       ) : filtered.length === 0 ? (
-        <div className="flex flex-col items-center justify-center py-20 text-gray-400">
-          <p className="text-lg mb-2">No hay drills{activeFilters.length > 0 || searchText || hayFiltrosAvanzados ? " con esos filtros" : " en esta categoría"}</p>
-          <button onClick={openCreate} className="text-sm text-green-700 hover:underline">+ Agregar el primero</button>
-        </div>
+        <EmptyState
+          msg={`No hay drills${hayFiltros ? " con esos filtros" : " en esta categoría"}`}
+          accion={hayFiltros
+            ? <BotonSecundario onClick={limpiarTodo}>Limpiar filtros</BotonSecundario>
+            : <BotonPrimario onClick={openCreate}><Plus size={16} />Agregar el primero</BotonPrimario>}
+        />
       ) : activeTab === "tecnico" ? (
         // ── Técnico: agrupado por posición ──────────────────────────────────────
-        <div className="space-y-4">
+        <div className="space-y-3">
           {POSICIONES.map(p => {
             const group = groupedTecnico[p];
             if (!group.length) return null;
             const isOpen = !collapsed.has(p);
+            const pendientes = group.filter(d => !d.aprobado).length;
             return (
-              <div key={p} className="border border-gray-200 rounded-xl overflow-hidden">
+              <div key={p} className="rounded-xl overflow-hidden"
+                style={{ background: "var(--ui-card)", border: "1px solid var(--ui-border-soft)" }}>
                 <button
                   onClick={() => toggleCollapse(p)}
-                  className="w-full flex items-center justify-between px-5 py-3 bg-gray-50 hover:bg-gray-100 transition-colors"
+                  className="w-full flex items-center justify-between px-5 py-3 transition-colors hover:bg-(--ui-card-alt)"
+                  style={{ background: "var(--ui-card-alt)" }}
                 >
-                  <div className="flex items-center gap-3">
-                    <span className="text-sm font-bold text-gray-800">[{p}] {POSICION_LABEL[p]}</span>
-                    <span className="text-xs text-gray-400 font-medium">{group.length} drill{group.length !== 1 ? "s" : ""}</span>
-                    {group.some(d => !d.aprobado) && (
-                      <span className="text-[10px] font-bold text-amber-600 bg-amber-100 px-2 py-0.5 rounded-full">
-                        ⚠️ {group.filter(d => !d.aprobado).length} pendiente{group.filter(d => !d.aprobado).length !== 1 ? "s" : ""}
+                  <div className="flex items-center gap-3 flex-wrap">
+                    <span className="text-sm font-bold" style={{ color: "var(--ui-text)" }}>
+                      [{p}] {POSICION_LABEL[p]}
+                    </span>
+                    <span className="text-xs font-semibold" style={{ color: "var(--ui-text-3)" }}>
+                      {group.length} drill{group.length !== 1 ? "s" : ""}
+                    </span>
+                    {pendientes > 0 && (
+                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-full"
+                        style={{ background: "var(--ui-warn-bg)", color: "var(--ui-warn)" }}>
+                        {pendientes} pendiente{pendientes !== 1 ? "s" : ""}
                       </span>
                     )}
                   </div>
-                  <span className="text-gray-400 text-sm">{isOpen ? "▲" : "▼"}</span>
+                  {isOpen
+                    ? <ChevronUp size={16} style={{ color: "var(--ui-text-3)" }} />
+                    : <ChevronDown size={16} style={{ color: "var(--ui-text-3)" }} />}
                 </button>
                 {isOpen && (
                   <div className="p-4 grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -836,12 +867,10 @@ export default function DrillsModule() {
           })}
         </div>
       ) : activeTab === "campo" ? (
-        // ── Campo: cards grandes con reglas ─────────────────────────────────────
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {filtered.map(d => <DrillCard key={d.id} d={d} />)}
         </div>
       ) : (
-        // ── Juego corto / Putting: grid simple ──────────────────────────────────
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
           {filtered.map(d => <DrillCard key={d.id} d={d} compact />)}
         </div>
@@ -849,385 +878,348 @@ export default function DrillsModule() {
 
       {/* ══ MODAL: Crear / Editar drill ════════════════════════════════════════ */}
       {showEditModal && (
-        <div className="fixed inset-0 bg-black/60 z-50 flex items-start justify-center p-4 overflow-y-auto"
-          onClick={() => { if (!saving) setShowEditModal(false); }}>
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl my-6" onClick={e => e.stopPropagation()}>
+        <Modal onClose={() => { if (!saving) setShowEditModal(false); }} ancho="2xl">
+          <ModalHeader
+            titulo={editingId ? "Editar drill" : "Nuevo drill"}
+            sub={TABS.find(t => t.id === form.categoria)?.label}
+            onClose={() => { if (!saving) setShowEditModal(false); }}
+          />
 
-            {/* Header */}
-            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 sticky top-0 bg-white rounded-t-2xl z-10">
-              <h2 className="font-bold text-gray-900">{editingId ? "Editar drill" : "Nuevo drill"}</h2>
-              <button onClick={() => setShowEditModal(false)} disabled={saving} className="text-gray-400 hover:text-gray-600 disabled:opacity-40">
-                <svg width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path d="M18 6L6 18M6 6l12 12"/></svg>
-              </button>
-            </div>
+          <div className="px-5 py-5 space-y-4">
+            <Campo label="Título *">
+              <input value={form.titulo} onChange={e => setF("titulo", e.target.value)}
+                placeholder="Rotación de hombros con palo cruzado" className={CLASE_CAMPO} style={CAMPO} />
+            </Campo>
 
-            <div className="px-6 py-5 space-y-4">
-              {/* Título */}
-              <div>
-                <label className="block text-xs font-semibold text-gray-700 mb-1">Título <span className="text-red-400">*</span></label>
-                <input value={form.titulo} onChange={e => setF("titulo", e.target.value)}
-                  placeholder="Nombre del drill"
-                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-600" />
-              </div>
-
-              {/* Categoría + subcategoría */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-semibold text-gray-700 mb-1">Categoría <span className="text-red-400">*</span></label>
-                  <select value={form.categoria} onChange={e => { setF("categoria", e.target.value as Categoria); setF("subcategoria", null); setF("posicion_swing", null); }}
-                    className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-green-600">
-                    {TABS.map(t => <option key={t.id} value={t.id}>{t.label}</option>)}
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold text-gray-700 mb-1">Foco pedagógico</label>
-                  <select value={form.subcategoria ?? ""} onChange={e => setF("subcategoria", e.target.value || null)}
-                    className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-green-600">
-                    <option value="">— Ninguno —</option>
-                    {FOCOS.map(f => <option key={f} value={f}>{FOCO_LABEL[f]}</option>)}
-                  </select>
-                </div>
-              </div>
-
-              {/* Posiciones swing (solo técnico) */}
-              {form.categoria === "tecnico" && (
-                <div>
-                  <label className="block text-xs font-semibold text-gray-700 mb-1.5">Posiciones del swing</label>
-                  <div className="flex flex-wrap gap-1.5">
-                    {POSICIONES.map(p => {
-                      const sel = form.posicion_swing?.includes(p) ?? false;
-                      return (
-                        <button key={p} type="button" onClick={() => toggleChip("posicion_swing", p)}
-                          className="px-2.5 py-1 rounded-full text-xs font-semibold border transition-all"
-                          style={sel ? { background:"#1B4D2E", color:"#fff", borderColor:"#1B4D2E" } : { background:"#f9fafb", color:"#374151", borderColor:"#e5e7eb" }}>
-                          {p}
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-              )}
-
-              {/* Nivel recomendado */}
-              <div>
-                <label className="block text-xs font-semibold text-gray-700 mb-1.5">Nivel recomendado</label>
-                <div className="flex flex-wrap gap-1.5">
-                  {NIVELES.map(n => {
-                    const sel = form.nivel_recomendado?.includes(n) ?? false;
-                    return (
-                      <button key={n} type="button" onClick={() => toggleChip("nivel_recomendado", n)}
-                        className="px-2.5 py-1 rounded-full text-xs font-semibold border transition-all"
-                        style={sel ? { background:"#1565c0", color:"#fff", borderColor:"#1565c0" } : { background:"#f9fafb", color:"#374151", borderColor:"#e5e7eb" }}>
-                        {NIVEL_LABEL[n]}
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-
-              {/* Material */}
-              <div>
-                <label className="block text-xs font-semibold text-gray-700 mb-1.5">Material</label>
-                <div className="flex flex-wrap gap-1.5">
-                  {MATERIALES.map(m => {
-                    const sel = form.material?.includes(m) ?? false;
-                    return (
-                      <button key={m} type="button" onClick={() => toggleChip("material", m)}
-                        className="px-2.5 py-1 rounded-full text-xs font-semibold border transition-all"
-                        style={sel ? { background:"#9a3412", color:"#fff", borderColor:"#9a3412" } : { background:"#f9fafb", color:"#374151", borderColor:"#e5e7eb" }}>
-                        {MATERIAL_LABEL[m]}
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-
-              {/* Lugar */}
-              <div>
-                <label className="block text-xs font-semibold text-gray-700 mb-1">Lugar <span className="text-red-400">*</span></label>
-                <select value={form.lugar} onChange={e => setF("lugar", e.target.value)}
-                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-green-600">
-                  {LUGARES.map(l => <option key={l.value} value={l.value}>{l.label}</option>)}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <Campo label="Categoría *">
+                <select value={form.categoria}
+                  onChange={e => { setF("categoria", e.target.value as Categoria); setF("subcategoria", null); setF("posicion_swing", null); }}
+                  className={CLASE_CAMPO} style={CAMPO}>
+                  {TABS.map(t => <option key={t.id} value={t.id}>{t.label}</option>)}
                 </select>
-              </div>
-
-              {/* Descripción */}
-              <div>
-                <label className="block text-xs font-semibold text-gray-700 mb-1">Descripción detallada <span className="text-red-400">*</span></label>
-                <textarea value={form.descripcion} onChange={e => setF("descripcion", e.target.value)}
-                  rows={3} placeholder="Instrucciones claras para el instructor..."
-                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-green-600" />
-              </div>
-
-              {/* Error + sensación */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-semibold text-gray-700 mb-1">Error que corrige</label>
-                  <textarea value={form.error_que_corrige ?? ""} onChange={e => setF("error_que_corrige", e.target.value || null)}
-                    rows={2} placeholder="El error técnico que trabaja..."
-                    className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-green-600" />
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold text-gray-700 mb-1">Sensación buscada</label>
-                  <textarea value={form.sensacion_buscada ?? ""} onChange={e => setF("sensacion_buscada", e.target.value || null)}
-                    rows={2} placeholder="La sensación propioceptiva..."
-                    className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-green-600" />
-                </div>
-              </div>
-
-              {/* Métrica + variante presión */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-semibold text-gray-700 mb-1">Métrica de éxito</label>
-                  <input value={form.metrica_exito ?? ""} onChange={e => setF("metrica_exito", e.target.value || null)}
-                    placeholder="ej: 8/10 impactos en zona"
-                    className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-600" />
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold text-gray-700 mb-1">Variante de presión</label>
-                  <input value={form.variante_presion ?? ""} onChange={e => setF("variante_presion", e.target.value || null)}
-                    placeholder="Cómo agregar presión..."
-                    className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-600" />
-                </div>
-              </div>
-
-              {/* Duración + repeticiones */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-semibold text-gray-700 mb-1">Duración (min)</label>
-                  <input type="number" min={1} max={90} value={form.duracion_minutos ?? ""}
-                    onChange={e => setF("duracion_minutos", e.target.value ? parseInt(e.target.value) : null)}
-                    placeholder="15"
-                    className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-600" />
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold text-gray-700 mb-1">Repeticiones</label>
-                  <input value={form.repeticiones ?? ""} onChange={e => setF("repeticiones", e.target.value || null)}
-                    placeholder="ej: 3 series de 10"
-                    className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-600" />
-                </div>
-              </div>
-
-              {/* Reglas de campo */}
-              {form.categoria === "campo" && (
-                <div>
-                  <div className="flex items-center justify-between mb-2">
-                    <label className="text-xs font-semibold text-gray-700">Reglas del juego</label>
-                    <button type="button" onClick={addRegla}
-                      className="text-xs text-green-700 font-semibold hover:underline">+ Agregar regla</button>
-                  </div>
-                  <div className="space-y-2">
-                    {(form.reglas_campo ?? []).map((r, i) => (
-                      <div key={i} className="flex gap-2 items-center">
-                        <span className="text-gray-400 text-sm shrink-0">⛳</span>
-                        <input value={r.texto} onChange={e => setRegla(i, e.target.value)}
-                          placeholder={`Regla ${i + 1}...`}
-                          className="flex-1 border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-green-500" />
-                        <button type="button" onClick={() => removeRegla(i)}
-                          className="text-gray-300 hover:text-red-400 text-sm">✕</button>
-                      </div>
-                    ))}
-                    {!form.reglas_campo?.length && (
-                      <p className="text-xs text-gray-400 italic">Sin reglas aún — haz clic en "+ Agregar regla"</p>
-                    )}
-                  </div>
-                </div>
-              )}
-
-              {/* Rating + Aprobado */}
-              <div className="flex items-center gap-6">
-                <div>
-                  <label className="block text-xs font-semibold text-gray-700 mb-1.5">Rating</label>
-                  <Stars value={form.rating} onChange={v => setF("rating", v)} />
-                </div>
-                <label className="flex items-center gap-2 cursor-pointer select-none mt-4">
-                  <input type="checkbox" checked={form.aprobado} onChange={e => setF("aprobado", e.target.checked)}
-                    className="w-4 h-4 rounded accent-green-700" />
-                  <span className="text-sm text-gray-700 font-medium">Aprobado por instructor</span>
-                </label>
-              </div>
-
-              {/* Notas instructor */}
-              <div>
-                <label className="block text-xs font-semibold text-gray-700 mb-1">Notas del instructor</label>
-                <textarea value={form.notas_instructor ?? ""} onChange={e => setF("notas_instructor", e.target.value || null)}
-                  rows={2} placeholder="Observaciones internas..."
-                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-green-600" />
-              </div>
-
-              {formError && <p className="text-xs text-red-500 bg-red-50 px-3 py-2 rounded-lg">{formError}</p>}
+              </Campo>
+              <Campo label="Foco pedagógico">
+                <select value={form.subcategoria ?? ""} onChange={e => setF("subcategoria", e.target.value || null)}
+                  className={CLASE_CAMPO} style={CAMPO}>
+                  <option value="">— Ninguno —</option>
+                  {FOCOS.map(f => <option key={f} value={f}>{FOCO_LABEL[f]}</option>)}
+                </select>
+              </Campo>
             </div>
 
-            <div className="px-6 pb-6 flex gap-2 sticky bottom-0 bg-white border-t border-gray-100 pt-4">
-              <button onClick={handleSave} disabled={saving}
-                className="flex-1 py-2.5 rounded-xl text-sm font-semibold text-white disabled:opacity-50 hover:brightness-110 transition-all"
-                style={{ background: "#1B4D2E" }}>
-                {saving ? "Guardando..." : editingId ? "Guardar cambios" : "Crear drill"}
-              </button>
-              <button onClick={() => setShowEditModal(false)} disabled={saving}
-                className="px-5 py-2.5 rounded-xl text-sm font-medium border border-gray-200 text-gray-600 hover:bg-gray-50 disabled:opacity-40">
-                Cancelar
-              </button>
+            {form.categoria === "tecnico" && (
+              <Campo label="Posiciones del swing">
+                <div className="flex flex-wrap gap-1.5">
+                  {POSICIONES.map(p => (
+                    <Chip key={p} label={p} activo={form.posicion_swing?.includes(p) ?? false}
+                      onClick={() => toggleChip("posicion_swing", p)} />
+                  ))}
+                </div>
+              </Campo>
+            )}
+
+            <Campo label="Nivel recomendado">
+              <div className="flex flex-wrap gap-1.5">
+                {NIVELES.map(n => (
+                  <Chip key={n} label={NIVEL_LABEL[n]} activo={form.nivel_recomendado?.includes(n) ?? false}
+                    onClick={() => toggleChip("nivel_recomendado", n)} tono={tonoNivel(n)} />
+                ))}
+              </div>
+            </Campo>
+
+            <Campo label="Material">
+              <div className="flex flex-wrap gap-1.5">
+                {MATERIALES.map(m => (
+                  <Chip key={m} label={MATERIAL_LABEL[m]} activo={form.material?.includes(m) ?? false}
+                    onClick={() => toggleChip("material", m)} icono={Package} />
+                ))}
+              </div>
+            </Campo>
+
+            <Campo label="Lugar *">
+              <select value={form.lugar} onChange={e => setF("lugar", e.target.value)}
+                className={CLASE_CAMPO} style={CAMPO}>
+                {LUGARES.map(l => <option key={l.value} value={l.value}>{l.label}</option>)}
+              </select>
+            </Campo>
+
+            <Campo label="Descripción detallada *">
+              <textarea value={form.descripcion} onChange={e => setF("descripcion", e.target.value)}
+                rows={3} placeholder="Instrucciones claras para el instructor…"
+                className={`${CLASE_CAMPO} resize-none`} style={CAMPO} />
+            </Campo>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <Campo label="Error que corrige">
+                <textarea value={form.error_que_corrige ?? ""} onChange={e => setF("error_que_corrige", e.target.value || null)}
+                  rows={2} placeholder="El error técnico que trabaja…"
+                  className={`${CLASE_CAMPO} resize-none`} style={CAMPO} />
+              </Campo>
+              <Campo label="Sensación buscada">
+                <textarea value={form.sensacion_buscada ?? ""} onChange={e => setF("sensacion_buscada", e.target.value || null)}
+                  rows={2} placeholder="La sensación propioceptiva…"
+                  className={`${CLASE_CAMPO} resize-none`} style={CAMPO} />
+              </Campo>
             </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <Campo label="Métrica de éxito">
+                <input value={form.metrica_exito ?? ""} onChange={e => setF("metrica_exito", e.target.value || null)}
+                  placeholder="8/10 impactos en zona" className={CLASE_CAMPO} style={CAMPO} />
+              </Campo>
+              <Campo label="Variante de presión">
+                <input value={form.variante_presion ?? ""} onChange={e => setF("variante_presion", e.target.value || null)}
+                  placeholder="Cómo agregar presión…" className={CLASE_CAMPO} style={CAMPO} />
+              </Campo>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <Campo label="Duración (min)">
+                <input type="number" min={1} max={90} value={form.duracion_minutos ?? ""}
+                  onChange={e => setF("duracion_minutos", e.target.value ? parseInt(e.target.value) : null)}
+                  placeholder="15" className={CLASE_CAMPO} style={CAMPO} />
+              </Campo>
+              <Campo label="Repeticiones">
+                <input value={form.repeticiones ?? ""} onChange={e => setF("repeticiones", e.target.value || null)}
+                  placeholder="3 series de 10" className={CLASE_CAMPO} style={CAMPO} />
+              </Campo>
+            </div>
+
+            {form.categoria === "campo" && (
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <CampoLabel>Reglas del juego</CampoLabel>
+                  <button type="button" onClick={addRegla}
+                    className="flex items-center gap-1 text-xs font-bold hover:underline" style={{ color: "var(--ui-gold)" }}>
+                    <Plus size={11} />Agregar regla
+                  </button>
+                </div>
+                <div className="space-y-2">
+                  {(form.reglas_campo ?? []).map((r, i) => (
+                    <div key={i} className="flex gap-2 items-center">
+                      <Flag size={13} className="shrink-0" style={{ color: "var(--ui-text-3)" }} />
+                      <input value={r.texto} onChange={e => setRegla(i, e.target.value)}
+                        placeholder={`Regla ${i + 1}…`}
+                        className="flex-1 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-1" style={CAMPO} />
+                      <button type="button" onClick={() => removeRegla(i)} title="Quitar regla"
+                        className="p-1 rounded transition-colors hover:bg-(--ui-bad-bg)" style={{ color: "var(--ui-text-3)" }}>
+                        <X size={13} />
+                      </button>
+                    </div>
+                  ))}
+                  {!form.reglas_campo?.length && (
+                    <p className="text-xs italic" style={{ color: "var(--ui-text-3)" }}>Sin reglas aún.</p>
+                  )}
+                </div>
+              </div>
+            )}
+
+            <div className="flex items-center gap-6 flex-wrap">
+              <div>
+                <p className="text-[11px] font-bold uppercase tracking-wide mb-1.5" style={{ color: "var(--ui-text-3)" }}>Rating</p>
+                <Stars value={form.rating} onChange={v => setF("rating", v)} />
+              </div>
+              <label className="flex items-center gap-2 cursor-pointer select-none mt-4">
+                <input type="checkbox" checked={form.aprobado} onChange={e => setF("aprobado", e.target.checked)}
+                  className="w-4 h-4 rounded" style={{ accentColor: "var(--ui-gold)" }} />
+                <span className="text-sm font-semibold" style={{ color: "var(--ui-text-2)" }}>Aprobado por instructor</span>
+              </label>
+            </div>
+
+            <Campo label="Notas del instructor">
+              <textarea value={form.notas_instructor ?? ""} onChange={e => setF("notas_instructor", e.target.value || null)}
+                rows={2} placeholder="Observaciones internas…"
+                className={`${CLASE_CAMPO} resize-none`} style={CAMPO} />
+            </Campo>
+
+            {formError && (
+              <p className="text-xs font-semibold px-3 py-2 rounded-lg"
+                style={{ background: "var(--ui-bad-bg)", color: "var(--ui-bad)" }}>{formError}</p>
+            )}
           </div>
-        </div>
+
+          <div className="px-5 pb-5 pt-4 flex gap-2 sticky bottom-0"
+            style={{ background: "var(--ui-card)", borderTop: "1px solid var(--ui-border-soft)" }}>
+            <div className="flex-1">
+              <BotonPrimario onClick={handleSave} disabled={saving}>
+                {saving ? "Guardando…" : editingId ? "Guardar cambios" : "Crear drill"}
+              </BotonPrimario>
+            </div>
+            <BotonSecundario onClick={() => setShowEditModal(false)} disabled={saving}>Cancelar</BotonSecundario>
+          </div>
+        </Modal>
       )}
 
       {/* ══ MODAL: Agregar con IA ══════════════════════════════════════════════ */}
       {showAIModal && (
-        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4"
-          onClick={() => { if (!aiLoading && !saving) setShowAIModal(false); }}>
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg" onClick={e => e.stopPropagation()}>
-            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
-              <div>
-                <h2 className="font-bold text-gray-900">✨ Agregar drill rápido con IA</h2>
-                <p className="text-xs text-gray-400 mt-0.5">Describe el drill y la IA lo organiza automáticamente</p>
-              </div>
-              <button onClick={() => setShowAIModal(false)} disabled={aiLoading || saving}
-                className="text-gray-400 hover:text-gray-600 disabled:opacity-40">
-                <svg width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path d="M18 6L6 18M6 6l12 12"/></svg>
+        <Modal onClose={() => { if (!aiLoading && !saving) setShowAIModal(false); }} ancho="lg">
+          <ModalHeader
+            titulo="Agregar drill rápido con IA"
+            sub="Describe el drill y la IA lo organiza automáticamente"
+            onClose={() => { if (!aiLoading && !saving) setShowAIModal(false); }}
+          />
+
+          <div className="px-5 py-5 space-y-4">
+            <textarea
+              value={aiText}
+              onChange={e => { setAiText(e.target.value); setAiPreview(null); setAiError(null); }}
+              rows={5}
+              placeholder={"Describe el drill en tus palabras…\n\nEj: «Drill de media subida para Competencia — el alumno pone un palo en la espalda y hace la subida hasta P3 sin que el palo caiga, para trabajar la rotación de hombros. 10 repeticiones.»"}
+              className="w-full rounded-xl px-4 py-3 text-sm resize-none focus:outline-none focus:ring-2"
+              style={CAMPO}
+            />
+
+            {aiError && (
+              <p className="text-xs font-semibold px-3 py-2 rounded-lg"
+                style={{ background: "var(--ui-bad-bg)", color: "var(--ui-bad)" }}>{aiError}</p>
+            )}
+
+            {!aiPreview && (
+              <button
+                onClick={handleOrganizarIA}
+                disabled={aiLoading || !aiText.trim()}
+                className="w-full flex items-center justify-center gap-2 py-2.5 rounded-lg text-sm font-bold disabled:opacity-50 transition-opacity hover:opacity-90"
+                style={{ background: "var(--ui-gold)", color: "var(--ui-bg)" }}>
+                {aiLoading
+                  ? <><span className="animate-spin rounded-full h-4 w-4 border-2" style={{ borderColor: "var(--ui-bg)", borderTopColor: "transparent" }} />Organizando…</>
+                  : <><Sparkles size={15} />Organizar con IA</>}
               </button>
-            </div>
+            )}
 
-            <div className="px-6 py-5 space-y-4">
-              <textarea
-                value={aiText}
-                onChange={e => { setAiText(e.target.value); setAiPreview(null); setAiError(null); }}
-                rows={5}
-                placeholder="Describe el drill en tus palabras...&#10;&#10;Ej: 'Drill de media subida para Competencia — el alumno pone un palo en la espalda y hace la subida hasta P3 sin que el palo caiga, para trabajar la rotación de hombros. 10 repeticiones.'"
-                className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-green-600"
-              />
-
-              {aiError && <p className="text-xs text-red-500 bg-red-50 px-3 py-2 rounded-lg">{aiError}</p>}
-
-              {!aiPreview && (
-                <button
-                  onClick={handleOrganizarIA}
-                  disabled={aiLoading || !aiText.trim()}
-                  className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-semibold text-white disabled:opacity-50 hover:brightness-110 transition-all"
-                  style={{ background: "#1B4D2E" }}>
-                  {aiLoading
-                    ? <><svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"/></svg>Organizando...</>
-                    : "✨ Organizar con IA"}
-                </button>
-              )}
-
-              {/* Preview IA */}
-              {aiPreview && (
-                <div className="border border-green-200 rounded-xl bg-green-50 p-4 space-y-3">
-                  <div className="flex items-center gap-2 mb-1">
-                    <svg width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="#166534" strokeWidth={2.5}><path d="M3 10l4 4 9-9"/></svg>
-                    <span className="text-xs font-bold text-green-800">Vista previa — revisa antes de guardar</span>
-                  </div>
-                  <p className="text-sm font-bold text-gray-900">{aiPreview.titulo}</p>
-                  <div className="flex flex-wrap gap-1">
-                    {aiPreview.categoria && (
-                      <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-white border border-green-200 text-green-800">
-                        {TABS.find(t => t.id === aiPreview.categoria)?.label ?? aiPreview.categoria}
-                      </span>
-                    )}
-                    {aiPreview.posicion_swing?.map(p => (
-                      <span key={p} className="text-[10px] font-bold px-2 py-0.5 rounded-full" style={{background:"#e8f5e9",color:"#2d5a27"}}>{p}</span>
-                    ))}
-                    {aiPreview.nivel_recomendado?.map(n => (
-                      <span key={n} className="text-[10px] font-semibold px-2 py-0.5 rounded-full" style={{background:"#e3f2fd",color:"#1565c0"}}>{NIVEL_LABEL[n]??n}</span>
-                    ))}
-                    {aiPreview.lugar && (
-                      <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full" style={{background:"#f3e5f5",color:"#6a1b9a"}}>
-                        📍 {LUGAR_LABEL[aiPreview.lugar] ?? aiPreview.lugar}
-                      </span>
-                    )}
-                  </div>
-                  <p className="text-xs text-gray-600 leading-snug">{aiPreview.descripcion}</p>
-                  {aiPreview.error_que_corrige && (
-                    <p className="text-xs text-red-600"><strong>Error:</strong> {aiPreview.error_que_corrige}</p>
-                  )}
-                  {aiPreview.metrica_exito && (
-                    <p className="text-xs text-blue-700"><strong>Métrica:</strong> {aiPreview.metrica_exito}</p>
-                  )}
-                  <div className="flex gap-2 pt-1">
-                    <button onClick={handleGuardarAI}
-                      className="flex-1 py-2 rounded-xl text-sm font-semibold text-white hover:brightness-110 transition-all"
-                      style={{ background: "#1B4D2E" }}>
-                      ✓ Guardado como pendiente
-                    </button>
-                    <button
-                      onClick={() => {
-                        if (!aiPreview) return;
-                        const cat = aiPreview.categoria;
-                        setForm({
-                          titulo: aiPreview.titulo ?? "",
-                          descripcion: aiPreview.descripcion ?? "",
-                          categoria: cat,
-                          subcategoria: aiPreview.subcategoria ?? null,
-                          posicion_swing: aiPreview.posicion_swing ?? null,
-                          material: aiPreview.material ?? null,
-                          nivel_recomendado: aiPreview.nivel_recomendado ?? null,
-                          lugar: aiPreview.lugar ?? "campo_practica",
-                          duracion_minutos: aiPreview.duracion_minutos ?? null,
-                          repeticiones: aiPreview.repeticiones ?? null,
-                          error_que_corrige: aiPreview.error_que_corrige ?? null,
-                          sensacion_buscada: aiPreview.sensacion_buscada ?? null,
-                          metrica_exito: aiPreview.metrica_exito ?? null,
-                          variante_presion: aiPreview.variante_presion ?? null,
-                          reglas_campo: aiPreview.reglas_campo ?? null,
-                          rating: aiPreview.rating ?? 3,
-                          favorito: false, aprobado: false,
-                          generado_por_ia: true, notas_instructor: null,
-                        });
-                        setEditingId(aiPreview.id); setFormError(null);
-                        setShowAIModal(false);
-                        setShowEditModal(true);
-                      }}
-                      className="px-4 py-2 rounded-xl text-sm font-medium border border-gray-200 text-gray-600 hover:bg-gray-50">
-                      ✏️ Editar
-                    </button>
-                  </div>
+            {aiPreview && (
+              <div className="rounded-xl p-4 space-y-3"
+                style={{ background: "var(--ui-card-alt)", border: "1px solid var(--ui-ok)" }}>
+                <div className="flex items-center gap-2 mb-1">
+                  <Check size={14} style={{ color: "var(--ui-ok)" }} />
+                  <span className="text-xs font-bold" style={{ color: "var(--ui-ok)" }}>Vista previa — revisa antes de guardar</span>
                 </div>
-              )}
-            </div>
+                <p className="text-sm font-bold" style={{ color: "var(--ui-text)" }}>{aiPreview.titulo}</p>
+                <div className="flex flex-wrap gap-1">
+                  {aiPreview.categoria && (
+                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full"
+                      style={{ background: "var(--ui-card)", color: "var(--ui-text-2)", border: "1px solid var(--ui-border)" }}>
+                      {TABS.find(t => t.id === aiPreview.categoria)?.label ?? aiPreview.categoria}
+                    </span>
+                  )}
+                  {aiPreview.posicion_swing?.map(p => (
+                    <span key={p} className="text-[10px] font-bold px-2 py-0.5 rounded-full"
+                      style={{ background: "var(--g-juvenil-bg)", color: "var(--g-juvenil-fg)" }}>{p}</span>
+                  ))}
+                  {aiPreview.nivel_recomendado?.map(n => (
+                    <span key={n} className="text-[10px] font-semibold px-2 py-0.5 rounded-full" style={tonoNivel(n)}>
+                      {NIVEL_LABEL[n] ?? n}
+                    </span>
+                  ))}
+                  {aiPreview.lugar && (
+                    <span className="inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full"
+                      style={{ background: "var(--ui-card)", color: "var(--ui-text-2)" }}>
+                      <MapPin size={9} />{LUGAR_LABEL[aiPreview.lugar] ?? aiPreview.lugar}
+                    </span>
+                  )}
+                </div>
+                <p className="text-xs leading-snug" style={{ color: "var(--ui-text-2)" }}>{aiPreview.descripcion}</p>
+                {aiPreview.error_que_corrige && (
+                  <p className="text-xs" style={{ color: "var(--ui-bad)" }}><strong>Error:</strong> {aiPreview.error_que_corrige}</p>
+                )}
+                {aiPreview.metrica_exito && (
+                  <p className="text-xs" style={{ color: "var(--g-birdies-fg)" }}><strong>Métrica:</strong> {aiPreview.metrica_exito}</p>
+                )}
+                <div className="flex gap-2 pt-1">
+                  <div className="flex-1">
+                    <BotonPrimario onClick={handleGuardarAI}>
+                      <Check size={15} />Guardar como pendiente
+                    </BotonPrimario>
+                  </div>
+                  <BotonSecundario
+                    onClick={() => {
+                      if (!aiPreview) return;
+                      const cat = aiPreview.categoria;
+                      setForm({
+                        titulo: aiPreview.titulo ?? "",
+                        descripcion: aiPreview.descripcion ?? "",
+                        categoria: cat,
+                        subcategoria: aiPreview.subcategoria ?? null,
+                        posicion_swing: aiPreview.posicion_swing ?? null,
+                        material: aiPreview.material ?? null,
+                        nivel_recomendado: aiPreview.nivel_recomendado ?? null,
+                        lugar: aiPreview.lugar ?? "campo_practica",
+                        duracion_minutos: aiPreview.duracion_minutos ?? null,
+                        repeticiones: aiPreview.repeticiones ?? null,
+                        error_que_corrige: aiPreview.error_que_corrige ?? null,
+                        sensacion_buscada: aiPreview.sensacion_buscada ?? null,
+                        metrica_exito: aiPreview.metrica_exito ?? null,
+                        variante_presion: aiPreview.variante_presion ?? null,
+                        reglas_campo: aiPreview.reglas_campo ?? null,
+                        rating: aiPreview.rating ?? 3,
+                        favorito: false, aprobado: false,
+                        generado_por_ia: true, notas_instructor: null,
+                      });
+                      setEditingId(aiPreview.id); setFormError(null);
+                      setShowAIModal(false);
+                      setShowEditModal(true);
+                    }}>
+                    <Pencil size={14} />Editar
+                  </BotonSecundario>
+                </div>
+              </div>
+            )}
           </div>
-        </div>
+        </Modal>
       )}
 
       {/* ══ MODAL: Resultado de importación Excel ═══════════════════════════════ */}
       {importResult && (
-        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4" onClick={() => setImportResult(null)}>
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md" onClick={e => e.stopPropagation()}>
-            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
-              <h2 className="font-bold text-gray-900">Resultado de la importación</h2>
-              <button onClick={() => setImportResult(null)} className="text-gray-400 hover:text-gray-600">
-                <svg width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path d="M18 6L6 18M6 6l12 12"/></svg>
-              </button>
-            </div>
-            <div className="px-6 py-5 space-y-3 max-h-[60vh] overflow-y-auto">
-              <p className="text-sm text-gray-700">
-                <strong className="text-green-700">{importResult.insertados}</strong> drill{importResult.insertados !== 1 ? "s" : ""} importado{importResult.insertados !== 1 ? "s" : ""}
-                {importResult.insertados > 0 && " (pendientes de aprobación)"}.
-              </p>
-              {importResult.omitidos.length > 0 && (
-                <div>
-                  <p className="text-xs font-semibold text-amber-700 mb-1.5">{importResult.omitidos.length} fila{importResult.omitidos.length !== 1 ? "s" : ""} omitida{importResult.omitidos.length !== 1 ? "s" : ""}:</p>
-                  <ul className="space-y-1">
-                    {importResult.omitidos.map((o, i) => (
-                      <li key={i} className="text-xs text-amber-800 bg-amber-50 rounded-lg px-2.5 py-1.5">
-                        {o.fila > 0 ? `Fila ${o.fila}: ` : ""}{o.motivo}
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-            </div>
-            <div className="px-6 pb-6">
-              <button onClick={() => setImportResult(null)} className="w-full py-2.5 rounded-xl text-sm font-semibold text-white" style={{ background: "#1B4D2E" }}>
-                Cerrar
-              </button>
-            </div>
+        <Modal onClose={() => setImportResult(null)} ancho="sm">
+          <ModalHeader titulo="Resultado de la importación" onClose={() => setImportResult(null)} />
+          <div className="px-5 py-5 space-y-3 max-h-[60vh] overflow-y-auto">
+            <p className="text-sm" style={{ color: "var(--ui-text-2)" }}>
+              <strong style={{ color: "var(--ui-ok)" }}>{importResult.insertados}</strong>
+              {" "}drill{importResult.insertados !== 1 ? "s" : ""} importado{importResult.insertados !== 1 ? "s" : ""}
+              {importResult.insertados > 0 && " (pendientes de aprobación)"}.
+            </p>
+            {importResult.omitidos.length > 0 && (
+              <div>
+                <p className="text-xs font-bold mb-1.5" style={{ color: "var(--ui-warn)" }}>
+                  {importResult.omitidos.length} fila{importResult.omitidos.length !== 1 ? "s" : ""} omitida{importResult.omitidos.length !== 1 ? "s" : ""}:
+                </p>
+                <ul className="space-y-1">
+                  {importResult.omitidos.map((o, i) => (
+                    <li key={i} className="text-xs rounded-lg px-2.5 py-1.5"
+                      style={{ background: "var(--ui-warn-bg)", color: "var(--ui-text-2)" }}>
+                      {o.fila > 0 ? `Fila ${o.fila}: ` : ""}{o.motivo}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
           </div>
-        </div>
+          <div className="px-5 pb-5">
+            <BotonPrimario onClick={() => setImportResult(null)}>Cerrar</BotonPrimario>
+          </div>
+        </Modal>
       )}
 
-      {toast && <Toast msg={toast} />}
-    </div>
+      {borrarDrill && (
+        <ModalConfirmar
+          titulo="Eliminar drill"
+          mensaje={<>Se elimina <strong style={{ color: "var(--ui-bad)" }}>{borrarDrill.titulo}</strong> de la biblioteca. Esta acción no se puede deshacer.</>}
+          onConfirmar={handleDelete}
+          onCancelar={() => setBorrarDrill(null)}
+        />
+      )}
+
+      {confirmarBiblioteca && (
+        <ModalConfirmar
+          titulo="Generar biblioteca base"
+          textoConfirmar="Generar los 52 drills"
+          mensaje={<>Se crean 52 drills base con cuatro llamadas a la IA. Tarda entre uno y dos minutos y los drills quedan pendientes de aprobación.</>}
+          onConfirmar={handleGenerarBiblioteca}
+          onCancelar={() => setConfirmarBiblioteca(false)}
+        />
+      )}
+
+      <Toast msg={toast} />
+    </Pagina>
   );
 }

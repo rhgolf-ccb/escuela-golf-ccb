@@ -1,8 +1,15 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { supabase } from "@/lib/supabase";
-import { Dumbbell } from "lucide-react";
+import { colorGrupo } from "@/lib/grupos";
+import {
+  Dumbbell, Plus, Search, Star, Pencil, Trash2, X, Clock, Repeat, Package, Target,
+} from "lucide-react";
+import {
+  BotonPrimario, BotonSecundario, CAMPO, CLASE_CAMPO, Campo, CampoLabel, EmptyState,
+  Encabezado, Loading, Modal, ModalConfirmar, ModalHeader, Pagina, Tabs, Toast,
+} from "@/components/ui/tema";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 type Categoria = "Movilidad" | "Fuerza y estabilidad" | "Potencia" | "Calentamiento";
@@ -28,19 +35,28 @@ interface Ejercicio {
 type EjercicioForm = Omit<Ejercicio, "id" | "created_at" | "updated_at">;
 
 // ── Constants ─────────────────────────────────────────────────────────────────
-const TABS: { id: Categoria; label: string; icon: string }[] = [
-  { id: "Movilidad",            label: "Movilidad",            icon: "🧘" },
-  { id: "Fuerza y estabilidad", label: "Fuerza y estabilidad",  icon: "💪" },
-  { id: "Potencia",             label: "Potencia",              icon: "⚡" },
-  { id: "Calentamiento",        label: "Calentamiento",         icon: "🔥" },
+const TABS: { id: Categoria; label: string }[] = [
+  { id: "Movilidad",            label: "Movilidad" },
+  { id: "Fuerza y estabilidad", label: "Fuerza y estabilidad" },
+  { id: "Potencia",             label: "Potencia" },
+  { id: "Calentamiento",        label: "Calentamiento" },
 ];
 
-const CATEGORIA_COLOR: Record<Categoria, { bg: string; fg: string }> = {
-  "Movilidad":            { bg: "#e3f2fd", fg: "#1565c0" },
-  "Fuerza y estabilidad": { bg: "#e8f5e9", fg: "#2d5a27" },
-  "Potencia":             { bg: "#ffe0e0", fg: "#b3261e" },
-  "Calentamiento":        { bg: "#fff8e1", fg: "#8d6d00" },
+// Las cuatro categorías tenían su propio par de pasteles inventado aquí. Se
+// toman prestados los pares de grupo, que es la paleta que ya está validada
+// contra el fondo oscuro. La correspondencia es arbitraria y solo busca que
+// las cuatro se distingan entre sí.
+const CATEGORIA_VAR: Record<Categoria, string> = {
+  "Movilidad":            "birdies",
+  "Fuerza y estabilidad": "juvenil",
+  "Potencia":             "damas",
+  "Calentamiento":        "competencia",
 };
+
+function colorCategoria(c: Categoria): { background: string; color: string } {
+  const v = CATEGORIA_VAR[c];
+  return { background: `var(--g-${v}-bg)`, color: `var(--g-${v}-fg)` };
+}
 
 const GRUPOS = ["Birdies", "Águilas", "Albatros", "Competencia", "Damas"];
 
@@ -53,11 +69,12 @@ function emptyForm(): EjercicioForm {
   };
 }
 
-// ── Toast ─────────────────────────────────────────────────────────────────────
-function Toast({ msg }: { msg: string }) {
+// Bloque de "etiqueta + valor" del detalle. Se repetía ocho veces.
+function Dato({ label, children }: { label: string; children: ReactNode }) {
   return (
-    <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[100] bg-gray-900 text-white text-sm font-medium px-5 py-3 rounded-xl shadow-xl">
-      {msg}
+    <div>
+      <p className="text-[11px] font-bold uppercase tracking-wide mb-1" style={{ color: "var(--ui-text-3)" }}>{label}</p>
+      <div className="text-sm" style={{ color: "var(--ui-text-2)" }}>{children}</div>
     </div>
   );
 }
@@ -78,6 +95,10 @@ export default function FisicoModule() {
   const [formError, setFormError]         = useState<string | null>(null);
 
   const [detailEjercicio, setDetailEjercicio] = useState<Ejercicio | null>(null);
+  // El borrado pedía confirmación con confirm(), que bloquea la pestaña y no
+  // alcanza a decir qué ejercicio se va. Ahora se guarda cuál y se pregunta
+  // dentro de la app, con el nombre a la vista.
+  const [borrarEjercicio, setBorrarEjercicio] = useState<Ejercicio | null>(null);
   const [toast, setToast]                 = useState<string | null>(null);
 
   const showToast = (msg: string) => { setToast(msg); setTimeout(() => setToast(null), 3000); };
@@ -127,10 +148,12 @@ export default function FisicoModule() {
   }
 
   // ── Delete ejercicio ─────────────────────────────────────────────────────────
-  async function handleDelete(id: string) {
-    if (!confirm("¿Eliminar este ejercicio?")) return;
-    await supabase.from("ejercicios_fisicos").delete().eq("id", id);
-    setEjercicios(prev => prev.filter(e => e.id !== id));
+  async function handleDelete() {
+    const e = borrarEjercicio;
+    if (!e) return;
+    await supabase.from("ejercicios_fisicos").delete().eq("id", e.id);
+    setEjercicios(prev => prev.filter(x => x.id !== e.id));
+    setBorrarEjercicio(null);
     setDetailEjercicio(null);
     showToast("Ejercicio eliminado");
   }
@@ -193,58 +216,68 @@ export default function FisicoModule() {
 
   // ── Ejercicio Card ───────────────────────────────────────────────────────────
   function EjercicioCard({ e }: { e: Ejercicio }) {
-    const colors = CATEGORIA_COLOR[e.categoria];
+    const tono = colorCategoria(e.categoria);
     return (
       <div
         onClick={() => setDetailEjercicio(e)}
-        className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden transition-shadow hover:shadow-md cursor-pointer"
+        className="rounded-xl overflow-hidden cursor-pointer transition-colors hover:border-(--ui-border)"
+        style={{ background: "var(--ui-card)", border: "1px solid var(--ui-border-soft)" }}
       >
         <div className="p-4">
           <div className="flex items-start justify-between gap-2 mb-2">
-            <h3 className="text-sm font-bold text-gray-900 leading-snug flex-1">{e.nombre}</h3>
+            <h3 className="text-sm font-bold leading-snug flex-1" style={{ color: "var(--ui-text)" }}>{e.nombre}</h3>
             <button
               onClick={ev => { ev.stopPropagation(); handleFavorito(e); }}
-              className="text-sm px-1 py-0.5 rounded-lg hover:bg-yellow-50 transition-colors shrink-0"
-              title={e.favorito ? "Quitar favorito" : "Marcar favorito"}
-            >{e.favorito ? "⭐" : "☆"}</button>
+              className="p-1 rounded-lg transition-colors hover:bg-(--ui-card-alt) shrink-0"
+              title={e.favorito ? "Quitar de favoritos" : "Marcar favorito"}
+            >
+              <Star size={14}
+                style={{ color: e.favorito ? "var(--ui-gold)" : "var(--ui-text-3)" }}
+                fill={e.favorito ? "var(--ui-gold)" : "none"} />
+            </button>
           </div>
 
-          {/* Badges */}
           <div className="flex flex-wrap gap-1 mb-2">
-            <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full" style={{ background: colors.bg, color: colors.fg }}>
+            <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full" style={tono}>
               {e.categoria}
             </span>
             {e.grupos?.map(g => (
-              <span key={g} className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full" style={{ background: "#e0f2f1", color: "#00695c" }}>{g}</span>
+              <span key={g} className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full"
+                style={{ background: "var(--ui-card-alt)", color: "var(--ui-text-2)" }}>{g}</span>
             ))}
             {e.screen_vinculado && (
-              <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full" style={{ background: "#fce4ec", color: "#ad1457" }}>
-                🎯 {e.screen_vinculado}
+              <span className="inline-flex items-center gap-1 text-[10px] font-semibold px-1.5 py-0.5 rounded-full"
+                style={{ background: "var(--ui-warn-bg)", color: "var(--ui-warn)" }}>
+                <Target size={9} />{e.screen_vinculado}
               </span>
             )}
           </div>
 
           {e.materiales && (
-            <p className="text-[10px] text-gray-400 mb-1.5">🧰 {e.materiales}</p>
+            <p className="flex items-center gap-1 text-[10px] mb-1.5" style={{ color: "var(--ui-text-3)" }}>
+              <Package size={10} />{e.materiales}
+            </p>
           )}
 
-          <p className="text-xs text-gray-500 leading-snug mb-3 line-clamp-2">{e.instrucciones}</p>
+          <p className="text-xs leading-snug mb-3 line-clamp-2" style={{ color: "var(--ui-text-2)" }}>{e.instrucciones}</p>
 
-          <div className="flex items-center gap-3 text-[10px] text-gray-400 mb-3">
-            {e.duracion_minutos && <span>⏱ {e.duracion_minutos} min</span>}
-            {e.series_repeticiones && <span className="truncate">🔄 {e.series_repeticiones}</span>}
+          <div className="flex items-center gap-3 text-[10px] mb-3" style={{ color: "var(--ui-text-3)" }}>
+            {e.duracion_minutos && <span className="flex items-center gap-1"><Clock size={10} />{e.duracion_minutos} min</span>}
+            {e.series_repeticiones && <span className="flex items-center gap-1 truncate"><Repeat size={10} />{e.series_repeticiones}</span>}
           </div>
 
-          <div className="border-t border-gray-100 pt-2.5 flex items-center gap-1.5">
+          <div className="pt-2.5 flex items-center gap-1.5" style={{ borderTop: "1px solid var(--ui-border-soft)" }}>
             <button
               onClick={ev => { ev.stopPropagation(); openEdit(e); }}
-              className="flex-1 text-[10px] font-semibold px-2 py-1.5 rounded-lg bg-gray-50 text-gray-600 hover:bg-gray-100 transition-colors"
-            >Editar</button>
+              className="flex-1 flex items-center justify-center gap-1 text-[11px] font-bold px-2 py-1.5 rounded-lg transition-colors hover:bg-(--ui-card-alt)"
+              style={{ color: "var(--ui-text-2)", border: "1px solid var(--ui-border)" }}
+            ><Pencil size={11} />Editar</button>
             <button
-              onClick={ev => { ev.stopPropagation(); handleDelete(e.id); }}
-              className="text-[10px] px-1.5 py-1 rounded-lg text-gray-300 hover:text-red-400 hover:bg-red-50 transition-colors"
+              onClick={ev => { ev.stopPropagation(); setBorrarEjercicio(e); }}
+              className="p-1.5 rounded-lg transition-colors hover:bg-(--ui-bad-bg)"
+              style={{ color: "var(--ui-text-3)" }}
               title="Eliminar"
-            >✕</button>
+            ><Trash2 size={13} /></button>
           </div>
         </div>
       </div>
@@ -252,104 +285,97 @@ export default function FisicoModule() {
   }
 
   const total = ejercicios.length;
+  const hayFiltros = grupoFilters.length > 0 || !!screenFilter || !!searchText;
 
-  // ─────────────────────────────────────────────────────────────────────────────
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 py-8">
-
-      {/* ── Header ── */}
-      <div className="flex items-start justify-between mb-8">
-        <div className="flex items-center gap-3">
-          <div className="w-11 h-11 rounded-xl bg-ccb-green flex items-center justify-center shrink-0">
-            <Dumbbell size={22} className="text-white" />
-          </div>
-          <div>
-            <h1 className="text-2xl font-bold text-ccb-green">Biblioteca de ejercicios físicos</h1>
-            <p className="text-sm text-(--text-muted) mt-0.5">{total} ejercicio{total !== 1 ? "s" : ""} en total</p>
-          </div>
-        </div>
-        <button
-          onClick={openCreate}
-          className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-semibold bg-white border border-gray-200 text-gray-700 hover:bg-gray-50 shadow-sm transition-colors"
-        >
-          <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path d="M12 5v14M5 12h14"/></svg>
+    <Pagina>
+      <Encabezado
+        icono={Dumbbell}
+        titulo="Biblioteca de ejercicios físicos"
+        bajada={`${total} ejercicio${total !== 1 ? "s" : ""} en total`}
+      >
+        <BotonPrimario onClick={openCreate}>
+          <Plus size={16} />
           Agregar ejercicio
-        </button>
-      </div>
+        </BotonPrimario>
+      </Encabezado>
 
-      {/* ── Tabs ── */}
-      <div className="flex gap-1 border-b border-gray-200 mb-4 flex-wrap">
-        {TABS.map(t => (
-          <button
-            key={t.id}
-            onClick={() => setActiveTab(t.id)}
-            className={`flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium border-b-2 transition-all -mb-px ${
-              activeTab === t.id
-                ? "border-green-700 text-green-800 font-semibold"
-                : "border-transparent text-gray-500 hover:text-gray-700"
-            }`}
-          >
-            <span>{t.icon}</span>
-            {t.label}
-            <span className="ml-1 text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-gray-100 text-gray-500">
-              {ejercicios.filter(e => e.categoria === t.id).length}
-            </span>
-          </button>
-        ))}
-      </div>
+      <Tabs
+        value={activeTab}
+        onChange={setActiveTab}
+        options={TABS.map(t => ({
+          id: t.id,
+          label: t.label,
+          count: ejercicios.filter(e => e.categoria === t.id).length,
+        }))}
+      />
 
-      {/* ── Filter bar ── */}
-      <div className="flex items-center gap-3 mb-6 flex-wrap">
+      {/* ── Filtros ── */}
+      <div className="rounded-xl px-3 py-2.5 mb-4 flex flex-wrap items-center gap-x-4 gap-y-2"
+        style={{ background: "var(--ui-card)", border: "1px solid var(--ui-border)" }}>
         <div className="relative flex-1 min-w-[200px] max-w-xs">
-          <svg className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none"
+            style={{ color: "var(--ui-text-3)" }} />
           <input
             value={searchText}
             onChange={e => setSearchText(e.target.value)}
-            placeholder="Buscar ejercicios..."
-            className="w-full pl-8 pr-3 py-2 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-green-600"
+            placeholder="Buscar ejercicios…"
+            className="w-full pl-9 pr-3 py-2 rounded-lg text-sm focus:outline-none focus:ring-2"
+            style={CAMPO}
           />
         </div>
-        <div className="flex flex-wrap gap-1.5">
-          {GRUPOS.map(g => (
-            <button
-              key={g}
-              onClick={() => toggleGrupoFilter(g)}
-              className="px-3 py-1.5 rounded-full text-xs font-semibold border transition-all"
-              style={grupoFilters.includes(g)
-                ? { background: "#1B4D2E", color: "#fff", borderColor: "#1B4D2E" }
-                : { background: "#f9fafb", color: "#374151", borderColor: "#e5e7eb" }}
-            >{g}</button>
-          ))}
+
+        <div className="flex items-center gap-2 flex-wrap">
+          <CampoLabel>Grupo</CampoLabel>
+          <div className="flex flex-wrap gap-1.5">
+            {GRUPOS.map(g => {
+              const on = grupoFilters.includes(g);
+              const c = colorGrupo(g);
+              return (
+                <button key={g} onClick={() => toggleGrupoFilter(g)}
+                  className="px-3 py-1.5 rounded-full text-xs font-semibold transition-all"
+                  style={on
+                    ? { background: c.background, color: c.color, border: `1px solid ${c.color}` }
+                    : { background: "transparent", color: "var(--ui-text-2)", border: "1px solid var(--ui-border)" }}>
+                  {g}
+                </button>
+              );
+            })}
+          </div>
         </div>
+
         {screensDisponibles.length > 0 && (
           <select
             value={screenFilter}
             onChange={e => setScreenFilter(e.target.value)}
-            className="px-3 py-2 rounded-xl border border-gray-200 text-xs font-medium bg-white focus:outline-none focus:ring-2 focus:ring-green-600"
+            className="px-3 py-1.5 rounded-lg text-xs font-semibold focus:outline-none focus:ring-2"
+            style={CAMPO}
           >
             <option value="">Todos los screens</option>
             {screensDisponibles.map(s => <option key={s} value={s}>{s}</option>)}
           </select>
         )}
-        {(grupoFilters.length > 0 || screenFilter || searchText) && (
+
+        {hayFiltros && (
           <button
             onClick={() => { setGrupoFilters([]); setScreenFilter(""); setSearchText(""); }}
-            className="px-3 py-1.5 rounded-full text-xs font-semibold border border-red-200 text-red-500 bg-red-50 hover:bg-red-100 transition-all"
-          >✕ Limpiar</button>
+            className="flex items-center gap-1 px-3 py-1.5 rounded-full text-xs font-semibold transition-colors hover:opacity-80"
+            style={{ color: "var(--ui-bad)", border: "1px solid var(--ui-bad)" }}
+          ><X size={12} />Limpiar</button>
         )}
       </div>
 
-      {/* ── Content ── */}
+      {/* ── Contenido ── */}
       {loading ? (
-        <div className="flex items-center justify-center py-20 text-gray-400">
-          <svg className="animate-spin h-6 w-6 mr-3" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"/></svg>
-          Cargando ejercicios...
-        </div>
+        <Loading msg="Cargando ejercicios…" />
       ) : filtered.length === 0 ? (
-        <div className="flex flex-col items-center justify-center py-20 text-gray-400">
-          <p className="text-lg mb-2">No hay ejercicios{grupoFilters.length > 0 || screenFilter || searchText ? " con esos filtros" : " en esta categoría"}</p>
-          <button onClick={openCreate} className="text-sm text-green-700 hover:underline">+ Agregar el primero</button>
-        </div>
+        <EmptyState
+          msg={`No hay ejercicios${hayFiltros ? " con esos filtros" : " en esta categoría"}`}
+          sub={hayFiltros ? "Prueba quitando algún filtro" : undefined}
+          accion={hayFiltros
+            ? <BotonSecundario onClick={() => { setGrupoFilters([]); setScreenFilter(""); setSearchText(""); }}>Limpiar filtros</BotonSecundario>
+            : <BotonPrimario onClick={openCreate}><Plus size={16} />Agregar el primero</BotonPrimario>}
+        />
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
           {filtered.map(e => <EjercicioCard key={e.id} e={e} />)}
@@ -358,235 +384,207 @@ export default function FisicoModule() {
 
       {/* ══ MODAL: Detalle del ejercicio ═══════════════════════════════════════ */}
       {detailEjercicio && (
-        <div className="fixed inset-0 bg-black/60 z-50 flex items-start justify-center p-4 overflow-y-auto"
-          onClick={() => setDetailEjercicio(null)}>
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-xl my-6" onClick={e => e.stopPropagation()}>
-            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 sticky top-0 bg-white rounded-t-2xl z-10">
-              <h2 className="font-bold text-gray-900">{detailEjercicio.nombre}</h2>
-              <button onClick={() => setDetailEjercicio(null)} className="text-gray-400 hover:text-gray-600">
-                <svg width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path d="M18 6L6 18M6 6l12 12"/></svg>
-              </button>
-            </div>
+        <Modal onClose={() => setDetailEjercicio(null)} ancho="xl">
+          <ModalHeader
+            titulo={detailEjercicio.nombre}
+            sub={detailEjercicio.grupo_muscular ?? undefined}
+            onClose={() => setDetailEjercicio(null)}
+          />
 
-            <div className="px-6 py-5 space-y-4">
-              <div className="flex flex-wrap gap-1.5">
-                <span className="text-[11px] font-bold px-2 py-0.5 rounded-full" style={{ background: CATEGORIA_COLOR[detailEjercicio.categoria].bg, color: CATEGORIA_COLOR[detailEjercicio.categoria].fg }}>
-                  {detailEjercicio.categoria}
+          <div className="px-5 py-5 space-y-4">
+            <div className="flex flex-wrap gap-1.5">
+              <span className="text-[11px] font-bold px-2 py-0.5 rounded-full" style={colorCategoria(detailEjercicio.categoria)}>
+                {detailEjercicio.categoria}
+              </span>
+              {detailEjercicio.grupos?.map(g => {
+                const c = colorGrupo(g);
+                return (
+                  <span key={g} className="text-[11px] font-semibold px-2 py-0.5 rounded-full"
+                    style={{ background: c.background, color: c.color }}>{g}</span>
+                );
+              })}
+              {detailEjercicio.screen_vinculado && (
+                <span className="inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-full"
+                  style={{ background: "var(--ui-warn-bg)", color: "var(--ui-warn)" }}>
+                  <Target size={10} />Screen {detailEjercicio.screen_vinculado}
                 </span>
-                {detailEjercicio.grupos?.map(g => (
-                  <span key={g} className="text-[11px] font-semibold px-2 py-0.5 rounded-full" style={{ background: "#e0f2f1", color: "#00695c" }}>{g}</span>
-                ))}
-                {detailEjercicio.screen_vinculado && (
-                  <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full" style={{ background: "#fce4ec", color: "#ad1457" }}>
-                    🎯 Screen {detailEjercicio.screen_vinculado}
-                  </span>
-                )}
-              </div>
-
-              {detailEjercicio.grupo_muscular && (
-                <div>
-                  <p className="text-xs font-semibold text-gray-700 mb-1">Grupo muscular</p>
-                  <p className="text-sm text-gray-600">{detailEjercicio.grupo_muscular}</p>
-                </div>
-              )}
-
-              {detailEjercicio.materiales && (
-                <div>
-                  <p className="text-xs font-semibold text-gray-700 mb-1">Materiales</p>
-                  <p className="text-sm text-gray-600">🧰 {detailEjercicio.materiales}</p>
-                </div>
-              )}
-
-              <div>
-                <p className="text-xs font-semibold text-gray-700 mb-1">Instrucciones</p>
-                <p className="text-sm text-gray-600 leading-relaxed whitespace-pre-line">{detailEjercicio.instrucciones}</p>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                {detailEjercicio.series_repeticiones && (
-                  <div>
-                    <p className="text-xs font-semibold text-gray-700 mb-1">Series / repeticiones</p>
-                    <p className="text-sm text-gray-600">{detailEjercicio.series_repeticiones}</p>
-                  </div>
-                )}
-                {detailEjercicio.duracion_minutos && (
-                  <div>
-                    <p className="text-xs font-semibold text-gray-700 mb-1">Duración</p>
-                    <p className="text-sm text-gray-600">⏱ {detailEjercicio.duracion_minutos} min</p>
-                  </div>
-                )}
-              </div>
-
-              {detailEjercicio.progresion && (
-                <div>
-                  <p className="text-xs font-semibold text-gray-700 mb-1">Progresión</p>
-                  <p className="text-sm text-gray-600">{detailEjercicio.progresion}</p>
-                </div>
-              )}
-
-              {detailEjercicio.nota && (
-                <div className="bg-amber-50 rounded-lg p-3">
-                  <p className="text-xs font-semibold text-amber-800 mb-1">Nota</p>
-                  <p className="text-sm text-amber-700">{detailEjercicio.nota}</p>
-                </div>
               )}
             </div>
 
-            <div className="px-6 pb-6 flex gap-2 sticky bottom-0 bg-white border-t border-gray-100 pt-4">
-              <button onClick={() => handleFavorito(detailEjercicio)}
-                className="px-4 py-2.5 rounded-xl text-sm font-medium border border-gray-200 text-gray-600 hover:bg-gray-50">
-                {detailEjercicio.favorito ? "⭐ Favorito" : "☆ Marcar favorito"}
-              </button>
-              <button onClick={() => { const e = detailEjercicio; setDetailEjercicio(null); openEdit(e); }}
-                className="flex-1 py-2.5 rounded-xl text-sm font-semibold text-white hover:brightness-110 transition-all"
-                style={{ background: "#1B4D2E" }}>
-                Editar
-              </button>
-              <button onClick={() => handleDelete(detailEjercicio.id)}
-                className="px-4 py-2.5 rounded-xl text-sm font-medium border border-red-200 text-red-500 hover:bg-red-50">
-                Eliminar
-              </button>
+            {detailEjercicio.materiales && (
+              <Dato label="Materiales">
+                <span className="flex items-center gap-1.5"><Package size={13} />{detailEjercicio.materiales}</span>
+              </Dato>
+            )}
+
+            <Dato label="Instrucciones">
+              <p className="leading-relaxed whitespace-pre-line">{detailEjercicio.instrucciones}</p>
+            </Dato>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {detailEjercicio.series_repeticiones && (
+                <Dato label="Series / repeticiones">{detailEjercicio.series_repeticiones}</Dato>
+              )}
+              {detailEjercicio.duracion_minutos && (
+                <Dato label="Duración">
+                  <span className="flex items-center gap-1.5"><Clock size={13} />{detailEjercicio.duracion_minutos} min</span>
+                </Dato>
+              )}
             </div>
+
+            {detailEjercicio.progresion && <Dato label="Progresión">{detailEjercicio.progresion}</Dato>}
+
+            {detailEjercicio.nota && (
+              <div className="rounded-lg p-3" style={{ background: "var(--ui-warn-bg)" }}>
+                <p className="text-[11px] font-bold uppercase tracking-wide mb-1" style={{ color: "var(--ui-warn)" }}>Nota</p>
+                <p className="text-sm" style={{ color: "var(--ui-text-2)" }}>{detailEjercicio.nota}</p>
+              </div>
+            )}
           </div>
-        </div>
+
+          <div className="px-5 pb-5 pt-4 flex gap-2 sticky bottom-0"
+            style={{ background: "var(--ui-card)", borderTop: "1px solid var(--ui-border-soft)" }}>
+            <BotonSecundario onClick={() => handleFavorito(detailEjercicio)}>
+              <Star size={14}
+                style={{ color: detailEjercicio.favorito ? "var(--ui-gold)" : "var(--ui-text-3)" }}
+                fill={detailEjercicio.favorito ? "var(--ui-gold)" : "none"} />
+              {detailEjercicio.favorito ? "Favorito" : "Marcar favorito"}
+            </BotonSecundario>
+            <div className="flex-1">
+              <BotonPrimario onClick={() => { const e = detailEjercicio; setDetailEjercicio(null); openEdit(e); }}>
+                <Pencil size={14} />Editar
+              </BotonPrimario>
+            </div>
+            <button onClick={() => setBorrarEjercicio(detailEjercicio)}
+              className="px-3 py-2 rounded-lg text-sm font-semibold transition-colors hover:bg-(--ui-bad-bg)"
+              style={{ color: "var(--ui-bad)", border: "1px solid var(--ui-bad)" }}>
+              <Trash2 size={14} />
+            </button>
+          </div>
+        </Modal>
       )}
 
       {/* ══ MODAL: Crear / Editar ejercicio ════════════════════════════════════ */}
       {showEditModal && (
-        <div className="fixed inset-0 bg-black/60 z-50 flex items-start justify-center p-4 overflow-y-auto"
-          onClick={() => { if (!saving) setShowEditModal(false); }}>
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl my-6" onClick={e => e.stopPropagation()}>
+        <Modal onClose={() => { if (!saving) setShowEditModal(false); }} ancho="2xl">
+          <ModalHeader
+            titulo={editingId ? "Editar ejercicio" : "Nuevo ejercicio"}
+            sub={form.categoria}
+            onClose={() => { if (!saving) setShowEditModal(false); }}
+          />
 
-            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 sticky top-0 bg-white rounded-t-2xl z-10">
-              <h2 className="font-bold text-gray-900">{editingId ? "Editar ejercicio" : "Nuevo ejercicio"}</h2>
-              <button onClick={() => setShowEditModal(false)} disabled={saving} className="text-gray-400 hover:text-gray-600 disabled:opacity-40">
-                <svg width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path d="M18 6L6 18M6 6l12 12"/></svg>
-              </button>
+          <div className="px-5 py-5 space-y-4">
+            <Campo label="Nombre *">
+              <input value={form.nombre} onChange={e => setF("nombre", e.target.value)}
+                placeholder="Rotación torácica en cuadrupedia" className={CLASE_CAMPO} style={CAMPO} />
+            </Campo>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <Campo label="Categoría *">
+                <select value={form.categoria} onChange={e => setF("categoria", e.target.value as Categoria)}
+                  className={CLASE_CAMPO} style={CAMPO}>
+                  {TABS.map(t => <option key={t.id} value={t.id}>{t.label}</option>)}
+                </select>
+              </Campo>
+              <Campo label="Grupo muscular">
+                <input value={form.grupo_muscular ?? ""} onChange={e => setF("grupo_muscular", e.target.value || null)}
+                  placeholder="Columna torácica" className={CLASE_CAMPO} style={CAMPO} />
+              </Campo>
             </div>
 
-            <div className="px-6 py-5 space-y-4">
-              {/* Nombre */}
-              <div>
-                <label className="block text-xs font-semibold text-gray-700 mb-1">Nombre <span className="text-red-400">*</span></label>
-                <input value={form.nombre} onChange={e => setF("nombre", e.target.value)}
-                  placeholder="Nombre del ejercicio"
-                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-600" />
+            <Campo label="Grupos" hint="Para qué grupos aplica este ejercicio">
+              <div className="flex flex-wrap gap-1.5">
+                {GRUPOS.map(g => {
+                  const sel = form.grupos?.includes(g) ?? false;
+                  const c = colorGrupo(g);
+                  return (
+                    <button key={g} type="button" onClick={() => toggleGrupoChip(g)}
+                      className="px-3 py-1.5 rounded-full text-xs font-semibold transition-all"
+                      style={sel
+                        ? { background: c.background, color: c.color, border: `1px solid ${c.color}` }
+                        : { background: "transparent", color: "var(--ui-text-2)", border: "1px solid var(--ui-border)" }}>
+                      {g}
+                    </button>
+                  );
+                })}
               </div>
+            </Campo>
 
-              {/* Categoría + grupo muscular */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-semibold text-gray-700 mb-1">Categoría <span className="text-red-400">*</span></label>
-                  <select value={form.categoria} onChange={e => setF("categoria", e.target.value as Categoria)}
-                    className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-green-600">
-                    {TABS.map(t => <option key={t.id} value={t.id}>{t.label}</option>)}
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold text-gray-700 mb-1">Grupo muscular</label>
-                  <input value={form.grupo_muscular ?? ""} onChange={e => setF("grupo_muscular", e.target.value || null)}
-                    placeholder="ej: Columna torácica"
-                    className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-600" />
-                </div>
-              </div>
-
-              {/* Grupos */}
-              <div>
-                <label className="block text-xs font-semibold text-gray-700 mb-1.5">Grupos</label>
-                <div className="flex flex-wrap gap-1.5">
-                  {GRUPOS.map(g => {
-                    const sel = form.grupos?.includes(g) ?? false;
-                    return (
-                      <button key={g} type="button" onClick={() => toggleGrupoChip(g)}
-                        className="px-2.5 py-1 rounded-full text-xs font-semibold border transition-all"
-                        style={sel ? { background: "#00695c", color: "#fff", borderColor: "#00695c" } : { background: "#f9fafb", color: "#374151", borderColor: "#e5e7eb" }}>
-                        {g}
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-
-              {/* Materiales + screen vinculado */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-semibold text-gray-700 mb-1">Materiales</label>
-                  <input value={form.materiales ?? ""} onChange={e => setF("materiales", e.target.value || null)}
-                    placeholder="ej: Banda elástica"
-                    className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-600" />
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold text-gray-700 mb-1">Screen TPI vinculado</label>
-                  <input value={form.screen_vinculado ?? ""} onChange={e => setF("screen_vinculado", e.target.value || null)}
-                    placeholder="ej: S5 o PB2"
-                    className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-600" />
-                </div>
-              </div>
-
-              {/* Instrucciones */}
-              <div>
-                <label className="block text-xs font-semibold text-gray-700 mb-1">Instrucciones <span className="text-red-400">*</span></label>
-                <textarea value={form.instrucciones ?? ""} onChange={e => setF("instrucciones", e.target.value || null)}
-                  rows={4} placeholder="Instrucciones claras para el instructor..."
-                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-green-600" />
-              </div>
-
-              {/* Series/repeticiones + progresión */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-semibold text-gray-700 mb-1">Series / repeticiones</label>
-                  <input value={form.series_repeticiones ?? ""} onChange={e => setF("series_repeticiones", e.target.value || null)}
-                    placeholder="ej: 3 series x 10 rep"
-                    className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-600" />
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold text-gray-700 mb-1">Duración (min)</label>
-                  <input type="number" min={1} max={90} value={form.duracion_minutos ?? ""}
-                    onChange={e => setF("duracion_minutos", e.target.value ? parseInt(e.target.value) : null)}
-                    placeholder="10"
-                    className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-600" />
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-gray-700 mb-1">Progresión</label>
-                <textarea value={form.progresion ?? ""} onChange={e => setF("progresion", e.target.value || null)}
-                  rows={2} placeholder="Cómo avanzar de nivel..."
-                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-green-600" />
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-gray-700 mb-1">Nota</label>
-                <textarea value={form.nota ?? ""} onChange={e => setF("nota", e.target.value || null)}
-                  rows={2} placeholder="Observaciones adicionales..."
-                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-green-600" />
-              </div>
-
-              <label className="flex items-center gap-2 cursor-pointer select-none">
-                <input type="checkbox" checked={form.favorito} onChange={e => setF("favorito", e.target.checked)}
-                  className="w-4 h-4 rounded accent-green-700" />
-                <span className="text-sm text-gray-700 font-medium">Marcar como favorito</span>
-              </label>
-
-              {formError && <p className="text-xs text-red-500 bg-red-50 px-3 py-2 rounded-lg">{formError}</p>}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <Campo label="Materiales">
+                <input value={form.materiales ?? ""} onChange={e => setF("materiales", e.target.value || null)}
+                  placeholder="Banda elástica" className={CLASE_CAMPO} style={CAMPO} />
+              </Campo>
+              <Campo label="Screen TPI vinculado">
+                <input value={form.screen_vinculado ?? ""} onChange={e => setF("screen_vinculado", e.target.value || null)}
+                  placeholder="S5 o PB2" className={CLASE_CAMPO} style={CAMPO} />
+              </Campo>
             </div>
 
-            <div className="px-6 pb-6 flex gap-2 sticky bottom-0 bg-white border-t border-gray-100 pt-4">
-              <button onClick={handleSave} disabled={saving}
-                className="flex-1 py-2.5 rounded-xl text-sm font-semibold text-white disabled:opacity-50 hover:brightness-110 transition-all"
-                style={{ background: "#1B4D2E" }}>
-                {saving ? "Guardando..." : editingId ? "Guardar cambios" : "Crear ejercicio"}
-              </button>
-              <button onClick={() => setShowEditModal(false)} disabled={saving}
-                className="px-5 py-2.5 rounded-xl text-sm font-medium border border-gray-200 text-gray-600 hover:bg-gray-50 disabled:opacity-40">
-                Cancelar
-              </button>
+            <Campo label="Instrucciones *">
+              <textarea value={form.instrucciones ?? ""} onChange={e => setF("instrucciones", e.target.value || null)}
+                rows={4} placeholder="Instrucciones claras para el instructor…"
+                className={`${CLASE_CAMPO} resize-none`} style={CAMPO} />
+            </Campo>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <Campo label="Series / repeticiones">
+                <input value={form.series_repeticiones ?? ""} onChange={e => setF("series_repeticiones", e.target.value || null)}
+                  placeholder="3 series x 10 rep" className={CLASE_CAMPO} style={CAMPO} />
+              </Campo>
+              <Campo label="Duración (min)">
+                <input type="number" min={1} max={90} value={form.duracion_minutos ?? ""}
+                  onChange={e => setF("duracion_minutos", e.target.value ? parseInt(e.target.value) : null)}
+                  placeholder="10" className={CLASE_CAMPO} style={CAMPO} />
+              </Campo>
             </div>
+
+            <Campo label="Progresión">
+              <textarea value={form.progresion ?? ""} onChange={e => setF("progresion", e.target.value || null)}
+                rows={2} placeholder="Cómo avanzar de nivel…"
+                className={`${CLASE_CAMPO} resize-none`} style={CAMPO} />
+            </Campo>
+
+            <Campo label="Nota">
+              <textarea value={form.nota ?? ""} onChange={e => setF("nota", e.target.value || null)}
+                rows={2} placeholder="Observaciones adicionales…"
+                className={`${CLASE_CAMPO} resize-none`} style={CAMPO} />
+            </Campo>
+
+            <label className="flex items-center gap-2 cursor-pointer select-none">
+              <input type="checkbox" checked={form.favorito} onChange={e => setF("favorito", e.target.checked)}
+                className="w-4 h-4 rounded" style={{ accentColor: "var(--ui-gold)" }} />
+              <span className="text-sm font-semibold" style={{ color: "var(--ui-text-2)" }}>Marcar como favorito</span>
+            </label>
+
+            {formError && (
+              <p className="text-xs font-semibold px-3 py-2 rounded-lg"
+                style={{ background: "var(--ui-bad-bg)", color: "var(--ui-bad)" }}>{formError}</p>
+            )}
           </div>
-        </div>
+
+          <div className="px-5 pb-5 pt-4 flex gap-2 sticky bottom-0"
+            style={{ background: "var(--ui-card)", borderTop: "1px solid var(--ui-border-soft)" }}>
+            <div className="flex-1">
+              <BotonPrimario onClick={handleSave} disabled={saving}>
+                {saving ? "Guardando…" : editingId ? "Guardar cambios" : "Crear ejercicio"}
+              </BotonPrimario>
+            </div>
+            <BotonSecundario onClick={() => setShowEditModal(false)} disabled={saving}>Cancelar</BotonSecundario>
+          </div>
+        </Modal>
       )}
 
-      {toast && <Toast msg={toast} />}
-    </div>
+      {borrarEjercicio && (
+        <ModalConfirmar
+          titulo="Eliminar ejercicio"
+          mensaje={<>Se elimina <strong style={{ color: "var(--ui-bad)" }}>{borrarEjercicio.nombre}</strong> de la biblioteca. Esta acción no se puede deshacer.</>}
+          onConfirmar={handleDelete}
+          onCancelar={() => setBorrarEjercicio(null)}
+        />
+      )}
+
+      <Toast msg={toast} />
+    </Pagina>
   );
 }

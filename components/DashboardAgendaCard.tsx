@@ -98,18 +98,18 @@ export default function DashboardAgendaCard({
   const dias = Array.from(porDia.keys()).sort();
 
   return (
-    <div className={`${GLASS_PANEL} border-t-[3px] p-4 sm:p-6`} style={{ borderTopColor: "#1B4D2E" }}>
+    <div className={`${GLASS_PANEL} border-t-[3px] p-4 sm:p-6`} style={{ borderTopColor: "var(--ui-gold)" }}>
       <div className="flex items-center justify-between mb-1">
         <h2 className="text-sm font-semibold flex items-center gap-2" style={{ color: GLASS_TITLE }}>
-          <Clock size={15} style={{ color: "#1B4D2E" }} />
+          <Clock size={15} style={{ color: "var(--ui-gold)" }} />
           Agenda
         </h2>
-        <div className="flex items-center gap-0.5 rounded-full p-0.5 bg-white/50 border border-white/60 shrink-0">
+        <div className="flex items-center gap-0.5 rounded-full p-0.5 bg-white/10 border border-white/10 shrink-0">
           <button
             type="button"
             onClick={() => setTab("hoy")}
             className="text-xs font-medium px-2.5 py-1 rounded-full transition-colors"
-            style={tab === "hoy" ? { background: "#1B4D2E", color: "#fff" } : { color: GLASS_SUBTITLE }}
+            style={tab === "hoy" ? { background: "var(--ui-gold)", color: "var(--ui-bg)" } : { color: GLASS_SUBTITLE }}
           >
             Hoy
           </button>
@@ -117,7 +117,7 @@ export default function DashboardAgendaCard({
             type="button"
             onClick={() => setTab("semana")}
             className="text-xs font-medium px-2.5 py-1 rounded-full transition-colors"
-            style={tab === "semana" ? { background: "#1B4D2E", color: "#fff" } : { color: GLASS_SUBTITLE }}
+            style={tab === "semana" ? { background: "var(--ui-gold)", color: "var(--ui-bg)" } : { color: GLASS_SUBTITLE }}
           >
             Semana
           </button>
@@ -151,7 +151,7 @@ export default function DashboardAgendaCard({
             <div className="space-y-4 max-h-[420px] overflow-y-auto pr-1">
               {dias.map((fecha) => (
                 <div key={fecha}>
-                  <p className="text-[11px] font-bold uppercase tracking-wide mb-2" style={{ color: fecha === hoy ? "#1B4D2E" : GLASS_MUTED }}>
+                  <p className="text-[11px] font-bold uppercase tracking-wide mb-2" style={{ color: fecha === hoy ? "var(--ui-gold)" : GLASS_MUTED }}>
                     {diaLabelFromFecha(fecha)}
                     {fecha === hoy ? " · Hoy" : ""}
                   </p>
@@ -169,7 +169,8 @@ export default function DashboardAgendaCard({
 
       <Link
         href="/programacion"
-        className="mt-4 flex items-center justify-center gap-1 text-sm font-semibold text-ccb-green hover:underline"
+        className="mt-4 flex items-center justify-center gap-1 text-sm font-semibold hover:underline"
+        style={{ color: "var(--ui-gold)" }}
       >
         Ver programación completa →
       </Link>

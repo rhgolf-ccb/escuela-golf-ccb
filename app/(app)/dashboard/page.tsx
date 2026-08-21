@@ -72,8 +72,10 @@ type EstadoAsistencia = "presente" | "ausente" | "sin_marcar";
 const ATTENDANCE_LABEL: Record<EstadoAsistencia, string> = {
   presente: "Presente", ausente: "Ausente", sin_marcar: "Sin marcar",
 };
+// Los mismos tres tonos del semáforo del resto de la app, no un verde y un
+// rojo propios de esta pantalla.
 const ATTENDANCE_COLOR: Record<EstadoAsistencia, string> = {
-  presente: "#16a34a", ausente: "#dc2626", sin_marcar: "#9ca3af",
+  presente: "var(--ui-ok)", ausente: "var(--ui-bad)", sin_marcar: "var(--ui-text-3)",
 };
 const ATTENDANCE_ORDER: EstadoAsistencia[] = ["presente", "ausente", "sin_marcar"];
 
@@ -178,7 +180,7 @@ export default async function DashboardPage() {
   ];
 
   return (
-    <div className="flex flex-col min-h-full">
+    <div className="tema-oscuro flex flex-col min-h-full">
 
       {/* FONDO — la foto acompaña todo el scroll del dashboard.
           Se ancla al área de <main> (lg:left-60, el ancho del sidebar sticky)
@@ -199,7 +201,7 @@ export default async function DashboardPage() {
           style={{ objectPosition: "center 70%" }}
         />
         {/* Scrim plano para el contraste del texto */}
-        <div className="absolute inset-0 bg-[rgba(10,30,20,0.34)]" />
+        <div className="absolute inset-0 bg-[rgba(10,23,16,0.42)]" />
       </div>
 
       {/* HERO — pantalla completa */}
@@ -236,7 +238,7 @@ export default async function DashboardPage() {
           se lea como una banda horizontal. */}
       <div
         className="relative z-10 flex-1 px-4 sm:px-6 py-5 sm:py-6 space-y-5 sm:space-y-6"
-        style={{ backgroundImage: "linear-gradient(to bottom, rgba(10,30,20,0) 0px, rgba(10,30,20,0.30) 120px)" }}
+        style={{ backgroundImage: "linear-gradient(to bottom, rgba(10,23,16,0) 0px, rgba(10,23,16,0.38) 120px)" }}
       >
 
         {/* Tarjetas de módulos — en flujo bajo el hero (solo móvil), mismo
@@ -250,9 +252,9 @@ export default async function DashboardPage() {
           <DashboardAgendaCard sesionesHoy={sesionesHoy} sesionesSemana={sesionesSemana} fechaLabel={fechaLabel} hoy={hoy} />
 
           {/* PRÓXIMOS EVENTOS */}
-          <div className={`${GLASS_PANEL} border-t-[3px] p-4 sm:p-6`} style={{ borderTopColor: "#f59e0b" }}>
+          <div className={`${GLASS_PANEL} border-t-[3px] p-4 sm:p-6`} style={{ borderTopColor: "var(--ui-warn)" }}>
             <h2 className="text-sm font-semibold flex items-center gap-2 mb-4" style={{ color: GLASS_TITLE }}>
-              <Trophy size={15} style={{ color: "#b45309" }} />
+              <Trophy size={15} style={{ color: "var(--ui-warn)" }} />
               Próximos eventos
             </h2>
 
@@ -269,7 +271,7 @@ export default async function DashboardPage() {
                   const esEspecial = e.tipo === "especial";
                   return (
                     <div key={e.id} className="flex gap-3">
-                      <div className="w-12 shrink-0 text-center rounded-lg py-1.5 bg-white/50">
+                      <div className="w-12 shrink-0 text-center rounded-lg py-1.5 bg-white/10">
                         <p className="text-base font-bold leading-none" style={{ color: GLASS_TITLE }}>{dia}</p>
                         <p className="text-[10px] font-semibold mt-0.5" style={{ color: GLASS_MUTED }}>{mes}</p>
                       </div>
@@ -278,7 +280,9 @@ export default async function DashboardPage() {
                           <p className="text-sm font-semibold" style={{ color: GLASS_TITLE }}>{e.nombre}</p>
                           <span
                             className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full inline-flex items-center gap-0.5 shrink-0"
-                            style={esEspecial ? { background: "#fef3c7", color: "#92400e" } : { background: "#dbeafe", color: "#1e40af" }}
+                            style={esEspecial
+                              ? { background: "var(--g-albatros-bg)", color: "var(--g-albatros-fg)" }
+                              : { background: "var(--g-birdies-bg)", color: "var(--g-birdies-fg)" }}
                           >
                             {esEspecial ? <Star size={9} /> : <Pin size={9} />}
                             {esEspecial ? "Especial" : "Institucional"}
@@ -294,10 +298,10 @@ export default async function DashboardPage() {
           </div>
 
           {/* RESUMEN DE ASISTENCIA */}
-          <div className={`${GLASS_PANEL} border-t-[3px] p-4 sm:p-6`} style={{ borderTopColor: "#378ADD" }}>
+          <div className={`${GLASS_PANEL} border-t-[3px] p-4 sm:p-6`} style={{ borderTopColor: "var(--g-birdies-fg)" }}>
             <div className="mb-4">
               <h2 className="text-sm font-semibold flex items-center gap-2" style={{ color: GLASS_TITLE }}>
-                <ChartBar size={15} style={{ color: "#1d5c9e" }} />
+                <ChartBar size={15} style={{ color: "var(--g-birdies-fg)" }} />
                 Resumen de asistencia
               </h2>
               <p className="text-xs mt-0.5" style={{ color: GLASS_MUTED }}>{rangoSemanaLabel}</p>
@@ -317,7 +321,7 @@ export default async function DashboardPage() {
                   <p className="text-xs mt-1" style={{ color: GLASS_MUTED }}>Asistencia de la semana en curso</p>
                 </div>
 
-                <div className="flex h-2.5 rounded-full overflow-hidden mb-4 bg-white/50">
+                <div className="flex h-2.5 rounded-full overflow-hidden mb-4 bg-white/10">
                   {ATTENDANCE_ORDER.map((key) => {
                     const count = attendanceCounts[key];
                     if (count === 0) return null;

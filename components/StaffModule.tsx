@@ -1,9 +1,15 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { Users, UserPlus, Pencil, Flag, Briefcase } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import Cropper from "react-easy-crop";
 import type { Area } from "react-easy-crop";
+import { acentoGrupo } from "@/lib/grupos";
+import {
+  BotonPrimario, BotonSecundario, CAMPO, CLASE_CAMPO, Campo, Encabezado, Loading,
+  Modal, ModalHeader, Pagina,
+} from "@/components/ui/tema";
 
 type Categoria = "profesores" | "administrativos";
 
@@ -35,18 +41,22 @@ function getInitials(name: string): string {
   return parts.length >= 2 ? (parts[0][0] + parts[1][0]).toUpperCase() : name.slice(0, 2).toUpperCase();
 }
 
-function avatarColor(member: Pick<StaffMember, "rol" | "categoria">): { bg: string; text: string } {
-  if (member.rol === "Coordinador de Escuelas") return { bg: "#e8f5ee", text: "#1B4D2E" };
-  if (member.rol === "Director de Golf") return { bg: "#fdf3e0", text: "#7d5a00" };
-  if (member.categoria === "profesores") return { bg: "#e8f5ee", text: "#1B4D2E" };
-  return { bg: "#f3e8fc", text: "#4a1070" };
+// El color de un miembro salía de cuatro hex escritos aquí. Ahora se toma
+// prestado de la paleta de grupos, que es la única fuente de color del
+// proyecto: verde para la cancha, dorado para la dirección, morado para
+// administración. No es que un profesor "sea" Juvenil — es que no hace falta
+// una quinta paleta para distinguir tres cosas.
+function acentoMiembro(member: Pick<StaffMember, "rol" | "categoria">): string {
+  if (member.rol === "Director de Golf") return acentoGrupo("competencia");
+  if (member.categoria === "administrativos") return acentoGrupo("damas");
+  return acentoGrupo("juvenil");
 }
 
-function badgeColor(member: Pick<StaffMember, "rol" | "categoria">): string | null {
-  if (member.rol === "Coordinador de Escuelas") return "#1B4D2E";
-  if (member.rol === "Director de Golf") return "#7d5a00";
-  if (member.categoria === "administrativos") return "#4a1070";
-  return null;
+// Solo los roles de mando llevan etiqueta destacada; el resto la lleva neutra.
+function rolDestacado(member: Pick<StaffMember, "rol" | "categoria">): boolean {
+  return member.rol === "Coordinador de Escuelas"
+    || member.rol === "Director de Golf"
+    || member.categoria === "administrativos";
 }
 
 function staffRolPrioridad(rol: string): number {
@@ -57,14 +67,6 @@ function staffRolPrioridad(rol: string): number {
 
 function emptyForm(categoria: Categoria, orden: number): StaffForm {
   return { id: crypto.randomUUID(), nombre: "", rol: "", categoria, descripcion: "", foto_url: null, orden };
-}
-
-function Loading() {
-  return (
-    <div className="flex items-center justify-center py-16">
-      <div className="animate-spin rounded-full h-7 w-7 border-2 border-[#1B4D2E] border-t-transparent" />
-    </div>
-  );
 }
 
 // Genera un Blob recortado (cuadrado) a partir de la imagen y el área de recorte
@@ -111,6 +113,9 @@ export default function StaffModule() {
   const [isNew, setIsNew] = useState(false);
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
+  // Los errores del modal se muestran dentro del modal. alert() bloquea la
+  // pestaña entera y obliga a cerrarlo para leer qué pasó.
+  const [formError, setFormError] = useState<string | null>(null);
 
   const [cropSrc, setCropSrc] = useState<string | null>(null);
   const [crop, setCrop] = useState({ x: 0, y: 0 });
@@ -144,6 +149,7 @@ export default function StaffModule() {
     const siblings = members.filter((m) => m.categoria === categoria);
     setForm(emptyForm(categoria, siblings.length + 1));
     setIsNew(true);
+    setFormError(null);
     setModalOpen(true);
   }
 
@@ -158,12 +164,14 @@ export default function StaffModule() {
       orden: member.orden,
     });
     setIsNew(false);
+    setFormError(null);
     setModalOpen(true);
   }
 
   function closeModal() {
     setModalOpen(false);
     setForm(null);
+    setFormError(null);
   }
 
   async function uploadFoto(file: File) {
@@ -178,7 +186,7 @@ export default function StaffModule() {
       const { data } = supabase.storage.from("staff-fotos").getPublicUrl(path);
       setForm((f) => (f ? { ...f, foto_url: `${data.publicUrl}?t=${Date.now()}` } : f));
     } catch (err) {
-      alert(err instanceof Error ? err.message : "Error al subir la foto");
+      setFormError(err instanceof Error ? err.message : "Error al subir la foto");
     } finally {
       setUploading(false);
     }
@@ -193,7 +201,7 @@ export default function StaffModule() {
       if (error) throw new Error(error.message);
       setForm((f) => (f ? { ...f, foto_url: null } : f));
     } catch (err) {
-      alert(err instanceof Error ? err.message : "Error al eliminar la foto");
+      setFormError(err instanceof Error ? err.message : "Error al eliminar la foto");
     } finally {
       setUploading(false);
     }
@@ -215,7 +223,7 @@ export default function StaffModule() {
       const croppedFile = new File([blob], "foto.jpg", { type: "image/jpeg" });
       await uploadFoto(croppedFile);
     } catch (err) {
-      alert(err instanceof Error ? err.message : "Error al recortar la foto");
+      setFormError(err instanceof Error ? err.message : "Error al recortar la foto");
     } finally {
       URL.revokeObjectURL(cropSrc);
       setCropSrc(null);
@@ -230,9 +238,10 @@ export default function StaffModule() {
   async function handleSave() {
     if (!form) return;
     if (!form.nombre.trim() || !form.rol.trim()) {
-      alert("Nombre y rol son obligatorios");
+      setFormError("Nombre y rol son obligatorios.");
       return;
     }
+    setFormError(null);
     setSaving(true);
     try {
       const payload = {
@@ -256,47 +265,33 @@ export default function StaffModule() {
   }
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-      <div className="flex items-center justify-between mb-6 flex-wrap gap-3">
-        <div className="flex items-center gap-3">
-          <div className="w-11 h-11 rounded-xl bg-ccb-green flex items-center justify-center shrink-0">
-            <i className="ti ti-users" style={{ fontSize: 22, color: "white" }} />
-          </div>
-          <div>
-            <h1 className="text-2xl font-bold text-ccb-green">Staff</h1>
-            <p className="text-sm text-(--text-muted) mt-0.5">Equipo de la Escuela de Golf — Country Club de Bogotá</p>
-          </div>
-        </div>
-        <button
-          onClick={() => openAdd("profesores")}
-          className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium text-white"
-          style={{ backgroundColor: "#1B4D2E" }}
-        >
-          <i className="ti ti-plus" style={{ fontSize: 16 }} />
+    <Pagina>
+      <Encabezado icono={Users} titulo="Staff" bajada="Equipo de la Escuela de Golf — Country Club de Bogotá">
+        <BotonPrimario onClick={() => openAdd("profesores")}>
+          <UserPlus size={16} />
           Agregar miembro
-        </button>
-      </div>
+        </BotonPrimario>
+      </Encabezado>
 
       {loading ? (
         <Loading />
       ) : (
-        <div className="space-y-8">
+        <div className="space-y-6">
           <StaffSection
-            icon="ti-golf"
-            iconBg="#e8f5ee"
-            iconColor="#1B4D2E"
+            icono={Flag}
+            acento={acentoGrupo("juvenil")}
             title="Profesores"
             members={profesores}
             onEdit={openEdit}
+            onAdd={() => openAdd("profesores")}
           />
-          <div className="border-t border-gray-100" />
           <StaffSection
-            icon="ti-building"
-            iconBg="#f3e8fc"
-            iconColor="#4a1070"
+            icono={Briefcase}
+            acento={acentoGrupo("damas")}
             title="Administrativos"
             members={administrativos}
             onEdit={openEdit}
+            onAdd={() => openAdd("administrativos")}
           />
         </div>
       )}
@@ -307,6 +302,7 @@ export default function StaffModule() {
           isNew={isNew}
           saving={saving}
           uploading={uploading}
+          error={formError}
           onChange={(patch) => setForm((f) => (f ? { ...f, ...patch } : f))}
           onUploadFoto={handleFileSelected}
           onRemoveFoto={removeFoto}
@@ -316,81 +312,86 @@ export default function StaffModule() {
       )}
 
       {cropSrc && (
+        // z-[60]: se abre encima del modal del miembro, que ya está en z-50.
         <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-[60] p-4">
-          <div className="bg-white rounded-xl w-full max-w-md p-5">
-            <h3 className="text-sm font-semibold text-gray-900 mb-3">Ajustar foto</h3>
-            <p className="text-xs text-gray-500 mb-4">Arrastra para mover y usa el control para acercar. La foto se recorta en círculo.</p>
-
-            <div className="relative w-full h-64 bg-gray-900 rounded-lg overflow-hidden">
-              <Cropper
-                image={cropSrc}
-                crop={crop}
-                zoom={zoom}
-                aspect={1}
-                cropShape="round"
-                showGrid={false}
-                onCropChange={setCrop}
-                onZoomChange={setZoom}
-                onCropComplete={onCropComplete}
-              />
+          <div className="tema-oscuro rounded-2xl w-full max-w-md overflow-hidden"
+            style={{ background: "var(--ui-card)", border: "1px solid var(--ui-border)" }}>
+            <div className="px-5 py-4" style={{ borderBottom: "1px solid var(--ui-border-soft)" }}>
+              <h3 className="text-lg font-bold" style={{ color: "var(--ui-text)" }}>Ajustar foto</h3>
+              <p className="text-xs mt-0.5" style={{ color: "var(--ui-text-3)" }}>
+                Arrastra para mover y usa el control para acercar. La foto se recorta en círculo.
+              </p>
             </div>
 
-            <div className="flex items-center gap-3 mt-4">
-              <span className="text-xs text-gray-500 shrink-0">Zoom</span>
-              <input
-                type="range"
-                min={1}
-                max={3}
-                step={0.05}
-                value={zoom}
-                onChange={(e) => setZoom(Number(e.target.value))}
-                className="w-full accent-ccb-green"
-              />
-            </div>
+            <div className="p-5">
+              <div className="relative w-full h-64 rounded-lg overflow-hidden" style={{ background: "var(--ui-bg)" }}>
+                <Cropper
+                  image={cropSrc}
+                  crop={crop}
+                  zoom={zoom}
+                  aspect={1}
+                  cropShape="round"
+                  showGrid={false}
+                  onCropChange={setCrop}
+                  onZoomChange={setZoom}
+                  onCropComplete={onCropComplete}
+                />
+              </div>
 
-            <div className="flex justify-end gap-2 mt-5">
-              <button
-                onClick={handleCropCancel}
-                disabled={uploading}
-                className="px-4 py-2 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-100"
-              >
-                Cancelar
-              </button>
-              <button
-                onClick={handleCropConfirm}
-                disabled={uploading}
-                className="px-4 py-2 rounded-lg text-sm font-medium text-white disabled:opacity-50"
-                style={{ backgroundColor: "#1B4D2E" }}
-              >
-                {uploading ? "Subiendo..." : "Aplicar"}
-              </button>
+              <div className="flex items-center gap-3 mt-4">
+                <span className="text-xs shrink-0" style={{ color: "var(--ui-text-3)" }}>Zoom</span>
+                <input
+                  type="range"
+                  min={1}
+                  max={3}
+                  step={0.05}
+                  value={zoom}
+                  onChange={(e) => setZoom(Number(e.target.value))}
+                  className="w-full"
+                  style={{ accentColor: "var(--ui-gold)" }}
+                />
+              </div>
+
+              <div className="flex justify-end gap-2 mt-5">
+                <BotonSecundario onClick={handleCropCancel} disabled={uploading}>Cancelar</BotonSecundario>
+                <BotonPrimario onClick={handleCropConfirm} disabled={uploading}>
+                  {uploading ? "Subiendo…" : "Aplicar"}
+                </BotonPrimario>
+              </div>
             </div>
           </div>
         </div>
       )}
-    </div>
+    </Pagina>
   );
 }
 
 function StaffSection({
-  icon, iconBg, iconColor, title, members, onEdit,
+  icono: Icono, acento, title, members, onEdit, onAdd,
 }: {
-  icon: string; iconBg: string; iconColor: string; title: string;
-  members: StaffMember[]; onEdit: (m: StaffMember) => void;
+  icono: typeof Flag; acento: string; title: string;
+  members: StaffMember[]; onEdit: (m: StaffMember) => void; onAdd: () => void;
 }) {
   return (
     <div>
-      <div className="flex items-center gap-2 mb-4">
-        <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ backgroundColor: iconBg, color: iconColor }}>
-          <i className={`ti ${icon}`} style={{ fontSize: 16 }} />
+      <div className="flex items-center gap-2 mb-3">
+        <div className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0"
+          style={{ background: `color-mix(in srgb, ${acento} 18%, transparent)`, color: acento }}>
+          <Icono size={16} />
         </div>
-        <h2 className="text-sm font-semibold text-gray-900">{title}</h2>
-        <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-gray-100 text-gray-500">
-          {members.length} {members.length === 1 ? "miembro" : "miembros"}
+        <h2 className="text-sm font-bold" style={{ color: "var(--ui-text)" }}>{title}</h2>
+        <span className="text-[11px] font-bold px-2 py-0.5 rounded-full tabular-nums"
+          style={{ background: "var(--ui-card-alt)", color: "var(--ui-text-3)" }}>
+          {members.length}
         </span>
+        <button onClick={onAdd}
+          className="ml-auto text-xs font-semibold rounded-lg px-2.5 py-1 transition-colors hover:bg-(--ui-card-alt)"
+          style={{ color: "var(--ui-text-2)", border: "1px solid var(--ui-border)" }}>
+          + Agregar en {title.toLowerCase()}
+        </button>
       </div>
       {members.length === 0 ? (
-        <p className="text-sm text-gray-300 italic py-4">Sin miembros en esta categoría.</p>
+        <p className="text-sm italic py-4" style={{ color: "var(--ui-text-3)" }}>Sin miembros en esta categoría.</p>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
           {members.map((m) => (
@@ -403,22 +404,31 @@ function StaffSection({
 }
 
 function StaffCard({ member, onEdit }: { member: StaffMember; onEdit: () => void }) {
-  const avatar = avatarColor(member);
-  const badge = badgeColor(member);
+  const acento = acentoMiembro(member);
+  const destacado = rolDestacado(member);
 
   return (
-    <div className="relative group border border-gray-100 rounded-xl p-4 bg-white">
+    <div className="relative group rounded-xl p-4 transition-colors"
+      style={{ background: "var(--ui-card)", border: "1px solid var(--ui-border-soft)" }}>
       <button
         onClick={onEdit}
-        className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity text-gray-400 hover:text-gray-700 p-1"
+        // El lápiz solo aparecía al pasar el cursor, así que en una tablet —que
+        // es donde se usa esto— no había forma de editar. Ahora es visible
+        // siempre, apenas atenuado.
+        className="absolute top-2 right-2 p-1.5 rounded-lg opacity-60 group-hover:opacity-100 transition-opacity hover:bg-(--ui-card-alt)"
+        style={{ color: "var(--ui-text-3)" }}
         title="Editar"
       >
-        <i className="ti ti-pencil" style={{ fontSize: 14 }} />
+        <Pencil size={14} />
       </button>
       <div className="flex items-center gap-4">
         <div
-          className="w-[80px] h-[80px] md:w-[96px] md:h-[96px] overflow-hidden flex-shrink-0 flex items-center justify-center text-[32px] font-medium"
-          style={{ backgroundColor: avatar.bg, color: avatar.text, borderRadius: "50%" }}
+          className="w-[80px] h-[80px] md:w-[96px] md:h-[96px] overflow-hidden flex-shrink-0 flex items-center justify-center text-[32px] font-semibold"
+          style={{
+            background: `color-mix(in srgb, ${acento} 20%, transparent)`,
+            color: acento,
+            borderRadius: "50%",
+          }}
         >
           {member.foto_url ? (
             // eslint-disable-next-line @next/next/no-img-element
@@ -438,16 +448,18 @@ function StaffCard({ member, onEdit }: { member: StaffMember; onEdit: () => void
             getInitials(member.nombre)
           )}
         </div>
-        <div className="min-w-0">
+        <div className="min-w-0 pr-5">
           <span
-            className="inline-block text-[10px] font-medium px-1.5 py-0.5 rounded-full border mb-1"
-            style={badge ? { borderColor: badge, color: badge } : { borderColor: "var(--border-strong)", color: "#6b7280" }}
+            className="inline-block text-[10px] font-bold px-1.5 py-0.5 rounded-full border mb-1"
+            style={destacado
+              ? { borderColor: acento, color: acento }
+              : { borderColor: "var(--ui-border)", color: "var(--ui-text-3)" }}
           >
             {member.rol}
           </span>
-          <p className="text-[13px] font-medium text-gray-900 leading-tight">{member.nombre}</p>
+          <p className="text-[13px] font-bold leading-tight" style={{ color: "var(--ui-text)" }}>{member.nombre}</p>
           {member.descripcion && (
-            <p className="text-[11px] text-gray-500 mt-1" style={{ lineHeight: 1.5 }}>{member.descripcion}</p>
+            <p className="text-[11px] mt-1" style={{ color: "var(--ui-text-2)", lineHeight: 1.5 }}>{member.descripcion}</p>
           )}
         </div>
       </div>
@@ -456,28 +468,29 @@ function StaffCard({ member, onEdit }: { member: StaffMember; onEdit: () => void
 }
 
 function StaffModal({
-  form, isNew, saving, uploading, onChange, onUploadFoto, onRemoveFoto, onCancel, onSave,
+  form, isNew, saving, uploading, error, onChange, onUploadFoto, onRemoveFoto, onCancel, onSave,
 }: {
-  form: StaffForm; isNew: boolean; saving: boolean; uploading: boolean;
+  form: StaffForm; isNew: boolean; saving: boolean; uploading: boolean; error: string | null;
   onChange: (patch: Partial<StaffForm>) => void;
   onUploadFoto: (file: File) => void;
   onRemoveFoto: () => void;
   onCancel: () => void;
   onSave: () => void;
 }) {
-  const avatar = avatarColor(form);
+  const acento = acentoMiembro(form);
 
   return (
-    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-xl w-full max-w-md p-5">
-        <h3 className="text-sm font-semibold text-gray-900 mb-4">
-          {isNew ? "Agregar miembro" : "Editar miembro"}
-        </h3>
-
+    <Modal onClose={() => { if (!saving && !uploading) onCancel(); }} ancho="sm">
+      <ModalHeader
+        titulo={isNew ? "Agregar miembro" : "Editar miembro"}
+        sub={form.categoria === "profesores" ? "Profesores" : "Administrativos"}
+        onClose={onCancel}
+      />
+      <div className="p-5">
         <div className="flex items-center gap-3 mb-4">
           <div
             className="w-14 h-14 rounded-full overflow-hidden shrink-0 flex items-center justify-center text-sm font-bold"
-            style={{ backgroundColor: avatar.bg, color: avatar.text }}
+            style={{ background: `color-mix(in srgb, ${acento} 20%, transparent)`, color: acento }}
           >
             {form.foto_url ? (
               // eslint-disable-next-line @next/next/no-img-element
@@ -487,7 +500,7 @@ function StaffModal({
                 style={{
                   width: "100%",
                   height: "100%",
-                  objectFit: "contain",
+                  objectFit: "cover",
                   objectPosition: "center center",
                   borderRadius: "50%",
                   display: "block",
@@ -498,8 +511,8 @@ function StaffModal({
             )}
           </div>
           <div className="flex flex-col items-start gap-1">
-            <label className="text-xs text-blue-600 hover:underline cursor-pointer">
-              {uploading ? "Subiendo..." : "Subir foto"}
+            <label className="text-xs font-semibold hover:underline cursor-pointer" style={{ color: "var(--ui-gold)" }}>
+              {uploading ? "Subiendo…" : form.foto_url ? "Cambiar foto" : "Subir foto"}
               <input
                 type="file"
                 accept="image/*"
@@ -517,7 +530,8 @@ function StaffModal({
                 type="button"
                 onClick={onRemoveFoto}
                 disabled={uploading}
-                className="text-xs text-red-600 hover:underline disabled:opacity-50"
+                className="text-xs hover:underline disabled:opacity-50"
+                style={{ color: "var(--ui-bad)" }}
               >
                 Quitar foto
               </button>
@@ -526,66 +540,42 @@ function StaffModal({
         </div>
 
         <div className="space-y-3">
-          <div>
-            <label className="text-xs font-medium text-gray-600 block mb-1">Nombre</label>
-            <input
-              value={form.nombre}
-              onChange={(e) => onChange({ nombre: e.target.value })}
-              className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2"
-            />
-          </div>
-          <div>
-            <label className="text-xs font-medium text-gray-600 block mb-1">Rol</label>
-            <input
-              value={form.rol}
-              onChange={(e) => onChange({ rol: e.target.value })}
-              className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2"
-            />
-          </div>
-          <div>
-            <label className="text-xs font-medium text-gray-600 block mb-1">Categoría</label>
-            <select
-              value={form.categoria}
-              onChange={(e) => onChange({ categoria: e.target.value as Categoria })}
-              className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 bg-white"
-            >
+          <Campo label="Nombre">
+            <input value={form.nombre} onChange={(e) => onChange({ nombre: e.target.value })}
+              className={CLASE_CAMPO} style={CAMPO} />
+          </Campo>
+          <Campo label="Rol">
+            <input value={form.rol} onChange={(e) => onChange({ rol: e.target.value })}
+              placeholder="Profesor de golf" className={CLASE_CAMPO} style={CAMPO} />
+          </Campo>
+          <Campo label="Categoría">
+            <select value={form.categoria} onChange={(e) => onChange({ categoria: e.target.value as Categoria })}
+              className={CLASE_CAMPO} style={CAMPO}>
               <option value="profesores">Profesores</option>
               <option value="administrativos">Administrativos</option>
             </select>
-          </div>
-          <div>
-            <div className="flex items-center justify-between mb-1">
-              <label className="text-xs font-medium text-gray-600">Descripción</label>
-              <span className="text-[10px] text-gray-400">{form.descripcion.length}/{DESCRIPCION_MAX}</span>
-            </div>
+          </Campo>
+          <Campo label="Descripción" hint={`${form.descripcion.length}/${DESCRIPCION_MAX} caracteres`}>
             <textarea
               value={form.descripcion}
               maxLength={DESCRIPCION_MAX}
               onChange={(e) => onChange({ descripcion: e.target.value })}
               rows={3}
-              className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 resize-none"
+              className={`${CLASE_CAMPO} resize-none`}
+              style={CAMPO}
             />
-          </div>
+          </Campo>
         </div>
 
+        {error && <p className="text-xs font-semibold mt-3" style={{ color: "var(--ui-bad)" }}>{error}</p>}
+
         <div className="flex justify-end gap-2 mt-5">
-          <button
-            onClick={onCancel}
-            disabled={saving}
-            className="px-4 py-2 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-100"
-          >
-            Cancelar
-          </button>
-          <button
-            onClick={onSave}
-            disabled={saving}
-            className="px-4 py-2 rounded-lg text-sm font-medium text-white disabled:opacity-50"
-            style={{ backgroundColor: "#1B4D2E" }}
-          >
-            {saving ? "Guardando..." : "Guardar"}
-          </button>
+          <BotonSecundario onClick={onCancel} disabled={saving}>Cancelar</BotonSecundario>
+          <BotonPrimario onClick={onSave} disabled={saving}>
+            {saving ? "Guardando…" : "Guardar"}
+          </BotonPrimario>
         </div>
       </div>
-    </div>
+    </Modal>
   );
 }

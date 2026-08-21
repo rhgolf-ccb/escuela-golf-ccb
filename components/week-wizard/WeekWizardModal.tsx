@@ -388,41 +388,41 @@ export default function WeekWizardModal({ tipoPlan, semana, planId, horariosDefe
 
   return (
     <div className="fixed inset-0 bg-black/60 z-50 flex items-start justify-center p-4 overflow-y-auto" onClick={() => { if (!saving) onClose(); }}>
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl my-6" onClick={(e) => e.stopPropagation()}>
-        <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 sticky top-0 bg-white rounded-t-2xl z-10" style={{ borderTopColor: config.color }}>
+      <div className="bg-(--ui-card) rounded-2xl shadow-2xl w-full max-w-2xl my-6" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center justify-between px-5 py-4 border-b border-(--ui-border-soft) sticky top-0 bg-(--ui-card) rounded-t-2xl z-10" style={{ borderTopColor: config.color }}>
           <div>
-            <h2 className="font-bold text-gray-900 text-sm">{TIPO_PLAN_LABEL[tipoPlan]} — Armar programación</h2>
+            <h2 className="font-bold text-(--ui-text) text-sm">{TIPO_PLAN_LABEL[tipoPlan]} — Armar programación</h2>
             {step === "dias" && diaActual && (
-              <p className="text-xs text-gray-400 mt-0.5">
+              <p className="text-xs text-(--ui-text-3) mt-0.5">
                 Día {currentIndex + 1} de {dias.length} · {diaActualKey} · {diaActual.horaInicio}-{diaActual.horaFin}
                 {diaActual.tipo === "normal" && ` · ${duracionTotal} min totales`}
               </p>
             )}
             {omitidos.length > 0 && (
-              <p className="text-xs mt-0.5" style={{ color: "#b45309" }}>
+              <p className="text-xs mt-0.5" style={{ color: "var(--ui-warn)" }}>
                 No se programan: {omitidos.map((o) => etiquetaDiaOmitido(o.dia, o.fecha, o.info)).join(", ")}
               </p>
             )}
             {puedeCambiarFecha && (
               <div className="mt-1.5">
                 <div className="flex items-center gap-1.5">
-                  <span className="text-[11px] font-semibold text-gray-500">Fecha:</span>
+                  <span className="text-[11px] font-semibold text-(--ui-text-3)">Fecha:</span>
                   <input
                     type="date"
                     value={fechaNueva}
                     onChange={(e) => { setFechaNueva(e.target.value); setMovido(null); }}
                     disabled={saving}
-                    className="text-xs border border-gray-200 rounded-lg px-2 py-1"
+                    className="text-xs border border-(--ui-border) rounded-lg px-2 py-1"
                   />
                   {fechaCambiada && !motivoFechaInvalida && (
-                    <span className="text-[11px] font-semibold" style={{ color: "#b45309" }}>se moverá al guardar</span>
+                    <span className="text-[11px] font-semibold" style={{ color: "var(--ui-warn)" }}>se moverá al guardar</span>
                   )}
                 </div>
-                {motivoFechaInvalida && <p className="text-[11px] mt-0.5" style={{ color: "#b91c1c" }}>{motivoFechaInvalida}</p>}
+                {motivoFechaInvalida && <p className="text-[11px] mt-0.5" style={{ color: "var(--ui-bad)" }}>{motivoFechaInvalida}</p>}
               </div>
             )}
           </div>
-          <button onClick={() => { if (!saving) onClose(); }} disabled={saving} className="text-gray-400 hover:text-gray-600 disabled:opacity-40">
+          <button onClick={() => { if (!saving) onClose(); }} disabled={saving} className="text-(--ui-text-3) hover:text-(--ui-text-2) disabled:opacity-40">
             <svg width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path d="M18 6L6 18M6 6l12 12" /></svg>
           </button>
         </div>
@@ -431,20 +431,20 @@ export default function WeekWizardModal({ tipoPlan, semana, planId, horariosDefe
             wizard en este caso; queda como red de seguridad. */}
         {dias.length === 0 && (
           <div className="p-5 space-y-3">
-            <div className="bg-gray-100 border border-gray-200 rounded-lg px-4 py-3 text-sm text-gray-700 space-y-1">
+            <div className="bg-(--ui-card-alt) border border-(--ui-border) rounded-lg px-4 py-3 text-sm text-(--ui-text-2) space-y-1">
               <p className="font-semibold">No hay días para programar.</p>
               {omitidos.map((o) => <p key={o.dia}>· {etiquetaDiaOmitido(o.dia, o.fecha, o.info)}</p>)}
             </div>
-            <button onClick={onClose} className="w-full py-2.5 rounded-xl text-sm font-semibold text-white" style={{ background: config.color }}>Cerrar</button>
+            <button onClick={onClose} className="w-full py-2.5 rounded-xl text-sm font-semibold text-(--g-on-accent)" style={{ background: config.color }}>Cerrar</button>
           </div>
         )}
 
         {aviso && (
-          <div className="mx-5 mt-3 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 text-xs text-amber-800">{aviso}</div>
+          <div className="mx-5 mt-3 bg-(--ui-warn-bg) border border-(--ui-warn) rounded-lg px-3 py-2 text-xs text-(--ui-warn)">{aviso}</div>
         )}
 
         {step === "dias" && diaActual && !singleDay && (
-          <div className="px-4 pt-3 pb-3 flex gap-1.5 flex-wrap border-b border-gray-50">
+          <div className="px-4 pt-3 pb-3 flex gap-1.5 flex-wrap border-b border-(--ui-border-soft)">
             {dias.map((d, i) => {
               const active = i === currentIndex;
               const saved = guardados.has(d);
@@ -457,10 +457,10 @@ export default function WeekWizardModal({ tipoPlan, semana, planId, horariosDefe
                   onClick={() => setCurrentIndex(i)}
                   title={saved ? (conAvisos ? "Guardado — con sugerencias sin usar" : "Guardado") : "Sin guardar"}
                   className="px-2.5 py-1.5 rounded-lg text-xs font-semibold border capitalize flex items-center gap-1 transition-all"
-                  style={active ? { background: config.color, color: "#fff", borderColor: config.color } : { background: "#f9fafb", color: "#374151", borderColor: "#e5e7eb" }}
+                  style={active ? { background: config.color, color: "var(--g-on-accent)", borderColor: config.color } : { background: "var(--ui-card-alt)", color: "var(--ui-text-2)", borderColor: "var(--ui-border)" }}
                 >
                   {saved && (
-                    <span style={{ color: active ? "#fff" : conAvisos ? "#b45309" : "#15803d" }}>{conAvisos ? "⚠" : "✓"}</span>
+                    <span style={{ color: active ? "#fff" : conAvisos ? "var(--ui-warn)" : "var(--ui-ok)" }}>{conAvisos ? "⚠" : "✓"}</span>
                   )}{d}
                 </button>
               );
@@ -470,27 +470,27 @@ export default function WeekWizardModal({ tipoPlan, semana, planId, horariosDefe
 
         {step === "count" && dias.length > 0 && (
           <div className="p-5 space-y-3">
-            <p className="text-xs font-bold text-gray-500 uppercase tracking-wide">¿Cuántas estaciones por día?</p>
+            <p className="text-xs font-bold text-(--ui-text-3) uppercase tracking-wide">¿Cuántas estaciones por día?</p>
             <div className={`grid gap-2 ${conteos.length === 3 ? "grid-cols-3" : "grid-cols-4"}`}>
               {conteos.map((n) => (
                 <button key={n} onClick={() => handleChooseCount(n)}
-                  className="flex flex-col items-center justify-center py-4 rounded-xl border-2 border-gray-200 hover:border-green-400 hover:bg-green-50 transition-all font-bold text-lg text-gray-800">
+                  className="flex flex-col items-center justify-center py-4 rounded-xl border-2 border-(--ui-border) hover:border-green-400 hover:bg-(--ui-ok-bg) transition-all font-bold text-lg text-(--ui-text)">
                   {n}
                 </button>
               ))}
             </div>
-            <p className="text-xs text-gray-500">Aplica a toda la semana — se puede ajustar por día más adelante.</p>
+            <p className="text-xs text-(--ui-text-3)">Aplica a toda la semana — se puede ajustar por día más adelante.</p>
             <button
               onClick={sugerirSemana}
               disabled={sugiriendo}
-              className="w-full mt-3 py-2.5 rounded-xl text-sm font-semibold text-white disabled:opacity-50"
+              className="w-full mt-3 py-2.5 rounded-xl text-sm font-semibold text-(--g-on-accent) disabled:opacity-50"
               style={{ background: config.color }}
             >
               {sugiriendo ? "Armando semana sugerida..." : "✨ Sugerir semana completa"}
             </button>
             {/* El bloque de error del paso "días" no se ve desde acá, y este es
                 el único paso donde vive "Sugerir semana completa". */}
-            {error && <div className="bg-red-50 border border-red-100 rounded-lg px-4 py-3 text-sm text-red-700">{error}</div>}
+            {error && <div className="bg-(--ui-bad-bg) border border-(--ui-bad) rounded-lg px-4 py-3 text-sm text-(--ui-bad)">{error}</div>}
           </div>
         )}
 
@@ -499,17 +499,17 @@ export default function WeekWizardModal({ tipoPlan, semana, planId, horariosDefe
             <div className="p-4 space-y-4 max-h-[70vh] overflow-y-auto">
               {tipoPlan === "juvenil" && (
                 <div>
-                  <label className="text-[11px] font-bold text-gray-500 uppercase tracking-wide block mb-1">Subgrupo (opcional)</label>
+                  <label className="text-[11px] font-bold text-(--ui-text-3) uppercase tracking-wide block mb-1">Subgrupo (opcional)</label>
                   <div className="flex flex-wrap gap-1.5">
                     <button onClick={() => updateDia({ ...diaActual, subgrupo: undefined })}
                       className="px-2.5 py-1 rounded-full text-xs font-semibold border"
-                      style={!diaActual.subgrupo ? { background: config.color, color: "#fff", borderColor: config.color } : { background: "#f9fafb", color: "#374151", borderColor: "#e5e7eb" }}>
+                      style={!diaActual.subgrupo ? { background: config.color, color: "var(--g-on-accent)", borderColor: config.color } : { background: "var(--ui-card-alt)", color: "var(--ui-text-2)", borderColor: "var(--ui-border)" }}>
                       Todas las edades
                     </button>
                     {SUBGRUPOS_JUVENIL.map((sg) => (
                       <button key={sg} onClick={() => updateDia({ ...diaActual, subgrupo: sg })}
                         className="px-2.5 py-1 rounded-full text-xs font-semibold border"
-                        style={diaActual.subgrupo === sg ? { background: config.color, color: "#fff", borderColor: config.color } : { background: "#f9fafb", color: "#374151", borderColor: "#e5e7eb" }}>
+                        style={diaActual.subgrupo === sg ? { background: config.color, color: "var(--g-on-accent)", borderColor: config.color } : { background: "var(--ui-card-alt)", color: "var(--ui-text-2)", borderColor: "var(--ui-border)" }}>
                         {SUBGRUPO_LABEL[sg]}
                       </button>
                     ))}
@@ -520,12 +520,12 @@ export default function WeekWizardModal({ tipoPlan, semana, planId, horariosDefe
               <div className="flex items-center gap-2">
                 <button
                   onClick={() => updateDia({ ...diaActual, tipo: diaActual.tipo === "normal" ? "especial" : "normal" })}
-                  className="text-xs font-medium text-gray-500 hover:text-gray-700 underline"
+                  className="text-xs font-medium text-(--ui-text-3) hover:text-(--ui-text-2) underline"
                 >
                   {diaActual.tipo === "normal" ? "Convertir en día especial" : "Volver a estaciones normales"}
                 </button>
                 {currentIndex > 0 && diaActual.tipo === "normal" && (
-                  <button onClick={copiarDiaAnterior} className="text-xs font-medium text-blue-700 hover:text-blue-900 ml-auto">
+                  <button onClick={copiarDiaAnterior} className="text-xs font-medium text-(--g-birdies-fg) hover:text-blue-900 ml-auto">
                     Copiar del día anterior
                   </button>
                 )}
@@ -553,7 +553,7 @@ export default function WeekWizardModal({ tipoPlan, semana, planId, horariosDefe
                   />
 
                   <div className="flex items-center gap-2 flex-wrap">
-                    <span className="text-[11px] font-bold text-gray-500 uppercase tracking-wide">Estaciones del día</span>
+                    <span className="text-[11px] font-bold text-(--ui-text-3) uppercase tracking-wide">Estaciones del día</span>
                     <div className="flex gap-1.5">
                       {conteos.map((n) => {
                         const active = diaActual.estaciones.length === n;
@@ -576,18 +576,18 @@ export default function WeekWizardModal({ tipoPlan, semana, planId, horariosDefe
                               updateDia({ ...diaActual, estaciones });
                             }}
                             className="w-8 h-8 rounded-lg text-sm font-bold border transition-all"
-                            style={active ? { background: config.color, color: "#fff", borderColor: config.color } : { background: "#f9fafb", color: "#374151", borderColor: "#e5e7eb" }}
+                            style={active ? { background: config.color, color: "var(--g-on-accent)", borderColor: config.color } : { background: "var(--ui-card-alt)", color: "var(--ui-text-2)", borderColor: "var(--ui-border)" }}
                           >
                             {n}
                           </button>
                         );
                       })}
                     </div>
-                    <span className="text-[11px] text-gray-400">1 = clase completa de un solo tema</span>
+                    <span className="text-[11px] text-(--ui-text-3)">1 = clase completa de un solo tema</span>
                   </div>
 
                   {diaActual.estaciones.length > 0 && (
-                    <p className="text-xs text-gray-400">~{minutosPorEstacion} min sugeridos por estación</p>
+                    <p className="text-xs text-(--ui-text-3)">~{minutosPorEstacion} min sugeridos por estación</p>
                   )}
 
                   {diaActual.estaciones.map((est, idx) => {
@@ -626,7 +626,7 @@ export default function WeekWizardModal({ tipoPlan, semana, planId, horariosDefe
                           const opt = config.categorias.find((c) => !diaActual.estaciones.some((e) => e.categoria === c.value)) ?? config.categorias[0];
                           updateDia({ ...diaActual, estaciones: [...diaActual.estaciones, nuevaEstacion(opt.value, suggestLugar(opt.canonical))] });
                         }}
-                        className="text-xs font-medium text-blue-700 hover:text-blue-900"
+                        className="text-xs font-medium text-(--g-birdies-fg) hover:text-blue-900"
                       >
                         + Agregar estación
                       </button>
@@ -634,7 +634,7 @@ export default function WeekWizardModal({ tipoPlan, semana, planId, horariosDefe
                     {diaActual.estaciones.length > 1 && (
                       <button
                         onClick={() => updateDia({ ...diaActual, estaciones: diaActual.estaciones.slice(0, -1) })}
-                        className="text-xs font-medium text-gray-400 hover:text-red-500"
+                        className="text-xs font-medium text-(--ui-text-3) hover:text-(--ui-bad)"
                       >
                         Quitar última
                       </button>
@@ -643,30 +643,30 @@ export default function WeekWizardModal({ tipoPlan, semana, planId, horariosDefe
                 </>
               )}
 
-              {error && <div className="bg-red-50 border border-red-100 rounded-lg px-4 py-3 text-sm text-red-700">{error}</div>}
+              {error && <div className="bg-(--ui-bad-bg) border border-(--ui-bad) rounded-lg px-4 py-3 text-sm text-(--ui-bad)">{error}</div>}
             </div>
 
             {faltantes.length > 0 && (
-              <div className="mx-5 mb-2 bg-red-50 border border-red-200 rounded-lg px-3 py-2 text-xs text-red-700 space-y-0.5">
+              <div className="mx-5 mb-2 bg-(--ui-bad-bg) border border-(--ui-bad) rounded-lg px-3 py-2 text-xs text-(--ui-bad) space-y-0.5">
                 <p className="font-semibold">Falta para continuar:</p>
                 {faltantes.map((f, i) => <p key={i}>· {f}</p>)}
               </div>
             )}
 
             {advertencias.length > 0 && (
-              <div className="mx-5 mb-2 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 text-xs text-amber-800 space-y-0.5">
+              <div className="mx-5 mb-2 bg-(--ui-warn-bg) border border-(--ui-warn) rounded-lg px-3 py-2 text-xs text-(--ui-warn) space-y-0.5">
                 <p className="font-semibold">Puedes guardar así; son sugerencias:</p>
                 {advertencias.map((a, i) => <p key={i}>· {a}</p>)}
               </div>
             )}
 
-            <div className="px-5 pb-5 pt-3 flex items-center gap-2 border-t border-gray-100">
+            <div className="px-5 pb-5 pt-3 flex items-center gap-2 border-t border-(--ui-border-soft)">
               {!singleDay && (
                 <>
                   <button onClick={handleDiaAnterior} disabled={currentIndex === 0}
-                    className="px-3 py-2.5 rounded-xl text-sm font-medium border border-gray-200 text-gray-600 hover:bg-gray-50 disabled:opacity-30" title="Día anterior">←</button>
+                    className="px-3 py-2.5 rounded-xl text-sm font-medium border border-(--ui-border) text-(--ui-text-2) hover:bg-(--ui-card-alt) disabled:opacity-30" title="Día anterior">←</button>
                   <button onClick={handleSiguienteDia} disabled={esUltimoDia}
-                    className="px-3 py-2.5 rounded-xl text-sm font-medium border border-gray-200 text-gray-600 hover:bg-gray-50 disabled:opacity-30" title="Siguiente día">→</button>
+                    className="px-3 py-2.5 rounded-xl text-sm font-medium border border-(--ui-border) text-(--ui-text-2) hover:bg-(--ui-card-alt) disabled:opacity-30" title="Siguiente día">→</button>
                   <button onClick={guardarDiaActual} disabled={!puedeAvanzar || saving || !!motivoFechaInvalida}
                     className="flex-1 py-2.5 rounded-xl text-sm font-semibold border-2 disabled:opacity-40"
                     style={{ borderColor: config.color, color: config.color }}>
@@ -675,7 +675,7 @@ export default function WeekWizardModal({ tipoPlan, semana, planId, horariosDefe
                 </>
               )}
               <button onClick={handleSave} disabled={(singleDay ? !puedeAvanzar : diasCompletos === 0) || saving || !!motivoFechaInvalida}
-                className="flex-1 py-2.5 rounded-xl text-sm font-semibold text-white disabled:opacity-40"
+                className="flex-1 py-2.5 rounded-xl text-sm font-semibold text-(--g-on-accent) disabled:opacity-40"
                 style={{ background: config.color }}>
                 {saving ? "Guardando..." : singleDay ? "✓ Guardar" : `Guardar todo y cerrar${diasCompletos > 1 ? ` (${diasCompletos} días)` : ""}`}
               </button>

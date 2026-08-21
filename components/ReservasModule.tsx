@@ -369,7 +369,7 @@ export default function ReservasModule() {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
       {/* Toast */}
       {toast && (
-        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-2 bg-(--ui-card-alt) text-white text-sm font-medium px-5 py-3 rounded-xl shadow-lg pointer-events-none">
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-2 bg-(--ui-card-alt) text-(--g-on-accent) text-sm font-medium px-5 py-3 rounded-xl shadow-lg pointer-events-none">
           <svg width="15" height="15" viewBox="0 0 20 20" fill="none" stroke="var(--ui-ok)" strokeWidth={2.5}><path d="M3 10l4 4 9-9"/></svg>
           {toast}
         </div>
@@ -696,7 +696,7 @@ export default function ReservasModule() {
                   <button
                     onClick={handleInscribir}
                     disabled={!alumnoSel || inscribiendo}
-                    className="px-4 py-2 rounded-lg text-sm font-semibold text-white flex-shrink-0 transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+                    className="px-4 py-2 rounded-lg text-sm font-semibold text-(--g-on-accent) flex-shrink-0 transition-all disabled:opacity-40 disabled:cursor-not-allowed"
                     style={{ background: acentoGrupo(sesionSel.tipo_plan) }}
                   >
                     {inscribiendo ? "..." : "Inscribir"}
@@ -831,7 +831,7 @@ export default function ReservasModule() {
               <button
                 onClick={() => handleEliminar(confirmEliminar)}
                 disabled={eliminando}
-                className="flex-1 py-2.5 rounded-xl text-sm font-semibold text-white bg-red-600 hover:bg-red-700 disabled:opacity-50 transition-colors"
+                className="flex-1 py-2.5 rounded-xl text-sm font-semibold text-(--ui-bg) bg-(--ui-bad) hover:bg-red-700 disabled:opacity-50 transition-colors"
               >
                 {eliminando ? "Eliminando..." : "Sí, eliminar"}
               </button>

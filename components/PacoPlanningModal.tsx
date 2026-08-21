@@ -278,7 +278,7 @@ function Pill({ active, onClick, children }: { active: boolean; onClick: () => v
       type="button"
       onClick={onClick}
       className="text-xs font-medium px-3 py-1.5 rounded-full border transition-colors"
-      style={active ? { backgroundColor: "#1a3a2a", color: "#fff", borderColor: "#1a3a2a" } : { color: "#6b7280", borderColor: "#e5e7eb", backgroundColor: "#fff" }}
+      style={active ? { backgroundColor: "var(--ui-gold)", color: "var(--g-on-accent)", borderColor: "var(--ui-gold)" } : { color: "var(--ui-text-3)", borderColor: "var(--ui-border)", backgroundColor: "#fff" }}
     >
       {children}
     </button>
@@ -676,13 +676,13 @@ export default function PacoPlanningModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ backgroundColor: "rgba(0,0,0,0.45)" }} onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
-      <div className="flex w-full max-w-6xl h-[85vh] bg-white rounded-2xl shadow-2xl overflow-hidden">
+      <div className="flex w-full max-w-6xl h-[85vh] bg-(--ui-card) rounded-2xl shadow-2xl overflow-hidden">
         {/* ── Panel izquierdo: chat ── */}
-        <div className="flex flex-col w-full sm:w-[420px] shrink-0 border-r border-gray-100">
-          <div className="flex items-center justify-between px-4 py-3.5 shrink-0" style={{ backgroundColor: "#1a3a2a" }}>
+        <div className="flex flex-col w-full sm:w-[420px] shrink-0 border-r border-(--ui-border-soft)">
+          <div className="flex items-center justify-between px-4 py-3.5 shrink-0" style={{ backgroundColor: "var(--ui-gold)" }}>
             <div className="min-w-0">
-              <p className="text-sm font-semibold text-white truncate">Planificar con Paco 🦅</p>
-              <p className="text-[11px] text-white/70 truncate">{TIPO_PLAN_LABEL[tipoPlan]} · {diasSemana.map((d) => DIA_LABEL[d]).join("/")}</p>
+              <p className="text-sm font-semibold text-(--ui-bg) truncate">Planificar con Paco 🦅</p>
+              <p className="text-[11px] text-(--ui-bg)/70 truncate">{TIPO_PLAN_LABEL[tipoPlan]} · {diasSemana.map((d) => DIA_LABEL[d]).join("/")}</p>
             </div>
             <button onClick={onClose} aria-label="Cerrar" className="text-white/70 hover:text-white p-1 shrink-0">
               <i className="ti ti-x" style={{ fontSize: 18 }} />
@@ -696,8 +696,8 @@ export default function PacoPlanningModal({
                   className="max-w-[92%] rounded-2xl px-3.5 py-2.5 text-sm"
                   style={
                     m.role === "user"
-                      ? { backgroundColor: "#1a3a2a", color: "#ffffff" }
-                      : { backgroundColor: "#f8f9fa", color: m.isError ? "#b91c1c" : "#1f2937", border: "0.5px solid #e5e7eb" }
+                      ? { backgroundColor: "var(--ui-gold)", color: "var(--ui-bg)" }
+                      : { backgroundColor: "var(--ui-card-alt)", color: m.isError ? "var(--ui-bad)" : "var(--ui-text)", border: "0.5px solid var(--ui-border)" }
                   }
                 >
                   {m.role === "assistant" && !m.isError ? (
@@ -710,21 +710,21 @@ export default function PacoPlanningModal({
                 </div>
                 <div className="flex items-center gap-1.5 mt-1 px-1">
                   {m.usedWebSearch && (
-                    <span className="text-[10px] text-gray-400 flex items-center gap-0.5">
+                    <span className="text-[10px] text-(--ui-text-3) flex items-center gap-0.5">
                       <i className="ti ti-search" style={{ fontSize: 10 }} /> Consultó fuentes web
                     </span>
                   )}
-                  <span className="text-[10px] text-gray-400">{formatTime(m.timestamp)}</span>
+                  <span className="text-[10px] text-(--ui-text-3)">{formatTime(m.timestamp)}</span>
                 </div>
               </div>
             ))}
 
             {!hasUserSentMessage && !isLoading && (
-              <div className="rounded-2xl border border-gray-100 p-3.5 space-y-3">
+              <div className="rounded-2xl border border-(--ui-border-soft) p-3.5 space-y-3">
                 {usaSesionJuvenil(tipoPlan) && (
                   <>
                     <div>
-                      <p className="text-xs font-semibold text-gray-500 mb-1.5">Estaciones esta semana</p>
+                      <p className="text-xs font-semibold text-(--ui-text-3) mb-1.5">Estaciones esta semana</p>
                       <div className="flex flex-wrap gap-1.5">
                         {(tipoPlan === "birdies" ? ESTACIONES_BIRDIES : ESTACIONES_JUVENIL).map((op) => (
                           <Pill key={op} active={opciones.estaciones.includes(op)} onClick={() => toggleOpcionArray("estaciones", op)}>{op}</Pill>
@@ -733,7 +733,7 @@ export default function PacoPlanningModal({
                     </div>
                     {opciones.estaciones.some((e) => e === "Física" || e === "Coordinación y equilibrio") && (
                       <div>
-                        <p className="text-xs font-semibold text-gray-500 mb-1.5">Enfoque físico</p>
+                        <p className="text-xs font-semibold text-(--ui-text-3) mb-1.5">Enfoque físico</p>
                         <div className="flex flex-wrap gap-1.5">
                           {ENFOQUE_FISICO_OPCIONES[tipoPlan].map((op) => (
                             <Pill key={op} active={opciones.enfoqueFisico.includes(op)} onClick={() => toggleOpcionArray("enfoqueFisico", op)}>{op}</Pill>
@@ -742,7 +742,7 @@ export default function PacoPlanningModal({
                       </div>
                     )}
                     <div>
-                      <p className="text-xs font-semibold text-gray-500 mb-1.5">Enfoque técnico</p>
+                      <p className="text-xs font-semibold text-(--ui-text-3) mb-1.5">Enfoque técnico</p>
                       <div className="flex flex-wrap gap-1.5">
                         {ENFOQUE_TECNICO_OPCIONES[tipoPlan].map((op) => (
                           <Pill key={op} active={opciones.enfoqueTecnico.includes(op)} onClick={() => toggleOpcionArray("enfoqueTecnico", op)}>{op}</Pill>
@@ -753,7 +753,7 @@ export default function PacoPlanningModal({
                         value={opciones.enfoqueTecnicoOtro}
                         onChange={(e) => setOpciones((p) => ({ ...p, enfoqueTecnicoOtro: e.target.value }))}
                         placeholder="Otro (opcional)"
-                        className="w-full text-xs px-2 py-1.5 rounded-lg border border-gray-200 mt-1.5"
+                        className="w-full text-xs px-2 py-1.5 rounded-lg border border-(--ui-border) mt-1.5"
                       />
                     </div>
                   </>
@@ -762,7 +762,7 @@ export default function PacoPlanningModal({
                 {tipoPlan === "competencia" && (
                   <>
                     <div>
-                      <p className="text-xs font-semibold text-gray-500 mb-1.5">¿Estación física esta semana?</p>
+                      <p className="text-xs font-semibold text-(--ui-text-3) mb-1.5">¿Estación física esta semana?</p>
                       <div className="flex gap-1.5">
                         <Pill active={opciones.fisicoComp} onClick={() => setOpciones((p) => ({ ...p, fisicoComp: true }))}>Sí</Pill>
                         <Pill active={!opciones.fisicoComp} onClick={() => setOpciones((p) => ({ ...p, fisicoComp: false, enfoqueFisico: [] }))}>No</Pill>
@@ -770,7 +770,7 @@ export default function PacoPlanningModal({
                     </div>
                     {opciones.fisicoComp && (
                       <div>
-                        <p className="text-xs font-semibold text-gray-500 mb-1.5">Enfoque físico</p>
+                        <p className="text-xs font-semibold text-(--ui-text-3) mb-1.5">Enfoque físico</p>
                         <div className="flex flex-wrap gap-1.5">
                           {ENFOQUE_FISICO_OPCIONES.competencia.map((op) => (
                             <Pill key={op} active={opciones.enfoqueFisico.includes(op)} onClick={() => toggleOpcionArray("enfoqueFisico", op)}>{op}</Pill>
@@ -779,7 +779,7 @@ export default function PacoPlanningModal({
                       </div>
                     )}
                     <div>
-                      <p className="text-xs font-semibold text-gray-500 mb-1.5">Torneo próximo</p>
+                      <p className="text-xs font-semibold text-(--ui-text-3) mb-1.5">Torneo próximo</p>
                       <div className="flex flex-wrap gap-1.5">
                         {TORNEO_OPCIONES.map((t) => (
                           <Pill key={t.value} active={opciones.torneo === t.value} onClick={() => setOpciones((p) => ({ ...p, torneo: t.value }))}>{t.label}</Pill>
@@ -787,7 +787,7 @@ export default function PacoPlanningModal({
                       </div>
                     </div>
                     <div>
-                      <p className="text-xs font-semibold text-gray-500 mb-1.5">Enfoque técnico prioritario</p>
+                      <p className="text-xs font-semibold text-(--ui-text-3) mb-1.5">Enfoque técnico prioritario</p>
                       <div className="flex flex-wrap gap-1.5">
                         {ENFOQUE_TECNICO_OPCIONES.competencia.map((op) => (
                           <Pill key={op} active={opciones.enfoqueTecnico.includes(op)} onClick={() => toggleOpcionArray("enfoqueTecnico", op)}>{op}</Pill>
@@ -798,7 +798,7 @@ export default function PacoPlanningModal({
                         value={opciones.enfoqueTecnicoOtro}
                         onChange={(e) => setOpciones((p) => ({ ...p, enfoqueTecnicoOtro: e.target.value }))}
                         placeholder="Otro (opcional)"
-                        className="w-full text-xs px-2 py-1.5 rounded-lg border border-gray-200 mt-1.5"
+                        className="w-full text-xs px-2 py-1.5 rounded-lg border border-(--ui-border) mt-1.5"
                       />
                     </div>
                   </>
@@ -807,7 +807,7 @@ export default function PacoPlanningModal({
                 {tipoPlan === "damas" && (
                   <>
                     <div>
-                      <p className="text-xs font-semibold text-gray-500 mb-1.5">Esta semana</p>
+                      <p className="text-xs font-semibold text-(--ui-text-3) mb-1.5">Esta semana</p>
                       <div className="flex flex-wrap gap-1.5">
                         {TIPO_SEMANA_DAMAS_OPCIONES.map((t) => (
                           <Pill key={t.value} active={opciones.tipoSemanaDamas === t.value} onClick={() => setOpciones((p) => ({ ...p, tipoSemanaDamas: t.value }))}>{t.label}</Pill>
@@ -818,19 +818,19 @@ export default function PacoPlanningModal({
                           type="time"
                           value={opciones.horaCampoDamas}
                           onChange={(e) => setOpciones((p) => ({ ...p, horaCampoDamas: e.target.value }))}
-                          className="text-xs px-2 py-1.5 rounded-lg border border-gray-200 mt-1.5"
+                          className="text-xs px-2 py-1.5 rounded-lg border border-(--ui-border) mt-1.5"
                         />
                       )}
                     </div>
                     <div>
-                      <p className="text-xs font-semibold text-gray-500 mb-1.5">¿Bunker en juego corto?</p>
+                      <p className="text-xs font-semibold text-(--ui-text-3) mb-1.5">¿Bunker en juego corto?</p>
                       <div className="flex gap-1.5">
                         <Pill active={opciones.bunkerDamas} onClick={() => setOpciones((p) => ({ ...p, bunkerDamas: true }))}>Sí</Pill>
                         <Pill active={!opciones.bunkerDamas} onClick={() => setOpciones((p) => ({ ...p, bunkerDamas: false }))}>No</Pill>
                       </div>
                     </div>
                     <div>
-                      <p className="text-xs font-semibold text-gray-500 mb-1.5">¿Calentamiento estándar con baile y movilidad?</p>
+                      <p className="text-xs font-semibold text-(--ui-text-3) mb-1.5">¿Calentamiento estándar con baile y movilidad?</p>
                       <div className="flex gap-1.5">
                         <Pill active={opciones.calentamientoDamas} onClick={() => setOpciones((p) => ({ ...p, calentamientoDamas: true }))}>Sí</Pill>
                         <Pill active={!opciones.calentamientoDamas} onClick={() => setOpciones((p) => ({ ...p, calentamientoDamas: false }))}>No</Pill>
@@ -842,8 +842,8 @@ export default function PacoPlanningModal({
                 <button
                   onClick={handleSubmitOpciones}
                   disabled={!planningContext}
-                  className="w-full py-2 rounded-lg text-sm font-semibold text-white disabled:opacity-50"
-                  style={{ backgroundColor: "#1a3a2a" }}
+                  className="w-full py-2 rounded-lg text-sm font-semibold text-(--g-on-accent) disabled:opacity-50"
+                  style={{ backgroundColor: "var(--ui-gold)" }}
                 >
                   Continuar
                 </button>
@@ -852,17 +852,17 @@ export default function PacoPlanningModal({
 
             {isLoading && (
               <div className="flex items-center gap-1.5 px-1">
-                <span className="text-xs text-gray-400">{toolStatus ? TOOL_STATUS_LABELS[toolStatus] ?? "Consultando..." : "Pensando..."}</span>
+                <span className="text-xs text-(--ui-text-3)">{toolStatus ? TOOL_STATUS_LABELS[toolStatus] ?? "Consultando..." : "Pensando..."}</span>
                 <span className="flex gap-0.5">
-                  <span className="w-1 h-1 rounded-full bg-gray-300 animate-bounce" style={{ animationDelay: "0ms" }} />
-                  <span className="w-1 h-1 rounded-full bg-gray-300 animate-bounce" style={{ animationDelay: "120ms" }} />
-                  <span className="w-1 h-1 rounded-full bg-gray-300 animate-bounce" style={{ animationDelay: "240ms" }} />
+                  <span className="w-1 h-1 rounded-full bg-(--ui-text-3) animate-bounce" style={{ animationDelay: "0ms" }} />
+                  <span className="w-1 h-1 rounded-full bg-(--ui-text-3) animate-bounce" style={{ animationDelay: "120ms" }} />
+                  <span className="w-1 h-1 rounded-full bg-(--ui-text-3) animate-bounce" style={{ animationDelay: "240ms" }} />
                 </span>
               </div>
             )}
           </div>
 
-          <div className="flex items-center gap-2 px-4 py-3 border-t border-gray-100 shrink-0">
+          <div className="flex items-center gap-2 px-4 py-3 border-t border-(--ui-border-soft) shrink-0">
             <input
               ref={inputRef}
               type="text"
@@ -871,16 +871,16 @@ export default function PacoPlanningModal({
               onKeyDown={handleKeyDown}
               disabled={isLoading || !planningContext}
               placeholder="Pregúntale a Paco sobre esta semana..."
-              className="flex-1 min-w-0 text-sm px-3 py-2 rounded-full border border-gray-200 focus:outline-none focus:border-[#1a3a2a] disabled:opacity-60"
+              className="flex-1 min-w-0 text-sm px-3 py-2 rounded-full border border-(--ui-border) focus:outline-none focus:border-[var(--ui-gold)] disabled:opacity-60"
             />
             <button
               onClick={() => sendMessage(input)}
               disabled={isLoading || !input.trim() || !planningContext}
               aria-label="Enviar"
               className="flex items-center justify-center w-9 h-9 rounded-full shrink-0 disabled:opacity-40 transition-opacity"
-              style={{ backgroundColor: "#1a3a2a" }}
+              style={{ backgroundColor: "var(--ui-gold)" }}
             >
-              <i className="ti ti-send" style={{ color: "#ffffff", fontSize: 16 }} />
+              <i className="ti ti-send" style={{ color: "var(--ui-bg)", fontSize: 16 }} />
             </button>
           </div>
 
@@ -888,34 +888,34 @@ export default function PacoPlanningModal({
 
         {/* ── Panel derecho: vista previa ── */}
         <div className="flex-1 flex flex-col min-w-0">
-          <div className="flex items-center justify-between px-5 py-3.5 border-b border-gray-100 shrink-0">
-            <p className="text-sm font-semibold text-gray-900">Vista previa</p>
+          <div className="flex items-center justify-between px-5 py-3.5 border-b border-(--ui-border-soft) shrink-0">
+            <p className="text-sm font-semibold text-(--ui-text)">Vista previa</p>
             {preview && (
               isLoading ? (
                 <span className="text-xs font-medium flex items-center gap-1.5 animate-pulse" style={{ color: eventColor }}>
                   🔄 Actualizando...
                 </span>
               ) : (
-                <span className="text-xs text-gray-400">Editable antes de publicar</span>
+                <span className="text-xs text-(--ui-text-3)">Editable antes de publicar</span>
               )
             )}
           </div>
 
           <div className={`flex-1 overflow-y-auto px-5 py-4 ${isLoading && preview ? "animate-pulse" : ""}`} style={isLoading && preview ? { boxShadow: `inset 0 0 0 2px ${eventColor}33` } : undefined}>
             {!preview ? (
-              <div className="h-full flex flex-col items-center justify-center text-center text-gray-400">
+              <div className="h-full flex flex-col items-center justify-center text-center text-(--ui-text-3)">
                 <p className="text-sm">Responde las preguntas de Paco en el chat — en cuanto tenga suficiente información, la programación aparece aquí lista para editar.</p>
               </div>
             ) : (
               <div className="space-y-4">
-                {preview.descripcion_tema && <p className="text-sm text-gray-600 italic">{preview.descripcion_tema}</p>}
+                {preview.descripcion_tema && <p className="text-sm text-(--ui-text-2) italic">{preview.descripcion_tema}</p>}
 
                 {usaSesionJuvenil(tipoPlan) && preview.sesion_juvenil?.map((diaPlan, diaIdx) => (
-                  <div key={diaPlan.dia_semana} className="rounded-xl border border-gray-100 overflow-hidden">
+                  <div key={diaPlan.dia_semana} className="rounded-xl border border-(--ui-border-soft) overflow-hidden">
                     <div className="px-4 py-2.5 flex items-start justify-between gap-2" style={{ backgroundColor: eventColor }}>
                       <div>
-                        <span className="text-white font-semibold text-sm">{DIA_LABEL[diaPlan.dia_semana]}</span>
-                        <span className="text-white/70 text-[11px] ml-2">{TIPO_DIA_JUVENIL_LABEL[diaPlan.tipo]}</span>
+                        <span className="text-(--g-on-accent) font-semibold text-sm">{DIA_LABEL[diaPlan.dia_semana]}</span>
+                        <span className="text-(--g-on-accent)/70 text-[11px] ml-2">{TIPO_DIA_JUVENIL_LABEL[diaPlan.tipo]}</span>
                         {JUVENIL_HORARIOS_COMPARTIDOS[diaPlan.dia_semana] && (
                           <p className="text-white/70 text-[11px] mt-0.5">{JUVENIL_HORARIOS_COMPARTIDOS[diaPlan.dia_semana]}</p>
                         )}
@@ -930,34 +930,34 @@ export default function PacoPlanningModal({
                     </div>
 
                     {editingDiaIdx === diaIdx && (
-                      <div className="p-3 space-y-2.5 bg-gray-50 border-b border-gray-100">
-                        <p className="text-[11px] font-bold text-gray-500 uppercase tracking-wide">Tipo de día</p>
+                      <div className="p-3 space-y-2.5 bg-(--ui-card-alt) border-b border-(--ui-border-soft)">
+                        <p className="text-[11px] font-bold text-(--ui-text-3) uppercase tracking-wide">Tipo de día</p>
                         <div className="flex flex-wrap gap-1.5">
                           {(Object.keys(TIPO_DIA_JUVENIL_LABEL) as TipoDiaJuvenil[]).map((t) => (
                             <Pill key={t} active={tipoPendiente === t} onClick={() => setTipoPendiente(t)}>{TIPO_DIA_JUVENIL_LABEL[t]}</Pill>
                           ))}
                         </div>
                         <div className="flex gap-2 pt-1">
-                          <button onClick={cerrarEditorDia} className="px-3 py-1.5 rounded-lg text-xs font-medium border border-gray-200 text-gray-600 hover:bg-white">
+                          <button onClick={cerrarEditorDia} className="px-3 py-1.5 rounded-lg text-xs font-medium border border-(--ui-border) text-(--ui-text-2) hover:bg-(--ui-card)">
                             Cancelar
                           </button>
                           <button
                             onClick={() => guardarTipoDia(diaIdx)}
                             disabled={tipoPendiente === diaPlan.tipo}
-                            className="px-3 py-1.5 rounded-lg text-xs font-semibold text-white disabled:opacity-40"
+                            className="px-3 py-1.5 rounded-lg text-xs font-semibold text-(--g-on-accent) disabled:opacity-40"
                             style={{ backgroundColor: eventColor }}
                           >
                             Guardar cambio
                           </button>
                           <button
                             onClick={() => pedirAPaco(diaIdx)}
-                            className="ml-auto px-3 py-1.5 rounded-lg text-xs font-medium text-purple-700 border border-purple-200 hover:bg-purple-50"
+                            className="ml-auto px-3 py-1.5 rounded-lg text-xs font-medium text-(--g-mas14-fg) border border-(--g-mas14-fg) hover:bg-(--g-mas14-bg)"
                           >
                             🦅 Pedir a Paco
                           </button>
                         </div>
                         {tipoPendiente && tipoPendiente !== diaPlan.tipo && (
-                          <p className="text-[11px] text-amber-700 bg-amber-50 rounded px-2 py-1.5">
+                          <p className="text-[11px] text-(--ui-warn) bg-(--ui-warn-bg) rounded px-2 py-1.5">
                             Guardar reemplaza el contenido actual de este día por uno vacío del nuevo tipo.
                           </p>
                         )}
@@ -966,35 +966,35 @@ export default function PacoPlanningModal({
 
                     {diaPlan.tipo === "campo" || diaPlan.tipo === "test_tecnico" || diaPlan.tipo === "test_fisico" ? (
                       <div className="p-4">
-                        <label className="text-[11px] font-bold text-gray-500 uppercase tracking-wide block mb-1">Notas</label>
+                        <label className="text-[11px] font-bold text-(--ui-text-3) uppercase tracking-wide block mb-1">Notas</label>
                         <textarea
                           value={diaPlan.notas}
                           onChange={(e) => updateJuvenilNotas(diaIdx, e.target.value)}
                           rows={3}
                           placeholder="Describe la actividad de este día..."
-                          className="w-full text-xs border border-gray-200 rounded-lg px-2.5 py-1.5 resize-none"
+                          className="w-full text-xs border border-(--ui-border) rounded-lg px-2.5 py-1.5 resize-none"
                         />
                       </div>
                     ) : (
                     <div className="p-4 space-y-3">
                       {diaPlan.estaciones.map((est, estIdx) => (
-                        <div key={`${est.categoria}-${estIdx}`} className="border border-gray-100 rounded-lg p-3 space-y-2">
+                        <div key={`${est.categoria}-${estIdx}`} className="border border-(--ui-border-soft) rounded-lg p-3 space-y-2">
                           <p className="text-xs font-bold" style={{ color: eventColor }}>
                             {CATEGORIA_ESTACION_LABEL[est.categoria as CategoriaEstacionEspecial] ?? est.categoria}
                           </p>
                           <div className="space-y-1.5">
                             {est.drills.map((d, di) => (
-                              <div key={di} className="border border-gray-100 rounded-lg p-2 bg-gray-50 space-y-1">
+                              <div key={di} className="border border-(--ui-border-soft) rounded-lg p-2 bg-(--ui-card-alt) space-y-1">
                                 <div className="flex items-center gap-2">
                                   <input
                                     value={d.titulo}
                                     onChange={(e) => updateJuvenilDrill(diaIdx, estIdx, di, { titulo: e.target.value })}
-                                    className="flex-1 text-xs font-medium border border-gray-200 rounded px-2 py-1 bg-white"
+                                    className="flex-1 text-xs font-medium border border-(--ui-border) rounded px-2 py-1 bg-(--ui-card)"
                                   />
                                   <button
                                     onClick={() => removeJuvenilDrill(diaIdx, estIdx, di)}
                                     disabled={est.drills.length <= 1}
-                                    className="text-gray-300 hover:text-red-500 disabled:opacity-30 shrink-0"
+                                    className="text-(--ui-text-3) hover:text-(--ui-bad) disabled:opacity-30 shrink-0"
                                   >
                                     <svg width="12" height="12" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path d="M18 6 6 18M6 6l12 12" /></svg>
                                   </button>
@@ -1003,7 +1003,7 @@ export default function PacoPlanningModal({
                                   value={d.descripcion}
                                   onChange={(e) => updateJuvenilDrill(diaIdx, estIdx, di, { descripcion: e.target.value })}
                                   rows={2}
-                                  className="w-full text-xs border border-gray-200 rounded px-2 py-1 resize-none bg-white"
+                                  className="w-full text-xs border border-(--ui-border) rounded px-2 py-1 resize-none bg-(--ui-card)"
                                 />
                               </div>
                             ))}
@@ -1011,17 +1011,17 @@ export default function PacoPlanningModal({
                           <button
                             onClick={() => setPickerFor({ diaIdx, estIdx })}
                             disabled={est.drills.length >= 3}
-                            className="text-xs font-medium text-blue-600 hover:underline disabled:opacity-40"
+                            className="text-xs font-medium text-(--g-birdies-fg) hover:underline disabled:opacity-40"
                           >
                             + Agregar de la biblioteca
                           </button>
                           <div>
-                            <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wide block mb-1">Desafío</label>
+                            <label className="text-[10px] font-bold text-(--ui-text-3) uppercase tracking-wide block mb-1">Desafío</label>
                             <textarea
                               value={est.desafio}
                               onChange={(e) => updateJuvenilDesafio(diaIdx, estIdx, e.target.value)}
                               rows={2}
-                              className="w-full text-xs border border-gray-200 rounded px-2 py-1 resize-none"
+                              className="w-full text-xs border border-(--ui-border) rounded px-2 py-1 resize-none"
                               placeholder="Reto o juego competitivo de cierre"
                             />
                           </div>
@@ -1044,34 +1044,34 @@ export default function PacoPlanningModal({
                 )}
 
                 {preview.sesiones.map((s, si) => (
-                  <div key={si} className="rounded-xl border border-gray-100 overflow-hidden">
+                  <div key={si} className="rounded-xl border border-(--ui-border-soft) overflow-hidden">
                     <div className="flex items-center justify-between px-4 py-2.5" style={{ backgroundColor: eventColor }}>
-                      <span className="text-white font-semibold text-sm">{DIA_LABEL[s.dia_semana]} · {formatFechaCorta(s.fecha)}</span>
-                      <span className="text-white/80 text-xs">{TIPO_SESION_LABEL[s.tipo_sesion] ?? s.tipo_sesion}</span>
+                      <span className="text-(--g-on-accent) font-semibold text-sm">{DIA_LABEL[s.dia_semana]} · {formatFechaCorta(s.fecha)}</span>
+                      <span className="text-(--g-on-accent)/80 text-xs">{TIPO_SESION_LABEL[s.tipo_sesion] ?? s.tipo_sesion}</span>
                     </div>
                     <div className="p-4 space-y-3">
                       <div className="flex gap-2">
-                        <input type="time" value={s.hora_inicio} onChange={(e) => updateSesion(si, { hora_inicio: e.target.value })} className="text-xs border border-gray-200 rounded px-2 py-1" />
-                        <input type="time" value={s.hora_fin} onChange={(e) => updateSesion(si, { hora_fin: e.target.value })} className="text-xs border border-gray-200 rounded px-2 py-1" />
-                        <select value={s.lugar} onChange={(e) => updateSesion(si, { lugar: e.target.value as Lugar })} className="flex-1 text-xs border border-gray-200 rounded px-2 py-1 bg-white">
+                        <input type="time" value={s.hora_inicio} onChange={(e) => updateSesion(si, { hora_inicio: e.target.value })} className="text-xs border border-(--ui-border) rounded px-2 py-1" />
+                        <input type="time" value={s.hora_fin} onChange={(e) => updateSesion(si, { hora_fin: e.target.value })} className="text-xs border border-(--ui-border) rounded px-2 py-1" />
+                        <select value={s.lugar} onChange={(e) => updateSesion(si, { lugar: e.target.value as Lugar })} className="flex-1 text-xs border border-(--ui-border) rounded px-2 py-1 bg-(--ui-card)">
                           {LUGARES.map((l) => (
                             <option key={l} value={l}>{LUGAR_LABEL[l]}</option>
                           ))}
                         </select>
                       </div>
-                      <textarea value={s.objetivo} onChange={(e) => updateSesion(si, { objetivo: e.target.value })} rows={2} placeholder="Objetivo de la sesión" className="w-full text-xs border border-gray-200 rounded px-2 py-1.5 resize-none" />
+                      <textarea value={s.objetivo} onChange={(e) => updateSesion(si, { objetivo: e.target.value })} rows={2} placeholder="Objetivo de la sesión" className="w-full text-xs border border-(--ui-border) rounded px-2 py-1.5 resize-none" />
 
                       {s.estaciones_damas && (
                         <div className="space-y-2">
-                          <p className="text-xs font-semibold text-gray-500">Estaciones</p>
+                          <p className="text-xs font-semibold text-(--ui-text-3)">Estaciones</p>
                           {s.estaciones_damas.map((est, ei) => (
-                            <div key={ei} className="border border-gray-100 rounded-lg p-2.5 space-y-1.5">
+                            <div key={ei} className="border border-(--ui-border-soft) rounded-lg p-2.5 space-y-1.5">
                               <div className="flex gap-2">
-                                <input value={est.nombre} onChange={(e) => updateEstacion(si, ei, { nombre: e.target.value })} className="flex-1 text-xs font-medium border border-gray-200 rounded px-2 py-1" />
-                                <input type="number" value={est.duracion_min} onChange={(e) => updateEstacion(si, ei, { duracion_min: Number(e.target.value) })} className="w-14 text-xs border border-gray-200 rounded px-2 py-1" />
+                                <input value={est.nombre} onChange={(e) => updateEstacion(si, ei, { nombre: e.target.value })} className="flex-1 text-xs font-medium border border-(--ui-border) rounded px-2 py-1" />
+                                <input type="number" value={est.duracion_min} onChange={(e) => updateEstacion(si, ei, { duracion_min: Number(e.target.value) })} className="w-14 text-xs border border-(--ui-border) rounded px-2 py-1" />
                               </div>
-                              <input value={est.lugar} onChange={(e) => updateEstacion(si, ei, { lugar: e.target.value })} className="w-full text-xs border border-gray-200 rounded px-2 py-1" />
-                              <textarea value={est.descripcion} onChange={(e) => updateEstacion(si, ei, { descripcion: e.target.value })} rows={2} className="w-full text-xs border border-gray-200 rounded px-2 py-1 resize-none" />
+                              <input value={est.lugar} onChange={(e) => updateEstacion(si, ei, { lugar: e.target.value })} className="w-full text-xs border border-(--ui-border) rounded px-2 py-1" />
+                              <textarea value={est.descripcion} onChange={(e) => updateEstacion(si, ei, { descripcion: e.target.value })} rows={2} className="w-full text-xs border border-(--ui-border) rounded px-2 py-1 resize-none" />
                             </div>
                           ))}
                         </div>
@@ -1080,18 +1080,18 @@ export default function PacoPlanningModal({
                       {!s.estaciones_damas && (
                         <div className="space-y-2">
                           <div className="flex items-center justify-between">
-                            <p className="text-xs font-semibold text-gray-500">Drills</p>
-                            <button onClick={() => addDrill(si)} className="text-xs text-blue-600 hover:underline">+ Agregar</button>
+                            <p className="text-xs font-semibold text-(--ui-text-3)">Drills</p>
+                            <button onClick={() => addDrill(si)} className="text-xs text-(--g-birdies-fg) hover:underline">+ Agregar</button>
                           </div>
                           {s.drills.map((d, di) => (
-                            <div key={di} className="border border-gray-100 rounded-lg p-2.5 space-y-1.5">
+                            <div key={di} className="border border-(--ui-border-soft) rounded-lg p-2.5 space-y-1.5">
                               <div className="flex items-center gap-2">
-                                <input value={d.titulo} onChange={(e) => updateDrill(si, di, { titulo: e.target.value })} className="flex-1 text-xs font-medium border border-gray-200 rounded px-2 py-1" placeholder="Título" />
-                                <button onClick={() => removeDrill(si, di)} className="text-gray-300 hover:text-red-500 shrink-0">
+                                <input value={d.titulo} onChange={(e) => updateDrill(si, di, { titulo: e.target.value })} className="flex-1 text-xs font-medium border border-(--ui-border) rounded px-2 py-1" placeholder="Título" />
+                                <button onClick={() => removeDrill(si, di)} className="text-(--ui-text-3) hover:text-(--ui-bad) shrink-0">
                                   <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path d="M18 6 6 18M6 6l12 12" /></svg>
                                 </button>
                               </div>
-                              <textarea value={d.descripcion} onChange={(e) => updateDrill(si, di, { descripcion: e.target.value })} rows={2} className="w-full text-xs border border-gray-200 rounded px-2 py-1 resize-none" placeholder="Descripción" />
+                              <textarea value={d.descripcion} onChange={(e) => updateDrill(si, di, { descripcion: e.target.value })} rows={2} className="w-full text-xs border border-(--ui-border) rounded px-2 py-1 resize-none" placeholder="Descripción" />
                             </div>
                           ))}
                         </div>
@@ -1104,14 +1104,14 @@ export default function PacoPlanningModal({
           </div>
 
           {preview && (
-            <div className="px-5 py-4 border-t border-gray-100 shrink-0 space-y-2">
-              {publishError && <p className="text-xs text-red-600 bg-red-50 px-3 py-2 rounded-lg">{publishError}</p>}
+            <div className="px-5 py-4 border-t border-(--ui-border-soft) shrink-0 space-y-2">
+              {publishError && <p className="text-xs text-(--ui-bad) bg-(--ui-bad-bg) px-3 py-2 rounded-lg">{publishError}</p>}
               <button
                 onClick={handlePublicarClick}
                 disabled={publishing || isLoading}
                 title={isLoading ? "Esperando actualización de Paco" : undefined}
-                className="w-full py-2.5 rounded-xl text-sm font-semibold text-white disabled:opacity-50"
-                style={{ backgroundColor: "#1a3a2a" }}
+                className="w-full py-2.5 rounded-xl text-sm font-semibold text-(--g-on-accent) disabled:opacity-50"
+                style={{ backgroundColor: "var(--ui-gold)" }}
               >
                 {publishing ? "Publicando..." : isLoading ? "Esperando actualización de Paco..." : "Publicar en calendario"}
               </button>
@@ -1122,16 +1122,16 @@ export default function PacoPlanningModal({
 
       {showConfirmReplace && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center p-4" style={{ backgroundColor: "rgba(0,0,0,0.5)" }}>
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6">
-            <p className="text-sm text-gray-800 mb-5">Ya existe programación para esta semana en este grupo. ¿Quieres reemplazarla?</p>
+          <div className="bg-(--ui-card) rounded-2xl shadow-2xl w-full max-w-sm p-6">
+            <p className="text-sm text-(--ui-text) mb-5">Ya existe programación para esta semana en este grupo. ¿Quieres reemplazarla?</p>
             <div className="flex gap-3">
-              <button onClick={() => setShowConfirmReplace(false)} className="flex-1 px-4 py-2.5 rounded-xl border border-gray-200 text-sm font-medium text-gray-600 hover:bg-gray-50">
+              <button onClick={() => setShowConfirmReplace(false)} className="flex-1 px-4 py-2.5 rounded-xl border border-(--ui-border) text-sm font-medium text-(--ui-text-2) hover:bg-(--ui-card-alt)">
                 Cancelar
               </button>
               <button
                 onClick={() => { setShowConfirmReplace(false); doPublish(); }}
-                className="flex-1 px-4 py-2.5 rounded-xl text-sm font-semibold text-white"
-                style={{ backgroundColor: "#b91c1c" }}
+                className="flex-1 px-4 py-2.5 rounded-xl text-sm font-semibold text-(--g-on-accent)"
+                style={{ backgroundColor: "var(--ui-bad)" }}
               >
                 Sí, reemplazar
               </button>

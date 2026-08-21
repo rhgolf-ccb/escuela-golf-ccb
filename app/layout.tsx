@@ -26,7 +26,9 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  themeColor: "#1a3a2a",
+  // Color de la barra de estado en la PWA. Es una meta del navegador,
+  // no CSS: aquí no valen las variables del tema. Sigue al fondo de --ui-bg.
+  themeColor: "#0a1710",
 };
 
 export default function RootLayout({

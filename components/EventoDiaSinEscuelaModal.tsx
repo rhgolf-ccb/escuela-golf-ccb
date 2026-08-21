@@ -92,17 +92,17 @@ export default function EventoDiaSinEscuelaModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ backgroundColor: "rgba(0,0,0,0.45)" }} onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6 space-y-3">
-        <h3 className="font-bold text-gray-900">{titulo}</h3>
+      <div className="bg-(--ui-card) rounded-2xl shadow-2xl w-full max-w-md p-6 space-y-3">
+        <h3 className="font-bold text-(--ui-text)">{titulo}</h3>
 
         {!editId && (
           <div className="flex gap-2">
             <button onClick={() => setKind("evento")} className="flex-1 py-2 rounded-lg text-sm font-semibold"
-              style={kind === "evento" ? { backgroundColor: "#1565c0", color: "#fff" } : { backgroundColor: "#f3f4f6", color: "#6b7280" }}>
+              style={kind === "evento" ? { backgroundColor: "var(--g-birdies-fg)", color: "#fff" } : { backgroundColor: "var(--ui-card-alt)", color: "var(--ui-text-3)" }}>
               📌 Evento
             </button>
             <button onClick={() => setKind("sin_escuela")} className="flex-1 py-2 rounded-lg text-sm font-semibold"
-              style={kind === "sin_escuela" ? { backgroundColor: "#4b5563", color: "#fff" } : { backgroundColor: "#f3f4f6", color: "#6b7280" }}>
+              style={kind === "sin_escuela" ? { backgroundColor: "var(--ui-text-2)", color: "#fff" } : { backgroundColor: "var(--ui-card-alt)", color: "var(--ui-text-3)" }}>
               Sin escuela
             </button>
           </div>
@@ -110,39 +110,39 @@ export default function EventoDiaSinEscuelaModal({
 
         {kind === "evento" ? (
           <>
-            <input value={nombre} onChange={(e) => setNombre(e.target.value)} placeholder="Nombre del evento (ej: Torneo interno)" className="w-full text-sm px-3 py-2 rounded-lg border border-gray-200" />
+            <input value={nombre} onChange={(e) => setNombre(e.target.value)} placeholder="Nombre del evento (ej: Torneo interno)" className="w-full text-sm px-3 py-2 rounded-lg border border-(--ui-border)" />
             <div className="flex gap-2">
               <button onClick={() => setTipo("institucional")} className="flex-1 text-xs font-semibold px-3 py-1.5 rounded-full"
-                style={tipo === "institucional" ? { backgroundColor: "#1565c018", color: "#1565c0" } : { color: "#9ca3af", backgroundColor: "#f9fafb" }}>
+                style={tipo === "institucional" ? { backgroundColor: "color-mix(in srgb, var(--g-birdies-fg) 9%, transparent)", color: "var(--g-birdies-fg)" } : { color: "var(--ui-text-3)", backgroundColor: "var(--ui-card-alt)" }}>
                 Institucional
               </button>
               <button onClick={() => setTipo("especial")} className="flex-1 text-xs font-semibold px-3 py-1.5 rounded-full"
-                style={tipo === "especial" ? { backgroundColor: "#b4530918", color: "#b45309" } : { color: "#9ca3af", backgroundColor: "#f9fafb" }}>
+                style={tipo === "especial" ? { backgroundColor: "color-mix(in srgb, var(--ui-warn) 9%, transparent)", color: "var(--ui-warn)" } : { color: "var(--ui-text-3)", backgroundColor: "var(--ui-card-alt)" }}>
                 Actividad especial
               </button>
             </div>
             <div className="flex gap-2">
-              <input type="date" value={fechaInicio} onChange={(e) => setFechaInicio(e.target.value)} className="flex-1 text-sm px-3 py-2 rounded-lg border border-gray-200" />
-              <input type="date" value={fechaFin} onChange={(e) => setFechaFin(e.target.value)} placeholder="Fecha fin (opcional)" className="flex-1 text-sm px-3 py-2 rounded-lg border border-gray-200" />
+              <input type="date" value={fechaInicio} onChange={(e) => setFechaInicio(e.target.value)} className="flex-1 text-sm px-3 py-2 rounded-lg border border-(--ui-border)" />
+              <input type="date" value={fechaFin} onChange={(e) => setFechaFin(e.target.value)} placeholder="Fecha fin (opcional)" className="flex-1 text-sm px-3 py-2 rounded-lg border border-(--ui-border)" />
             </div>
-            <textarea value={descripcion} onChange={(e) => setDescripcion(e.target.value)} rows={2} placeholder="Descripción (opcional)" className="w-full text-sm px-3 py-2 rounded-lg border border-gray-200 resize-none" />
+            <textarea value={descripcion} onChange={(e) => setDescripcion(e.target.value)} rows={2} placeholder="Descripción (opcional)" className="w-full text-sm px-3 py-2 rounded-lg border border-(--ui-border) resize-none" />
           </>
         ) : (
           <>
             <div className="flex gap-2">
-              <input type="date" value={fechaInicio} onChange={(e) => setFechaInicio(e.target.value)} className="flex-1 text-sm px-3 py-2 rounded-lg border border-gray-200" />
-              <input type="date" value={fechaFin} onChange={(e) => setFechaFin(e.target.value)} className="flex-1 text-sm px-3 py-2 rounded-lg border border-gray-200" />
+              <input type="date" value={fechaInicio} onChange={(e) => setFechaInicio(e.target.value)} className="flex-1 text-sm px-3 py-2 rounded-lg border border-(--ui-border)" />
+              <input type="date" value={fechaFin} onChange={(e) => setFechaFin(e.target.value)} className="flex-1 text-sm px-3 py-2 rounded-lg border border-(--ui-border)" />
             </div>
-            <input value={motivo} onChange={(e) => setMotivo(e.target.value)} placeholder="Motivo / mensaje a los padres (ej: Festivo — Batalla de Boyacá)" className="w-full text-sm px-3 py-2 rounded-lg border border-gray-200" />
-            <p className="text-[11px] text-gray-400">Este texto es lo que ven los padres en su calendario.</p>
+            <input value={motivo} onChange={(e) => setMotivo(e.target.value)} placeholder="Motivo / mensaje a los padres (ej: Festivo — Batalla de Boyacá)" className="w-full text-sm px-3 py-2 rounded-lg border border-(--ui-border)" />
+            <p className="text-[11px] text-(--ui-text-3)">Este texto es lo que ven los padres en su calendario.</p>
           </>
         )}
 
-        {error && <p className="text-xs text-red-600">{error}</p>}
+        {error && <p className="text-xs text-(--ui-bad)">{error}</p>}
 
         {conflicto ? (
           <div className="space-y-2 pt-1">
-            <div className="rounded-lg px-3 py-2 text-xs space-y-1" style={{ backgroundColor: "#fffbeb", border: "1px solid #fde68a", color: "#92400e" }}>
+            <div className="rounded-lg px-3 py-2 text-xs space-y-1" style={{ backgroundColor: "var(--ui-warn-bg)", border: "1px solid var(--ui-warn)", color: "var(--ui-warn)" }}>
               <p className="font-semibold">
                 Ya hay {conflicto.sesiones} sesión{conflicto.sesiones > 1 ? "es" : ""} programada{conflicto.sesiones > 1 ? "s" : ""} en ese rango.
               </p>
@@ -150,30 +150,30 @@ export default function EventoDiaSinEscuelaModal({
               <p>Si las dejas, seguirán saliendo en el PDF de padres aunque el día quede sin escuela.</p>
             </div>
             <div className="flex gap-2">
-              <button onClick={() => setConflicto(null)} disabled={saving} className="py-2 px-3 rounded-xl text-sm font-medium border border-gray-200 text-gray-600 hover:bg-gray-50">Cancelar</button>
-              <button onClick={() => handleGuardar("conservar")} disabled={saving} className="flex-1 py-2 rounded-xl text-sm font-medium border border-gray-200 text-gray-600 hover:bg-gray-50 disabled:opacity-50">
+              <button onClick={() => setConflicto(null)} disabled={saving} className="py-2 px-3 rounded-xl text-sm font-medium border border-(--ui-border) text-(--ui-text-2) hover:bg-(--ui-card-alt)">Cancelar</button>
+              <button onClick={() => handleGuardar("conservar")} disabled={saving} className="flex-1 py-2 rounded-xl text-sm font-medium border border-(--ui-border) text-(--ui-text-2) hover:bg-(--ui-card-alt) disabled:opacity-50">
                 Marcar y conservarlas
               </button>
-              <button onClick={() => handleGuardar("borrar")} disabled={saving} className="flex-1 py-2 rounded-xl text-sm font-semibold text-white disabled:opacity-50" style={{ backgroundColor: "#b91c1c" }}>
+              <button onClick={() => handleGuardar("borrar")} disabled={saving} className="flex-1 py-2 rounded-xl text-sm font-semibold text-(--ui-bg) disabled:opacity-50" style={{ backgroundColor: "var(--ui-bad)" }}>
                 {saving ? "Guardando..." : "Marcar y borrarlas"}
               </button>
             </div>
           </div>
         ) : confirmDelete ? (
           <div className="flex gap-2 pt-2">
-            <button onClick={() => setConfirmDelete(false)} disabled={deleting} className="flex-1 py-2 rounded-xl text-sm font-medium border border-gray-200 text-gray-600 hover:bg-gray-50">Cancelar</button>
-            <button onClick={handleBorrar} disabled={deleting} className="flex-1 py-2 rounded-xl text-sm font-semibold text-white disabled:opacity-50" style={{ backgroundColor: "#b91c1c" }}>
+            <button onClick={() => setConfirmDelete(false)} disabled={deleting} className="flex-1 py-2 rounded-xl text-sm font-medium border border-(--ui-border) text-(--ui-text-2) hover:bg-(--ui-card-alt)">Cancelar</button>
+            <button onClick={handleBorrar} disabled={deleting} className="flex-1 py-2 rounded-xl text-sm font-semibold text-(--ui-bg) disabled:opacity-50" style={{ backgroundColor: "var(--ui-bad)" }}>
               {deleting ? "Borrando..." : "Sí, borrar"}
             </button>
           </div>
         ) : (
           <div className="flex gap-2 pt-2">
             {editId ? (
-              <button onClick={() => setConfirmDelete(true)} disabled={saving} className="py-2 px-3 rounded-xl text-sm font-medium border border-red-200 text-red-600 hover:bg-red-50">Borrar</button>
+              <button onClick={() => setConfirmDelete(true)} disabled={saving} className="py-2 px-3 rounded-xl text-sm font-medium border border-(--ui-bad) text-(--ui-bad) hover:bg-(--ui-bad-bg)">Borrar</button>
             ) : (
-              <button onClick={onClose} disabled={saving} className="flex-1 py-2 rounded-xl text-sm font-medium border border-gray-200 text-gray-600 hover:bg-gray-50">Cancelar</button>
+              <button onClick={onClose} disabled={saving} className="flex-1 py-2 rounded-xl text-sm font-medium border border-(--ui-border) text-(--ui-text-2) hover:bg-(--ui-card-alt)">Cancelar</button>
             )}
-            <button onClick={() => handleGuardar()} disabled={saving} className="flex-1 py-2 rounded-xl text-sm font-semibold text-white disabled:opacity-50" style={{ backgroundColor: "#1a3a2a" }}>
+            <button onClick={() => handleGuardar()} disabled={saving} className="flex-1 py-2 rounded-xl text-sm font-semibold text-(--ui-bg) disabled:opacity-50" style={{ backgroundColor: "var(--ui-gold)" }}>
               {saving ? "Guardando..." : editId ? "Guardar cambios" : "Guardar"}
             </button>
           </div>

@@ -24,18 +24,18 @@ export default function EspecialDiaPicker({ opciones, valor, notas, color, juego
   }
   return (
     <div className="space-y-2">
-      <p className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-1">Tipo de día especial</p>
+      <p className="text-xs font-bold text-(--ui-text-3) uppercase tracking-wide mb-1">Tipo de día especial</p>
       {opciones.map((esp) => (
         <button
           key={esp.value}
           onClick={() => onChangeValor(esp.value)}
           className="w-full flex items-center gap-3 px-4 py-3 rounded-xl border-2 text-left transition-all"
-          style={valor === esp.value ? { borderColor: color, background: `${color}0d` } : { borderColor: "#e5e7eb", background: "#f9fafb" }}
+          style={valor === esp.value ? { borderColor: color, background: `${color}0d` } : { borderColor: "var(--ui-border)", background: "var(--ui-card-alt)" }}
         >
           <span className="text-xl">{esp.emoji}</span>
           <div>
-            <p className="text-sm font-semibold text-gray-900">{esp.label}</p>
-            <p className="text-xs text-gray-500">{esp.desc}</p>
+            <p className="text-sm font-semibold text-(--ui-text)">{esp.label}</p>
+            <p className="text-xs text-(--ui-text-3)">{esp.desc}</p>
           </div>
           {valor === esp.value && (
             <div className="ml-auto w-5 h-5 rounded-full flex items-center justify-center shrink-0" style={{ background: color }}>
@@ -46,14 +46,14 @@ export default function EspecialDiaPicker({ opciones, valor, notas, color, juego
       ))}
       {esSalidaCampo && juegosCampo && juegosCampo.length > 0 && (
         <div className="pt-1">
-          <p className="text-[11px] font-bold text-gray-500 uppercase tracking-wide mb-1.5">Juegos / retos de campo</p>
+          <p className="text-[11px] font-bold text-(--ui-text-3) uppercase tracking-wide mb-1.5">Juegos / retos de campo</p>
           <div className="flex flex-wrap gap-1.5">
             {juegosCampo.map((j) => {
               const on = seleccion.includes(j);
               return (
                 <button key={j} type="button" onClick={() => toggleJuego(j)}
                   className="px-2.5 py-1 rounded-full text-[11px] font-semibold border transition-all"
-                  style={on ? { background: color, color: "#fff", borderColor: color } : { background: "#f9fafb", color: "#374151", borderColor: "#e5e7eb" }}>
+                  style={on ? { background: color, color: "var(--g-on-accent)", borderColor: color } : { background: "var(--ui-card-alt)", color: "var(--ui-text-2)", borderColor: "var(--ui-border)" }}>
                   {j}
                 </button>
               );
@@ -66,7 +66,7 @@ export default function EspecialDiaPicker({ opciones, valor, notas, color, juego
         onChange={(e) => onChangeNotas(e.target.value)}
         rows={2}
         placeholder="Notas (opcional)"
-        className="w-full text-xs border border-gray-200 rounded-lg px-2.5 py-1.5 resize-none mt-2"
+        className="w-full text-xs border border-(--ui-border) rounded-lg px-2.5 py-1.5 resize-none mt-2"
       />
     </div>
   );

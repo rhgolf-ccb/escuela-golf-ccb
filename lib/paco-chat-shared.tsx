@@ -37,17 +37,21 @@ export function extractPlanTitle(content: string): string {
 
 // Estándar visual de contenido de Paco (chat flotante, modal de perfil de
 // alumno, análisis grupal, planificación de programación).
+// Estándar visual del contenido de Paco (chat flotante, modal de perfil de
+// alumno, análisis grupal, planificación de programación). Los cuatro viven en
+// pantallas oscuras, así que aquí tampoco hay hex: todo sale de los tokens del
+// tema y el bloque se pinta bien sin saber en cuál de los cuatro está.
 export const MARKDOWN_COMPONENTS = {
-  h1: (props: React.ComponentProps<"h1">) => <h1 className="text-base mt-2 mb-2 first:mt-0" style={{ color: "#1a3a2a", fontWeight: 600 }} {...props} />,
-  h2: (props: React.ComponentProps<"h2">) => <h2 className="text-[15px] mt-2 mb-2 first:mt-0" style={{ color: "#1a3a2a", fontWeight: 600 }} {...props} />,
-  h3: (props: React.ComponentProps<"h3">) => <h3 className="text-sm mt-1.5 mb-2 first:mt-0" style={{ color: "#1a3a2a", fontWeight: 600 }} {...props} />,
+  h1: (props: React.ComponentProps<"h1">) => <h1 className="text-base mt-2 mb-2 first:mt-0" style={{ color: "var(--ui-gold)", fontWeight: 700 }} {...props} />,
+  h2: (props: React.ComponentProps<"h2">) => <h2 className="text-[15px] mt-2 mb-2 first:mt-0" style={{ color: "var(--ui-gold)", fontWeight: 700 }} {...props} />,
+  h3: (props: React.ComponentProps<"h3">) => <h3 className="text-sm mt-1.5 mb-2 first:mt-0" style={{ color: "var(--ui-gold)", fontWeight: 700 }} {...props} />,
   p: (props: React.ComponentProps<"p">) => <p className="mb-1.5 last:mb-0" style={{ lineHeight: 1.6 }} {...props} />,
   ul: (props: React.ComponentProps<"ul">) => <ul className="list-disc pl-5 mb-1.5 space-y-1 last:mb-0" {...props} />,
   ol: (props: React.ComponentProps<"ol">) => <ol className="list-decimal pl-5 mb-1.5 space-y-1 last:mb-0" {...props} />,
   li: (props: React.ComponentProps<"li">) => <li style={{ lineHeight: 1.6 }} {...props} />,
-  strong: (props: React.ComponentProps<"strong">) => <strong className="font-semibold" style={{ color: "#1a3a2a" }} {...props} />,
-  hr: () => <hr style={{ borderTop: "1px solid #e0e0e0", marginTop: 16, marginBottom: 16 }} />,
-  a: (props: React.ComponentProps<"a">) => <a className="underline" style={{ color: "#1a3a2a" }} target="_blank" rel="noreferrer" {...props} />,
+  strong: (props: React.ComponentProps<"strong">) => <strong className="font-bold" style={{ color: "var(--ui-text)" }} {...props} />,
+  hr: () => <hr style={{ borderTop: "1px solid var(--ui-border)", marginTop: 16, marginBottom: 16 }} />,
+  a: (props: React.ComponentProps<"a">) => <a className="underline" style={{ color: "var(--ui-gold)" }} target="_blank" rel="noreferrer" {...props} />,
   table: (props: React.ComponentProps<"table">) => (
     <div className="overflow-x-auto mb-1.5 last:mb-0">
       <table className="w-full border-collapse text-[11px]" {...props} />
@@ -55,11 +59,14 @@ export const MARKDOWN_COMPONENTS = {
   ),
   thead: (props: React.ComponentProps<"thead">) => <thead {...props} />,
   th: (props: React.ComponentProps<"th">) => (
-    <th className="border px-1.5 py-1 text-left font-semibold text-white" style={{ backgroundColor: "#1a3a2a", borderColor: "#1a3a2a" }} {...props} />
+    <th className="border px-1.5 py-1 text-left font-bold"
+      style={{ background: "var(--ui-card-alt)", color: "var(--ui-text-3)", borderColor: "var(--ui-border)" }} {...props} />
   ),
-  td: (props: React.ComponentProps<"td">) => <td className="border px-1.5 py-1" style={{ borderColor: "#e0e0e0" }} {...props} />,
-  tr: (props: React.ComponentProps<"tr">) => <tr className="odd:bg-[#f0f5f0]" {...props} />,
-  code: (props: React.ComponentProps<"code">) => <code className="text-[11px] bg-gray-100 rounded px-1 py-0.5" {...props} />,
+  td: (props: React.ComponentProps<"td">) => <td className="border px-1.5 py-1" style={{ borderColor: "var(--ui-border-soft)" }} {...props} />,
+  tr: (props: React.ComponentProps<"tr">) => <tr className="odd:bg-(--ui-card-alt)" {...props} />,
+  code: (props: React.ComponentProps<"code">) => (
+    <code className="text-[11px] rounded px-1 py-0.5" style={{ background: "var(--ui-card-alt)" }} {...props} />
+  ),
 };
 
 export type PacoUsage = { count: number; limit: number | null };

@@ -60,7 +60,7 @@ function StarRating({ rating }: { rating: number | null }) {
   return (
     <span className="flex gap-0.5 items-center">
       {[1, 2, 3, 4, 5].map((i) => (
-        <svg key={i} width="9" height="9" viewBox="0 0 20 20" fill={i <= stars ? "#f59e0b" : "#e5e7eb"}>
+        <svg key={i} width="9" height="9" viewBox="0 0 20 20" fill={i <= stars ? "var(--ui-warn)" : "var(--ui-border)"}>
           <path d="M10 1l2.39 4.84L18 7.27l-4 3.9.94 5.49L10 14l-4.94 2.66L6 11.17 2 7.27l5.61-.43z" />
         </svg>
       ))}
@@ -162,10 +162,10 @@ export default function EstacionLibraryPicker({ fuente, categoriaDrills, grupos,
 
   return (
     <div className="fixed inset-0 bg-black/50 z-[70] flex items-center justify-center p-4" onClick={onClose}>
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md max-h-[75vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
-        <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
-          <p className="text-sm font-bold text-gray-900">Agregar de la biblioteca</p>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
+      <div className="bg-(--ui-card) rounded-2xl shadow-2xl w-full max-w-md max-h-[75vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center justify-between px-4 py-3 border-b border-(--ui-border-soft)">
+          <p className="text-sm font-bold text-(--ui-text)">Agregar de la biblioteca</p>
+          <button onClick={onClose} className="text-(--ui-text-3) hover:text-(--ui-text-2)">
             <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <path d="M18 6L6 18M6 6l12 12" />
             </svg>
@@ -173,7 +173,7 @@ export default function EstacionLibraryPicker({ fuente, categoriaDrills, grupos,
         </div>
         <div className="flex-1 overflow-y-auto p-3 space-y-2">
           {loading ? (
-            <div className="flex items-center gap-2 text-xs text-gray-400 py-4 justify-center">
+            <div className="flex items-center gap-2 text-xs text-(--ui-text-3) py-4 justify-center">
               <svg className="animate-spin h-3.5 w-3.5" fill="none" viewBox="0 0 24 24">
                 <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                 <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
@@ -181,7 +181,7 @@ export default function EstacionLibraryPicker({ fuente, categoriaDrills, grupos,
               Cargando biblioteca...
             </div>
           ) : disponibles.length === 0 ? (
-            <p className="text-xs text-gray-400 italic text-center py-4">
+            <p className="text-xs text-(--ui-text-3) italic text-center py-4">
               {fuente === "drills" ? "No hay más drills disponibles en esta categoría." : "No hay más ejercicios físicos disponibles para este grupo."}
             </p>
           ) : (
@@ -189,15 +189,15 @@ export default function EstacionLibraryPicker({ fuente, categoriaDrills, grupos,
               <button
                 key={d.id}
                 onClick={() => handlePick(d)}
-                className="w-full text-left rounded-xl border-2 border-gray-200 hover:border-green-400 hover:bg-green-50 p-3 transition-all"
+                className="w-full text-left rounded-xl border-2 border-(--ui-border) hover:border-green-400 hover:bg-(--ui-ok-bg) p-3 transition-all"
               >
                 <div className="flex items-center gap-2 flex-wrap">
-                  <p className="text-sm font-semibold text-gray-900">{d.titulo}</p>
+                  <p className="text-sm font-semibold text-(--ui-text)">{d.titulo}</p>
                   {fuente === "drills" && <StarRating rating={d.rating} />}
                 </div>
-                {d.descripcion && <p className="text-xs text-gray-500 mt-0.5 line-clamp-2">{d.descripcion}</p>}
+                {d.descripcion && <p className="text-xs text-(--ui-text-3) mt-0.5 line-clamp-2">{d.descripcion}</p>}
                 {d.series_repeticiones && (
-                  <span className="inline-block mt-1 text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-blue-50 text-blue-700">
+                  <span className="inline-block mt-1 text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-(--g-birdies-bg) text-(--g-birdies-fg)">
                     {d.series_repeticiones}
                   </span>
                 )}

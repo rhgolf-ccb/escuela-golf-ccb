@@ -3,8 +3,19 @@
 import { useState, useEffect, useMemo, useRef, useCallback, type ReactNode, Fragment } from "react";
 import { createClient } from "@supabase/supabase-js";
 import * as XLSX from "xlsx";
-import { BarChart3 } from "lucide-react";
-import { calcularGrupo, tipoPlanDeAlumno, tipoPlanDeGrupo, type TipoPlan } from "@/lib/grupos";
+import {
+  BarChart3, CalendarCheck, ClipboardCheck, TrendingUp, PieChart, CakeSlice, Radio,
+  FileText, Table2, Send, type LucideIcon,
+} from "lucide-react";
+import {
+  acentoGrupo, acentoGrupoSuave, calcularGrupo, edadDe,
+  tipoPlanDeAlumno, tipoPlanDeGrupo, TIPOS_PLAN, TIPO_PLAN_LABEL, type TipoPlan,
+} from "@/lib/grupos";
+import {
+  Badge, BarraPct, CAMPO, CampoLabel, ChipGrupo, EmptyState, Encabezado, ErrorState,
+  fondoFila, GrupoBadge, Leyenda, Loading, MetricCard, Pagina, Panel, PctBadge,
+  Segmented, TH, thStyle, TONO, tonoDePct, Toolbar, WeekNav, type Tono,
+} from "@/components/ui/tema";
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -15,21 +26,26 @@ const supabase = createClient(
 
 type Tab = "asistencia" | "tests" | "progreso" | "estadisticas" | "edades" | "live";
 
-const TABS: { id: Tab; label: string }[] = [
-  { id: "asistencia", label: "Asistencia" },
-  { id: "tests", label: "Tests" },
-  { id: "progreso", label: "Progreso" },
-  { id: "estadisticas", label: "Estadísticas" },
-  { id: "edades", label: "Edades" },
-  { id: "live", label: "Reserva live" },
-];
+// Las seis pestañas responden a tres preguntas distintas y la barra plana las
+// mostraba como si fueran seis variantes de lo mismo. Se agrupan por familia:
+// el seguimiento del alumno, la foto del padrón y lo que está pasando ahora.
+// El orden es el que ya tenían, así que agrupar no mueve nada de sitio.
+type Familia = "seguimiento" | "padron" | "vivo";
 
-const GROUP_COLOR: Record<string, { bg: string; text: string; border: string }> = {
-  birdies:      { bg: "#1e40af18", text: "#1e40af", border: "#1e40af25" },
-  juvenil:      { bg: "#1B4D2E18", text: "#1B4D2E", border: "#1B4D2E25" },
-  competencia:  { bg: "#7d5a0018", text: "#7d5a00", border: "#7d5a0025" },
-  damas:        { bg: "#4a107018", text: "#4a1070", border: "#4a107025" },
+const FAMILIA_LABEL: Record<Familia, string> = {
+  seguimiento: "Seguimiento",
+  padron: "Padrón",
+  vivo: "Ahora",
 };
+
+const TABS: { id: Tab; label: string; icon: LucideIcon; familia: Familia; hint: string }[] = [
+  { id: "asistencia",   label: "Asistencia",   icon: CalendarCheck,  familia: "seguimiento", hint: "Quién vino a cada sesión" },
+  { id: "tests",        label: "Tests",        icon: ClipboardCheck, familia: "seguimiento", hint: "Cobertura de evaluaciones" },
+  { id: "progreso",     label: "Progreso",     icon: TrendingUp,     familia: "seguimiento", hint: "Tendencia semana a semana" },
+  { id: "estadisticas", label: "Estadísticas", icon: PieChart,       familia: "padron",      hint: "Resumen por grupo" },
+  { id: "edades",       label: "Edades",       icon: CakeSlice,      familia: "padron",      hint: "Listado para armar grupos" },
+  { id: "live",         label: "Reserva live", icon: Radio,          familia: "vivo",        hint: "Inscritos de la semana en curso" },
+];
 
 const MESES_ES = ["enero","febrero","marzo","abril","mayo","junio","julio","agosto","septiembre","octubre","noviembre","diciembre"];
 
@@ -52,16 +68,6 @@ function addDays(d: Date, n: number): Date {
 
 function toISO(d: Date): string {
   return d.toISOString().split("T")[0];
-}
-
-function calcEdad(birth: string | null): number | null {
-  if (!birth) return null;
-  const hoy = new Date();
-  const nac = new Date(birth);
-  let edad = hoy.getFullYear() - nac.getFullYear();
-  const m = hoy.getMonth() - nac.getMonth();
-  if (m < 0 || (m === 0 && hoy.getDate() < nac.getDate())) edad--;
-  return edad;
 }
 
 function fmtFecha(iso: string | null | undefined): string {
@@ -160,51 +166,7 @@ function fetchStudents<T = Student>(columnas: string, soloActivos: boolean) {
 
 const STUDENT_COLS = "id,full_name,birth_date,gender,grupo_activo,status,tiene_talega";
 
-// ── Shared UI components ─────────────────────────────────────────────────────
-
-function Badge({ label, color }: { label: string; color: "green" | "yellow" | "red" | "gray" | "blue" }) {
-  const cls = {
-    green:  "bg-green-50 text-green-700 border border-green-200",
-    yellow: "bg-yellow-50 text-yellow-700 border border-yellow-200",
-    red:    "bg-red-50 text-red-600 border border-red-200",
-    gray:   "bg-gray-100 text-gray-500 border border-gray-200",
-    blue:   "bg-blue-50 text-blue-700 border border-blue-200",
-  }[color];
-  return <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold ${cls}`}>{label}</span>;
-}
-
-function PctBadge({ value }: { value: number }) {
-  const color = value >= 85 ? "green" : value >= 60 ? "yellow" : "red";
-  return <Badge label={`${value}%`} color={color} />;
-}
-
-function MetricCard({ label, value, sub }: { label: string; value: string | number; sub?: string }) {
-  return (
-    <div className="bg-white rounded-xl border border-gray-100 shadow-sm px-5 py-4 min-w-0">
-      <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-1 truncate">{label}</p>
-      <p className="text-2xl font-bold text-gray-900">{value}</p>
-      {sub && <p className="text-xs text-gray-400 mt-0.5">{sub}</p>}
-    </div>
-  );
-}
-
-function WeekNav({ monday, onChange }: { monday: Date; onChange: (d: Date) => void }) {
-  const sunday = addDays(monday, 6);
-  const label = monday.getMonth() === sunday.getMonth()
-    ? `${monday.getDate()}–${sunday.getDate()} ${MESES_ES[monday.getMonth()]} ${monday.getFullYear()}`
-    : `${monday.getDate()} ${MESES_ES[monday.getMonth()].slice(0,3)} – ${sunday.getDate()} ${MESES_ES[sunday.getMonth()].slice(0,3)} ${monday.getFullYear()}`;
-  return (
-    <div className="flex items-center gap-2">
-      <button onClick={() => onChange(addDays(monday, -7))} className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-500">
-        <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path d="M15 18l-6-6 6-6"/></svg>
-      </button>
-      <span className="text-sm font-medium text-gray-700 min-w-[200px] text-center">{label}</span>
-      <button onClick={() => onChange(addDays(monday, 7))} className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-500">
-        <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path d="M9 18l6-6-6-6"/></svg>
-      </button>
-    </div>
-  );
-}
+// ── Selector de periodo ──────────────────────────────────────────────────────
 
 type PeriodMode = "semana" | "periodo";
 
@@ -233,28 +195,46 @@ function PeriodSelector({
     onApply(fi, ti);
   }
 
+  const ATAJOS = [
+    { id: "semana", label: "Esta semana" },
+    { id: "mes", label: "Este mes" },
+    { id: "mesAnterior", label: "Último mes" },
+    { id: "3meses", label: "Últimos 3 meses" },
+  ] as const;
+
   return (
     <div className="flex flex-col gap-2">
-      <div className="flex items-center gap-3 flex-wrap">
-        <div className="flex gap-1 bg-gray-100 rounded-lg p-1">
-          <button onClick={() => onModeChange("semana")} className={`px-3 py-1 rounded-md text-xs font-semibold transition-colors ${mode === "semana" ? "bg-white text-gray-800 shadow-sm" : "text-gray-500"}`}>Semana</button>
-          <button onClick={() => onModeChange("periodo")} className={`px-3 py-1 rounded-md text-xs font-semibold transition-colors ${mode === "periodo" ? "bg-white text-gray-800 shadow-sm" : "text-gray-500"}`}>Periodo</button>
-        </div>
+      <div className="flex items-center gap-2 flex-wrap">
+        <CampoLabel>Periodo</CampoLabel>
+        <Segmented
+          value={mode}
+          onChange={onModeChange}
+          options={[{ id: "semana" as const, label: "Semana" }, { id: "periodo" as const, label: "Rango" }]}
+        />
         {mode === "semana" ? weekSlot : (
           <div className="flex items-center gap-2 flex-wrap">
-            <input type="date" value={draftFrom} onChange={(e) => setDraftFrom(e.target.value)} className="text-sm border border-gray-200 rounded-lg px-2 py-1.5" />
-            <span className="text-gray-400 text-sm">→</span>
-            <input type="date" value={draftTo} onChange={(e) => setDraftTo(e.target.value)} className="text-sm border border-gray-200 rounded-lg px-2 py-1.5" />
-            <button onClick={() => onApply(draftFrom, draftTo)} className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-[#1B4D2E] text-white">Aplicar</button>
+            <input type="date" value={draftFrom} onChange={(e) => setDraftFrom(e.target.value)}
+              className="text-sm rounded-lg px-2 py-1.5 focus:outline-none focus:ring-2" style={CAMPO} />
+            <span className="text-sm" style={{ color: "var(--ui-text-3)" }}>→</span>
+            <input type="date" value={draftTo} onChange={(e) => setDraftTo(e.target.value)}
+              className="text-sm rounded-lg px-2 py-1.5 focus:outline-none focus:ring-2" style={CAMPO} />
+            <button onClick={() => onApply(draftFrom, draftTo)}
+              className="px-3 py-1.5 rounded-lg text-xs font-bold transition-opacity hover:opacity-90"
+              style={{ background: "var(--ui-gold)", color: "var(--ui-bg)" }}>
+              Aplicar
+            </button>
           </div>
         )}
       </div>
       {mode === "periodo" && (
         <div className="flex gap-1.5 flex-wrap">
-          <button onClick={() => shortcut("semana")} className="px-2.5 py-1 rounded-lg text-[11px] font-medium bg-white border border-gray-200 text-gray-600 hover:bg-gray-50">Esta semana</button>
-          <button onClick={() => shortcut("mes")} className="px-2.5 py-1 rounded-lg text-[11px] font-medium bg-white border border-gray-200 text-gray-600 hover:bg-gray-50">Este mes</button>
-          <button onClick={() => shortcut("mesAnterior")} className="px-2.5 py-1 rounded-lg text-[11px] font-medium bg-white border border-gray-200 text-gray-600 hover:bg-gray-50">Último mes</button>
-          <button onClick={() => shortcut("3meses")} className="px-2.5 py-1 rounded-lg text-[11px] font-medium bg-white border border-gray-200 text-gray-600 hover:bg-gray-50">Últimos 3 meses</button>
+          {ATAJOS.map((a) => (
+            <button key={a.id} onClick={() => shortcut(a.id)}
+              className="px-2.5 py-1 rounded-full text-[11px] font-medium transition-colors hover:bg-(--ui-card-alt)"
+              style={{ color: "var(--ui-text-2)", border: "1px solid var(--ui-border)" }}>
+              {a.label}
+            </button>
+          ))}
         </div>
       )}
     </div>
@@ -262,29 +242,17 @@ function PeriodSelector({
 }
 
 type GrupoFilter = "todos" | TipoPlan;
+
 function GrupoTabs({ value, onChange }: { value: GrupoFilter; onChange: (v: GrupoFilter) => void }) {
-  const opts: { id: GrupoFilter; label: string; color?: string }[] = [
-    { id: "todos", label: "Todos" },
-    { id: "birdies", label: "Birdies", color: "#1e40af" },
-    { id: "juvenil", label: "Juvenil", color: "#1B4D2E" },
-    { id: "competencia", label: "Competencia", color: "#7d5a00" },
-    { id: "damas", label: "Damas", color: "#4a1070" },
-  ];
   return (
-    <div className="flex gap-1.5">
-      {opts.map((o) => (
-        <button
-          key={o.id}
-          onClick={() => onChange(o.id)}
-          className="px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors border"
-          style={value === o.id && o.color
-            ? { backgroundColor: o.color, color: "#fff", borderColor: o.color }
-            : value === o.id && !o.color
-            ? { backgroundColor: "#1B4D2E", color: "#fff", borderColor: "#1B4D2E" }
-            : { backgroundColor: "#fff", color: "#6b7280", borderColor: "#e5e7eb" }
-          }
-        >{o.label}</button>
-      ))}
+    <div className="flex items-center gap-2 flex-wrap">
+      <CampoLabel>Grupo</CampoLabel>
+      <div className="flex gap-1.5 flex-wrap">
+        <ChipGrupo label="Todos" grupo={null} active={value === "todos"} onClick={() => onChange("todos")} />
+        {TIPOS_PLAN.map((t) => (
+          <ChipGrupo key={t} label={TIPO_PLAN_LABEL[t]} grupo={t} active={value === t} onClick={() => onChange(t)} />
+        ))}
+      </div>
     </div>
   );
 }
@@ -299,14 +267,23 @@ function AsistioCell({ value, reservaId, onSaved }: { value: boolean | null; res
     onSaved(reservaId, next);
     setSaving(false);
   }
+  // El punto era de 8px y había que apuntarle: el área clicable sube a 20px sin
+  // que el punto crezca, porque la densidad de la rejilla es lo que la hace útil.
+  const comun = "w-5 h-5 flex items-center justify-center mx-auto rounded transition-colors hover:bg-(--ui-card-alt)";
   if (value === true) return (
-    <button onClick={toggle} disabled={saving} title="Asistió — clic para cambiar" className="w-2 h-2 rounded-full mx-auto block transition-transform hover:scale-110" style={{ backgroundColor: "#1B4D2E" }} />
+    <button onClick={toggle} disabled={saving} title="Asistió — clic para cambiar" className={comun}>
+      <span className="w-2 h-2 rounded-full" style={{ background: "var(--ui-ok)" }} />
+    </button>
   );
   if (value === false) return (
-    <button onClick={toggle} disabled={saving} title="Ausente — clic para cambiar" className="w-2 h-2 rounded-full mx-auto block transition-transform hover:scale-110" style={{ backgroundColor: "#e24b4a" }} />
+    <button onClick={toggle} disabled={saving} title="Ausente — clic para cambiar" className={comun}>
+      <span className="w-2 h-2 rounded-full" style={{ background: "var(--ui-bad)" }} />
+    </button>
   );
   return (
-    <button onClick={toggle} disabled={saving} title="Sin marcar — clic para marcar asistencia" className="w-2 h-2 rounded-full mx-auto block border border-gray-300 hover:border-gray-500 transition-colors" />
+    <button onClick={toggle} disabled={saving} title="Sin marcar — clic para marcar asistencia" className={comun}>
+      <span className="w-2 h-2 rounded-full" style={{ border: "1px solid var(--ui-text-3)" }} />
+    </button>
   );
 }
 
@@ -499,18 +476,26 @@ function TabAsistencia() {
   }), [reservasEnRango]);
 
   // Rango corto: una columna por sesión (editable). Rango largo en modo periodo: una columna por semana (% agregado).
-  const columnas: { key: string; label: string; sesionIds: string[] }[] = useMemo(() => groupByWeek
+  //
+  // `label` es lo que cabe en una columna de la rejilla y `labelLargo` lo que
+  // se entiende fuera de ella. Con catorce semanas en pantalla el rango
+  // completo ("22/6–28/6") se solapaba con el de la columna vecina, así que la
+  // cabecera muestra solo el lunes; el rango entero queda en el title y es el
+  // que viaja al PDF y al Excel, donde sí hay sitio y no hay a qué apuntar.
+  const columnas: { key: string; label: string; labelLargo: string; sesionIds: string[] }[] = useMemo(() => groupByWeek
     ? weeksInRange(effFrom, effTo).map((w) => {
         const wIni = toISO(w.inicio), wFin = toISO(w.fin);
         return {
           key: wIni,
-          label: `${w.inicio.getDate()}/${w.inicio.getMonth() + 1}–${w.fin.getDate()}/${w.fin.getMonth() + 1}`,
+          label: `${w.inicio.getDate()}/${w.inicio.getMonth() + 1}`,
+          labelLargo: `${w.inicio.getDate()}/${w.inicio.getMonth() + 1}–${w.fin.getDate()}/${w.fin.getMonth() + 1}`,
           sesionIds: sesionesFiltradas.filter((s) => s.fecha >= wIni && s.fecha <= wFin).map((s) => s.id),
         };
       })
     : sesionesFiltradas.map((s) => {
         const d = new Date(s.fecha + "T12:00:00");
-        return { key: s.id, label: `${d.getDate()}/${d.getMonth() + 1}`, sesionIds: [s.id] };
+        const etiqueta = `${d.getDate()}/${d.getMonth() + 1}`;
+        return { key: s.id, label: etiqueta, labelLargo: `${etiqueta} ${fmtHora(s.hora_inicio)}`, sesionIds: [s.id] };
       }), [groupByWeek, effFrom, effTo, sesionesFiltradas]);
 
   // Cada sesión cae en exactamente una columna (la suya, o la semana que la
@@ -537,7 +522,7 @@ function TabAsistencia() {
   const celda = (alumnoId: string, colKey: string) => reservasPorCelda.get(`${alumnoId}|${colKey}`) ?? [];
   const reservasDe = (alumnoId: string) => reservasPorAlumno.get(alumnoId) ?? [];
 
-  const headers = ["Nombre", "Grupo", ...columnas.map((c) => c.label), "Total", "% Asist."];
+  const headers = ["Nombre", "Grupo", ...columnas.map((c) => c.labelLargo), "Total", "% Asist."];
 
   function doExportPDF() {
     const rows = studentsConReserva.map((st) => {
@@ -593,9 +578,14 @@ function TabAsistencia() {
     exportWhatsApp(`Asistencia – ${fmtRango(effFrom, effTo)}`, lines);
   }
 
+  const pctGlobal = pct(totalAsistieron, totalMarcadas);
+  // Con el periodo largo la rejilla se va a la derecha y el nombre se pierde:
+  // la primera columna se queda pegada al borde izquierdo.
+  const nombrePegado: React.CSSProperties = { position: "sticky", left: 0, zIndex: 1 };
+
   return (
     <div>
-      <div className="flex flex-wrap items-start gap-3 mb-5">
+      <Toolbar right={<ExportBar pdf={doExportPDF} excel={doExportExcel} whatsapp={doExportWhatsApp} />}>
         <PeriodSelector
           mode={periodMode}
           onModeChange={setPeriodMode}
@@ -605,102 +595,114 @@ function TabAsistencia() {
           weekSlot={<WeekNav monday={monday} onChange={setMonday} />}
         />
         <GrupoTabs value={grupo} onChange={setGrupo} />
-        <div className="ml-auto flex gap-2">
-          <ExportBtn label="PDF" onClick={doExportPDF} />
-          <ExportBtn label="Excel" onClick={doExportExcel} />
-          <ExportBtn label="WhatsApp" onClick={doExportWhatsApp} green />
-        </div>
-      </div>
+      </Toolbar>
 
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-5">
-        <MetricCard label="Inscritos" value={totalInscritos} />
-        <MetricCard label="Asistieron" value={totalAsistieron} />
-        <MetricCard label="Ausencias" value={totalAusentes} />
-        <MetricCard label={groupByWeek ? "Semanas" : "Sesiones"} value={groupByWeek ? columnas.length : sesionesFiltradas.length} />
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
+        <MetricCard label="Inscritos" value={totalInscritos} sub={fmtRango(effFrom, effTo)} />
+        <MetricCard label="Asistieron" value={totalAsistieron} tono="ok"
+          sub={totalMarcadas > 0 ? `${pctGlobal}% de lo marcado` : "sin marcar aún"} />
+        <MetricCard label="Ausencias" value={totalAusentes} tono={totalAusentes > 0 ? "bad" : "neutro"} />
+        <MetricCard
+          label={groupByWeek ? "Semanas" : "Sesiones"}
+          value={groupByWeek ? columnas.length : sesionesFiltradas.length}
+          sub={groupByWeek ? "% agregado por semana" : undefined}
+        />
       </div>
 
       {loading ? <Loading /> : loadError ? (
         <ErrorState msg={loadError} />
       ) : sesionesFiltradas.length === 0 ? (
-        <EmptyState msg="No hay sesiones en el periodo para el grupo seleccionado." />
+        <Panel><EmptyState msg="No hay sesiones en el periodo para el grupo seleccionado." /></Panel>
       ) : (
-        <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-x-auto">
+        <Panel>
+          <div className="overflow-x-auto">
           <table className="w-full text-sm" style={{ tableLayout: "fixed" }}>
             <thead>
-              <tr className="border-b border-gray-100">
-                <th className="text-left px-1.5 py-1.5 text-[11px] font-semibold text-gray-500 bg-gray-50 w-[160px]">Nombre</th>
-                <th className="text-left px-1.5 py-1.5 text-[11px] font-semibold text-gray-500 bg-gray-50 w-20">Grupo</th>
+              <tr>
+                <th className={`${TH} text-left px-2 py-2 w-[170px]`} style={{ ...thStyle, ...nombrePegado, zIndex: 2 }}>Nombre</th>
+                <th className={`${TH} text-left px-1.5 py-2 w-24`} style={thStyle}>Grupo</th>
                 {columnas.map((c) => {
                   const ses = !groupByWeek ? sesionesFiltradas.find((s) => s.id === c.key) : undefined;
                   return (
-                    <th key={c.key} className="text-center px-1 py-1.5 text-[11px] font-semibold text-gray-500 bg-gray-50 w-8">
+                    <th key={c.key} className={`${TH} text-center px-1 py-2 w-9 overflow-hidden`} style={thStyle} title={c.labelLargo}>
                       {c.label}
-                      {ses && <><br /><span className="font-normal text-gray-400 text-[9px]">{fmtHora(ses.hora_inicio)}</span></>}
+                      {ses && <><br /><span className="font-medium text-[9px] normal-case tracking-normal opacity-70">{fmtHora(ses.hora_inicio)}</span></>}
                     </th>
                   );
                 })}
-                <th className="text-center px-1.5 py-1.5 text-[11px] font-semibold text-gray-500 bg-gray-50 w-12">Total</th>
-                <th className="text-center px-1.5 py-1.5 text-[11px] font-semibold text-gray-500 bg-gray-50 w-12">%</th>
+                <th className={`${TH} text-center px-1.5 py-2 w-12`} style={thStyle}>Total</th>
+                <th className={`${TH} text-center px-1.5 py-2 w-14`} style={thStyle}>%</th>
               </tr>
             </thead>
             <tbody>
               {studentsConReserva.length === 0 ? (
-                <tr><td colSpan={columnas.length + 4} className="text-center py-8 text-sm text-gray-400">Sin inscritos en el periodo</td></tr>
+                <tr><td colSpan={columnas.length + 4}><EmptyState msg="Sin inscritos en el periodo" /></td></tr>
               ) : studentsConReserva.map((st, i) => {
                 const reservasAlumno = reservasDe(st.id);
                 const asistio = reservasAlumno.filter((r) => r.asistio === true).length;
                 const p = pct(asistio, reservasAlumno.length);
+                const fondo = fondoFila(i);
                 return (
-                  <tr key={st.id} className={`h-8 ${i % 2 === 0 ? "bg-white" : "bg-gray-50/50"}`}>
-                    <td className="px-1.5 py-1 text-[11px] font-medium text-gray-800 w-[160px] truncate" title={st.full_name}>{st.full_name}</td>
-                    <td className="px-1.5 py-1 w-20 truncate">
-                      {st.grupo_activo && (
-                        <span className="text-[10px] px-1.5 py-0.5 rounded-full font-medium" style={(() => { const t = grupoTipo(st.grupo_activo); return t ? { backgroundColor: GROUP_COLOR[t].bg, color: GROUP_COLOR[t].text } : {}; })()}>{st.grupo_activo}</span>
-                      )}
+                  <tr key={st.id} className="h-8" style={{ background: fondo }}>
+                    <td className="px-2 py-1 text-[11px] font-semibold w-[170px] truncate"
+                      style={{ ...nombrePegado, background: fondo, color: "var(--ui-text)" }} title={st.full_name}>
+                      {st.full_name}
                     </td>
+                    <td className="px-1.5 py-1 w-24 truncate"><GrupoBadge grupo={st.grupo_activo} /></td>
                     {columnas.map((col) => {
                       const rCol = celda(st.id, col.key);
                       if (groupByWeek) {
                         const marcado = rCol.filter((r) => r.asistio !== null).length;
                         const asis = rCol.filter((r) => r.asistio === true).length;
                         return (
-                          <td key={col.key} className="text-center px-1 py-1 w-8">
-                            {marcado > 0 ? <PctBadge value={pct(asis, marcado)} /> : <span className="text-[10px] text-gray-300">—</span>}
+                          <td key={col.key} className="text-center px-1 py-1 w-9">
+                            {marcado > 0 ? <PctBadge value={pct(asis, marcado)} /> : <span className="text-[10px]" style={{ color: "var(--ui-text-3)" }}>—</span>}
                           </td>
                         );
                       }
                       const r = rCol[0];
-                      if (!r) return <td key={col.key} className="text-center px-1 py-1 w-8"><span className="w-2 h-2 rounded-full bg-gray-200 block mx-auto" /></td>;
-                      return <td key={col.key} className="text-center px-1 py-1 w-8"><AsistioCell value={r.asistio} reservaId={r.id} onSaved={handleAsistioSaved} /></td>;
+                      if (!r) return (
+                        <td key={col.key} className="text-center px-1 py-1 w-9" title="No estaba inscrito en esta sesión">
+                          <span className="w-2 h-2 rounded-full block mx-auto" style={{ background: "var(--ui-border)" }} />
+                        </td>
+                      );
+                      return <td key={col.key} className="text-center px-1 py-1 w-9"><AsistioCell value={r.asistio} reservaId={r.id} onSaved={handleAsistioSaved} /></td>;
                     })}
-                    <td className="text-center px-1.5 py-1 text-[11px] text-gray-600 w-12">{reservasAlumno.length}</td>
-                    <td className="text-center px-1.5 py-1 w-12"><PctBadge value={p} /></td>
+                    <td className="text-center px-1.5 py-1 text-[11px] tabular-nums w-12" style={{ color: "var(--ui-text-2)" }}>{reservasAlumno.length}</td>
+                    <td className="text-center px-1.5 py-1 w-14"><PctBadge value={p} /></td>
                   </tr>
                 );
               })}
             </tbody>
             {studentsConReserva.length > 0 && (
               <tfoot>
-                <tr className="border-t-2 border-gray-200 bg-gray-50 font-semibold">
-                  <td className="px-1.5 py-1.5 text-[11px] text-gray-600">Totales</td>
-                  <td />
+                <tr className="font-bold" style={{ background: "var(--ui-card-alt)", borderTop: "2px solid var(--ui-border)" }}>
+                  <td className={`${TH} px-2 py-2`} style={{ ...nombrePegado, background: "var(--ui-card-alt)", color: "var(--ui-text-2)" }}>Totales</td>
+                  <td style={{ background: "var(--ui-card-alt)" }} />
                   {columnas.map((col) => {
                     const rCol = col.sesionIds.flatMap((id) => reservasPorSesion.get(id) ?? []);
                     const total = rCol.length;
                     const asist = rCol.filter((r) => r.asistio === true).length;
                     return (
-                      <td key={col.key} className="text-center px-1 py-1.5 w-8">
-                        <span className="text-[10px] text-gray-600">{asist}/{total}</span>
+                      <td key={col.key} className="text-center px-1 py-2 w-9">
+                        <span className="text-[10px] tabular-nums" style={{ color: "var(--ui-text-2)" }}>{asist}/{total}</span>
                       </td>
                     );
                   })}
                   <td />
-                  <td className="text-center px-1.5 py-1.5 w-12"><PctBadge value={pct(totalAsistieron, totalMarcadas)} /></td>
+                  <td className="text-center px-1.5 py-2 w-14"><PctBadge value={pctGlobal} /></td>
                 </tr>
               </tfoot>
             )}
           </table>
-        </div>
+          </div>
+          <Leyenda items={[
+            { color: "var(--ui-ok)", label: "Asistió" },
+            { color: "var(--ui-bad)", label: "Ausente" },
+            { color: "transparent", borde: "var(--ui-text-3)", label: "Sin marcar — clic para cambiar" },
+            { color: "var(--ui-border)", label: "No inscrito" },
+          ]} />
+        </Panel>
       )}
     </div>
   );
@@ -710,14 +712,19 @@ function TabAsistencia() {
 
 type TestStatus = "completo" | "parcial" | "sin" | "na";
 
+const TONO_TEST: Record<Exclude<TestStatus, "na">, { tono: Tono; title: string }> = {
+  completo: { tono: "ok",   title: "Completo" },
+  parcial:  { tono: "warn", title: "Parcial" },
+  sin:      { tono: "bad",  title: "Sin test" },
+};
+
 function TestDot({ status }: { status: TestStatus }) {
-  if (status === "na") return <span className="text-gray-300 text-sm">—</span>;
-  const cfg = {
-    completo: { bg: "#16a34a", title: "Completo" },
-    parcial:  { bg: "#ca8a04", title: "Parcial" },
-    sin:      { bg: "#dc2626", title: "Sin test" },
-  }[status];
-  return <span className="w-4 h-4 rounded-full block mx-auto" style={{ backgroundColor: cfg.bg }} title={cfg.title} />;
+  if (status === "na") return <span className="text-sm" style={{ color: "var(--ui-text-3)" }} title="No aplica">—</span>;
+  const cfg = TONO_TEST[status];
+  return (
+    <span className="w-4 h-4 rounded-full block mx-auto" title={cfg.title}
+      style={{ background: TONO[cfg.tono].fg }} />
+  );
 }
 
 function TabTests() {
@@ -788,7 +795,7 @@ function TabTests() {
   function getNotaStatus(id: string): TestStatus {
     return notasMap[id] ? "completo" : "sin";
   }
-  function getGeneral(sw: TestStatus, ph: TestStatus, tr: TestStatus, nt: TestStatus): TestStatus {
+  function getGeneral(sw: TestStatus, ph: TestStatus, tr: TestStatus, nt: TestStatus): Exclude<TestStatus, "na"> {
     const relevant = [sw, ph, tr !== "na" ? tr : null, nt].filter(Boolean) as TestStatus[];
     if (relevant.every((s) => s === "completo")) return "completo";
     if (relevant.some((s) => s === "completo" || s === "parcial")) return "parcial";
@@ -821,28 +828,56 @@ function TabTests() {
     exportWhatsApp("Tests", lines);
   }
 
+  // La tabla contesta "quién tiene qué", pero la pregunta que se hace primero
+  // es "cuánto falta". Las cifras van arriba y la tabla queda como detalle.
+  const resumen = useMemo(() => {
+    let completos = 0, parciales = 0, sinNada = 0;
+    for (const st of studentsFiltrados) {
+      const gen = getGeneral(getSwingStatus(st.id), getPhysStatus(st.id), getTrackStatus(st.id, st.grupo_activo), getNotaStatus(st.id));
+      if (gen === "completo") completos++;
+      else if (gen === "parcial") parciales++;
+      else sinNada++;
+    }
+    return { completos, parciales, sinNada };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- los get* leen los mapas de estado, que ya están en las dependencias
+  }, [studentsFiltrados, swingMap, physMap, trackMap, notasMap]);
+
+  const columnasTest: { key: string; label: string; sub?: string }[] = [
+    { key: "sw", label: "Técnico", sub: "P1–P10" },
+    { key: "ph", label: "Físico", sub: "TPI" },
+    { key: "tr", label: "Trackman" },
+    { key: "nt", label: "Nota", sub: "profesor" },
+  ];
+
   return (
     <div>
-      <div className="flex flex-wrap items-center gap-3 mb-5">
+      <Toolbar right={<ExportBar pdf={doExportPDF} excel={doExportExcel} whatsapp={doExportWhatsApp} />}>
         <GrupoTabs value={grupo} onChange={setGrupo} />
-        <div className="ml-auto flex gap-2">
-          <ExportBtn label="PDF" onClick={doExportPDF} />
-          <ExportBtn label="Excel" onClick={doExportExcel} />
-          <ExportBtn label="WhatsApp" onClick={doExportWhatsApp} green />
-        </div>
+      </Toolbar>
+
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
+        <MetricCard label="Alumnos activos" value={studentsFiltrados.length} />
+        <MetricCard label="Con todo al día" value={resumen.completos} tono="ok"
+          sub={studentsFiltrados.length > 0 ? `${pct(resumen.completos, studentsFiltrados.length)}% del grupo` : undefined} />
+        <MetricCard label="Pendientes" value={resumen.parciales} tono={resumen.parciales > 0 ? "warn" : "neutro"} sub="les falta algún test" />
+        <MetricCard label="Sin ningún test" value={resumen.sinNada} tono={resumen.sinNada > 0 ? "bad" : "neutro"} />
       </div>
-      {loading ? <Loading /> : loadError ? <ErrorState msg={loadError} /> : studentsFiltrados.length === 0 ? <EmptyState msg="No hay alumnos activos." /> : (
-        <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-x-auto">
+
+      {loading ? <Loading /> : loadError ? <ErrorState msg={loadError} /> : studentsFiltrados.length === 0 ? <Panel><EmptyState msg="No hay alumnos activos." /></Panel> : (
+        <Panel>
+          <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
-              <tr className="border-b border-gray-100 bg-gray-50">
-                <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500">Nombre</th>
-                <th className="text-left px-3 py-3 text-xs font-semibold text-gray-500">Grupo</th>
-                <th className="text-center px-3 py-3 text-xs font-semibold text-gray-500">Técnico<br/><span className="font-normal text-gray-400">P1–P10</span></th>
-                <th className="text-center px-3 py-3 text-xs font-semibold text-gray-500">Físico<br/><span className="font-normal text-gray-400">TPI</span></th>
-                <th className="text-center px-3 py-3 text-xs font-semibold text-gray-500">Trackman</th>
-                <th className="text-center px-3 py-3 text-xs font-semibold text-gray-500">Nota<br/><span className="font-normal text-gray-400">profesor</span></th>
-                <th className="text-center px-3 py-3 text-xs font-semibold text-gray-500">Estado</th>
+              <tr>
+                <th className={`${TH} text-left px-4 py-2.5`} style={thStyle}>Nombre</th>
+                <th className={`${TH} text-left px-3 py-2.5`} style={thStyle}>Grupo</th>
+                {columnasTest.map((c) => (
+                  <th key={c.key} className={`${TH} text-center px-3 py-2.5 w-24`} style={thStyle}>
+                    {c.label}
+                    {c.sub && <><br /><span className="font-medium text-[9px] normal-case tracking-normal opacity-70">{c.sub}</span></>}
+                  </th>
+                ))}
+                <th className={`${TH} text-center px-3 py-2.5 w-28`} style={thStyle}>Estado</th>
               </tr>
             </thead>
             <tbody>
@@ -852,46 +887,56 @@ function TabTests() {
                 const gen = getGeneral(sw, ph, tr, nt);
                 const nota = notasMap[st.id];
                 return (
-                  <tr key={st.id} className={i % 2 === 0 ? "bg-white" : "bg-gray-50/50"}>
-                    <td className="px-4 py-2.5 font-medium text-gray-800">{st.full_name}</td>
-                    <td className="px-3 py-2.5">{st.grupo_activo && <span className="text-xs px-1.5 py-0.5 rounded-full font-medium" style={(() => { const t = grupoTipo(st.grupo_activo); return t ? { backgroundColor: GROUP_COLOR[t].bg, color: GROUP_COLOR[t].text } : {}; })()}>{st.grupo_activo}</span>}</td>
-                    <td className="text-center px-3 py-2.5"><TestDot status={sw} /></td>
-                    <td className="text-center px-3 py-2.5"><TestDot status={ph} /></td>
-                    <td className="text-center px-3 py-2.5"><TestDot status={tr} /></td>
-                    <td className="text-center px-3 py-2.5" title={nota ? `${nota.contenido.slice(0,80)} (${nota.fecha})` : ""}><TestDot status={nt} /></td>
-                    <td className="text-center px-3 py-2.5">
-                      <Badge label={gen === "completo" ? "Completo" : gen === "parcial" ? "Pendiente" : "Sin tests"} color={gen === "completo" ? "green" : gen === "parcial" ? "yellow" : "red"} />
+                  <tr key={st.id} style={{ background: fondoFila(i) }}>
+                    <td className="px-4 py-2 text-[13px] font-semibold" style={{ color: "var(--ui-text)" }}>{st.full_name}</td>
+                    <td className="px-3 py-2"><GrupoBadge grupo={st.grupo_activo} /></td>
+                    <td className="text-center px-3 py-2"><TestDot status={sw} /></td>
+                    <td className="text-center px-3 py-2"><TestDot status={ph} /></td>
+                    <td className="text-center px-3 py-2"><TestDot status={tr} /></td>
+                    <td className="text-center px-3 py-2" title={nota ? `${nota.contenido.slice(0,80)} (${nota.fecha})` : ""}><TestDot status={nt} /></td>
+                    <td className="text-center px-3 py-2">
+                      <Badge
+                        label={gen === "completo" ? "Completo" : gen === "parcial" ? "Pendiente" : "Sin tests"}
+                        tono={TONO_TEST[gen].tono}
+                      />
                     </td>
                   </tr>
                 );
               })}
             </tbody>
           </table>
-        </div>
+          </div>
+          <Leyenda items={[
+            { color: TONO.ok.fg, label: "Completo" },
+            { color: TONO.warn.fg, label: "Parcial" },
+            { color: TONO.bad.fg, label: "Sin test" },
+            { color: "transparent", borde: "var(--ui-border)", label: "No aplica — Trackman solo en Competencia y Damas" },
+          ]} />
+        </Panel>
       )}
-      <div className="flex items-center gap-4 mt-3 text-xs text-gray-400">
-        <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-full bg-green-600 inline-block" /> Completo</span>
-        <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-full bg-yellow-500 inline-block" /> Parcial</span>
-        <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-full bg-red-600 inline-block" /> Sin test</span>
-        <span className="flex items-center gap-1.5"><span className="text-gray-300">—</span> No aplica</span>
-      </div>
     </div>
   );
 }
 
 // ── Tab 4: PROGRESO ──────────────────────────────────────────────────────────
 
-function MiniBar({ values }: { values: number[] }) {
+// Cada barra se pinta contra la semana anterior: subió, bajó o se mantuvo. La
+// primera no tiene con qué compararse, así que va neutra.
+function MiniBar({ values, labels }: { values: number[]; labels?: string[] }) {
   const max = Math.max(...values, 1);
-  const colors = values.map((v, i) => {
-    if (i === 0) return "#9ca3af";
-    return v > values[i - 1] ? "#16a34a" : v < values[i - 1] ? "#dc2626" : "#ca8a04";
-  });
   return (
     <div className="flex items-end gap-0.5 h-6">
-      {values.map((v, i) => (
-        <div key={i} className="w-3 rounded-sm" style={{ height: `${Math.max(3, (v / max) * 24)}px`, backgroundColor: colors[i] }} title={`${v}%`} />
-      ))}
+      {values.map((v, i) => {
+        const color = i === 0 ? "var(--ui-text-3)"
+          : v > values[i - 1] ? TONO.ok.fg
+          : v < values[i - 1] ? TONO.bad.fg
+          : TONO.warn.fg;
+        return (
+          <div key={i} className="w-3 rounded-sm shrink-0"
+            style={{ height: `${Math.max(3, (v / max) * 24)}px`, background: color }}
+            title={labels?.[i] ? `${labels[i]}: ${v}%` : `${v}%`} />
+        );
+      })}
     </div>
   );
 }
@@ -1016,9 +1061,14 @@ function TabProgreso() {
     exportExcel("Progreso", headers, rows, periodoLabel);
   }
 
+  const etiquetasSemana = semanas.map((s) => {
+    const d = new Date(s.inicio + "T12:00:00");
+    return `${d.getDate()}/${d.getMonth() + 1}`;
+  });
+
   return (
     <div>
-      <div className="flex flex-wrap items-start gap-3 mb-5">
+      <Toolbar right={<ExportBar excel={doExportExcel} />}>
         <PeriodSelector
           mode={periodMode}
           onModeChange={setPeriodMode}
@@ -1026,31 +1076,39 @@ function TabProgreso() {
           to={rangeTo}
           onApply={(f, t) => { setRangeFrom(f); setRangeTo(t); }}
           weekSlot={
-            <div className="flex gap-1.5">
-              {([4,8,12] as const).map((r) => (
-                <button key={r} onClick={() => setRango(r)} className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition-colors ${rango===r ? "bg-[#1B4D2E] text-white border-[#1B4D2E]" : "bg-white text-gray-600 border-gray-200"}`}>
-                  {r === 4 ? "4 semanas" : r === 8 ? "8 semanas" : "3 meses"}
-                </button>
-              ))}
-            </div>
+            <Segmented
+              value={rango}
+              onChange={setRango}
+              options={[
+                { id: 4 as const, label: "4 semanas" },
+                { id: 8 as const, label: "8 semanas" },
+                { id: 12 as const, label: "3 meses" },
+              ]}
+            />
           }
         />
         <GrupoTabs value={grupo} onChange={setGrupo} />
-        <div className="ml-auto flex gap-2">
-          <ExportBtn label="Excel" onClick={doExportExcel} />
-        </div>
-      </div>
-      {loading ? <Loading /> : loadError ? <ErrorState msg={loadError} /> : studentsFiltrados.length === 0 ? <EmptyState msg="No hay alumnos activos." /> : (
-        <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-x-auto">
+      </Toolbar>
+
+      {loading ? <Loading /> : loadError ? <ErrorState msg={loadError} /> : studentsFiltrados.length === 0 ? <Panel><EmptyState msg="No hay alumnos activos." /></Panel> : (
+        <Panel title="Progreso por alumno" sub={periodoLabel}>
+          <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
-              <tr className="border-b border-gray-100 bg-gray-50">
-                <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500">Nombre</th>
-                <th className="text-left px-3 py-3 text-xs font-semibold text-gray-500">Grupo</th>
-                <th className="text-center px-3 py-3 text-xs font-semibold text-gray-500">Tendencia</th>
-                <th className="text-center px-3 py-3 text-xs font-semibold text-gray-500">Asist. acumulada</th>
-                <th className="text-center px-3 py-3 text-xs font-semibold text-gray-500">Tests</th>
-                <th className="text-left px-3 py-3 text-xs font-semibold text-gray-500">Última nota</th>
+              <tr>
+                <th className={`${TH} text-left px-4 py-2.5`} style={thStyle}>Nombre</th>
+                <th className={`${TH} text-left px-3 py-2.5`} style={thStyle}>Grupo</th>
+                <th className={`${TH} text-center px-3 py-2.5 w-32`} style={thStyle}>
+                  Tendencia
+                  {etiquetasSemana.length > 0 && (
+                    <><br /><span className="font-medium text-[9px] normal-case tracking-normal opacity-70">
+                      {etiquetasSemana[0]} → {etiquetasSemana[etiquetasSemana.length - 1]}
+                    </span></>
+                  )}
+                </th>
+                <th className={`${TH} text-center px-3 py-2.5 w-40`} style={thStyle}>Asist. acumulada</th>
+                <th className={`${TH} text-center px-3 py-2.5 w-16`} style={thStyle}>Tests</th>
+                <th className={`${TH} text-left px-3 py-2.5`} style={thStyle}>Última nota</th>
               </tr>
             </thead>
             <tbody>
@@ -1059,30 +1117,33 @@ function TabProgreso() {
                 const acum = vals.length > 0 ? Math.round(vals.reduce((a, b) => a + b, 0) / vals.length) : 0;
                 const nota = notasMap[st.id];
                 return (
-                  <tr key={st.id} className={i % 2 === 0 ? "bg-white" : "bg-gray-50/50"}>
-                    <td className="px-4 py-2.5 font-medium text-gray-800">{st.full_name}</td>
-                    <td className="px-3 py-2.5">{st.grupo_activo && <span className="text-xs px-1.5 py-0.5 rounded-full font-medium" style={(() => { const t = grupoTipo(st.grupo_activo); return t ? { backgroundColor: GROUP_COLOR[t].bg, color: GROUP_COLOR[t].text } : {}; })()}>{st.grupo_activo}</span>}</td>
-                    <td className="px-3 py-2.5 flex justify-center"><MiniBar values={vals} /></td>
-                    <td className="px-3 py-2.5">
-                      <div className="flex items-center gap-2">
-                        <div className="flex-1 bg-gray-100 rounded-full h-1.5 min-w-[60px]">
-                          <div className="h-1.5 rounded-full" style={{ width: `${acum}%`, backgroundColor: acum >= 85 ? "#16a34a" : acum >= 60 ? "#ca8a04" : "#dc2626" }} />
-                        </div>
-                        <span className="text-xs text-gray-600 w-8">{acum}%</span>
-                      </div>
-                    </td>
-                    <td className="text-center px-3 py-2.5 text-xs text-gray-600">{getTestFraction(st.id, st.grupo_activo)}</td>
-                    <td className="px-3 py-2.5 text-xs text-gray-500 max-w-[200px]">
+                  <tr key={st.id} style={{ background: fondoFila(i) }}>
+                    <td className="px-4 py-2 text-[13px] font-semibold" style={{ color: "var(--ui-text)" }}>{st.full_name}</td>
+                    <td className="px-3 py-2"><GrupoBadge grupo={st.grupo_activo} /></td>
+                    <td className="px-3 py-2"><div className="flex justify-center"><MiniBar values={vals} labels={etiquetasSemana} /></div></td>
+                    <td className="px-3 py-2"><BarraPct value={acum} /></td>
+                    <td className="text-center px-3 py-2 text-xs tabular-nums" style={{ color: "var(--ui-text-2)" }}>{getTestFraction(st.id, st.grupo_activo)}</td>
+                    <td className="px-3 py-2 text-xs max-w-[220px]" style={{ color: "var(--ui-text-2)" }}>
                       {nota ? (
-                        <div><p className="truncate">{nota.contenido.slice(0, 50)}{nota.contenido.length > 50 ? "…" : ""}</p><p className="text-gray-300 text-[10px]">{fmtFecha(nota.fecha)}</p></div>
-                      ) : <span className="text-gray-300">—</span>}
+                        <div>
+                          <p className="truncate">{nota.contenido.slice(0, 50)}{nota.contenido.length > 50 ? "…" : ""}</p>
+                          <p className="text-[10px]" style={{ color: "var(--ui-text-3)" }}>{fmtFecha(nota.fecha)}</p>
+                        </div>
+                      ) : <span style={{ color: "var(--ui-text-3)" }}>—</span>}
                     </td>
                   </tr>
                 );
               })}
             </tbody>
           </table>
-        </div>
+          </div>
+          <Leyenda items={[
+            { color: TONO.ok.fg, label: "Subió respecto a la semana previa" },
+            { color: TONO.bad.fg, label: "Bajó" },
+            { color: TONO.warn.fg, label: "Se mantuvo" },
+            { color: "var(--ui-text-3)", label: "Primera semana del periodo" },
+          ]} />
+        </Panel>
       )}
     </div>
   );
@@ -1166,46 +1227,68 @@ function TabEstadisticas() {
   if (loadError) return <ErrorState msg={loadError} />;
   if (!stats) return <EmptyState msg="No hay datos." />;
 
+  // El padrón repartido por grupo, como una sola barra apilada: es la forma más
+  // rápida de ver si un grupo se está comiendo la escuela.
+  const totalEnGrupos = stats.porGrupo.reduce((a, g) => a + g.alumnos, 0);
+
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         <MetricCard label="Alumnos activos" value={stats.totalActivos} />
-        <MetricCard label="% Asistencia prom. 4 sem." value={`${stats.pctAsistencia}%`} />
+        <MetricCard label="Asistencia prom. 4 sem." value={`${stats.pctAsistencia}%`} tono={tonoDePct(stats.pctAsistencia)} />
         <MetricCard label="Alumnos Competencia" value={stats.competencia} />
         <MetricCard label="Alumnos Damas" value={stats.damas} />
       </div>
-      <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-x-auto">
-        <div className="px-4 py-3 border-b border-gray-100">
-          <h3 className="text-sm font-semibold text-gray-700">Resumen por grupo</h3>
-        </div>
+
+      {totalEnGrupos > 0 && (
+        <Panel title="Reparto del padrón" sub={`${totalEnGrupos} alumnos activos con grupo`}>
+          <div className="px-4 py-4">
+            <div className="flex h-3 rounded-full overflow-hidden" style={{ background: "var(--ui-card-alt)" }}>
+              {stats.porGrupo.map((g) => (
+                <div key={g.grupo}
+                  style={{ width: `${(g.alumnos / totalEnGrupos) * 100}%`, background: acentoGrupo(g.grupo) }}
+                  title={`${g.grupo}: ${g.alumnos} (${pct(g.alumnos, totalEnGrupos)}%)`} />
+              ))}
+            </div>
+            <div className="flex flex-wrap gap-x-4 gap-y-1.5 mt-3">
+              {stats.porGrupo.map((g) => (
+                <span key={g.grupo} className="flex items-center gap-1.5 text-[11px]" style={{ color: "var(--ui-text-2)" }}>
+                  <span className="w-2.5 h-2.5 rounded-full" style={{ background: acentoGrupo(g.grupo) }} />
+                  {g.grupo}
+                  <span className="tabular-nums" style={{ color: "var(--ui-text-3)" }}>{g.alumnos}</span>
+                </span>
+              ))}
+            </div>
+          </div>
+        </Panel>
+      )}
+
+      <Panel title="Resumen por grupo" sub="últimas 4 semanas">
+        <div className="overflow-x-auto">
         <table className="w-full text-sm">
           <thead>
-            <tr className="border-b border-gray-100 bg-gray-50">
-              <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500">Grupo</th>
-              <th className="text-center px-3 py-3 text-xs font-semibold text-gray-500">Alumnos</th>
-              <th className="text-center px-3 py-3 text-xs font-semibold text-gray-500">Sesiones (4 sem.)</th>
-              <th className="text-center px-3 py-3 text-xs font-semibold text-gray-500">Asist. promedio</th>
-              <th className="text-center px-3 py-3 text-xs font-semibold text-gray-500">Tests técnicos</th>
+            <tr>
+              <th className={`${TH} text-left px-4 py-2.5`} style={thStyle}>Grupo</th>
+              <th className={`${TH} text-center px-3 py-2.5`} style={thStyle}>Alumnos</th>
+              <th className={`${TH} text-center px-3 py-2.5`} style={thStyle}>Sesiones</th>
+              <th className={`${TH} text-center px-3 py-2.5 w-40`} style={thStyle}>Asist. promedio</th>
+              <th className={`${TH} text-center px-3 py-2.5`} style={thStyle}>Tests técnicos</th>
             </tr>
           </thead>
           <tbody>
-            {stats.porGrupo.map((g, i) => {
-              const tipo = grupoTipo(g.grupo);
-              return (
-                <tr key={g.grupo} className={i % 2 === 0 ? "bg-white" : "bg-gray-50/50"}>
-                  <td className="px-4 py-2.5">
-                    <span className="text-xs px-2 py-0.5 rounded-full font-semibold" style={tipo ? { backgroundColor: GROUP_COLOR[tipo].bg, color: GROUP_COLOR[tipo].text } : {}}>{g.grupo}</span>
-                  </td>
-                  <td className="text-center px-3 py-2.5 text-gray-700">{g.alumnos}</td>
-                  <td className="text-center px-3 py-2.5 text-gray-700">{g.sesiones}</td>
-                  <td className="text-center px-3 py-2.5"><PctBadge value={g.asistProm} /></td>
-                  <td className="text-center px-3 py-2.5 text-gray-700">{g.testsCompletos}/{g.alumnos}</td>
-                </tr>
-              );
-            })}
+            {stats.porGrupo.map((g, i) => (
+              <tr key={g.grupo} style={{ background: fondoFila(i) }}>
+                <td className="px-4 py-2.5"><GrupoBadge grupo={g.grupo} /></td>
+                <td className="text-center px-3 py-2.5 tabular-nums" style={{ color: "var(--ui-text)" }}>{g.alumnos}</td>
+                <td className="text-center px-3 py-2.5 tabular-nums" style={{ color: "var(--ui-text-2)" }}>{g.sesiones}</td>
+                <td className="px-3 py-2.5"><BarraPct value={g.asistProm} /></td>
+                <td className="text-center px-3 py-2.5 tabular-nums" style={{ color: "var(--ui-text-2)" }}>{g.testsCompletos}/{g.alumnos}</td>
+              </tr>
+            ))}
           </tbody>
         </table>
-      </div>
+        </div>
+      </Panel>
     </div>
   );
 }
@@ -1215,24 +1298,6 @@ function TabEstadisticas() {
 const GRUPOS_EDADES = ["Birdies", "Águilas", "Albatros", "+14", "Competencia", "Damas"] as const;
 type GrupoEdad = typeof GRUPOS_EDADES[number];
 type EstadoFilter = "todos" | "activos" | "inactivos";
-
-function colorHexForGrupo(g: string): string {
-  const t = grupoTipo(g);
-  if (t === "competencia") return "#7d5a00";
-  if (t === "damas") return "#4a1070";
-  if (t === "birdies") return "#1e40af";
-  return "#1B4D2E";
-}
-
-function GrupoChip({ label, active, colorHex, onClick }: { label: string; active: boolean; colorHex: string; onClick: () => void }) {
-  return (
-    <button
-      onClick={onClick}
-      className="px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors border"
-      style={active ? { backgroundColor: colorHex, color: "#fff", borderColor: colorHex } : { backgroundColor: "#fff", color: "#6b7280", borderColor: "#e5e7eb" }}
-    >{label}</button>
-  );
-}
 
 function TabEdades() {
   const [grupoSel, setGrupoSel] = useState<GrupoEdad>("Birdies");
@@ -1267,12 +1332,12 @@ function TabEdades() {
   }
 
   const showEdadDropdown = grupoSel === "Birdies" || grupoSel === "Águilas" || grupoSel === "Albatros";
-  const colorHex = colorHexForGrupo(grupoSel);
+  const acento = acentoGrupo(grupoSel);
 
   // La edad se recalcula muchas veces por alumno (filtro, orden, agrupación,
   // métricas y render), así que se cachea una sola vez por lista.
   const conEdad = useMemo(
-    () => students.map((s) => ({ student: s, edad: calcEdad(s.birth_date) })),
+    () => students.map((s) => ({ student: s, edad: edadDe(s.birth_date) })),
     [students]
   );
 
@@ -1333,7 +1398,7 @@ function TabEdades() {
       parts.push(`| --- | --- | --- | --- | --- |`);
       g.items.forEach((s) => {
         n++;
-        parts.push(`| ${n} | ${s.full_name} | ${fmtFecha(s.birth_date)} | ${calcEdad(s.birth_date) ?? "—"} | ${s.status === "activo" ? "Activo" : "Inactivo"} |`);
+        parts.push(`| ${n} | ${s.full_name} | ${fmtFecha(s.birth_date)} | ${edadDe(s.birth_date) ?? "—"} | ${s.status === "activo" ? "Activo" : "Inactivo"} |`);
       });
     });
     import("@/lib/pdf-generator").then(({ generateCCBPdf }) => {
@@ -1348,76 +1413,92 @@ function TabEdades() {
       if (agrupadoPorEdad) rows.push([`${g.edad !== null ? `${g.edad} años` : "Sin fecha"} — ${g.items.length} alumnos`, "", "", "", ""]);
       g.items.forEach((s) => {
         n++;
-        rows.push([n, s.full_name, fmtFecha(s.birth_date), calcEdad(s.birth_date) ?? "—", s.status === "activo" ? "Activo" : "Inactivo"]);
+        rows.push([n, s.full_name, fmtFecha(s.birth_date), edadDe(s.birth_date) ?? "—", s.status === "activo" ? "Activo" : "Inactivo"]);
       });
     });
     exportExcel(`Edades — ${grupoSel}`, ["#", "Nombre", "Fecha de nacimiento", "Edad", "Estado"], rows);
   }
 
+  // Cuántos hay en cada grupo con el filtro de estado puesto, para que el chip
+  // diga a dónde vale la pena entrar antes de entrar.
+  const conteoPorGrupo = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const { student: s } of conEdad) {
+      if (estadoFilter === "activos" && s.status !== "activo") continue;
+      if (estadoFilter === "inactivos" && s.status !== "inactivo") continue;
+      if (!s.grupo_activo) continue;
+      m.set(s.grupo_activo, (m.get(s.grupo_activo) ?? 0) + 1);
+    }
+    return m;
+  }, [conEdad, estadoFilter]);
+
   return (
     <div>
-      <div className="flex flex-wrap gap-1.5 mb-3">
-        {GRUPOS_EDADES.map((g) => (
-          <GrupoChip key={g} label={g} active={grupoSel === g} colorHex={colorHexForGrupo(g)} onClick={() => selectGrupo(g)} />
-        ))}
-      </div>
-
-      <div className="flex flex-wrap items-center gap-3 mb-4">
-        <div className="flex gap-1 bg-gray-100 rounded-lg p-1">
-          {(["todos", "activos", "inactivos"] as EstadoFilter[]).map((e) => (
-            <button key={e} onClick={() => setEstadoFilter(e)}
-              className={`px-3 py-1 rounded-md text-xs font-semibold transition-colors ${estadoFilter === e ? "bg-white text-gray-800 shadow-sm" : "text-gray-500"}`}>
-              {e === "todos" ? "Todos" : e === "activos" ? "Solo activos" : "Inactivos"}
-            </button>
-          ))}
+      <Toolbar right={
+        /* Sin exportar mientras la carga esté fallida: el PDF y el Excel de
+           esta pestaña son los que se usan para armar los grupos. */
+        loadError ? undefined : <ExportBar pdf={doExportPDF} excel={doExportExcel} />
+      }>
+        <div className="flex items-center gap-2 flex-wrap">
+          <CampoLabel>Grupo</CampoLabel>
+          <div className="flex gap-1.5 flex-wrap">
+            {GRUPOS_EDADES.map((g) => (
+              <ChipGrupo key={g} label={g} grupo={g} active={grupoSel === g}
+                count={loadError ? undefined : (conteoPorGrupo.get(g) ?? 0)}
+                onClick={() => selectGrupo(g)} />
+            ))}
+          </div>
+        </div>
+        <div className="flex items-center gap-2">
+          <CampoLabel>Estado</CampoLabel>
+          <Segmented
+            value={estadoFilter}
+            onChange={setEstadoFilter}
+            options={[
+              { id: "todos" as EstadoFilter, label: "Todos" },
+              { id: "activos" as EstadoFilter, label: "Activos" },
+              { id: "inactivos" as EstadoFilter, label: "Inactivos" },
+            ]}
+          />
         </div>
         {showEdadDropdown && (
           <select
             value={edadFilter === "todas" ? "todas" : String(edadFilter)}
             onChange={(e) => setEdadFilter(e.target.value === "todas" ? "todas" : Number(e.target.value))}
-            className="text-xs border border-gray-200 rounded-lg px-2 py-1.5 bg-white text-gray-700"
+            className="text-xs rounded-lg px-2 py-1.5 focus:outline-none focus:ring-2"
+            style={CAMPO}
           >
             <option value="todas">Todas las edades</option>
             {edadesDisponibles.map((e) => <option key={e} value={e}>{e} años</option>)}
           </select>
         )}
-        {/* Sin exportar mientras la carga esté fallida: el PDF y el Excel de
-            esta pestaña son los que se usan para armar los grupos. */}
-        {!loadError && (
-          <div className="ml-auto flex gap-2">
-            <ExportBtn label="PDF" onClick={doExportPDF} />
-            <ExportBtn label="Excel" onClick={doExportExcel} />
-          </div>
-        )}
-      </div>
-
-      <div className="flex items-center gap-2 mb-3">
-        <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: colorHex }} />
-        <h3 className="text-sm font-bold text-gray-800">{grupoSel}</h3>
-        {!loadError && <span className="text-xs text-gray-400">({filtered.length} alumno{filtered.length === 1 ? "" : "s"})</span>}
-      </div>
+      </Toolbar>
 
       {/* Conteos y promedios se ocultan si la carga falló: sobre un listado que
           no llegó completo serían cifras falsas. */}
       {!loadError && (
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
-          <MetricCard label="Total alumnos" value={filtered.length} />
-          <MetricCard label="Edad promedio" value={promedioEdad ?? "—"} />
-          <MetricCard label="Menor edad" value={menorEdad ?? "—"} />
-          <MetricCard label="Mayor edad" value={mayorEdad ?? "—"} />
+          <MetricCard label={`Alumnos en ${grupoSel}`} value={filtered.length} />
+          <MetricCard label="Edad promedio" value={promedioEdad ?? "—"} sub="años" />
+          <MetricCard label="Menor edad" value={menorEdad ?? "—"} sub="años" />
+          <MetricCard label="Mayor edad" value={mayorEdad ?? "—"} sub="años" />
         </div>
       )}
 
-      {loading ? <Loading /> : loadError ? <ErrorState msg={loadError} /> : filtered.length === 0 ? <EmptyState msg="No hay alumnos para este filtro." /> : (
-        <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-x-auto">
+      {loading ? <Loading /> : loadError ? <ErrorState msg={loadError} /> : filtered.length === 0 ? <Panel><EmptyState msg="No hay alumnos para este filtro." /></Panel> : (
+        <Panel
+          title={grupoSel}
+          sub={`${filtered.length} alumno${filtered.length === 1 ? "" : "s"}${agrupadoPorEdad ? " · agrupados por edad" : ""}`}
+        >
+          <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
-              <tr className="border-b border-gray-100 bg-gray-50">
-                <th className="text-center px-2 py-1.5 text-[11px] font-semibold text-gray-500 w-10">#</th>
-                <th className="text-left px-2 py-1.5 text-[11px] font-semibold text-gray-500">Nombre</th>
-                <th className="text-left px-2 py-1.5 text-[11px] font-semibold text-gray-500">Fecha de nacimiento</th>
-                <th className="text-center px-2 py-1.5 text-[11px] font-semibold text-gray-500 w-16">Edad</th>
-                <th className="text-center px-2 py-1.5 text-[11px] font-semibold text-gray-500 w-20">Estado</th>
+              <tr>
+                <th className={`${TH} text-center px-2 py-2 w-10`} style={thStyle}>#</th>
+                <th className={`${TH} text-left px-2 py-2`} style={thStyle}>Nombre</th>
+                <th className={`${TH} text-left px-2 py-2`} style={thStyle}>Fecha de nacimiento</th>
+                <th className={`${TH} text-center px-2 py-2 w-16`} style={thStyle}>Edad</th>
+                <th className={`${TH} text-center px-2 py-2 w-24`} style={thStyle}>Estado</th>
               </tr>
             </thead>
             <tbody>
@@ -1427,7 +1508,9 @@ function TabEdades() {
                   <Fragment key={g.edad ?? "sinfecha"}>
                     {agrupadoPorEdad && (
                       <tr>
-                        <td colSpan={5} className="px-2 py-1 bg-gray-50 text-[11px] font-semibold text-gray-600 border-t border-b border-gray-100">
+                        <td colSpan={5} className="px-2 py-1.5 text-[11px] font-bold"
+                          style={{ background: "var(--ui-card-alt)", color: "var(--ui-text-2)", borderTop: "1px solid var(--ui-border-soft)", borderBottom: "1px solid var(--ui-border-soft)" }}>
+                          <span className="inline-block w-1.5 h-1.5 rounded-full mr-2 align-middle" style={{ background: acento }} />
                           {g.edad !== null ? `${g.edad} años` : "Sin fecha"} — {g.items.length} alumno{g.items.length === 1 ? "" : "s"}
                         </td>
                       </tr>
@@ -1435,16 +1518,19 @@ function TabEdades() {
                     {g.items.map((s, i) => {
                       n++;
                       return (
-                        <tr key={s.id} className={i % 2 === 0 ? "bg-white" : "bg-gray-50/50"}>
-                          <td className="text-center px-2 py-[3px] text-[11px] text-gray-400">{n}</td>
-                          <td className="px-2 py-[3px] text-[11px] font-medium text-gray-800">{s.full_name}</td>
-                          <td className="px-2 py-[3px] text-[11px] text-gray-500">{fmtFecha(s.birth_date)}</td>
+                        <tr key={s.id} style={{ background: fondoFila(i) }}>
+                          <td className="text-center px-2 py-[3px] text-[11px] tabular-nums" style={{ color: "var(--ui-text-3)" }}>{n}</td>
+                          <td className="px-2 py-[3px] text-[11px] font-semibold" style={{ color: "var(--ui-text)" }}>{s.full_name}</td>
+                          <td className="px-2 py-[3px] text-[11px]" style={{ color: "var(--ui-text-2)" }}>{fmtFecha(s.birth_date)}</td>
                           <td className="text-center px-2 py-[3px]">
-                            <span className="text-[10px] px-1.5 py-0.5 rounded-full font-semibold" style={{ backgroundColor: `${colorHex}18`, color: colorHex }}>
-                              {calcEdad(s.birth_date) ?? "—"}
+                            <span className="text-[10px] px-1.5 py-0.5 rounded-full font-bold tabular-nums"
+                              style={{ background: acentoGrupoSuave(grupoSel, 18), color: acento }}>
+                              {edadDe(s.birth_date) ?? "—"}
                             </span>
                           </td>
-                          <td className="text-center px-2 py-[3px]"><Badge label={s.status} color={s.status === "activo" ? "green" : "gray"} /></td>
+                          <td className="text-center px-2 py-[3px]">
+                            <Badge label={s.status} tono={s.status === "activo" ? "ok" : "neutro"} />
+                          </td>
                         </tr>
                       );
                     })}
@@ -1453,7 +1539,8 @@ function TabEdades() {
               })()}
             </tbody>
           </table>
-        </div>
+          </div>
+        </Panel>
       )}
     </div>
   );
@@ -1461,70 +1548,80 @@ function TabEdades() {
 
 // ── Tab 7: RESERVAS LIVE ─────────────────────────────────────────────────────
 
-const GRUPOS_LIVE = [
-  { id: "birdies" as const, label: "Birdies", color: "#1e40af", dias: ["martes", "miercoles", "jueves", "sabado", "domingo"] },
-  { id: "juvenil" as const, label: "Juvenil", color: "#1B4D2E", dias: ["martes", "miercoles", "jueves", "sabado", "domingo"] },
-  { id: "competencia" as const, label: "Competencia", color: "#7d5a00", dias: ["martes", "miercoles", "jueves", "sabado"] },
-  { id: "damas" as const, label: "Damas", color: "#4a1070", dias: ["viernes"] },
+// El color de cada plan sale de lib/grupos; aquí solo viven los días en que
+// entrena cada uno.
+const GRUPOS_LIVE: { id: TipoPlan; dias: string[] }[] = [
+  { id: "birdies",     dias: ["martes", "miercoles", "jueves", "sabado", "domingo"] },
+  { id: "juvenil",     dias: ["martes", "miercoles", "jueves", "sabado", "domingo"] },
+  { id: "competencia", dias: ["martes", "miercoles", "jueves", "sabado"] },
+  { id: "damas",       dias: ["viernes"] },
 ];
 
 const DIA_LABEL: Record<string, string> = { martes: "Martes", miercoles: "Miércoles", jueves: "Jueves", viernes: "Viernes", sabado: "Sábado", domingo: "Domingo" };
 const DIA_OFFSET: Record<string, number> = { lunes: 0, martes: 1, miercoles: 2, jueves: 3, viernes: 4, sabado: 5, domingo: 6 };
 
 function TalegaChip({ propia }: { propia: boolean }) {
+  const t = propia ? TONO.ok : TONO.neutro;
   return (
-    <span
-      className="shrink-0 text-[9px] font-semibold px-1.5 py-0.5 rounded-full"
-      style={propia ? { backgroundColor: "#16a34a18", color: "#16a34a" } : { backgroundColor: "#9ca3af20", color: "#6b7280" }}
-    >{propia ? "Propia" : "Escuela"}</span>
+    <span className="shrink-0 text-[9px] font-bold px-1.5 py-0.5 rounded-full"
+      style={{ background: t.bg, color: t.fg }}>
+      {propia ? "Propia" : "Escuela"}
+    </span>
   );
 }
 
 function DayColumn({
-  diaLabel, fecha, sesionesDia, reservasBySesion, colorHex,
+  diaLabel, fecha, sesionesDia, reservasBySesion, acento, esHoy,
 }: {
   diaLabel: string; fecha: string; sesionesDia: Sesion[];
-  reservasBySesion: Record<string, Reserva[]>; colorHex: string;
+  reservasBySesion: Record<string, Reserva[]>; acento: string; esHoy: boolean;
 }) {
   const totalReservas = sesionesDia.reduce((sum, s) => sum + (reservasBySesion[s.id]?.length ?? 0), 0);
   return (
-    <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden flex flex-col min-w-0">
-      <div className="px-3 py-2 border-b border-gray-100" style={{ backgroundColor: `${colorHex}10` }}>
+    <div className="rounded-xl overflow-hidden flex flex-col min-w-0"
+      style={{
+        background: "var(--ui-card)",
+        // El día de hoy es el que se mira: se marca con el acento del grupo en
+        // vez de dejarlo idéntico a los otros seis.
+        border: esHoy ? `1px solid ${acento}` : "1px solid var(--ui-border-soft)",
+      }}>
+      <div className="px-3 py-2" style={{
+        background: `color-mix(in srgb, ${acento} ${esHoy ? 16 : 8}%, transparent)`,
+        borderBottom: "1px solid var(--ui-border-soft)",
+      }}>
         <div className="flex items-baseline justify-between gap-1">
-          <span className="text-xs font-bold truncate" style={{ color: colorHex }}>{diaLabel}</span>
-          <span className="text-[10px] text-gray-400 shrink-0">{fecha}</span>
+          <span className="text-xs font-bold truncate" style={{ color: acento }}>{diaLabel}</span>
+          <span className="text-[10px] shrink-0" style={{ color: "var(--ui-text-3)" }}>{fecha}</span>
         </div>
         <div className="flex items-center justify-between mt-0.5">
           {sesionesDia.length === 1 ? (
-            <span className="text-[10px] text-gray-500">{fmtHora(sesionesDia[0].hora_inicio)} – {fmtHora(sesionesDia[0].hora_fin)}</span>
+            <span className="text-[10px]" style={{ color: "var(--ui-text-2)" }}>{fmtHora(sesionesDia[0].hora_inicio)} – {fmtHora(sesionesDia[0].hora_fin)}</span>
           ) : sesionesDia.length > 1 ? (
-            <span className="text-[10px] text-gray-400">{sesionesDia.length} horarios</span>
-          ) : <span className="text-[10px] text-gray-300">Sin sesión</span>}
-          <span className="text-[10px] font-semibold text-gray-600">{totalReservas}</span>
+            <span className="text-[10px]" style={{ color: "var(--ui-text-3)" }}>{sesionesDia.length} horarios</span>
+          ) : <span className="text-[10px]" style={{ color: "var(--ui-text-3)" }}>Sin sesión</span>}
+          <span className="text-[11px] font-bold tabular-nums" style={{ color: "var(--ui-text)" }}>{totalReservas}</span>
         </div>
       </div>
       <div className="p-2 space-y-2 flex-1">
         {sesionesDia.length === 0 ? (
-          <p className="text-[11px] text-gray-300 text-center py-4">Sin sesión</p>
+          <p className="text-[11px] text-center py-4" style={{ color: "var(--ui-text-3)" }}>Sin sesión</p>
         ) : sesionesDia.map((s) => {
           const rv = reservasBySesion[s.id] ?? [];
           return (
             <div key={s.id}>
               {sesionesDia.length > 1 && (
-                <p className="text-[10px] font-semibold text-gray-500 mb-1">{fmtHora(s.hora_inicio)} – {fmtHora(s.hora_fin)}</p>
+                <p className="text-[10px] font-bold mb-1" style={{ color: "var(--ui-text-3)" }}>{fmtHora(s.hora_inicio)} – {fmtHora(s.hora_fin)}</p>
               )}
               {rv.length === 0 ? (
-                <p className="text-[10px] text-gray-300 italic mb-1">Sin inscritos</p>
+                <p className="text-[10px] italic mb-1" style={{ color: "var(--ui-text-3)" }}>Sin inscritos</p>
               ) : (
                 <div className="space-y-1">
                   {rv.map((r, i) => (
-                    <div
-                      key={r.id}
-                      className="flex items-center justify-between gap-1.5 border border-gray-100"
-                      style={{ padding: "5px", borderRadius: "6px", fontSize: "11px" }}
-                    >
-                      <span className="text-gray-700 truncate flex items-center gap-1 min-w-0">
-                        <span className="text-gray-400 shrink-0">{i + 1}.</span>
+                    <div key={r.id}
+                      className="flex items-center justify-between gap-1.5"
+                      style={{ padding: "5px", borderRadius: "6px", fontSize: "11px", background: "var(--ui-card-alt)" }}>
+                      <span className="truncate flex items-center gap-1 min-w-0" style={{ color: "var(--ui-text)" }}>
+                        <span className="shrink-0 tabular-nums" style={{ color: "var(--ui-text-3)" }}>{i + 1}.</span>
                         <span className="truncate">{r.students?.full_name ?? "—"}</span>
                       </span>
                       <TalegaChip propia={r.students?.tiene_talega === "Sí"} />
@@ -1599,7 +1696,7 @@ function TabReservaLive() {
         });
       });
     });
-    exportPDF("Reservas Live", ["Día", "Horario", "#", "Nombre", "Talega"], rows, `${grupoCfg.label} — ${fmtRango(monday, sunday)}`);
+    exportPDF("Reservas Live", ["Día", "Horario", "#", "Nombre", "Talega"], rows, `${TIPO_PLAN_LABEL[grupoSel]} — ${fmtRango(monday, sunday)}`);
   }
   function doExportExcel() {
     const rows: (string | number)[][] = [];
@@ -1610,10 +1707,10 @@ function TabReservaLive() {
         });
       });
     });
-    exportExcel("Reservas Live", ["Día", "Horario", "#", "Nombre", "Talega"], rows, `${grupoCfg.label} — ${fmtRango(monday, sunday)}`);
+    exportExcel("Reservas Live", ["Día", "Horario", "#", "Nombre", "Talega"], rows, `${TIPO_PLAN_LABEL[grupoSel]} — ${fmtRango(monday, sunday)}`);
   }
   function doExportWhatsApp() {
-    const lines = [`${grupoCfg.label} — ${fmtRango(monday, sunday)}`, `Total: ${totalReservas} | Talega propia: ${conTalegaPropia} | Talega escuela: ${talegaEscuela}`, ""];
+    const lines = [`${TIPO_PLAN_LABEL[grupoSel]} — ${fmtRango(monday, sunday)}`, `Total: ${totalReservas} | Talega propia: ${conTalegaPropia} | Talega escuela: ${talegaEscuela}`, ""];
     columnas.forEach((col) => {
       const total = col.sesionesDia.reduce((sum, s) => sum + (reservasBySesion[s.id]?.length ?? 0), 0);
       if (total === 0) return;
@@ -1625,46 +1722,66 @@ function TabReservaLive() {
     exportWhatsApp("Reservas Live", lines);
   }
 
+  const acento = acentoGrupo(grupoSel);
+  const hoyISO = toISO(new Date());
+
   return (
     <div>
-      <div className="flex flex-wrap items-center gap-3 mb-4">
-        <div className="flex gap-1.5">
-          {GRUPOS_LIVE.map((g) => (
-            <GrupoChip key={g.id} label={g.label} active={grupoSel === g.id} colorHex={g.color} onClick={() => setGrupoSel(g.id)} />
-          ))}
-        </div>
-        <WeekNav monday={monday} onChange={setMonday} />
-        <div className="ml-auto flex items-center gap-3">
-          <span className="flex items-center gap-1.5 text-xs text-gray-400">
-            <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
+      <Toolbar right={
+        <>
+          <span className="flex items-center gap-1.5 text-xs" style={{ color: "var(--ui-text-3)" }}>
+            <span className="w-2 h-2 rounded-full animate-pulse" style={{ background: "var(--ui-bad)" }} />
             En vivo · hace {secsAgo}s
           </span>
-          <div className="flex gap-2">
-            <ExportBtn label="PDF" onClick={doExportPDF} />
-            <ExportBtn label="Excel" onClick={doExportExcel} />
-            <ExportBtn label="WhatsApp" onClick={doExportWhatsApp} green />
+          <ExportBar pdf={doExportPDF} excel={doExportExcel} whatsapp={doExportWhatsApp} />
+        </>
+      }>
+        <div className="flex items-center gap-2 flex-wrap">
+          <CampoLabel>Grupo</CampoLabel>
+          <div className="flex gap-1.5 flex-wrap">
+            {GRUPOS_LIVE.map((g) => (
+              <ChipGrupo key={g.id} label={TIPO_PLAN_LABEL[g.id]} grupo={g.id}
+                active={grupoSel === g.id} onClick={() => setGrupoSel(g.id)} />
+            ))}
           </div>
         </div>
-      </div>
+        <WeekNav monday={monday} onChange={setMonday} />
+      </Toolbar>
 
-      <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 mb-4">
-        <MetricCard label="Total reservas" value={totalReservas} />
-        <MetricCard label="Con talega propia" value={conTalegaPropia} />
-        <MetricCard label="Con talega escuela" value={talegaEscuela} />
+      <div className="grid grid-cols-3 gap-3 mb-4">
+        <MetricCard label="Total reservas" value={totalReservas} sub={fmtRango(monday, sunday)} />
+        <MetricCard label="Con talega propia" value={conTalegaPropia} tono="ok"
+          sub={totalReservas > 0 ? `${pct(conTalegaPropia, totalReservas)}% de los inscritos` : undefined} />
+        <MetricCard label="Con talega escuela" value={talegaEscuela} tono="neutro"
+          sub={talegaEscuela > 0 ? "talegas a preparar" : undefined} />
       </div>
 
       {loading && sesiones.length === 0 ? <Loading /> : (
-        <div className="grid gap-3" style={{ gridTemplateColumns: `repeat(${columnas.length}, minmax(0, 1fr))` }}>
-          {columnas.map((col) => (
-            <DayColumn
-              key={col.dia}
-              diaLabel={col.label}
-              fecha={`${col.fecha.getDate()} ${MESES_ES[col.fecha.getMonth()].slice(0, 3)}`}
-              sesionesDia={col.sesionesDia}
-              reservasBySesion={reservasBySesion}
-              colorHex={grupoCfg.color}
-            />
-          ))}
+        // Las columnas se estrechaban hasta 60px en móvil, donde el nombre de un
+        // alumno no cabe. Ahora tienen un mínimo y la semana se desplaza en
+        // horizontal; el tope de ancho es para que Damas —un solo día— no se
+        // estire a lo ancho de la pantalla.
+        <div className="overflow-x-auto pb-1">
+          <div className="grid gap-3"
+            style={{
+              gridTemplateColumns: `repeat(${columnas.length}, minmax(150px, 1fr))`,
+              maxWidth: columnas.length <= 2 ? columnas.length * 300 : undefined,
+            }}>
+          {columnas.map((col) => {
+            const fechaISO = toISO(col.fecha);
+            return (
+              <DayColumn
+                key={col.dia}
+                diaLabel={col.label}
+                fecha={`${col.fecha.getDate()} ${MESES_ES[col.fecha.getMonth()].slice(0, 3)}`}
+                sesionesDia={col.sesionesDia}
+                reservasBySesion={reservasBySesion}
+                acento={acento}
+                esHoy={fechaISO === hoyISO}
+              />
+            );
+          })}
+          </div>
         </div>
       )}
     </div>
@@ -1673,31 +1790,22 @@ function TabReservaLive() {
 
 // ── Shared helpers ───────────────────────────────────────────────────────────
 
-function Loading() {
-  return <div className="flex items-center justify-center py-16"><div className="animate-spin rounded-full h-7 w-7 border-2 border-[#1B4D2E] border-t-transparent" /></div>;
-}
-
-function EmptyState({ msg }: { msg: string }) {
-  return <div className="py-16 text-center text-sm text-gray-400">{msg}</div>;
-}
-
-// Una lista incompleta se ve igual que una completa, así que cuando la carga
-// falla hay que decirlo en pantalla en vez de pintar lo que alcanzó a llegar.
-function ErrorState({ msg }: { msg: string }) {
+// Los tres formatos salen siempre juntos y competían visualmente con los
+// filtros. Agrupados en una sola pieza con icono se leen como una acción, y el
+// verde de WhatsApp deja de ser el elemento más llamativo de la pantalla.
+function ExportBar({ pdf, excel, whatsapp }: { pdf?: () => void; excel?: () => void; whatsapp?: () => void }) {
+  const btn = "flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-semibold transition-colors hover:bg-(--ui-card-alt)";
   return (
-    <div className="py-12 px-4 text-center">
-      <p className="text-sm font-semibold text-red-700">No se pudo cargar el listado completo</p>
-      <p className="text-xs text-gray-500 mt-1">{msg}</p>
-      <p className="text-xs text-gray-400 mt-2">No se muestran resultados parciales para no dar por bueno un listado incompleto.</p>
+    <div className="flex items-stretch rounded-lg overflow-hidden divide-x shrink-0"
+      style={{ border: "1px solid var(--ui-border)", borderColor: "var(--ui-border)", color: "var(--ui-text-2)" }}>
+      {pdf && <button onClick={pdf} className={btn} style={{ borderColor: "var(--ui-border)" }}><FileText size={13} />PDF</button>}
+      {excel && <button onClick={excel} className={btn} style={{ borderColor: "var(--ui-border)" }}><Table2 size={13} />Excel</button>}
+      {whatsapp && (
+        <button onClick={whatsapp} className={btn} style={{ borderColor: "var(--ui-border)", color: "var(--ui-ok)" }}>
+          <Send size={13} />WhatsApp
+        </button>
+      )}
     </div>
-  );
-}
-
-function ExportBtn({ label, onClick, green }: { label: string; onClick: () => void; green?: boolean }) {
-  return (
-    <button onClick={onClick} className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition-colors ${green ? "bg-[#25d366] text-white border-[#25d366] hover:bg-[#1ebe5d]" : "bg-white text-gray-600 border-gray-200 hover:bg-gray-50"}`}>
-      {label}
-    </button>
   );
 }
 
@@ -1705,29 +1813,55 @@ function ExportBtn({ label, onClick, green }: { label: string; onClick: () => vo
 
 export default function ReportesModule() {
   const [activeTab, setActiveTab] = useState<Tab>("asistencia");
+  const tabActual = TABS.find((t) => t.id === activeTab)!;
+
+  // Las familias en el orden en que aparecen en TABS, sin repetirlas.
+  const familias = useMemo(() => {
+    const vistas: Familia[] = [];
+    for (const t of TABS) if (!vistas.includes(t.familia)) vistas.push(t.familia);
+    return vistas.map((f) => ({ familia: f, tabs: TABS.filter((t) => t.familia === f) }));
+  }, []);
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div className="mb-6 flex items-center gap-3">
-          <div className="w-11 h-11 rounded-xl bg-ccb-green flex items-center justify-center shrink-0">
-            <BarChart3 size={22} className="text-white" />
-          </div>
-          <div>
-            <h1 className="text-2xl font-bold text-ccb-green">Reportes</h1>
-            <p className="text-sm text-(--text-muted) mt-0.5">Coordinador · Profesores</p>
-          </div>
-        </div>
+    <Pagina>
+        <Encabezado icono={BarChart3} titulo="Reportes" bajada="Coordinador · Profesores" />
 
-        <div className="flex gap-1 bg-white rounded-xl border border-gray-100 shadow-sm p-1 mb-6 overflow-x-auto">
-          {TABS.map((t) => (
-            <button key={t.id} onClick={() => setActiveTab(t.id)}
-              className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors whitespace-nowrap flex items-center gap-1.5 ${activeTab === t.id ? "bg-[#1B4D2E] text-white shadow-sm" : "text-gray-600 hover:text-gray-900 hover:bg-gray-50"}`}>
-              {t.id === "live" && activeTab === t.id && <span className="w-2 h-2 rounded-full bg-red-400 animate-pulse" />}
-              {t.label}
-            </button>
+        {/* NAVEGACIÓN POR FAMILIA */}
+        <nav className="rounded-xl p-1.5 mb-2 flex items-center gap-1.5 overflow-x-auto"
+          style={{ background: "var(--ui-card)", border: "1px solid var(--ui-border)" }}>
+          {familias.map(({ familia, tabs }, iFam) => (
+            <Fragment key={familia}>
+              {iFam > 0 && <span className="w-px self-stretch my-1 shrink-0" style={{ background: "var(--ui-border)" }} />}
+              <div className="flex items-center gap-1 shrink-0">
+                <span className="text-[9px] font-bold uppercase tracking-wider px-1.5 hidden lg:block"
+                  style={{ color: "var(--ui-text-3)" }}>
+                  {FAMILIA_LABEL[familia]}
+                </span>
+                {tabs.map((t) => {
+                  const activo = activeTab === t.id;
+                  const Icono = t.icon;
+                  return (
+                    <button key={t.id} onClick={() => setActiveTab(t.id)} title={t.hint}
+                      className="px-3 py-2 rounded-lg text-sm font-semibold transition-colors whitespace-nowrap flex items-center gap-1.5"
+                      style={activo
+                        ? { background: "var(--g-juvenil-bg)", color: "var(--g-juvenil-fg)" }
+                        : { color: "var(--ui-text-2)" }}>
+                      {t.id === "live"
+                        ? <span className="w-2 h-2 rounded-full animate-pulse" style={{ background: "var(--ui-bad)" }} />
+                        : <Icono size={15} />}
+                      {t.label}
+                    </button>
+                  );
+                })}
+              </div>
+            </Fragment>
           ))}
-        </div>
+        </nav>
+
+        {/* Qué contesta la pestaña abierta. Con seis pestañas el nombre solo no
+            alcanza: "Tests" y "Progreso" suenan intercambiables hasta que se
+            entran. */}
+        <p className="text-xs mb-5 px-1" style={{ color: "var(--ui-text-3)" }}>{tabActual.hint}</p>
 
         <div>
           {activeTab === "asistencia" && <TabAsistencia />}
@@ -1737,7 +1871,6 @@ export default function ReportesModule() {
           {activeTab === "edades" && <TabEdades />}
           {activeTab === "live" && <TabReservaLive />}
         </div>
-      </div>
-    </div>
+    </Pagina>
   );
 }

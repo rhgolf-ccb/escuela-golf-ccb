@@ -12,7 +12,7 @@ import {
 import { TIPOS_PLAN } from "@/lib/grupos";
 
 const GRUPOS: TipoPlan[] = TIPOS_PLAN;
-const COLOR = "#b45309";
+const COLOR = "var(--ui-warn)";
 const CATEGORIAS: CategoriaEstacionEspecial[] = ["juego_largo", "juego_corto", "putt"];
 
 type TipoEstructura = "estaciones" | "libre";
@@ -403,13 +403,13 @@ export default function ActividadEspecialWizard({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ backgroundColor: "rgba(0,0,0,0.45)" }} onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
-      <div className="flex flex-col w-full max-w-2xl max-h-[90vh] bg-white rounded-2xl shadow-2xl overflow-hidden">
+      <div className="flex flex-col w-full max-w-2xl max-h-[90vh] bg-(--ui-card) rounded-2xl shadow-2xl overflow-hidden">
         <div className="flex items-center justify-between px-5 py-3.5 shrink-0" style={{ backgroundColor: COLOR }}>
           <div>
-            <p className="text-sm font-semibold text-white">Actividad especial 🌟</p>
-            <p className="text-[11px] text-white/70">Paso {step} de 6</p>
+            <p className="text-sm font-semibold text-(--g-on-accent)">Actividad especial 🌟</p>
+            <p className="text-[11px] text-(--g-on-accent)/70">Paso {step} de 6</p>
           </div>
-          <button onClick={onClose} aria-label="Cerrar" className="text-white/70 hover:text-white p-1">
+          <button onClick={onClose} aria-label="Cerrar" className="text-(--g-on-accent)/70 hover:text-(--g-on-accent) p-1">
             <i className="ti ti-x" style={{ fontSize: 18 }} />
           </button>
         </div>
@@ -418,21 +418,21 @@ export default function ActividadEspecialWizard({
           {/* Paso 1 */}
           {step === 1 && (
             <div className="space-y-3">
-              <p className="text-sm text-gray-500">¿Qué tipo de actividad especial es?</p>
+              <p className="text-sm text-(--ui-text-3)">¿Qué tipo de actividad especial es?</p>
               <button onClick={() => { setTipoEstructura("estaciones"); setStep(2); }}
-                className="w-full text-left px-4 py-3 rounded-xl border border-gray-200 text-sm font-medium text-gray-700 hover:bg-gray-50">
-                Como día de escuela con modificaciones <span className="block text-xs text-gray-400 font-normal mt-0.5">Tiene estructura de estaciones (calentamiento + estaciones de juego)</span>
+                className="w-full text-left px-4 py-3 rounded-xl border border-(--ui-border) text-sm font-medium text-(--ui-text-2) hover:bg-(--ui-card-alt)">
+                Como día de escuela con modificaciones <span className="block text-xs text-(--ui-text-3) font-normal mt-0.5">Tiene estructura de estaciones (calentamiento + estaciones de juego)</span>
               </button>
               <button onClick={() => { setTipoEstructura("libre"); setStep(2); }}
-                className="w-full text-left px-4 py-3 rounded-xl border border-gray-200 text-sm font-medium text-gray-700 hover:bg-gray-50">
-                Formato completamente libre <span className="block text-xs text-gray-400 font-normal mt-0.5">Torneo, festival, evaluación — tú defines la estructura</span>
+                className="w-full text-left px-4 py-3 rounded-xl border border-(--ui-border) text-sm font-medium text-(--ui-text-2) hover:bg-(--ui-card-alt)">
+                Formato completamente libre <span className="block text-xs text-(--ui-text-3) font-normal mt-0.5">Torneo, festival, evaluación — tú defines la estructura</span>
               </button>
               {plantillas.length > 0 && (
                 <div className="pt-2">
-                  <p className="text-xs text-gray-400 mb-1.5">O usa una plantilla guardada:</p>
+                  <p className="text-xs text-(--ui-text-3) mb-1.5">O usa una plantilla guardada:</p>
                   <div className="flex flex-wrap gap-2">
                     {plantillas.map((p) => (
-                      <button key={p.id} onClick={() => aplicarPlantilla(p)} className="text-xs font-medium px-3 py-1.5 rounded-full border border-gray-200 text-gray-600 hover:bg-gray-50">
+                      <button key={p.id} onClick={() => aplicarPlantilla(p)} className="text-xs font-medium px-3 py-1.5 rounded-full border border-(--ui-border) text-(--ui-text-2) hover:bg-(--ui-card-alt)">
                         {p.nombre}
                       </button>
                     ))}
@@ -446,28 +446,28 @@ export default function ActividadEspecialWizard({
           {step === 2 && (
             <div className="space-y-3">
               <input value={nombre} onChange={(e) => setNombre(e.target.value)} placeholder="Nombre de la actividad (ej: Summer Camp Golf)"
-                className="w-full text-sm px-3 py-2 rounded-lg border border-gray-200" />
+                className="w-full text-sm px-3 py-2 rounded-lg border border-(--ui-border)" />
               <div>
-                <p className="text-xs text-gray-500 mb-1.5">Grupos participantes</p>
+                <p className="text-xs text-(--ui-text-3) mb-1.5">Grupos participantes</p>
                 <div className="flex flex-wrap gap-2">
                   {GRUPOS.map((g) => (
                     <button key={g} onClick={() => toggleGrupo(g)} className="text-xs font-semibold px-3 py-1.5 rounded-full border"
-                      style={grupos.includes(g) ? { backgroundColor: COLOR, color: "#fff", borderColor: COLOR } : { color: "#6b7280", borderColor: "#e5e7eb" }}>
+                      style={grupos.includes(g) ? { backgroundColor: COLOR, color: "var(--g-on-accent)", borderColor: COLOR } : { color: "var(--ui-text-3)", borderColor: "var(--ui-border)" }}>
                       {TIPO_PLAN_LABEL[g]}
                     </button>
                   ))}
                 </div>
               </div>
               <div className="flex gap-2">
-                <input type="date" value={fecha} onChange={(e) => setFecha(e.target.value)} className="flex-1 text-sm px-3 py-2 rounded-lg border border-gray-200" />
-                <input type="time" value={horaInicio} onChange={(e) => setHoraInicio(e.target.value)} className="text-sm px-3 py-2 rounded-lg border border-gray-200" />
+                <input type="date" value={fecha} onChange={(e) => setFecha(e.target.value)} className="flex-1 text-sm px-3 py-2 rounded-lg border border-(--ui-border)" />
+                <input type="time" value={horaInicio} onChange={(e) => setHoraInicio(e.target.value)} className="text-sm px-3 py-2 rounded-lg border border-(--ui-border)" />
               </div>
               <div className="flex items-center gap-2">
-                <label className="text-xs text-gray-500">Duración total (min)</label>
-                <input type="number" min={10} value={duracionTotal} onChange={(e) => setDuracionTotal(Number(e.target.value) || 0)} className="w-20 text-sm px-2 py-1.5 rounded-lg border border-gray-200" />
-                <span className="text-xs text-gray-400">termina {horaFin}</span>
+                <label className="text-xs text-(--ui-text-3)">Duración total (min)</label>
+                <input type="number" min={10} value={duracionTotal} onChange={(e) => setDuracionTotal(Number(e.target.value) || 0)} className="w-20 text-sm px-2 py-1.5 rounded-lg border border-(--ui-border)" />
+                <span className="text-xs text-(--ui-text-3)">termina {horaFin}</span>
               </div>
-              <label className="flex items-center gap-2 text-sm text-gray-700">
+              <label className="flex items-center gap-2 text-sm text-(--ui-text-2)">
                 <input type="checkbox" checked={seReplica} onChange={(e) => toggleReplica(e.target.checked)} />
                 ¿El mismo plan se ejecuta con grupos diferentes en horarios distintos el mismo día?
               </label>
@@ -475,22 +475,22 @@ export default function ActividadEspecialWizard({
                 <div className="pl-6 space-y-2">
                   {turnos.map((t, i) => (
                     <div key={i} className="flex items-center gap-2">
-                      <input type="time" value={t.hora_inicio} onChange={(e) => updateTurno(i, { hora_inicio: e.target.value })} className="text-sm px-2 py-1.5 rounded-lg border border-gray-200" />
-                      <input value={t.nombre_grupo} onChange={(e) => updateTurno(i, { nombre_grupo: e.target.value })} placeholder="Nombre del grupo (ej: Átomos)" className="flex-1 text-sm px-2 py-1.5 rounded-lg border border-gray-200" />
-                      <button onClick={() => removeTurno(i)} className="text-gray-300 hover:text-red-500 shrink-0">
+                      <input type="time" value={t.hora_inicio} onChange={(e) => updateTurno(i, { hora_inicio: e.target.value })} className="text-sm px-2 py-1.5 rounded-lg border border-(--ui-border)" />
+                      <input value={t.nombre_grupo} onChange={(e) => updateTurno(i, { nombre_grupo: e.target.value })} placeholder="Nombre del grupo (ej: Átomos)" className="flex-1 text-sm px-2 py-1.5 rounded-lg border border-(--ui-border)" />
+                      <button onClick={() => removeTurno(i)} className="text-(--ui-text-3) hover:text-(--ui-bad) shrink-0">
                         <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path d="M18 6 6 18M6 6l12 12" /></svg>
                       </button>
                     </div>
                   ))}
-                  <button onClick={addTurno} className="text-xs text-blue-600 hover:underline">+ Agregar turno</button>
+                  <button onClick={addTurno} className="text-xs text-(--g-birdies-fg) hover:underline">+ Agregar turno</button>
                 </div>
               )}
               <div className="flex gap-2 pt-2">
-                <button onClick={() => setStep(1)} className="flex-1 py-2 rounded-xl text-sm font-medium border border-gray-200 text-gray-600 hover:bg-gray-50">Atrás</button>
+                <button onClick={() => setStep(1)} className="flex-1 py-2 rounded-xl text-sm font-medium border border-(--ui-border) text-(--ui-text-2) hover:bg-(--ui-card-alt)">Atrás</button>
                 <button
                   onClick={() => setStep(tipoEstructura === "estaciones" ? 3 : 5)}
                   disabled={!nombre.trim() || grupos.length === 0}
-                  className="flex-1 py-2 rounded-xl text-sm font-semibold text-white disabled:opacity-50"
+                  className="flex-1 py-2 rounded-xl text-sm font-semibold text-(--g-on-accent) disabled:opacity-50"
                   style={{ backgroundColor: COLOR }}
                 >
                   Continuar
@@ -502,32 +502,32 @@ export default function ActividadEspecialWizard({
           {/* Paso 3 — solo estructura de estaciones */}
           {step === 3 && tipoEstructura === "estaciones" && (
             <div className="space-y-3">
-              <label className="flex items-center gap-2 text-sm text-gray-700">
+              <label className="flex items-center gap-2 text-sm text-(--ui-text-2)">
                 <input type="checkbox" checked={calentIncluye} onChange={(e) => setCalentIncluye(e.target.checked)} />
                 ¿Incluye calentamiento activo con juego?
               </label>
               {calentIncluye && (
                 <div className="pl-6 space-y-2">
                   <div className="flex items-center gap-2">
-                    <label className="text-xs text-gray-500">Duración (min)</label>
-                    <input type="number" min={5} value={calentDuracion} onChange={(e) => setCalentDuracion(Number(e.target.value) || 10)} className="w-16 text-sm px-2 py-1.5 rounded-lg border border-gray-200" />
-                    <button onClick={fetchCalentamiento} disabled={loadingCalent} className="text-xs text-blue-600 hover:underline disabled:opacity-50">
+                    <label className="text-xs text-(--ui-text-3)">Duración (min)</label>
+                    <input type="number" min={5} value={calentDuracion} onChange={(e) => setCalentDuracion(Number(e.target.value) || 10)} className="w-16 text-sm px-2 py-1.5 rounded-lg border border-(--ui-border)" />
+                    <button onClick={fetchCalentamiento} disabled={loadingCalent} className="text-xs text-(--g-birdies-fg) hover:underline disabled:opacity-50">
                       {loadingCalent ? "Generando..." : calentEjercicios.length > 0 ? "Regenerar con Paco" : "Generar con Paco"}
                     </button>
                   </div>
                   {calentEjercicios.length > 0 && (
                     <div className="space-y-1.5">
                       {calentEjercicios.map((ej, i) => (
-                        <div key={i} className="border border-gray-100 rounded-lg p-2 space-y-1">
+                        <div key={i} className="border border-(--ui-border-soft) rounded-lg p-2 space-y-1">
                           <div className="flex items-center gap-2">
-                            <input value={ej.nombre} onChange={(e) => updateEjercicioCalent(i, { nombre: e.target.value })} className="flex-1 text-xs font-medium px-2 py-1 rounded border border-gray-200" />
-                            <input type="number" min={1} value={ej.duracion_min} onChange={(e) => updateEjercicioCalent(i, { duracion_min: Number(e.target.value) || 1 })} className="w-14 text-xs px-2 py-1 rounded border border-gray-200" />
-                            <span className="text-[10px] text-gray-400">min</span>
-                            <button onClick={() => removeEjercicioCalent(i)} className="text-gray-300 hover:text-red-500 shrink-0">
+                            <input value={ej.nombre} onChange={(e) => updateEjercicioCalent(i, { nombre: e.target.value })} className="flex-1 text-xs font-medium px-2 py-1 rounded border border-(--ui-border)" />
+                            <input type="number" min={1} value={ej.duracion_min} onChange={(e) => updateEjercicioCalent(i, { duracion_min: Number(e.target.value) || 1 })} className="w-14 text-xs px-2 py-1 rounded border border-(--ui-border)" />
+                            <span className="text-[10px] text-(--ui-text-3)">min</span>
+                            <button onClick={() => removeEjercicioCalent(i)} className="text-(--ui-text-3) hover:text-(--ui-bad) shrink-0">
                               <svg width="12" height="12" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path d="M18 6 6 18M6 6l12 12" /></svg>
                             </button>
                           </div>
-                          <textarea value={ej.descripcion} onChange={(e) => updateEjercicioCalent(i, { descripcion: e.target.value })} rows={1} className="w-full text-xs px-2 py-1 rounded border border-gray-200 resize-none" />
+                          <textarea value={ej.descripcion} onChange={(e) => updateEjercicioCalent(i, { descripcion: e.target.value })} rows={1} className="w-full text-xs px-2 py-1 rounded border border-(--ui-border) resize-none" />
                         </div>
                       ))}
                     </div>
@@ -535,11 +535,11 @@ export default function ActividadEspecialWizard({
                 </div>
               )}
               <div>
-                <p className="text-xs text-gray-500 mb-1.5">Número de estaciones</p>
+                <p className="text-xs text-(--ui-text-3) mb-1.5">Número de estaciones</p>
                 <div className="flex gap-2">
                   {[1, 2, 3].map((n) => (
                     <button key={n} onClick={() => setNumEstacionesTo(n)} className="w-10 h-10 rounded-lg text-sm font-semibold border"
-                      style={numEstaciones === n ? { backgroundColor: COLOR, color: "#fff", borderColor: COLOR } : { color: "#6b7280", borderColor: "#e5e7eb" }}>
+                      style={numEstaciones === n ? { backgroundColor: COLOR, color: "var(--g-on-accent)", borderColor: COLOR } : { color: "var(--ui-text-3)", borderColor: "var(--ui-border)" }}>
                       {n}
                     </button>
                   ))}
@@ -547,27 +547,27 @@ export default function ActividadEspecialWizard({
               </div>
               <div className="space-y-2">
                 {Array.from({ length: numEstaciones }, (_, i) => (
-                  <div key={i} className="border border-gray-100 rounded-lg p-3 flex items-center gap-2">
-                    <span className="text-xs font-semibold text-gray-500 w-16">Estación {i + 1}</span>
+                  <div key={i} className="border border-(--ui-border-soft) rounded-lg p-3 flex items-center gap-2">
+                    <span className="text-xs font-semibold text-(--ui-text-3) w-16">Estación {i + 1}</span>
                     <div className="flex gap-1.5 flex-1">
                       {CATEGORIAS.map((c) => (
                         <button key={c} onClick={() => setCategoriasEstaciones((prev) => prev.map((x, j) => (j === i ? c : x)))}
                           className="text-xs font-medium px-2 py-1 rounded-full border"
-                          style={categoriasEstaciones[i] === c ? { backgroundColor: COLOR, color: "#fff", borderColor: COLOR } : { color: "#6b7280", borderColor: "#e5e7eb" }}>
+                          style={categoriasEstaciones[i] === c ? { backgroundColor: COLOR, color: "var(--g-on-accent)", borderColor: COLOR } : { color: "var(--ui-text-3)", borderColor: "var(--ui-border)" }}>
                           {CATEGORIA_ESTACION_LABEL[c]}
                         </button>
                       ))}
                     </div>
                     <input type="number" min={5} value={duracionesEstaciones[i] ?? 15}
                       onChange={(e) => setDuracionesEstaciones((prev) => prev.map((x, j) => (j === i ? Number(e.target.value) || 0 : x)))}
-                      className="w-16 text-xs px-2 py-1.5 rounded-lg border border-gray-200" />
-                    <span className="text-[10px] text-gray-400">min</span>
+                      className="w-16 text-xs px-2 py-1.5 rounded-lg border border-(--ui-border)" />
+                    <span className="text-[10px] text-(--ui-text-3)">min</span>
                   </div>
                 ))}
               </div>
               <div className="flex gap-2 pt-2">
-                <button onClick={() => setStep(2)} className="flex-1 py-2 rounded-xl text-sm font-medium border border-gray-200 text-gray-600 hover:bg-gray-50">Atrás</button>
-                <button onClick={() => setStep(4)} className="flex-1 py-2 rounded-xl text-sm font-semibold text-white" style={{ backgroundColor: COLOR }}>Continuar</button>
+                <button onClick={() => setStep(2)} className="flex-1 py-2 rounded-xl text-sm font-medium border border-(--ui-border) text-(--ui-text-2) hover:bg-(--ui-card-alt)">Atrás</button>
+                <button onClick={() => setStep(4)} className="flex-1 py-2 rounded-xl text-sm font-semibold text-(--g-on-accent)" style={{ backgroundColor: COLOR }}>Continuar</button>
               </div>
             </div>
           )}
@@ -576,49 +576,49 @@ export default function ActividadEspecialWizard({
           {step === 4 && tipoEstructura === "estaciones" && (
             <div className="space-y-4">
               {Array.from({ length: numEstaciones }, (_, i) => i).map((i) => (
-                <div key={i} className="border border-gray-100 rounded-lg p-3 space-y-2">
+                <div key={i} className="border border-(--ui-border-soft) rounded-lg p-3 space-y-2">
                   <div className="flex items-center justify-between">
-                    <p className="text-sm font-semibold text-gray-800">Estación {i + 1} — {CATEGORIA_ESTACION_LABEL[categoriasEstaciones[i]]} ({duracionesEstaciones[i]} min)</p>
-                    <button onClick={() => fetchOpciones(i)} disabled={loadingOpciones === i} className="text-xs text-blue-600 hover:underline disabled:opacity-50">
+                    <p className="text-sm font-semibold text-(--ui-text)">Estación {i + 1} — {CATEGORIA_ESTACION_LABEL[categoriasEstaciones[i]]} ({duracionesEstaciones[i]} min)</p>
+                    <button onClick={() => fetchOpciones(i)} disabled={loadingOpciones === i} className="text-xs text-(--g-birdies-fg) hover:underline disabled:opacity-50">
                       {loadingOpciones === i ? "Generando..." : opcionesPorEstacion[i] ? "Otras opciones" : "Generar con Paco"}
                     </button>
                   </div>
 
                   {elegidoPorEstacion[i] && editandoIdx !== i ? (
-                    <div className="rounded-lg p-2.5" style={{ background: "#fef3e2" }}>
+                    <div className="rounded-lg p-2.5" style={{ background: "var(--ui-warn-bg)" }}>
                       <div className="flex items-center justify-between">
-                        <p className="text-sm font-semibold text-gray-800">✓ {elegidoPorEstacion[i]!.nombre}</p>
-                        <button onClick={() => setEditandoIdx(i)} className="text-xs text-blue-600 hover:underline">Editar</button>
+                        <p className="text-sm font-semibold text-(--ui-text)">✓ {elegidoPorEstacion[i]!.nombre}</p>
+                        <button onClick={() => setEditandoIdx(i)} className="text-xs text-(--g-birdies-fg) hover:underline">Editar</button>
                       </div>
-                      <p className="text-xs text-gray-600 mt-1">{elegidoPorEstacion[i]!.objetivo_pedagogico}</p>
+                      <p className="text-xs text-(--ui-text-2) mt-1">{elegidoPorEstacion[i]!.objetivo_pedagogico}</p>
                     </div>
                   ) : elegidoPorEstacion[i] && editandoIdx === i ? (
-                    <div className="space-y-1.5 border border-gray-200 rounded-lg p-2.5">
-                      <input value={elegidoPorEstacion[i]!.nombre} onChange={(e) => actualizarElegido(i, { nombre: e.target.value })} placeholder="Nombre del juego" className="w-full text-xs font-medium px-2 py-1 rounded border border-gray-200" />
-                      <textarea value={elegidoPorEstacion[i]!.objetivo_pedagogico} onChange={(e) => actualizarElegido(i, { objetivo_pedagogico: e.target.value })} rows={2} placeholder="Objetivo pedagógico" className="w-full text-xs px-2 py-1 rounded border border-gray-200 resize-none" />
-                      <textarea value={elegidoPorEstacion[i]!.materiales} onChange={(e) => actualizarElegido(i, { materiales: e.target.value })} rows={1} placeholder="Materiales" className="w-full text-xs px-2 py-1 rounded border border-gray-200 resize-none" />
-                      <textarea value={elegidoPorEstacion[i]!.instrucciones_profesor} onChange={(e) => actualizarElegido(i, { instrucciones_profesor: e.target.value })} rows={2} placeholder="Instrucciones para el profesor" className="w-full text-xs px-2 py-1 rounded border border-gray-200 resize-none" />
-                      <textarea value={elegidoPorEstacion[i]!.explicacion_ninos} onChange={(e) => actualizarElegido(i, { explicacion_ninos: e.target.value })} rows={2} placeholder="Cómo explicárselo a los niños" className="w-full text-xs px-2 py-1 rounded border border-gray-200 resize-none" />
-                      <button onClick={() => setEditandoIdx(null)} className="text-xs text-blue-600 hover:underline">Listo</button>
+                    <div className="space-y-1.5 border border-(--ui-border) rounded-lg p-2.5">
+                      <input value={elegidoPorEstacion[i]!.nombre} onChange={(e) => actualizarElegido(i, { nombre: e.target.value })} placeholder="Nombre del juego" className="w-full text-xs font-medium px-2 py-1 rounded border border-(--ui-border)" />
+                      <textarea value={elegidoPorEstacion[i]!.objetivo_pedagogico} onChange={(e) => actualizarElegido(i, { objetivo_pedagogico: e.target.value })} rows={2} placeholder="Objetivo pedagógico" className="w-full text-xs px-2 py-1 rounded border border-(--ui-border) resize-none" />
+                      <textarea value={elegidoPorEstacion[i]!.materiales} onChange={(e) => actualizarElegido(i, { materiales: e.target.value })} rows={1} placeholder="Materiales" className="w-full text-xs px-2 py-1 rounded border border-(--ui-border) resize-none" />
+                      <textarea value={elegidoPorEstacion[i]!.instrucciones_profesor} onChange={(e) => actualizarElegido(i, { instrucciones_profesor: e.target.value })} rows={2} placeholder="Instrucciones para el profesor" className="w-full text-xs px-2 py-1 rounded border border-(--ui-border) resize-none" />
+                      <textarea value={elegidoPorEstacion[i]!.explicacion_ninos} onChange={(e) => actualizarElegido(i, { explicacion_ninos: e.target.value })} rows={2} placeholder="Cómo explicárselo a los niños" className="w-full text-xs px-2 py-1 rounded border border-(--ui-border) resize-none" />
+                      <button onClick={() => setEditandoIdx(null)} className="text-xs text-(--g-birdies-fg) hover:underline">Listo</button>
                     </div>
                   ) : opcionesPorEstacion[i] ? (
                     <div className="space-y-1.5">
                       {opcionesPorEstacion[i]!.map((op, oi) => (
-                        <button key={oi} onClick={() => elegirOpcion(i, op)} className="w-full text-left border border-gray-200 rounded-lg p-2 hover:bg-gray-50">
-                          <p className="text-xs font-semibold text-gray-800">{op.nombre}</p>
-                          <p className="text-[11px] text-gray-500 mt-0.5">{op.objetivo_pedagogico}</p>
+                        <button key={oi} onClick={() => elegirOpcion(i, op)} className="w-full text-left border border-(--ui-border) rounded-lg p-2 hover:bg-(--ui-card-alt)">
+                          <p className="text-xs font-semibold text-(--ui-text)">{op.nombre}</p>
+                          <p className="text-[11px] text-(--ui-text-3) mt-0.5">{op.objetivo_pedagogico}</p>
                         </button>
                       ))}
-                      <button onClick={() => handlePedirOtras(i)} disabled={loadingOpciones === i} className="text-xs text-blue-600 hover:underline disabled:opacity-50">Pedir otras opciones</button>
+                      <button onClick={() => handlePedirOtras(i)} disabled={loadingOpciones === i} className="text-xs text-(--g-birdies-fg) hover:underline disabled:opacity-50">Pedir otras opciones</button>
                     </div>
                   ) : (
-                    <p className="text-xs text-gray-400 italic">Aún no se han generado opciones para esta estación.</p>
+                    <p className="text-xs text-(--ui-text-3) italic">Aún no se han generado opciones para esta estación.</p>
                   )}
                 </div>
               ))}
               <div className="flex gap-2 pt-2">
-                <button onClick={() => setStep(3)} className="flex-1 py-2 rounded-xl text-sm font-medium border border-gray-200 text-gray-600 hover:bg-gray-50">Atrás</button>
-                <button onClick={() => setStep(5)} disabled={!todasEstacionesListas} className="flex-1 py-2 rounded-xl text-sm font-semibold text-white disabled:opacity-50" style={{ backgroundColor: COLOR }}>Continuar</button>
+                <button onClick={() => setStep(3)} className="flex-1 py-2 rounded-xl text-sm font-medium border border-(--ui-border) text-(--ui-text-2) hover:bg-(--ui-card-alt)">Atrás</button>
+                <button onClick={() => setStep(5)} disabled={!todasEstacionesListas} className="flex-1 py-2 rounded-xl text-sm font-semibold text-(--g-on-accent) disabled:opacity-50" style={{ backgroundColor: COLOR }}>Continuar</button>
               </div>
             </div>
           )}
@@ -628,46 +628,46 @@ export default function ActividadEspecialWizard({
             <div className="space-y-3">
               {tipoEstructura === "libre" && (
                 <>
-                  <div className="rounded-xl p-3 space-y-2" style={{ backgroundColor: "#fef3e2" }}>
+                  <div className="rounded-xl p-3 space-y-2" style={{ backgroundColor: "var(--ui-warn-bg)" }}>
                     <p className="text-xs font-semibold" style={{ color: COLOR }}>Generar con Paco 🦅</p>
                     <textarea value={descripcionPaco} onChange={(e) => setDescripcionPaco(e.target.value)} rows={2}
                       placeholder="Ej: Torneo interno para Competencia y Albatros, con 3 estaciones"
-                      className="w-full text-sm px-3 py-2 rounded-lg border border-gray-200 resize-none bg-white" />
-                    {generarLibreError && <p className="text-xs text-red-600">{generarLibreError}</p>}
-                    <button onClick={handleGenerarLibre} disabled={generandoLibre} className="text-sm font-semibold text-white px-4 py-1.5 rounded-lg disabled:opacity-50" style={{ backgroundColor: COLOR }}>
+                      className="w-full text-sm px-3 py-2 rounded-lg border border-(--ui-border) resize-none bg-(--ui-card)" />
+                    {generarLibreError && <p className="text-xs text-(--ui-bad)">{generarLibreError}</p>}
+                    <button onClick={handleGenerarLibre} disabled={generandoLibre} className="text-sm font-semibold text-(--g-on-accent) px-4 py-1.5 rounded-lg disabled:opacity-50" style={{ backgroundColor: COLOR }}>
                       {generandoLibre ? "Generando..." : "Generar plan"}
                     </button>
                   </div>
                   <div className="space-y-2">
                     <div className="flex items-center justify-between">
-                      <p className="text-xs font-semibold text-gray-500">Estaciones</p>
-                      <button onClick={addEstLibre} className="text-xs text-blue-600 hover:underline">+ Agregar estación</button>
+                      <p className="text-xs font-semibold text-(--ui-text-3)">Estaciones</p>
+                      <button onClick={addEstLibre} className="text-xs text-(--g-birdies-fg) hover:underline">+ Agregar estación</button>
                     </div>
                     {estacionesLibres.map((est, ei) => (
-                      <div key={ei} className="border border-gray-100 rounded-lg p-3 space-y-2">
+                      <div key={ei} className="border border-(--ui-border-soft) rounded-lg p-3 space-y-2">
                         <div className="flex items-center gap-2">
-                          <input value={est.nombre} onChange={(e) => updateEstLibre(ei, { nombre: e.target.value })} placeholder="Nombre de la estación" className="flex-1 text-sm font-medium border border-gray-200 rounded px-2 py-1" />
-                          <button onClick={() => removeEstLibre(ei)} className="text-gray-300 hover:text-red-500 shrink-0">
+                          <input value={est.nombre} onChange={(e) => updateEstLibre(ei, { nombre: e.target.value })} placeholder="Nombre de la estación" className="flex-1 text-sm font-medium border border-(--ui-border) rounded px-2 py-1" />
+                          <button onClick={() => removeEstLibre(ei)} className="text-(--ui-text-3) hover:text-(--ui-bad) shrink-0">
                             <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path d="M18 6 6 18M6 6l12 12" /></svg>
                           </button>
                         </div>
                         <div className="flex gap-2">
-                          <input value={est.lugar} onChange={(e) => updateEstLibre(ei, { lugar: e.target.value })} placeholder="Lugar" className="flex-1 text-xs border border-gray-200 rounded px-2 py-1" />
-                          <input value={est.horario} onChange={(e) => updateEstLibre(ei, { horario: e.target.value })} placeholder="Horario (ej: 30 min)" className="flex-1 text-xs border border-gray-200 rounded px-2 py-1" />
+                          <input value={est.lugar} onChange={(e) => updateEstLibre(ei, { lugar: e.target.value })} placeholder="Lugar" className="flex-1 text-xs border border-(--ui-border) rounded px-2 py-1" />
+                          <input value={est.horario} onChange={(e) => updateEstLibre(ei, { horario: e.target.value })} placeholder="Horario (ej: 30 min)" className="flex-1 text-xs border border-(--ui-border) rounded px-2 py-1" />
                         </div>
-                        <div className="space-y-1.5 pl-2 border-l-2" style={{ borderColor: "#fde4c2" }}>
+                        <div className="space-y-1.5 pl-2 border-l-2" style={{ borderColor: "var(--ui-warn)" }}>
                           {est.drills.map((d, di) => (
                             <div key={di} className="space-y-1">
                               <div className="flex items-center gap-2">
-                                <input value={d.titulo} onChange={(e) => updateDrillLibre(ei, di, { titulo: e.target.value })} placeholder="Título" className="flex-1 text-xs font-medium border border-gray-200 rounded px-2 py-1" />
-                                <button onClick={() => removeDrillLibre(ei, di)} className="text-gray-300 hover:text-red-500 shrink-0">
+                                <input value={d.titulo} onChange={(e) => updateDrillLibre(ei, di, { titulo: e.target.value })} placeholder="Título" className="flex-1 text-xs font-medium border border-(--ui-border) rounded px-2 py-1" />
+                                <button onClick={() => removeDrillLibre(ei, di)} className="text-(--ui-text-3) hover:text-(--ui-bad) shrink-0">
                                   <svg width="12" height="12" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path d="M18 6 6 18M6 6l12 12" /></svg>
                                 </button>
                               </div>
-                              <textarea value={d.descripcion} onChange={(e) => updateDrillLibre(ei, di, { descripcion: e.target.value })} rows={2} placeholder="Descripción" className="w-full text-xs border border-gray-200 rounded px-2 py-1 resize-none" />
+                              <textarea value={d.descripcion} onChange={(e) => updateDrillLibre(ei, di, { descripcion: e.target.value })} rows={2} placeholder="Descripción" className="w-full text-xs border border-(--ui-border) rounded px-2 py-1 resize-none" />
                             </div>
                           ))}
-                          <button onClick={() => addDrillLibre(ei)} className="text-xs text-blue-600 hover:underline">+ Agregar drill</button>
+                          <button onClick={() => addDrillLibre(ei)} className="text-xs text-(--g-birdies-fg) hover:underline">+ Agregar drill</button>
                         </div>
                       </div>
                     ))}
@@ -681,7 +681,7 @@ export default function ActividadEspecialWizard({
                   const bloques: React.ReactNode[] = [];
                   if (calentIncluye) {
                     bloques.push(
-                      <div key="calent" className="text-xs text-gray-600 border-l-2 pl-2" style={{ borderColor: COLOR }}>
+                      <div key="calent" className="text-xs text-(--ui-text-2) border-l-2 pl-2" style={{ borderColor: COLOR }}>
                         {cursor}–{addMinutes(cursor, calentDuracion)} · Calentamiento
                       </div>
                     );
@@ -692,7 +692,7 @@ export default function ActividadEspecialWizard({
                     const fin = addMinutes(cursor, duracionesEstaciones[i]);
                     cursor = fin;
                     bloques.push(
-                      <div key={i} className="text-xs text-gray-600 border-l-2 pl-2" style={{ borderColor: COLOR }}>
+                      <div key={i} className="text-xs text-(--ui-text-2) border-l-2 pl-2" style={{ borderColor: COLOR }}>
                         {ini}–{fin} · {CATEGORIA_ESTACION_LABEL[cat]} — {elegidoPorEstacion[i]?.nombre}
                       </div>
                     );
@@ -705,13 +705,13 @@ export default function ActividadEspecialWizard({
                     {seReplica && turnos.length > 0 ? (
                       turnos.map((t, ti) => (
                         <div key={ti} className="space-y-1">
-                          <p className="text-xs font-semibold text-gray-500">{turnoLabel(t, ti)}</p>
+                          <p className="text-xs font-semibold text-(--ui-text-3)">{turnoLabel(t, ti)}</p>
                           {renderCronograma(t.hora_inicio)}
                         </div>
                       ))
                     ) : (
                       <div className="space-y-1">
-                        <p className="text-xs font-semibold text-gray-500">Cronograma</p>
+                        <p className="text-xs font-semibold text-(--ui-text-3)">Cronograma</p>
                         {renderCronograma(horaInicio)}
                       </div>
                     )}
@@ -720,11 +720,11 @@ export default function ActividadEspecialWizard({
               })()}
 
               <textarea value={notas} onChange={(e) => setNotas(e.target.value)} rows={2} placeholder="Notas logísticas (qué preparar antes, cómo organizar el espacio)"
-                className="w-full text-xs border border-gray-200 rounded-lg px-3 py-2 resize-none" />
+                className="w-full text-xs border border-(--ui-border) rounded-lg px-3 py-2 resize-none" />
 
               <div className="flex gap-2 pt-2">
-                <button onClick={() => setStep(tipoEstructura === "estaciones" ? 4 : 2)} className="flex-1 py-2 rounded-xl text-sm font-medium border border-gray-200 text-gray-600 hover:bg-gray-50">Atrás</button>
-                <button onClick={() => setStep(6)} className="flex-1 py-2 rounded-xl text-sm font-semibold text-white" style={{ backgroundColor: COLOR }}>Continuar</button>
+                <button onClick={() => setStep(tipoEstructura === "estaciones" ? 4 : 2)} className="flex-1 py-2 rounded-xl text-sm font-medium border border-(--ui-border) text-(--ui-text-2) hover:bg-(--ui-card-alt)">Atrás</button>
+                <button onClick={() => setStep(6)} className="flex-1 py-2 rounded-xl text-sm font-semibold text-(--g-on-accent)" style={{ backgroundColor: COLOR }}>Continuar</button>
               </div>
             </div>
           )}
@@ -732,29 +732,29 @@ export default function ActividadEspecialWizard({
           {/* Paso 6 — opciones finales */}
           {step === 6 && (
             <div className="space-y-3">
-              {saveError && <p className="text-xs text-red-600 bg-red-50 px-3 py-2 rounded-lg">{saveError}</p>}
+              {saveError && <p className="text-xs text-(--ui-bad) bg-(--ui-bad-bg) px-3 py-2 rounded-lg">{saveError}</p>}
               {!saved ? (
-                <button onClick={handlePublicar} disabled={saving} className="w-full py-2.5 rounded-xl text-sm font-semibold text-white disabled:opacity-50" style={{ backgroundColor: COLOR }}>
+                <button onClick={handlePublicar} disabled={saving} className="w-full py-2.5 rounded-xl text-sm font-semibold text-(--g-on-accent) disabled:opacity-50" style={{ backgroundColor: COLOR }}>
                   {saving ? "Publicando..." : "Publicar en calendario"}
                 </button>
               ) : (
                 <>
                   <p className="text-xs text-center font-medium" style={{ color: COLOR }}>Actividad especial publicada ✓</p>
                   <div className="flex gap-2">
-                    <button onClick={handlePdf} className="flex-1 py-2 rounded-xl text-sm font-medium border border-gray-200 text-gray-700 hover:bg-gray-50 flex items-center justify-center gap-1.5">
+                    <button onClick={handlePdf} className="flex-1 py-2 rounded-xl text-sm font-medium border border-(--ui-border) text-(--ui-text-2) hover:bg-(--ui-card-alt) flex items-center justify-center gap-1.5">
                       <i className="ti ti-file-type-pdf" style={{ fontSize: 16 }} /> Descargar PDF
                     </button>
-                    <button onClick={handleWhatsApp} className="flex-1 py-2 rounded-xl text-sm font-medium text-white flex items-center justify-center gap-1.5" style={{ backgroundColor: "#25D366" }}>
+                    <button onClick={handleWhatsApp} className="flex-1 py-2 rounded-xl text-sm font-medium text-(--g-on-accent) flex items-center justify-center gap-1.5" style={{ backgroundColor: "#25D366" }}>
                       <i className="ti ti-brand-whatsapp" style={{ fontSize: 16 }} /> WhatsApp
                     </button>
                   </div>
                 </>
               )}
-              <button onClick={handleGuardarPlantilla} disabled={savingPlantilla} className="w-full py-2 rounded-xl text-sm font-medium border border-gray-200 text-gray-700 hover:bg-gray-50 disabled:opacity-50">
+              <button onClick={handleGuardarPlantilla} disabled={savingPlantilla} className="w-full py-2 rounded-xl text-sm font-medium border border-(--ui-border) text-(--ui-text-2) hover:bg-(--ui-card-alt) disabled:opacity-50">
                 {savingPlantilla ? "Guardando plantilla..." : "Guardar como plantilla para reusar"}
               </button>
               {plantillaMsg && <p className="text-xs text-center" style={{ color: COLOR }}>{plantillaMsg}</p>}
-              {saved && <button onClick={onClose} className="w-full py-2 rounded-xl text-sm font-medium text-gray-500 hover:bg-gray-50">Cerrar</button>}
+              {saved && <button onClick={onClose} className="w-full py-2 rounded-xl text-sm font-medium text-(--ui-text-3) hover:bg-(--ui-card-alt)">Cerrar</button>}
             </div>
           )}
         </div>
