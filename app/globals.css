@@ -89,3 +89,59 @@ body {
 .animate-fade-in-up {
   animation: fade-in-up 0.3s ease-out;
 }
+
+/* ── Tema oscuro del módulo Alumnos ────────────────────────────────────────
+   El resto de la app sigue siendo clara, así que el oscuro no va en :root: se
+   activa solo bajo .tema-oscuro-alumnos. Todos los valores viven aquí — el
+   módulo los consume por nombre y no lleva un solo hex suelto — para poder
+   extender el tema a otros módulos cambiando un archivo. */
+.tema-oscuro-alumnos {
+  --al-bg: #0a1710;
+  --al-card: #10241a;
+  --al-card-alt: #0e2118;
+  --al-border: #1e3d2c;
+  --al-border-soft: #16301f;
+  --al-text: #f2f5f2;
+  --al-text-2: #a8bdb0;
+  --al-text-3: #7d9187;
+  --al-gold: #c9a961;
+
+  /* Semáforo de asistencia y tests. Sin datos usa el texto tenue. */
+  --al-ok: #6ddba0;
+  --al-ok-bg: #10301f;
+  --al-warn: #e8c07f;
+  --al-warn-bg: #2e2512;
+  --al-bad: #e88f8f;
+  --al-bad-bg: #331818;
+
+  /* Un par por grupo: texto y fondo. */
+  --al-g-birdies-fg: #7fb3e8;      --al-g-birdies-bg: #12303f;
+  --al-g-aguilas-fg: #7fd4a8;      --al-g-aguilas-bg: #123024;
+  --al-g-albatros-fg: #e8c07f;     --al-g-albatros-bg: #3a2e12;
+  --al-g-mas14-fg: #c8a8e8;        --al-g-mas14-bg: #2b1a3a;
+  --al-g-damas-fg: #e89bc0;        --al-g-damas-bg: #3a1a2b;
+  --al-g-competencia-fg: #e8c454;  --al-g-competencia-bg: #2a2000;
+
+  background: var(--al-bg);
+  color: var(--al-text);
+}
+
+/* El menú "⋯" es el DropdownMenu compartido, que trae estilos claros fijos
+   (bg-white, text-gray-700). Se reutiliza tal cual —maneja Escape, clic fuera y
+   teclado— y se repinta solo cuando queda dentro del tema oscuro. Fuera de
+   @layer para ganarle a las utilidades de Tailwind del propio componente. */
+.tema-oscuro-alumnos [role="menu"] {
+  background: var(--al-card);
+  border-color: var(--al-border);
+}
+.tema-oscuro-alumnos [role="menuitem"] {
+  color: var(--al-text-2);
+}
+.tema-oscuro-alumnos [role="menuitem"]:hover:not(:disabled),
+.tema-oscuro-alumnos [role="menuitem"]:focus:not(:disabled) {
+  background: var(--al-card-alt);
+  color: var(--al-text);
+}
+.tema-oscuro-alumnos [role="menu"] .h-px {
+  background: var(--al-border-soft);
+}

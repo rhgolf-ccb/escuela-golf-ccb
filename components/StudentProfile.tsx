@@ -812,10 +812,26 @@ export default function StudentProfile({ studentId, currentRol }: { studentId: s
       const { data, error } = await supabase.from("students")
         .select("id,full_name,birth_date,status,grupo_activo,gender,parent_name,parent_phone,parent_email,observations,enrollment_date,foto_url,tiene_talega")
         .eq("id", studentId).single();
-      if (!error) setStudent(data);
+      if (!error) {
+        setStudent(data);
+        // La vista rápida del módulo Alumnos abre el perfil directo en edición
+        // con ?editar=1. Se lee de window y no con useSearchParams para no
+        // obligar a envolver la página en un límite de Suspense, y se limpia el
+        // parámetro para que recargar o compartir la URL no reabra el formulario.
+        const params = new URLSearchParams(window.location.search);
+        if (params.get("editar") === "1") {
+          openEdit(data);
+          params.delete("editar");
+          const qs = params.toString();
+          window.history.replaceState(null, "", window.location.pathname + (qs ? `?${qs}` : ""));
+        }
+      }
       setLoading(false);
     }
     fetchStudent();
+    // openEdit se recrea en cada render: incluirlo en las dependencias volvería
+    // a cargar el alumno en cada pintado. Solo se usa una vez, al llegar el dato.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [studentId]);
 
   useEffect(() => {
@@ -952,12 +968,13 @@ export default function StudentProfile({ studentId, currentRol }: { studentId: s
       });
   }, [activeTab, student, physicalEvals, protocolosFisico]);
 
-  function openEdit() {
-    if (!student) return;
-    setForm({ full_name: student.full_name, birth_date: student.birth_date ?? "", status: student.status, grupo_activo: student.grupo_activo ?? "", parent_name: student.parent_name ?? "", parent_phone: student.parent_phone ?? "", parent_email: student.parent_email ?? "", observations: student.observations ?? "", tiene_talega: student.tiene_talega ?? "" });
+  function openEdit(alumno: Student | null = student) {
+    if (!alumno) return;
+    setForm({ full_name: alumno.full_name, birth_date: alumno.birth_date ?? "", status: alumno.status, grupo_activo: alumno.grupo_activo ?? "", parent_name: alumno.parent_name ?? "", parent_phone: alumno.parent_phone ?? "", parent_email: alumno.parent_email ?? "", observations: alumno.observations ?? "", tiene_talega: alumno.tiene_talega ?? "" });
     setSaveError(null); setIsEditing(true);
   }
   function closeEdit() { setIsEditing(false); setForm(null); setSaveError(null); }
+
   function setField<K extends keyof EditForm>(key: K, value: EditForm[K]) { setForm((prev) => prev ? { ...prev, [key]: value } : prev); }
 
   async function handleSave() {
@@ -1791,7 +1808,7 @@ posPayload[`${key}_score`] = rawScore !== null ? Math.round(rawScore) : null;
                 {parentPdfLoading ? "Generando..." : "Reporte para padres PDF"}
               </button>
             )}
-            <button onClick={openEdit} className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium" style={{ backgroundColor:"#1B4D2E", color:"white" }}>
+            <button onClick={() => openEdit()} className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium" style={{ backgroundColor:"#1B4D2E", color:"white" }}>
               <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
               Editar
             </button>
