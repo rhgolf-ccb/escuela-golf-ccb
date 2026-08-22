@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
 import { generateAuthLink, sendEmailViaResend } from "@/lib/auth-link";
-import { ADMIN_ROLES, isStaff, type Rol } from "@/lib/roles";
+import { ADMIN_ROLES, isPadreOrAlumno, isStaff, type Rol } from "@/lib/roles";
 
 const VALID_ROLES: Rol[] = [
   "coordinador",
@@ -31,6 +31,18 @@ export async function POST(request: NextRequest) {
   const { email, nombre, rol, estudianteIds, password } = await request.json();
   if (!email || !rol || !VALID_ROLES.includes(rol)) {
     return NextResponse.json({ error: "email y rol (válido) son requeridos" }, { status: 400 });
+  }
+
+  // Alumno o padre sin ficha vinculada es una cuenta muerta: /mi-perfil,
+  // /reservas y el chat de Paco parten todos de user_estudiantes, así que entra
+  // a la app y no ve nada. La validación va también en el formulario, pero esta
+  // es la que manda — el endpoint se puede llamar directo.
+  const vinculos: string[] = Array.isArray(estudianteIds) ? estudianteIds.filter((id) => typeof id === "string") : [];
+  if (isPadreOrAlumno(rol) && vinculos.length === 0) {
+    return NextResponse.json(
+      { error: "un usuario de alumno o padre necesita al menos un alumno vinculado" },
+      { status: 400 },
+    );
   }
 
   // Con contraseña, la cuenta queda lista de una: no se manda correo y el
@@ -85,10 +97,17 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: insertError.message }, { status: 500 });
   }
 
-  if (Array.isArray(estudianteIds) && estudianteIds.length > 0) {
-    await supabase.from("user_estudiantes").insert(
-      estudianteIds.map((estudiante_id: string) => ({ user_id: userId, estudiante_id }))
+  if (vinculos.length > 0) {
+    const { error: vinculoError } = await supabase.from("user_estudiantes").insert(
+      vinculos.map((estudiante_id) => ({ user_id: userId, estudiante_id }))
     );
+    // Si el vínculo falla, la cuenta que queda es la que acabamos de prohibir
+    // crear. Se deshace entera en vez de dejarla entrar y no ver nada.
+    if (vinculoError && isPadreOrAlumno(rol)) {
+      await supabase.from("app_users").delete().eq("id", userId);
+      await admin.auth.admin.deleteUser(userId);
+      return NextResponse.json({ error: `no se pudo vincular el alumno: ${vinculoError.message}` }, { status: 500 });
+    }
   }
 
   let emailWarning: string | null = null;

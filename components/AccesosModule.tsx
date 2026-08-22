@@ -7,7 +7,7 @@ import {
   Encabezado, Loading, Modal, ModalHeader, Pagina, Panel, Tabs, Toast,
 } from "@/components/ui/tema";
 import { supabase } from "@/lib/supabase";
-import { ROLE_ALLOW, STAFF_ROLES, type Rol } from "@/lib/roles";
+import { isPadreOrAlumno, ROLE_ALLOW, STAFF_ROLES, type Rol } from "@/lib/roles";
 
 type Tab = "usuarios" | "roles" | "registro";
 
@@ -48,9 +48,6 @@ function formatFecha(dateStr: string | null): string {
   return new Date(dateStr).toLocaleString("es-CO", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" });
 }
 
-function isParentRole(rol: Rol): boolean {
-  return rol === "padre_competencia" || rol === "padre_otros" || rol === "alumno_competencia";
-}
 
 export default function AccesosModule({ currentUserId, initialSessionDays }: { currentUserId: string; initialSessionDays: number | null }) {
   const [tab, setTab] = useState<Tab>("usuarios");
@@ -145,6 +142,13 @@ export default function AccesosModule({ currentUserId, initialSessionDays }: { c
   async function handleInvite() {
     if (invitePassword && invitePassword.length < 8) {
       setInviteError("La contraseña debe tener mínimo 8 caracteres.");
+      return;
+    }
+    // Una cuenta de alumno o padre sin ficha vinculada entra a la app y no ve
+    // nada: /mi-perfil, /reservas y Paco parten todos de user_estudiantes. Se
+    // creaban igual porque el buscador era opcional.
+    if (isPadreOrAlumno(inviteRol) && inviteEstudiantes.length === 0) {
+      setInviteError("Vincula al menos un alumno: la cuenta no sirve sin ficha. Si es el alumno mismo, búscalo por su nombre completo.");
       return;
     }
     setInviteSaving(true); setInviteError(null);
@@ -421,8 +425,9 @@ export default function AccesosModule({ currentUserId, initialSessionDays }: { c
               </select>
             </Campo>
 
-            {isParentRole(inviteRol) && (
-              <Campo label="Alumno(s) vinculado(s)" hint="Solo verá a los alumnos que vincules aquí">
+            {isPadreOrAlumno(inviteRol) && (
+              <Campo label="Alumno(s) vinculado(s) *"
+                hint="Obligatorio. Solo verá a los alumnos que vincules aquí. Si la cuenta es del alumno, vincúlalo a él mismo.">
                 <div className="space-y-1 mb-1">
                   {inviteEstudiantes.map((st) => (
                     <div key={st.id} className="flex items-center justify-between px-3 py-1.5 rounded-lg"
@@ -466,7 +471,8 @@ export default function AccesosModule({ currentUserId, initialSessionDays }: { c
             {inviteError && <p className="text-xs font-semibold" style={{ color: "var(--ui-bad)" }}>{inviteError}</p>}
 
             <div className="flex gap-2 pt-1">
-              <BotonPrimario onClick={handleInvite} disabled={inviteSaving || !inviteEmail.trim()}>
+              <BotonPrimario onClick={handleInvite}
+                disabled={inviteSaving || !inviteEmail.trim() || (isPadreOrAlumno(inviteRol) && inviteEstudiantes.length === 0)}>
                 {inviteSaving ? "Creando…" : invitePassword ? "Crear cuenta" : "Invitar por correo"}
               </BotonPrimario>
               <BotonSecundario onClick={() => { setShowInvite(false); resetInvite(); }} disabled={inviteSaving}>
