@@ -80,7 +80,9 @@ function Dato({ label, children }: { label: string; children: ReactNode }) {
 }
 
 // ── Main component ────────────────────────────────────────────────────────────
-export default function FisicoModule() {
+// soloLectura: mismo criterio que DrillsModule — las familias de Competencia
+// consultan la biblioteca; la base ya bloquea su escritura.
+export default function FisicoModule({ soloLectura = false }: { soloLectura?: boolean }) {
   const [activeTab, setActiveTab]         = useState<Categoria>("Movilidad");
   const [ejercicios, setEjercicios]       = useState<Ejercicio[]>([]);
   const [loading, setLoading]             = useState(true);
@@ -226,6 +228,7 @@ export default function FisicoModule() {
         <div className="p-4">
           <div className="flex items-start justify-between gap-2 mb-2">
             <h3 className="text-sm font-bold leading-snug flex-1" style={{ color: "var(--ui-text)" }}>{e.nombre}</h3>
+            {!soloLectura && (
             <button
               onClick={ev => { ev.stopPropagation(); handleFavorito(e); }}
               className="p-1 rounded-lg transition-colors hover:bg-(--ui-card-alt) shrink-0"
@@ -235,6 +238,7 @@ export default function FisicoModule() {
                 style={{ color: e.favorito ? "var(--ui-gold)" : "var(--ui-text-3)" }}
                 fill={e.favorito ? "var(--ui-gold)" : "none"} />
             </button>
+            )}
           </div>
 
           <div className="flex flex-wrap gap-1 mb-2">
@@ -266,6 +270,7 @@ export default function FisicoModule() {
             {e.series_repeticiones && <span className="flex items-center gap-1 truncate"><Repeat size={10} />{e.series_repeticiones}</span>}
           </div>
 
+          {!soloLectura && (
           <div className="pt-2.5 flex items-center gap-1.5" style={{ borderTop: "1px solid var(--ui-border-soft)" }}>
             <button
               onClick={ev => { ev.stopPropagation(); openEdit(e); }}
@@ -279,6 +284,7 @@ export default function FisicoModule() {
               title="Eliminar"
             ><Trash2 size={13} /></button>
           </div>
+          )}
         </div>
       </div>
     );
@@ -294,10 +300,12 @@ export default function FisicoModule() {
         titulo="Biblioteca de ejercicios físicos"
         bajada={`${total} ejercicio${total !== 1 ? "s" : ""} en total`}
       >
-        <BotonPrimario onClick={openCreate}>
-          <Plus size={16} />
-          Agregar ejercicio
-        </BotonPrimario>
+        {!soloLectura && (
+          <BotonPrimario onClick={openCreate}>
+            <Plus size={16} />
+            Agregar ejercicio
+          </BotonPrimario>
+        )}
       </Encabezado>
 
       <Tabs
@@ -374,6 +382,7 @@ export default function FisicoModule() {
           sub={hayFiltros ? "Prueba quitando algún filtro" : undefined}
           accion={hayFiltros
             ? <BotonSecundario onClick={() => { setGrupoFilters([]); setScreenFilter(""); setSearchText(""); }}>Limpiar filtros</BotonSecundario>
+            : soloLectura ? undefined
             : <BotonPrimario onClick={openCreate}><Plus size={16} />Agregar el primero</BotonPrimario>}
         />
       ) : (
@@ -442,6 +451,7 @@ export default function FisicoModule() {
             )}
           </div>
 
+          {!soloLectura && (
           <div className="px-5 pb-5 pt-4 flex gap-2 sticky bottom-0"
             style={{ background: "var(--ui-card)", borderTop: "1px solid var(--ui-border-soft)" }}>
             <BotonSecundario onClick={() => handleFavorito(detailEjercicio)}>
@@ -461,6 +471,7 @@ export default function FisicoModule() {
               <Trash2 size={14} />
             </button>
           </div>
+          )}
         </Modal>
       )}
 

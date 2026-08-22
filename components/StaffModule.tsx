@@ -105,7 +105,9 @@ async function getCroppedImg(imageSrc: string, cropPixels: { x: number; y: numbe
   });
 }
 
-export default function StaffModule() {
+// soloLectura: las familias de Competencia ven el directorio del equipo, no lo
+// editan. La base ya bloquea su escritura (20260822_escritura_solo_staff).
+export default function StaffModule({ soloLectura = false }: { soloLectura?: boolean }) {
   const [members, setMembers] = useState<StaffMember[]>([]);
   const [loading, setLoading] = useState(false);
   const [modalOpen, setModalOpen] = useState(false);
@@ -267,10 +269,12 @@ export default function StaffModule() {
   return (
     <Pagina>
       <Encabezado icono={Users} titulo="Staff" bajada="Equipo de la Escuela de Golf — Country Club de Bogotá">
-        <BotonPrimario onClick={() => openAdd("profesores")}>
-          <UserPlus size={16} />
-          Agregar miembro
-        </BotonPrimario>
+        {!soloLectura && (
+          <BotonPrimario onClick={() => openAdd("profesores")}>
+            <UserPlus size={16} />
+            Agregar miembro
+          </BotonPrimario>
+        )}
       </Encabezado>
 
       {loading ? (
@@ -282,6 +286,7 @@ export default function StaffModule() {
             acento={acentoGrupo("juvenil")}
             title="Profesores"
             members={profesores}
+            soloLectura={soloLectura}
             onEdit={openEdit}
             onAdd={() => openAdd("profesores")}
           />
@@ -290,6 +295,7 @@ export default function StaffModule() {
             acento={acentoGrupo("damas")}
             title="Administrativos"
             members={administrativos}
+            soloLectura={soloLectura}
             onEdit={openEdit}
             onAdd={() => openAdd("administrativos")}
           />
@@ -367,10 +373,11 @@ export default function StaffModule() {
 }
 
 function StaffSection({
-  icono: Icono, acento, title, members, onEdit, onAdd,
+  icono: Icono, acento, title, members, soloLectura, onEdit, onAdd,
 }: {
   icono: typeof Flag; acento: string; title: string;
-  members: StaffMember[]; onEdit: (m: StaffMember) => void; onAdd: () => void;
+  members: StaffMember[]; soloLectura: boolean;
+  onEdit: (m: StaffMember) => void; onAdd: () => void;
 }) {
   return (
     <div>
@@ -384,18 +391,20 @@ function StaffSection({
           style={{ background: "var(--ui-card-alt)", color: "var(--ui-text-3)" }}>
           {members.length}
         </span>
-        <button onClick={onAdd}
-          className="ml-auto text-xs font-semibold rounded-lg px-2.5 py-1 transition-colors hover:bg-(--ui-card-alt)"
-          style={{ color: "var(--ui-text-2)", border: "1px solid var(--ui-border)" }}>
-          + Agregar en {title.toLowerCase()}
-        </button>
+        {!soloLectura && (
+          <button onClick={onAdd}
+            className="ml-auto text-xs font-semibold rounded-lg px-2.5 py-1 transition-colors hover:bg-(--ui-card-alt)"
+            style={{ color: "var(--ui-text-2)", border: "1px solid var(--ui-border)" }}>
+            + Agregar en {title.toLowerCase()}
+          </button>
+        )}
       </div>
       {members.length === 0 ? (
         <p className="text-sm italic py-4" style={{ color: "var(--ui-text-3)" }}>Sin miembros en esta categoría.</p>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
           {members.map((m) => (
-            <StaffCard key={m.id} member={m} onEdit={() => onEdit(m)} />
+            <StaffCard key={m.id} member={m} soloLectura={soloLectura} onEdit={() => onEdit(m)} />
           ))}
         </div>
       )}
@@ -403,13 +412,14 @@ function StaffSection({
   );
 }
 
-function StaffCard({ member, onEdit }: { member: StaffMember; onEdit: () => void }) {
+function StaffCard({ member, soloLectura, onEdit }: { member: StaffMember; soloLectura: boolean; onEdit: () => void }) {
   const acento = acentoMiembro(member);
   const destacado = rolDestacado(member);
 
   return (
     <div className="relative group rounded-xl p-4 transition-colors"
       style={{ background: "var(--ui-card)", border: "1px solid var(--ui-border-soft)" }}>
+      {!soloLectura && (
       <button
         onClick={onEdit}
         // El lápiz solo aparecía al pasar el cursor, así que en una tablet —que
@@ -421,6 +431,7 @@ function StaffCard({ member, onEdit }: { member: StaffMember; onEdit: () => void
       >
         <Pencil size={14} />
       </button>
+      )}
       <div className="flex items-center gap-4">
         <div
           className="w-[80px] h-[80px] md:w-[96px] md:h-[96px] overflow-hidden flex-shrink-0 flex items-center justify-center text-[32px] font-semibold"

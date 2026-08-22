@@ -2,7 +2,7 @@ import Navbar from "@/components/Navbar";
 import AsesorGolfChat from "@/components/AsesorGolfChat";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
 import { getCurrentAppUser } from "@/lib/current-user";
-import { isStaff, type Rol } from "@/lib/roles";
+import { puedeUsarPaco, type Rol } from "@/lib/roles";
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const currentUser = await getCurrentAppUser();
@@ -27,7 +27,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       <main className="flex-1 flex flex-col min-w-0 overflow-x-hidden pt-14 lg:pt-0">
         {children}
       </main>
-      {role && isStaff(role) && <AsesorGolfChat rol={role} />}
+      {role && puedeUsarPaco(role) && <AsesorGolfChat rol={role} />}
     </div>
   );
 }

@@ -664,6 +664,10 @@ function defaultSwingForm(protocolosTecnico: Record<string, ProtocoloTestRow[]>,
 }
 
 export default function StudentProfile({ studentId, currentRol }: { studentId: string; currentRol: Rol | null }) {
+  // Desde ago-2026 una familia de Competencia abre el perfil de su propio hijo
+  // (la página valida el vínculo). Lee todo, no escribe nada: las policies de
+  // la base ya lo bloquean, aquí se quitan los botones que no le sirven.
+  const puedeEditar = !!currentRol && isStaff(currentRol);
   const router = useRouter();
   const [student, setStudent] = useState<Student|null>(null);
   const [loading, setLoading] = useState(true);
@@ -820,7 +824,7 @@ export default function StudentProfile({ studentId, currentRol }: { studentId: s
         // obligar a envolver la página en un límite de Suspense, y se limpia el
         // parámetro para que recargar o compartir la URL no reabra el formulario.
         const params = new URLSearchParams(window.location.search);
-        if (params.get("editar") === "1") {
+        if (params.get("editar") === "1" && puedeEditar) {
           openEdit(data);
           params.delete("editar");
           const qs = params.toString();
@@ -1809,10 +1813,12 @@ posPayload[`${key}_score`] = rawScore !== null ? Math.round(rawScore) : null;
                 {parentPdfLoading ? "Generando..." : "Reporte para padres PDF"}
               </button>
             )}
+            {puedeEditar && (
             <button onClick={() => openEdit()} className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium" style={{ backgroundColor:"var(--ui-gold)", color:"var(--ui-bg)" }}>
               <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
               Editar
             </button>
+            )}
           </div>
         </div>
       </div>
@@ -1841,15 +1847,17 @@ posPayload[`${key}_score`] = rawScore !== null ? Math.round(rawScore) : null;
                 )}
               </div>
 
-              <div className="flex flex-col items-center gap-1.5">
-                <button
-                  onClick={() => photoInputRef.current?.click()}
-                  className="px-4 py-1.5 rounded-lg text-xs font-medium text-(--ui-text-2) border border-(--ui-border) hover:bg-(--ui-card-alt) transition-colors"
-                >
-                  {student.foto_url ? "Cambiar foto" : "Subir foto"}
-                </button>
-                {photoError && <p className="text-xs text-(--ui-bad)">{photoError}</p>}
-              </div>
+              {puedeEditar && (
+                <div className="flex flex-col items-center gap-1.5">
+                  <button
+                    onClick={() => photoInputRef.current?.click()}
+                    className="px-4 py-1.5 rounded-lg text-xs font-medium text-(--ui-text-2) border border-(--ui-border) hover:bg-(--ui-card-alt) transition-colors"
+                  >
+                    {student.foto_url ? "Cambiar foto" : "Subir foto"}
+                  </button>
+                  {photoError && <p className="text-xs text-(--ui-bad)">{photoError}</p>}
+                </div>
+              )}
 
               <input
                 ref={photoInputRef}
@@ -1902,10 +1910,12 @@ posPayload[`${key}_score`] = rawScore !== null ? Math.round(rawScore) : null;
                 <h2 className="text-base font-semibold text-(--ui-text)">Evaluación técnica de swing</h2>
                 <p className="text-xs text-(--ui-text-3) mt-0.5">{grupo} · {posicionesActivas.length} posiciones</p>
               </div>
-              <button onClick={openSwingForm} className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium text-(--ui-bg)" style={{ backgroundColor:"var(--ui-gold)" }}>
-                <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path d="M12 5v14M5 12h14"/></svg>
-                Nueva evaluación
-              </button>
+              {puedeEditar && (
+                <button onClick={openSwingForm} className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium text-(--ui-bg)" style={{ backgroundColor:"var(--ui-gold)" }}>
+                  <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path d="M12 5v14M5 12h14"/></svg>
+                  Nueva evaluación
+                </button>
+              )}
             </div>
 
             {(swingLoading || !protocolosTecnicoReady) ? (
@@ -2224,11 +2234,13 @@ posPayload[`${key}_score`] = rawScore !== null ? Math.round(rawScore) : null;
                       {showTrackmanHistory ? "Ocultar historial" : `Ver historial (${trackmanSessions.length})`}
                     </button>
                   )}
-                  <label className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium cursor-pointer transition-colors" style={{ backgroundColor:"var(--g-birdies-bg)", color:"var(--g-birdies-fg)" }}>
-                    <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path d="M12 5v14M5 12h14"/></svg>
-                    Subir pantallazo Trackman
-                    <input type="file" accept="image/jpeg,image/png,image/webp" className="hidden" onChange={(e) => handleTrackmanFileChange(e.target.files?.[0] ?? null)} />
-                  </label>
+                  {puedeEditar && (
+                    <label className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium cursor-pointer transition-colors" style={{ backgroundColor:"var(--g-birdies-bg)", color:"var(--g-birdies-fg)" }}>
+                      <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path d="M12 5v14M5 12h14"/></svg>
+                      Subir pantallazo Trackman
+                      <input type="file" accept="image/jpeg,image/png,image/webp" className="hidden" onChange={(e) => handleTrackmanFileChange(e.target.files?.[0] ?? null)} />
+                    </label>
+                  )}
                 </div>
               </div>
 
@@ -2292,10 +2304,12 @@ posPayload[`${key}_score`] = rawScore !== null ? Math.round(rawScore) : null;
                 <h2 className="text-base font-semibold text-(--ui-text)">Evaluación física TPI</h2>
                 <p className="text-xs text-(--ui-text-3) mt-0.5">{grupoFisico} · {getPhysicalCategorias(protocolosFisico, grupoFisico).reduce((acc, c) => acc + c.tests.length, 0)} tests</p>
               </div>
-              <button onClick={openPhysicalForm} className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium text-(--ui-bg)" style={{ backgroundColor:"var(--ui-gold)" }}>
-                <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path d="M12 5v14M5 12h14"/></svg>
-                Nueva evaluación
-              </button>
+              {puedeEditar && (
+                <button onClick={openPhysicalForm} className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium text-(--ui-bg)" style={{ backgroundColor:"var(--ui-gold)" }}>
+                  <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path d="M12 5v14M5 12h14"/></svg>
+                  Nueva evaluación
+                </button>
+              )}
             </div>
 
             {(physicalLoading || !protocolosFisicoReady) ? (
@@ -2497,10 +2511,12 @@ posPayload[`${key}_score`] = rawScore !== null ? Math.round(rawScore) : null;
           <div>
             <div className="flex items-center justify-between mb-5">
               <h2 className="text-base font-semibold text-(--ui-text)">Hitos del alumno</h2>
-              <button onClick={openHitoForm} className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium transition-colors" style={{ backgroundColor:"var(--ui-gold)", color:"var(--ui-bg)" }}>
-                <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path d="M12 5v14M5 12h14"/></svg>
-                Registrar hito
-              </button>
+              {puedeEditar && (
+                <button onClick={openHitoForm} className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium transition-colors" style={{ backgroundColor:"var(--ui-gold)", color:"var(--ui-bg)" }}>
+                  <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path d="M12 5v14M5 12h14"/></svg>
+                  Registrar hito
+                </button>
+              )}
             </div>
 
             {hitosLoading ? (
@@ -2530,9 +2546,11 @@ posPayload[`${key}_score`] = rawScore !== null ? Math.round(rawScore) : null;
                       <p className="text-xs text-(--ui-text-3) mt-0.5">{formatFecha(h.fecha)}</p>
                       {h.descripcion && <p className="text-sm text-(--ui-text-2) mt-1.5 leading-relaxed">{h.descripcion}</p>}
                     </div>
+                    {puedeEditar && (
                     <button onClick={() => handleDeleteHito(h.id)} className="order-3 shrink-0 p-1.5 rounded-lg text-(--ui-text-3) hover:text-(--ui-bad) hover:bg-(--ui-bad-bg) transition-colors">
                       <svg width="15" height="15" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}><path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6"/></svg>
                     </button>
+                    )}
                   </div>
                 ))}
               </div>
@@ -2554,14 +2572,16 @@ posPayload[`${key}_score`] = rawScore !== null ? Math.round(rawScore) : null;
                     ? <><svg className="animate-spin h-3.5 w-3.5" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"/></svg>Generando...</>
                     : <><svg width="13" height="13" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>Descargar PDF</>}
                 </button>
-                <button
-                  onClick={() => openNotaForm()}
-                  className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium transition-colors"
-                  style={{ backgroundColor: "var(--ui-gold)", color: "var(--ui-bg)" }}
-                >
-                  <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path d="M12 5v14M5 12h14"/></svg>
-                  Nueva nota
-                </button>
+                {puedeEditar && (
+                  <button
+                    onClick={() => openNotaForm()}
+                    className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium transition-colors"
+                    style={{ backgroundColor: "var(--ui-gold)", color: "var(--ui-bg)" }}
+                  >
+                    <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path d="M12 5v14M5 12h14"/></svg>
+                    Nueva nota
+                  </button>
+                )}
               </div>
             </div>
 
@@ -2601,12 +2621,14 @@ posPayload[`${key}_score`] = rawScore !== null ? Math.round(rawScore) : null;
                             🎥 Video
                           </span>
                         )}
+                        {puedeEditar && (<>
                         <button onClick={() => openNotaForm(nota)} className="p-1.5 rounded-lg text-(--ui-text-3) hover:text-(--g-birdies-fg) hover:bg-(--g-birdies-bg) transition-colors" title="Editar">
                           <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
                         </button>
                         <button onClick={() => handleDeleteNota(nota.id)} className="p-1.5 rounded-lg text-(--ui-text-3) hover:text-(--ui-bad) hover:bg-(--ui-bad-bg) transition-colors" title="Eliminar">
                           <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}><path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6"/></svg>
                         </button>
+                        </>)}
                       </div>
                     </div>
 

@@ -3,7 +3,7 @@ import type { NextRequest } from "next/server";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
-import { STAFF_ROLES, pacoLimitFor, type Rol } from "@/lib/roles";
+import { puedeUsarPaco, isFamiliaCompetencia, pacoLimitFor, pacoLimiteSemanalFor, type Rol } from "@/lib/roles";
 import { PACO_PLANNING_KNOWLEDGE, PACO_ADVANCED_PLANNING } from "@/lib/paco-planning-knowledge";
 import { ANTHROPIC_MODEL } from "@/lib/anthropic-model";
 import { TIPOS_PLAN, tipoPlanDeGrupo, type TipoPlan } from "@/lib/grupos";
@@ -21,6 +21,101 @@ const MAX_TOOL_ITERATIONS = 10;
 const MAX_HISTORY = 10;
 
 const LIMITE_ALCANZADO_MSG = "Has alcanzado tu límite diario de consultas a Paco. Se renueva mañana a las 12:00 AM.";
+const LIMITE_SEMANAL_MSG = "Ya usaste tus consultas de esta semana con Paco. Se renuevan el lunes.";
+
+// El cupo se cuenta en días de Bogotá, no en días UTC: a las 7 p. m. en Bogotá
+// ya es el día siguiente en UTC, así que el contador diario se reiniciaba media
+// tarde en vez de a medianoche como dice el mensaje.
+function fechaBogota(): string {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/Bogota", year: "numeric", month: "2-digit", day: "2-digit",
+  }).format(new Date());
+}
+
+// Lunes de la semana en curso: es el corte del cupo semanal de las familias,
+// el mismo lunes que abre las reservas.
+function lunesBogota(): string {
+  const d = new Date(`${fechaBogota()}T00:00:00Z`);
+  const dow = d.getUTCDay(); // 0 = domingo
+  d.setUTCDate(d.getUTCDate() + (dow === 0 ? -6 : 1 - dow));
+  return d.toISOString().slice(0, 10);
+}
+
+// paco_usage guarda una fila por día; el cupo de la familia es de la semana.
+async function consumoSemanal(admin: SupabaseClient, userId: string): Promise<number> {
+  const { data } = await admin
+    .from("paco_usage")
+    .select("mensajes_count")
+    .eq("user_id", userId)
+    .gte("fecha", lunesBogota());
+  return (data ?? []).reduce((acc, f) => acc + (f.mensajes_count ?? 0), 0);
+}
+
+// Paco para las familias de Competencia. Es otro Paco: habla con un niño o con
+// su papá, no con un profesor, y no tiene herramientas — todo lo que sabe del
+// alumno se lo pasamos aquí. Las reglas de qué NO hace son la mitad del prompt
+// porque es la única barrera: sin tools no puede tocar nada, pero sí podría
+// contar de más si no se le dice.
+const PACO_FAMILIA_INTRO = `Eres Paco, el águila mascota y asesor de la Escuela de Golf del Country Club de Bogotá. Estás hablando con un alumno del grupo de Competencia o con su papá o mamá — nunca con un profesor.
+
+Cómo hablas:
+- De tú, cercano, con humor y frases cortas. Si usas un término técnico, lo explicas en la misma frase.
+- Motivas a entrenar y a no faltar a las sesiones, sin prometer resultados ni presionar.
+- Respuestas breves: unas 150 palabras como máximo, salvo que te pidan una rutina.
+
+De qué sí hablas: técnica de swing, putt y juego corto, drills y ejercicios físicos de la escuela, rutinas de práctica en casa, calentamiento, hidratación y alimentación para entrenar, manejo de nervios y concentración en torneo, reglas y etiqueta del golf, y cómo funciona la escuela.
+
+Cuando te pidan un drill o un ejercicio (para el backswing, el slice, el putt, la movilidad, lo que sea):
+- Busca primero en la biblioteca de la escuela con obtener_drills, y con obtener_ejercicios_fisicos si es trabajo físico. Filtra por grupo "Competencia" cuando aplique.
+- Recomienda 1 o 2, no una lista larga, y di el nombre exacto del drill: así lo pueden abrir en la sección Drills de la app y ver la ficha completa.
+- Explica cómo se hace en palabras del alumno, con qué palo, cuántas repeticiones y en qué se tiene que fijar para saber si le está saliendo bien.
+- Si la biblioteca no tiene nada para eso, dilo y explica el movimiento con lo que sabes, sin inventarte un drill como si fuera de la escuela.
+
+Usa la base de conocimiento de la escuela que viene abajo para los arreglos de swing y los puntos clave de la secuencia. Está escrita para profesores: tradúcela, no la copies.
+
+Lo que no haces, sin excepción:
+- No hablas de ningún otro alumno. Solo conoces al alumno o alumnos de esta cuenta, que te paso más abajo. Si te preguntan por otro niño, por sus notas o por sus resultados, respondes que esa información la maneja el coordinador.
+- No cambias ni prometes reservas, cupos, horarios ni programación. Eso se hace en la pantalla de Reservas o hablando con el coordinador.
+- No das diagnósticos médicos ni tratamientos. Si hay dolor o molestia, remites al profesor y al médico.
+- No opinas sobre el cobro, la mensualidad ni decisiones administrativas.
+- Nunca llamas al campo de práctica driving range.
+
+Si te piden algo fuera de esto, lo dices con buena onda y devuelves la conversación al golf.`;
+
+// Lo que Paco sabe del alumno es exactamente lo que la familia ya ve en la app:
+// su grupo, su edad, su asistencia del mes y si tiene tests hechos. Se arma en
+// el servidor con la llave de servicio para que el navegador no pueda pedir el
+// contexto de un niño que no es suyo.
+async function contextoDeMisAlumnos(admin: SupabaseClient, userId: string): Promise<string> {
+  const { data: vinculos } = await admin
+    .from("user_estudiantes")
+    .select("estudiante_id")
+    .eq("user_id", userId);
+
+  const ids = (vinculos ?? []).map((v) => v.estudiante_id).filter(Boolean);
+  if (!ids.length) return "Esta cuenta todavía no tiene ningún alumno asociado. Responde solo consultas generales de golf.";
+
+  const [{ data: alumnos }, { data: metricas }] = await Promise.all([
+    admin.from("students").select("id, full_name, birth_date, grupo_activo").in("id", ids),
+    admin.from("student_metrics").select("student_id, presentes, ausentes, tests, meta_competencia, presentes_competencia").in("student_id", ids),
+  ]);
+
+  const porId = new Map((metricas ?? []).map((m) => [String(m.student_id), m]));
+  const fichas = (alumnos ?? []).map((a) => {
+    const m = porId.get(String(a.id));
+    const edad = a.birth_date
+      ? Math.floor((Date.now() - new Date(a.birth_date).getTime()) / 31_557_600_000)
+      : null;
+    const asistencia = m && m.meta_competencia > 0
+      ? `${m.presentes_competencia} de ${m.meta_competencia} sesiones del mes (la meta del club son 3 por semana)`
+      : m && (m.presentes + m.ausentes) > 0
+        ? `${m.presentes} asistencias y ${m.ausentes} ausencias registradas`
+        : "todavía sin asistencia registrada";
+    return `- ${a.full_name}${edad !== null ? `, ${edad} años` : ""}, grupo ${a.grupo_activo ?? "sin asignar"}. Asistencia: ${asistencia}. Tests hechos: ${m?.tests ?? 0} de 3.`;
+  });
+
+  return `Alumnos de esta cuenta (los únicos de los que puedes hablar):\n${fichas.join("\n")}`;
+}
 
 const PACO_GENERAL_INTRO = `Eres Paco, el águila mascota y asesor experto de golf de la Escuela de Golf del Country Club de Bogotá (CCB). Eres un experto en técnica de swing (posiciones P1–P10), screening físico TPI, biomecánica, desarrollo atlético juvenil (framework TPI Junior + Canadian LTAD) y análisis Trackman. Tu referencia principal de swing es Kyle Morris (@kylemorrisgolf).
 
@@ -442,6 +537,14 @@ const PROPONER_PROGRAMACION_TOOL: Anthropic.Tool = {
 
 const TOOLS: Anthropic.ToolUnion[] = [{ type: "web_search_20250305", name: "web_search" }, ...CCB_TOOLS];
 
+// Lo único que una familia puede consultar: las dos bibliotecas que ya navega
+// en /drills y /fisico. Devuelven material aprobado, sin un solo dato de un
+// alumno. Fuera quedan las de padrón, tests, notas y asistencia (son de otros
+// niños) y las que escriben (calendario, días sin escuela, programación).
+const TOOLS_FAMILIA: Anthropic.ToolUnion[] = CCB_TOOLS.filter(
+  (t) => t.name === "obtener_drills" || t.name === "obtener_ejercicios_fisicos",
+);
+
 // El modelo a veces repite una categoría de estación dentro del mismo día en vez
 // de generar las 3 distintas — se deduplica por categoría (se queda con la
 // primera aparición) antes de mostrarlo en la vista previa del profesor.
@@ -714,25 +817,36 @@ export async function POST(request: NextRequest) {
     userId = user.id;
     rol = (caller?.rol as Rol | undefined) ?? null;
   }
-  if (!rol || !STAFF_ROLES.includes(rol)) {
+  if (!rol || !puedeUsarPaco(rol)) {
     return Response.json({ error: "forbidden" }, { status: 403 });
   }
 
+  // Las familias de Competencia entran a un Paco recortado: sin herramientas,
+  // sin búsqueda web y con el contexto de sus propios hijos armado en el
+  // servidor. Su cupo es semanal, no diario.
+  const esFamilia = isFamiliaCompetencia(rol);
+
   const admin = createSupabaseAdminClient();
-  const limite = pacoLimitFor(rol);
-  const hoy = new Date().toISOString().split("T")[0];
+  const limite = esFamilia ? pacoLimiteSemanalFor(rol) : pacoLimitFor(rol);
+  const hoy = fechaBogota();
+  const periodo: "dia" | "semana" = esFamilia ? "semana" : "dia";
 
   if (limite !== null) {
-    const { data: usage } = await admin
-      .from("paco_usage")
-      .select("mensajes_count")
-      .eq("user_id", userId)
-      .eq("fecha", hoy)
-      .maybeSingle();
-    const consumo = usage?.mensajes_count ?? 0;
+    let consumo: number;
+    if (esFamilia) {
+      consumo = await consumoSemanal(admin, userId);
+    } else {
+      const { data: usage } = await admin
+        .from("paco_usage")
+        .select("mensajes_count")
+        .eq("user_id", userId)
+        .eq("fecha", hoy)
+        .maybeSingle();
+      consumo = usage?.mensajes_count ?? 0;
+    }
     if (consumo >= limite) {
       return Response.json(
-        { error: LIMITE_ALCANZADO_MSG, usage: { count: consumo, limit: limite } },
+        { error: esFamilia ? LIMITE_SEMANAL_MSG : LIMITE_ALCANZADO_MSG, usage: { count: consumo, limit: limite, periodo } },
         { status: 429 }
       );
     }
@@ -751,21 +865,41 @@ export async function POST(request: NextRequest) {
   }
   const history = messages.slice(-MAX_HISTORY);
 
+  // Los contextos que manda el cliente (alumno, grupo, planeación) se ignoran
+  // para una familia: son texto libre que entra al system prompt, y aceptarlo
+  // sería dejar que el navegador escriba las instrucciones de Paco.
+  let systemPrompt: string;
+  let tools: Anthropic.ToolUnion[];
+  let maxTokens: number;
+
   const { data: knowledgeDocs } = await admin.from("paco_knowledge").select("titulo, tema, contenido").eq("activo", true);
   const knowledgeContext = knowledgeDocs?.length
     ? knowledgeDocs.map((d) => `### ${d.titulo}${d.tema ? ` (${d.tema})` : ""}\n${d.contenido}`).join("\n\n")
     : undefined;
 
-  const systemPrompt = buildSystemPrompt(body.studentContext, body.planningContext, body.groupContext, body.individualPlanContext, knowledgeContext);
-  const tools: Anthropic.ToolUnion[] = body.planningContext ? [...TOOLS, PROPONER_PROGRAMACION_TOOL] : TOOLS;
-  const maxTokens = body.planningContext ? 8000 : 2048;
+  if (esFamilia) {
+    // La base de conocimiento entra igual que para el staff — son los arreglos
+    // de swing y los check points de la secuencia, que es justo lo que un niño
+    // pregunta. Son ~13 mil caracteres, no mueve la aguja del costo.
+    systemPrompt = [
+      PACO_FAMILIA_INTRO,
+      await contextoDeMisAlumnos(admin, userId),
+      knowledgeContext ? `Base de conocimiento de la escuela (tradúcela a palabras del alumno, nunca la copies tal cual):\n\n${knowledgeContext}` : "",
+    ].filter(Boolean).join("\n\n");
+    tools = TOOLS_FAMILIA;
+    maxTokens = 1500;
+  } else {
+    systemPrompt = buildSystemPrompt(body.studentContext, body.planningContext, body.groupContext, body.individualPlanContext, knowledgeContext);
+    tools = body.planningContext ? [...TOOLS, PROPONER_PROGRAMACION_TOOL] : TOOLS;
+    maxTokens = body.planningContext ? 8000 : 2048;
+  }
   // Chat normal: sin extended thinking, respuesta inmediata. Planeación
   // semanal: thinking adaptativo con esfuerzo bajo para armar mejor la
   // semana completa sin perder velocidad de forma notoria. Nunca Opus.
   // Sonnet 5 no soporta thinking.type "enabled" (legado) — solo "adaptive",
   // que se calibra con output_config.effort en vez de budget_tokens.
-  const thinking: Anthropic.ThinkingConfigParam = body.planningContext ? { type: "adaptive" } : { type: "disabled" };
-  const outputConfig: Anthropic.OutputConfig | undefined = body.planningContext ? { effort: "low" } : undefined;
+  const thinking: Anthropic.ThinkingConfigParam = (!esFamilia && body.planningContext) ? { type: "adaptive" } : { type: "disabled" };
+  const outputConfig: Anthropic.OutputConfig | undefined = (!esFamilia && body.planningContext) ? { effort: "low" } : undefined;
 
   const client = new Anthropic({ apiKey });
 
@@ -798,7 +932,9 @@ export async function POST(request: NextRequest) {
 
         while (true) {
           const response = await client.messages.create({
-            model: ANTHROPIC_MODEL, max_tokens: maxTokens, system: systemPrompt, tools, thinking, messages: conversation,
+            model: ANTHROPIC_MODEL, max_tokens: maxTokens, system: systemPrompt, thinking, messages: conversation,
+            // Sin herramientas para una familia: ni las de la base ni búsqueda web.
+            ...(tools.length ? { tools } : {}),
             ...(outputConfig ? { output_config: outputConfig } : {}),
           });
 
@@ -845,12 +981,18 @@ export async function POST(request: NextRequest) {
           break;
         }
 
-        let usage: { count: number; limit: number | null } | undefined;
+        let usage: { count: number; limit: number | null; periodo?: "dia" | "semana" } | undefined;
         if (limite === null) {
-          usage = { count: 0, limit: null };
+          usage = { count: 0, limit: null, periodo };
         } else {
           const { data: nuevoConteo } = await admin.rpc("increment_paco_usage", { p_user_id: userId, p_fecha: hoy });
-          usage = { count: typeof nuevoConteo === "number" ? nuevoConteo : limite, limit: limite };
+          if (esFamilia) {
+            // El contador de la base es por día; el cupo de la familia es de la
+            // semana completa, así que hay que volver a sumarla.
+            usage = { count: await consumoSemanal(admin, userId), limit: limite, periodo };
+          } else {
+            usage = { count: typeof nuevoConteo === "number" ? nuevoConteo : limite, limit: limite, periodo };
+          }
         }
 
         send({ type: "done", text: text.trim(), usedWebSearch, usage });

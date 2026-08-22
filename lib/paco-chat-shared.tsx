@@ -7,6 +7,7 @@ export const TOOL_STATUS_LABELS: Record<string, string> = {
   obtener_grupo: "👥 Consultando grupo...",
   obtener_sesiones_semana: "🗓️ Revisando programación...",
   obtener_drills: "🏌️ Buscando drills...",
+  obtener_ejercicios_fisicos: "💪 Buscando ejercicios físicos...",
 };
 
 export function formatTime(ts: number): string {
@@ -17,7 +18,17 @@ export function todayISODate(): string {
   return new Date().toISOString().split("T")[0];
 }
 
+// Lunes de la semana en curso. Es el corte del cupo semanal de las familias y
+// el mismo que usa la ventana de reservas (lib/reservas-ventana.ts).
+export function lunesISODate(): string {
+  const d = new Date();
+  const dow = d.getDay(); // 0 = domingo
+  d.setDate(d.getDate() + (dow === 0 ? -6 : 1 - dow));
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
 export const PACO_LIMIT_MESSAGE = "Has alcanzado tu límite diario de consultas. Vuelve mañana 🦅";
+export const PACO_LIMIT_MESSAGE_SEMANAL = "Ya usaste tus 10 consultas de esta semana. Vuelven el lunes 🦅";
 
 export type PlanKind = "torneo" | "festival" | null;
 
@@ -69,7 +80,9 @@ export const MARKDOWN_COMPONENTS = {
   ),
 };
 
-export type PacoUsage = { count: number; limit: number | null };
+// periodo: el staff tiene cupo por día y las familias por semana — lo que
+// cambia es la etiqueta y cuándo se renueva, no la cuenta.
+export type PacoUsage = { count: number; limit: number | null; periodo?: "dia" | "semana" };
 export type StreamEvent = { type: string; tool?: string; text?: string; usedWebSearch?: boolean; usage?: PacoUsage; message?: string; plan?: unknown; debug?: unknown };
 
 // La planeación semanal (thinking + tool loop) puede tardar 30-40s antes del

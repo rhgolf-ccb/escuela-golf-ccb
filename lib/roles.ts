@@ -15,8 +15,10 @@ export const ROLE_ALLOW: Record<Rol, "all" | string[]> = {
   director: "all",
   profesor: "all",
   administrativo: "all",
-  padre_competencia: ["/mi-perfil", "/reservas", "/staff", "/drills", "/calendario"],
-  alumno_competencia: ["/mi-perfil", "/reservas", "/staff", "/drills", "/calendario"],
+  // /api/asesor-golf es el chat de Paco: proxy.ts filtra también las rutas de
+  // API con esta misma lista, así que sin la entrada la petición sale 403.
+  padre_competencia: ["/mi-perfil", "/reservas", "/alumnos", "/staff", "/drills", "/fisico", "/calendario", "/api/asesor-golf"],
+  alumno_competencia: ["/mi-perfil", "/reservas", "/alumnos", "/staff", "/drills", "/fisico", "/calendario", "/api/asesor-golf"],
   padre_otros: ["/mi-perfil", "/staff", "/drills", "/calendario"],
 };
 
@@ -48,12 +50,33 @@ export function isPadreOrAlumno(rol: Rol): boolean {
   return rol === "padre_competencia" || rol === "padre_otros" || rol === "alumno_competencia";
 }
 
-// Límite diario de consultas al asesor Paco. null = sin límite (director).
+// Familias de Competencia. Son las únicas cuentas de fuera del staff que
+// reservan cupo y que ven el padrón (solo su grupo, ver StudentsModule).
+export function isFamiliaCompetencia(rol: Rol): boolean {
+  return rol === "padre_competencia" || rol === "alumno_competencia";
+}
+
+// Límite DIARIO de consultas al asesor Paco para el staff. null = sin límite
+// (director). Las familias no se miden por día: ver pacoLimiteSemanalFor.
 export function pacoLimitFor(rol: Rol): number | null {
   if (rol === "director") return null;
   if (rol === "coordinador") return 40;
   if (rol === "profesor" || rol === "administrativo") return 20;
   return 0;
+}
+
+// Las familias de Competencia tienen a Paco por semana, no por día: la idea es
+// que el niño vuelva a la app varias veces, no que gaste todo en una tarde. La
+// semana arranca el lunes, igual que la de reservas.
+export const PACO_LIMITE_SEMANAL_FAMILIA = 10;
+
+export function pacoLimiteSemanalFor(rol: Rol): number | null {
+  return isFamiliaCompetencia(rol) ? PACO_LIMITE_SEMANAL_FAMILIA : null;
+}
+
+// Quién puede abrir el chat de Paco: el staff y las familias de Competencia.
+export function puedeUsarPaco(rol: Rol): boolean {
+  return isStaff(rol) || isFamiliaCompetencia(rol);
 }
 
 export function roleLabel(rol: Rol): string {

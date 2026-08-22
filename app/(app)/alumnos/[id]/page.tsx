@@ -1,6 +1,8 @@
+import { redirect } from "next/navigation";
 import StudentProfile from "@/components/StudentProfile";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
-import type { Rol } from "@/lib/roles";
+import { getCurrentAppUser } from "@/lib/current-user";
+import { isStaff } from "@/lib/roles";
 
 type Props = {
   params: Promise<{ id: string }>;
@@ -9,13 +11,21 @@ type Props = {
 export default async function StudentProfilePage({ params }: Props) {
   const { id } = await params;
 
-  const supabase = await createSupabaseServerClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  let currentRol: Rol | null = null;
-  if (user) {
-    const { data } = await supabase.from("app_users").select("rol").eq("id", user.id).maybeSingle();
-    currentRol = (data?.rol as Rol) ?? null;
+  const currentUser = await getCurrentAppUser();
+  if (!currentUser) redirect("/login");
+
+  // Una familia de Competencia ve el listado de su grupo, pero el perfil
+  // completo — tests, asistencia y notas del profesor — solo el de sus hijos.
+  if (!isStaff(currentUser.rol)) {
+    const supabase = await createSupabaseServerClient();
+    const { data: vinculo } = await supabase
+      .from("user_estudiantes")
+      .select("estudiante_id")
+      .eq("user_id", currentUser.id)
+      .eq("estudiante_id", id)
+      .maybeSingle();
+    if (!vinculo) redirect("/alumnos");
   }
 
-  return <StudentProfile studentId={id} currentRol={currentRol} />;
+  return <StudentProfile studentId={id} currentRol={currentUser.rol} />;
 }

@@ -5,9 +5,9 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { supabase } from "@/lib/supabase";
 import { shouldOfferPdf } from "@/lib/pdf-generator";
-import { TOOL_STATUS_LABELS, formatTime, MARKDOWN_COMPONENTS, streamAsesorChat, todayISODate, detectPlanKind, extractPlanTitle, PACO_LIMIT_MESSAGE, type PacoUsage } from "@/lib/paco-chat-shared";
+import { TOOL_STATUS_LABELS, formatTime, MARKDOWN_COMPONENTS, streamAsesorChat, todayISODate, lunesISODate, detectPlanKind, extractPlanTitle, PACO_LIMIT_MESSAGE, PACO_LIMIT_MESSAGE_SEMANAL, type PacoUsage } from "@/lib/paco-chat-shared";
 import { formatWhatsAppMessage, openWhatsApp } from "@/lib/whatsapp-formatter";
-import { pacoLimitFor, type Rol } from "@/lib/roles";
+import { pacoLimitFor, pacoLimiteSemanalFor, isFamiliaCompetencia, type Rol } from "@/lib/roles";
 
 type Message = {
   role: "user" | "assistant";
@@ -24,17 +24,38 @@ const WELCOME_MESSAGE: Message = {
   timestamp: Date.now(),
 };
 
+// Las familias tienen su propia bienvenida y sus propios atajos: los del staff
+// hablan de benchmarks TPI y protocolos, que no es lo que le sirve a un niño.
+const WELCOME_MESSAGE_FAMILIA: Message = {
+  role: "assistant",
+  content:
+    "¡Hola! Soy Paco 🦅, el águila de la Escuela de Golf. Pregúntame lo que quieras de golf: cómo practicar en casa, cómo calmar los nervios antes de un torneo, reglas, o qué hacer para mejorar tu putt. ¿Empezamos?",
+  timestamp: Date.now(),
+};
+
 const SUGGESTIONS = [
   "¿Qué tests aplican a Birdies?",
   "Benchmarks TPI Competencia 15 años",
   "¿Cómo afecta la altitud al swing?",
 ];
 
+const SUGGESTIONS_FAMILIA = [
+  "¿Qué puedo practicar en casa esta semana?",
+  "¿Cómo calmo los nervios en un torneo?",
+  "¿Cómo mejoro mi putt desde 2 metros?",
+];
+
 const MAX_HISTORY = 10;
 
 export default function AsesorGolfChat({ rol }: { rol: Rol | null }) {
+  // Una familia de Competencia ve otro Paco: otra bienvenida, otros atajos y
+  // cupo semanal en vez de diario. Lo que puede preguntar lo limita el servidor.
+  const esFamilia = !!rol && isFamiliaCompetencia(rol);
+  const bienvenida = esFamilia ? WELCOME_MESSAGE_FAMILIA : WELCOME_MESSAGE;
+  const sugerencias = esFamilia ? SUGGESTIONS_FAMILIA : SUGGESTIONS;
+
   const [isOpen, setIsOpen] = useState(false);
-  const [messages, setMessages] = useState<Message[]>([WELCOME_MESSAGE]);
+  const [messages, setMessages] = useState<Message[]>([bienvenida]);
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [toolStatus, setToolStatus] = useState<string | null>(null);
@@ -47,15 +68,19 @@ export default function AsesorGolfChat({ rol }: { rol: Rol | null }) {
 
   useEffect(() => {
     if (!rol) return;
-    const limit = pacoLimitFor(rol);
+    const limit = esFamilia ? pacoLimiteSemanalFor(rol) : pacoLimitFor(rol);
     if (limit === null) return;
-    supabase
-      .from("paco_usage")
-      .select("mensajes_count")
-      .eq("fecha", todayISODate())
-      .maybeSingle()
-      .then(({ data }) => setUsage({ count: data?.mensajes_count ?? 0, limit }));
-  }, [rol]);
+    // paco_usage guarda una fila por día y solo deja ver las propias (RLS).
+    // El cupo de la familia es de la semana, así que se suman los días desde
+    // el lunes en vez de leer el de hoy.
+    const consulta = esFamilia
+      ? supabase.from("paco_usage").select("mensajes_count").gte("fecha", lunesISODate())
+      : supabase.from("paco_usage").select("mensajes_count").eq("fecha", todayISODate());
+    consulta.then(({ data }) => {
+      const count = (data ?? []).reduce((acc, f) => acc + (f.mensajes_count ?? 0), 0);
+      setUsage({ count, limit, periodo: esFamilia ? "semana" : "dia" });
+    });
+  }, [rol, esFamilia]);
 
   async function sendMessage(text: string) {
     const trimmed = text.trim();
@@ -71,7 +96,7 @@ export default function AsesorGolfChat({ rol }: { rol: Rol | null }) {
 
     try {
       const history = nextMessages
-        .filter((m) => m !== WELCOME_MESSAGE)
+        .filter((m) => m !== bienvenida)
         .slice(-MAX_HISTORY)
         .map((m) => ({ role: m.role, content: m.content }));
 
@@ -93,7 +118,7 @@ export default function AsesorGolfChat({ rol }: { rol: Rol | null }) {
       });
 
       if (limitReached) {
-        setMessages((prev) => [...prev, { role: "assistant", content: PACO_LIMIT_MESSAGE, timestamp: Date.now() }]);
+        setMessages((prev) => [...prev, { role: "assistant", content: esFamilia ? PACO_LIMIT_MESSAGE_SEMANAL : PACO_LIMIT_MESSAGE, timestamp: Date.now() }]);
       } else if (gotError || finalText === null) {
         setMessages((prev) => [
           ...prev,
@@ -124,7 +149,7 @@ export default function AsesorGolfChat({ rol }: { rol: Rol | null }) {
   }
 
   function handleNuevaConsulta() {
-    setMessages([WELCOME_MESSAGE]);
+    setMessages([bienvenida]);
     setInput("");
   }
 
@@ -184,7 +209,7 @@ export default function AsesorGolfChat({ rol }: { rol: Rol | null }) {
               </div>
               {usage && usage.limit !== null && (
                 <span className="text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-(--ui-bg)/10 text-(--ui-bg)/70 shrink-0">
-                  Consultas hoy: {usage.count}/{usage.limit}
+                  {usage.periodo === "semana" ? "Esta semana" : "Consultas hoy"}: {usage.count}/{usage.limit}
                 </span>
               )}
             </div>
@@ -250,7 +275,7 @@ export default function AsesorGolfChat({ rol }: { rol: Rol | null }) {
 
             {!hasUserSentMessage && !isLoading && (
               <div className="flex flex-col gap-1.5 pt-1">
-                {SUGGESTIONS.map((s) => (
+                {sugerencias.map((s) => (
                   <button
                     key={s}
                     onClick={() => sendMessage(s)}

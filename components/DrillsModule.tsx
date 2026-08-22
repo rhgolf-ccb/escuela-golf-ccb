@@ -160,7 +160,10 @@ function Stars({ value, onChange }: { value: number; onChange?: (v: number) => v
 }
 
 // ── Main component ────────────────────────────────────────────────────────────
-export default function DrillsModule() {
+// soloLectura: las familias de Competencia entran a consultar los drills. Las
+// policies de la base ya bloquean su escritura (ver 20260822_escritura_solo_staff),
+// así que aquí lo que se quita es la interfaz que no les sirve.
+export default function DrillsModule({ soloLectura = false }: { soloLectura?: boolean }) {
   const [activeTab, setActiveTab]           = useState<Categoria>("tecnico");
   const [drills, setDrills]                 = useState<Drill[]>([]);
   const [loading, setLoading]               = useState(true);
@@ -580,6 +583,7 @@ export default function DrillsModule() {
             </div>
           )}
 
+          {!soloLectura && (
           <div className="pt-2.5 flex items-center gap-1.5" style={{ borderTop: "1px solid var(--ui-border-soft)" }}>
             <button
               onClick={() => { showToast("Drill copiado al portapapeles del plan"); }}
@@ -614,6 +618,7 @@ export default function DrillsModule() {
               title="Eliminar"
             ><Trash2 size={13} /></button>
           </div>
+          )}
         </div>
       </div>
     );
@@ -630,6 +635,7 @@ export default function DrillsModule() {
   return (
     <Pagina>
       <Encabezado icono={BookOpen} titulo="Biblioteca de drills" bajada={`${total} drill${total !== 1 ? "s" : ""} en total`}>
+        {!soloLectura && <>
         {!loading && drills.length === 0 && !libraryProgress && (
           <BotonSecundario onClick={() => setConfirmarBiblioteca(true)}>
             <Sparkles size={14} />Generar biblioteca base
@@ -652,6 +658,7 @@ export default function DrillsModule() {
         <BotonPrimario onClick={() => { setShowAIModal(true); setAiText(""); setAiPreview(null); setAiError(null); }}>
           <Sparkles size={16} />Generar con IA
         </BotonPrimario>
+        </>}
       </Encabezado>
 
       {/* ── Progreso de generación de biblioteca ── */}
@@ -821,6 +828,7 @@ export default function DrillsModule() {
           msg={`No hay drills${hayFiltros ? " con esos filtros" : " en esta categoría"}`}
           accion={hayFiltros
             ? <BotonSecundario onClick={limpiarTodo}>Limpiar filtros</BotonSecundario>
+            : soloLectura ? undefined
             : <BotonPrimario onClick={openCreate}><Plus size={16} />Agregar el primero</BotonPrimario>}
         />
       ) : activeTab === "tecnico" ? (

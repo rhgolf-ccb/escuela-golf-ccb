@@ -29,8 +29,16 @@ type AlumnoFila = Student & { foto_url: string | null };
 
 // Una fila por alumno de la vista student_metrics. presentes/ausentes ya vienen
 // sin las reservas que nadie marcó: ver la migración de la vista.
-type Metrica = { presentes: number; ausentes: number; tests: number };
-const SIN_METRICA: Metrica = { presentes: 0, ausentes: 0, tests: 0 };
+type Metrica = {
+  presentes: number; ausentes: number; tests: number;
+  // Solo Competencia: asistencias del mes y meta del mes (3 por semana,
+  // ajustada por festivos y por la fecha de matrícula). Ver la migración
+  // 20260822_asistencia_meta_competencia.sql.
+  metaCompetencia: number; presentesCompetencia: number;
+};
+const SIN_METRICA: Metrica = {
+  presentes: 0, ausentes: 0, tests: 0, metaCompetencia: 0, presentesCompetencia: 0,
+};
 
 const COLUMNAS_PADRON = "id, full_name, birth_date, status, grupo_activo, gender, tiene_talega, foto_url";
 
@@ -67,6 +75,13 @@ const GROUPS: { label: string; value: GroupFilter; isSpecial?: boolean }[] = [
   { label: "Competencia", value: "Competencia", isSpecial: true },
 ];
 
+// Una familia ve el desempeño del grupo — edad, asistencia y tests, también de
+// los demás niños: es el indicador que mueve a Competencia. Lo que no sale de
+// ahí son los datos personales (teléfonos, correos, observaciones) ni el estado
+// de matrícula, que se maneja desde la ficha y es cosa del staff.
+const COLUMNAS_STAFF = ["Alumno", "Edad", "Asistencia", "Tests", "Estado"];
+const COLUMNAS_FAMILIA = ["Alumno", "Edad", "Asistencia", "Tests"];
+
 type Tono = { color: string; background: string };
 
 const TONO_NEUTRO: Tono = { color: "var(--ui-text-3)", background: "var(--ui-border-soft)" };
@@ -76,7 +91,14 @@ const TONO_BAD: Tono    = { color: "var(--ui-bad)",    background: "var(--ui-bad
 
 // null = todavía nadie le marcó asistencia. No es 0 %, que se leería como que
 // faltó a todas las clases — la escuela apenas arranca y casi nadie tiene datos.
+//
+// Competencia se mide distinto: contra la meta del club (3 sesiones por semana
+// de las 4 programadas), no contra lo que el alumno alcanzó a reservar. Ir a
+// las 4 es el tope, así que el porcentaje se corta en 100 en vez de pasarse.
 function porcentajeAsistencia(m: Metrica): number | null {
+  if (m.metaCompetencia > 0) {
+    return Math.min(100, Math.round((m.presentesCompetencia / m.metaCompetencia) * 100));
+  }
   const total = m.presentes + m.ausentes;
   if (total === 0) return null;
   return Math.round((m.presentes / total) * 100);
@@ -140,7 +162,22 @@ function initiales(name: string): string {
   return name.split(" ").slice(0, 2).map((n) => n[0]).join("").toUpperCase();
 }
 
-export default function StudentsModule({ currentRol }: { currentRol: Rol | null }) {
+export default function StudentsModule({
+  currentRol,
+  misEstudiantesIds = [],
+}: {
+  currentRol: Rol | null;
+  misEstudiantesIds?: string[];
+}) {
+  // Las familias de Competencia entran al padrón en modo consulta: solo su
+  // grupo, sin datos de contacto de otras familias y sin ninguna acción de
+  // edición. Asistencia y tests sí los ven de todo el grupo — es el indicador
+  // que mueve a Competencia. El perfil completo (notas del profesor, tests
+  // detallados) solo se abre para los alumnos vinculados a la cuenta.
+  const soloConsulta = !currentRol || !isStaff(currentRol);
+  const misAlumnos = new Set(misEstudiantesIds);
+  const columnasTabla = soloConsulta ? COLUMNAS_FAMILIA : COLUMNAS_STAFF;
+
   const [students, setStudents] = useState<AlumnoFila[]>([]);
   const [metricas, setMetricas] = useState<Map<string, Metrica>>(new Map());
   const [metricasError, setMetricasError] = useState<string | null>(null);
@@ -148,7 +185,7 @@ export default function StudentsModule({ currentRol }: { currentRol: Rol | null 
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("activo");
-  const [groupFilter, setGroupFilter] = useState<GroupFilter>("todos");
+  const [groupFilter, setGroupFilter] = useState<GroupFilter>(soloConsulta ? "Competencia" : "todos");
   const [soloTalegaPropia, setSoloTalegaPropia] = useState(false);
   const [soloSinGrupo, setSoloSinGrupo] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -176,12 +213,15 @@ export default function StudentsModule({ currentRol }: { currentRol: Rol | null 
       let failed = false;
 
       for (let desde = 0; ; desde += PAGE_SIZE) {
-        const { data, error } = await supabase
+        let query = supabase
           .from("students")
           .select(COLUMNAS_PADRON)
           .order("full_name", { ascending: true })
           .order("id", { ascending: true })
           .range(desde, desde + PAGE_SIZE - 1);
+        // Una familia no se trae el padrón entero al navegador: solo su grupo.
+        if (soloConsulta) query = query.eq("grupo_activo", "Competencia");
+        const { data, error } = await query;
 
         if (error) {
           setError(error.message);
@@ -199,7 +239,7 @@ export default function StudentsModule({ currentRol }: { currentRol: Rol | null 
       setLoading(false);
     }
     fetchAll();
-  }, []);
+  }, [soloConsulta]);
 
   // Asistencia y tests salen agregados de la vista student_metrics — una fila
   // por alumno, no una consulta por alumno. Se piden solo las filas con algo
@@ -213,8 +253,10 @@ export default function StudentsModule({ currentRol }: { currentRol: Rol | null 
       for (let desde = 0; ; desde += PAGE_SIZE) {
         const { data, error } = await supabase
           .from("student_metrics")
-          .select("student_id, presentes, ausentes, tests")
-          .or("presentes.gt.0,ausentes.gt.0,tests.gt.0")
+          .select("student_id, presentes, ausentes, tests, meta_competencia, presentes_competencia")
+          // meta_competencia > 0 entra aunque no haya asistencias: un alumno de
+          // Competencia que no ha venido este mes va en 0 %, no en "sin datos".
+          .or("presentes.gt.0,ausentes.gt.0,tests.gt.0,meta_competencia.gt.0")
           .order("student_id", { ascending: true })
           .range(desde, desde + PAGE_SIZE - 1);
 
@@ -224,9 +266,16 @@ export default function StudentsModule({ currentRol }: { currentRol: Rol | null 
           setMetricasError(error.message);
           return;
         }
-        const page = (data ?? []) as { student_id: string; presentes: number; ausentes: number; tests: number }[];
+        const page = (data ?? []) as {
+          student_id: string; presentes: number; ausentes: number; tests: number;
+          meta_competencia: number | null; presentes_competencia: number | null;
+        }[];
         for (const r of page) {
-          mapa.set(String(r.student_id), { presentes: r.presentes, ausentes: r.ausentes, tests: r.tests });
+          mapa.set(String(r.student_id), {
+            presentes: r.presentes, ausentes: r.ausentes, tests: r.tests,
+            metaCompetencia: r.meta_competencia ?? 0,
+            presentesCompetencia: r.presentes_competencia ?? 0,
+          });
         }
         if (page.length < PAGE_SIZE) break;
       }
@@ -234,7 +283,7 @@ export default function StudentsModule({ currentRol }: { currentRol: Rol | null 
       setMetricas(mapa);
     }
     fetchMetricas();
-  }, []);
+  }, [soloConsulta]);
 
   const filtered = useMemo(() => {
     return students.filter((s) => {
@@ -426,7 +475,9 @@ export default function StudentsModule({ currentRol }: { currentRol: Rol | null 
             </div>
             <div>
               <h1 className="text-2xl font-bold" style={{ color: "var(--ui-text)" }}>Alumnos</h1>
-              <p className="text-sm mt-0.5" style={{ color: "var(--ui-text-3)" }}>Gestión de alumnos de la Escuela de Golf</p>
+              <p className="text-sm mt-0.5" style={{ color: "var(--ui-text-3)" }}>
+                {soloConsulta ? "Grupo de Competencia" : "Gestión de alumnos de la Escuela de Golf"}
+              </p>
             </div>
           </div>
           <div className="flex items-center gap-3 text-sm">
@@ -474,87 +525,97 @@ export default function StudentsModule({ currentRol }: { currentRol: Rol | null 
             )}
           </div>
 
-          <div className="flex gap-1 rounded-lg p-1 self-start sm:self-auto shrink-0" style={{ background: "var(--ui-card-alt)" }}>
-            {(["todos", "activo", "inactivo"] as StatusFilter[]).map((s) => {
-              const active = statusFilter === s;
-              return (
-                <button key={s} onClick={() => setStatusFilter(s)}
-                  className="px-3 py-1.5 rounded-md text-xs font-medium capitalize transition-colors"
-                  style={active
-                    ? { background: "var(--g-juvenil-bg)", color: "var(--g-juvenil-fg)" }
-                    : { color: "var(--ui-text-3)" }}>
-                  {s === "todos" ? `Todos (${counts.todos})` : s === "activo" ? `Activos (${counts.activo})` : `Inactivos (${counts.inactivo})`}
-                </button>
-              );
-            })}
-          </div>
+          {!soloConsulta && (
+            <>
+            <div className="flex gap-1 rounded-lg p-1 self-start sm:self-auto shrink-0" style={{ background: "var(--ui-card-alt)" }}>
+              {(["todos", "activo", "inactivo"] as StatusFilter[]).map((s) => {
+                const active = statusFilter === s;
+                return (
+                  <button key={s} onClick={() => setStatusFilter(s)}
+                    className="px-3 py-1.5 rounded-md text-xs font-medium capitalize transition-colors"
+                    style={active
+                      ? { background: "var(--g-juvenil-bg)", color: "var(--g-juvenil-fg)" }
+                      : { color: "var(--ui-text-3)" }}>
+                    {s === "todos" ? `Todos (${counts.todos})` : s === "activo" ? `Activos (${counts.activo})` : `Inactivos (${counts.inactivo})`}
+                  </button>
+                );
+              })}
+            </div>
 
-          <button
-            onClick={() => setSoloTalegaPropia((v) => !v)}
-            className="px-3 py-1.5 rounded-lg text-xs font-medium transition-colors self-start sm:self-auto shrink-0"
-            style={soloTalegaPropia
-              ? { background: "var(--ui-gold)", color: "var(--ui-bg)", border: "1px solid var(--ui-gold)" }
-              : { color: "var(--ui-text-2)", border: "1px solid var(--ui-border)" }}
-          >
-            Talega propia ({counts.talegaPropia})
-          </button>
-          <button
-            onClick={() => setSoloSinGrupo((v) => !v)}
-            className="px-3 py-1.5 rounded-lg text-xs font-medium transition-colors self-start sm:self-auto shrink-0"
-            style={soloSinGrupo
-              ? { background: "var(--ui-gold)", color: "var(--ui-bg)", border: "1px solid var(--ui-gold)" }
-              : { color: "var(--ui-text-2)", border: "1px solid var(--ui-border)" }}
-          >
-            Sin grupo ({sinGrupoCount})
-          </button>
+            <button
+              onClick={() => setSoloTalegaPropia((v) => !v)}
+              className="px-3 py-1.5 rounded-lg text-xs font-medium transition-colors self-start sm:self-auto shrink-0"
+              style={soloTalegaPropia
+                ? { background: "var(--ui-gold)", color: "var(--ui-bg)", border: "1px solid var(--ui-gold)" }
+                : { color: "var(--ui-text-2)", border: "1px solid var(--ui-border)" }}
+            >
+              Talega propia ({counts.talegaPropia})
+            </button>
+            <button
+              onClick={() => setSoloSinGrupo((v) => !v)}
+              className="px-3 py-1.5 rounded-lg text-xs font-medium transition-colors self-start sm:self-auto shrink-0"
+              style={soloSinGrupo
+                ? { background: "var(--ui-gold)", color: "var(--ui-bg)", border: "1px solid var(--ui-gold)" }
+                : { color: "var(--ui-text-2)", border: "1px solid var(--ui-border)" }}
+            >
+              Sin grupo ({sinGrupoCount})
+            </button>
+            </>
+          )}
         </div>
 
         {/* CHIPS DE GRUPO */}
-        <div className="rounded-xl px-4 py-3 mb-4 flex flex-col sm:flex-row gap-3 sm:items-center sm:justify-between"
-          style={{ background: "var(--ui-card)", border: "1px solid var(--ui-border)" }}>
-          <div className="flex gap-2 overflow-x-auto scrollbar-hide">
-            {GROUPS.map(({ label, value, isSpecial }) => {
-              const active = groupFilter === value;
-              const count = groupCounts[value];
-              const tono = value === "todos" ? TONO_NEUTRO : colorGrupo(value);
-              return (
-                <button key={value} onClick={() => setGroupFilter(value)}
-                  className="flex items-center gap-1.5 px-4 py-2 rounded-full text-sm font-medium whitespace-nowrap transition-all shrink-0"
-                  style={active
-                    ? { background: tono.background, color: tono.color, border: `1px solid ${tono.color}` }
-                    : { background: "transparent", color: "var(--ui-text-2)", border: "1px solid var(--ui-border)" }}>
-                  {isSpecial && <Trophy size={13} />}
-                  {label}
-                  {value !== "todos" && (
-                    <span className="text-xs rounded-full px-1.5 py-0.5 font-semibold"
-                      style={{ background: "var(--ui-bg)", color: active ? tono.color : "var(--ui-text-3)" }}>
-                      {count}
-                    </span>
-                  )}
-                </button>
-              );
-            })}
-          </div>
+        {!soloConsulta && (
+          <div className="rounded-xl px-4 py-3 mb-4 flex flex-col sm:flex-row gap-3 sm:items-center sm:justify-between"
+            style={{ background: "var(--ui-card)", border: "1px solid var(--ui-border)" }}>
+            <div className="flex gap-2 overflow-x-auto scrollbar-hide">
+              {GROUPS.map(({ label, value, isSpecial }) => {
+                const active = groupFilter === value;
+                const count = groupCounts[value];
+                const tono = value === "todos" ? TONO_NEUTRO : colorGrupo(value);
+                return (
+                  <button key={value} onClick={() => setGroupFilter(value)}
+                    className="flex items-center gap-1.5 px-4 py-2 rounded-full text-sm font-medium whitespace-nowrap transition-all shrink-0"
+                    style={active
+                      ? { background: tono.background, color: tono.color, border: `1px solid ${tono.color}` }
+                      : { background: "transparent", color: "var(--ui-text-2)", border: "1px solid var(--ui-border)" }}>
+                    {isSpecial && <Trophy size={13} />}
+                    {label}
+                    {value !== "todos" && (
+                      <span className="text-xs rounded-full px-1.5 py-0.5 font-semibold"
+                        style={{ background: "var(--ui-bg)", color: active ? tono.color : "var(--ui-text-3)" }}>
+                        {count}
+                      </span>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
 
-          {currentRol && isStaff(currentRol) && (
-            <button
-              onClick={() => groupFilter !== "todos" && setShowGroupAnalysis(true)}
-              disabled={groupFilter === "todos"}
-              title={groupFilter === "todos" ? "Selecciona un grupo primero" : undefined}
-              className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium shrink-0 disabled:opacity-40 disabled:cursor-not-allowed transition-opacity hover:opacity-90"
-              style={{ background: "var(--g-juvenil-bg)", color: "var(--g-juvenil-fg)", border: "1px solid var(--ui-border)" }}
-            >
-              Análisis grupal con Paco 🦅
-            </button>
-          )}
-        </div>
+            {currentRol && isStaff(currentRol) && (
+              <button
+                onClick={() => groupFilter !== "todos" && setShowGroupAnalysis(true)}
+                disabled={groupFilter === "todos"}
+                title={groupFilter === "todos" ? "Selecciona un grupo primero" : undefined}
+                className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium shrink-0 disabled:opacity-40 disabled:cursor-not-allowed transition-opacity hover:opacity-90"
+                style={{ background: "var(--g-juvenil-bg)", color: "var(--g-juvenil-fg)", border: "1px solid var(--ui-border)" }}
+              >
+                Análisis grupal con Paco 🦅
+              </button>
+            )}
+          </div>
+        )}
 
         {/* PERFILES DESTACADOS */}
         {!loading && !error && destacados.length > 0 && (
           <div className="mb-4">
             <p className="text-[11px] font-bold uppercase tracking-wide mb-2" style={{ color: "var(--ui-text-3)" }}>
               {groupFilter === "todos" ? "Perfiles destacados" : `Destacados de ${groupFilter}`}
-              <span className="font-medium normal-case tracking-normal ml-1.5">— por asistencia</span>
+              <span className="font-medium normal-case tracking-normal ml-1.5">
+                {groupFilter === "Competencia"
+                  ? "— por asistencia del mes (meta: 3 sesiones por semana)"
+                  : "— por asistencia"}
+              </span>
             </p>
             <div className="grid gap-3 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 2xl:grid-cols-6">
               {destacados.map(({ alumno, pct }, i) => (
@@ -566,8 +627,10 @@ export default function StudentsModule({ currentRol }: { currentRol: Rol | null 
                   // Con 4 columnas las dos últimas romperían la fila: solo
                   // aparecen cuando la rejilla tiene las 6.
                   oculta={i >= 4}
-                  onVer={() => abrirVistaRapida(alumno)}
-                  onAbrir={() => router.push(`/alumnos/${alumno.id}`)}
+                  onVer={soloConsulta ? undefined : () => abrirVistaRapida(alumno)}
+                  onAbrir={!soloConsulta || misAlumnos.has(String(alumno.id))
+                    ? () => router.push(`/alumnos/${alumno.id}`)
+                    : undefined}
                 />
               ))}
             </div>
@@ -575,7 +638,7 @@ export default function StudentsModule({ currentRol }: { currentRol: Rol | null 
         )}
 
         {/* BARRA DE ACCIÓN EN BLOQUE */}
-        {selected.size > 0 && (
+        {!soloConsulta && selected.size > 0 && (
           <div className="rounded-xl px-4 py-2.5 mb-3 flex items-center justify-between gap-3 flex-wrap"
             style={{ background: "var(--g-juvenil-bg)", border: "1px solid var(--ui-border)" }}>
             <span className="text-sm font-medium" style={{ color: "var(--ui-text)" }}>
@@ -625,19 +688,23 @@ export default function StudentsModule({ currentRol }: { currentRol: Rol | null 
                 <table className="w-full text-sm">
                   <thead>
                     <tr style={{ background: "var(--ui-card-alt)", borderBottom: "1px solid var(--ui-border)" }}>
-                      <th className="px-4 py-3 w-10">
-                        <input type="checkbox" checked={allFilteredSelected} onChange={toggleSelectAll} title="Seleccionar todos los filtrados" className="w-4 h-4 cursor-pointer" style={{ accentColor: "var(--ui-gold)", colorScheme: "dark" }} />
-                      </th>
-                      {["Alumno", "Edad", "Asistencia", "Tests", "Estado"].map((h) => (
+                      {!soloConsulta && (
+                        <th className="px-4 py-3 w-10">
+                          <input type="checkbox" checked={allFilteredSelected} onChange={toggleSelectAll} title="Seleccionar todos los filtrados" className="w-4 h-4 cursor-pointer" style={{ accentColor: "var(--ui-gold)", colorScheme: "dark" }} />
+                        </th>
+                      )}
+                      {columnasTabla.map((h) => (
                         <th key={h} className="text-left px-5 py-3 font-semibold tracking-wide text-xs uppercase" style={{ color: "var(--ui-text-3)" }}>{h}</th>
                       ))}
-                      <th className="text-right px-5 py-3 font-semibold tracking-wide text-xs uppercase" style={{ color: "var(--ui-text-3)" }}>Acción</th>
+                      {!soloConsulta && (
+                        <th className="text-right px-5 py-3 font-semibold tracking-wide text-xs uppercase" style={{ color: "var(--ui-text-3)" }}>Acción</th>
+                      )}
                     </tr>
                   </thead>
                   <tbody>
                     {filtered.length === 0 ? (
                       <tr>
-                        <td colSpan={7} className="text-center py-16" style={{ color: "var(--ui-text-3)" }}>
+                        <td colSpan={columnasTabla.length + (soloConsulta ? 0 : 2)} className="text-center py-16" style={{ color: "var(--ui-text-3)" }}>
                           {search ? `No se encontraron alumnos con "${search}"` : "No hay alumnos en esta categoría"}
                         </td>
                       </tr>
@@ -646,19 +713,24 @@ export default function StudentsModule({ currentRol }: { currentRol: Rol | null 
                         const grupoMostrar = calcularGrupo(student.birth_date, student.gender, student.grupo_activo);
                         const metrica = metricas.get(String(student.id)) ?? SIN_METRICA;
                         const pct = porcentajeAsistencia(metrica);
+                        // En modo consulta solo se abre el perfil de los hijos
+                        // de la cuenta; el resto del grupo es solo listado.
+                        const puedeAbrirPerfil = !soloConsulta || misAlumnos.has(String(student.id));
                         return (
                           <tr
                             key={String(student.id)}
-                            className="cursor-pointer transition-colors"
+                            className={puedeAbrirPerfil ? "cursor-pointer transition-colors" : "transition-colors"}
                             style={{
                               background: idx % 2 === 1 ? "var(--ui-card-alt)" : "transparent",
                               borderTop: "1px solid var(--ui-border-soft)",
                             }}
-                            onClick={() => router.push(`/alumnos/${student.id}`)}
+                            onClick={puedeAbrirPerfil ? () => router.push(`/alumnos/${student.id}`) : undefined}
                           >
-                            <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
-                              <input type="checkbox" checked={selected.has(String(student.id))} onChange={() => toggleSelect(String(student.id))} className="w-4 h-4 cursor-pointer" style={{ accentColor: "var(--ui-gold)", colorScheme: "dark" }} />
-                            </td>
+                            {!soloConsulta && (
+                              <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
+                                <input type="checkbox" checked={selected.has(String(student.id))} onChange={() => toggleSelect(String(student.id))} className="w-4 h-4 cursor-pointer" style={{ accentColor: "var(--ui-gold)", colorScheme: "dark" }} />
+                              </td>
+                            )}
                             <td className="px-5 py-3">
                               <div className="flex items-center gap-2.5 min-w-0">
                                 <Avatar alumno={student} grupo={grupoMostrar} size={34} />
@@ -679,6 +751,8 @@ export default function StudentsModule({ currentRol }: { currentRol: Rol | null 
                             <td className="px-5 py-3">
                               <Indicador texto={`${metrica.tests}/3`} tono={tonoTests(metrica.tests)} />
                             </td>
+                            {!soloConsulta && (
+                              <>
                             <td className="px-5 py-3" onClick={(e) => e.stopPropagation()}>
                               <button onClick={() => toggleStatus(student)} title="Cambiar activo / inactivo" className="cursor-pointer focus:outline-none">
                                 <StatusBadge status={student.status} />
@@ -715,6 +789,8 @@ export default function StudentsModule({ currentRol }: { currentRol: Rol | null 
                                 />
                               </div>
                             </td>
+                              </>
+                            )}
                           </tr>
                         );
                       })
@@ -738,7 +814,7 @@ export default function StudentsModule({ currentRol }: { currentRol: Rol | null 
         </div>
 
         {/* VISTA RÁPIDA */}
-        {vistaRapida && (
+        {!soloConsulta && vistaRapida && (
           <VistaRapida
             alumno={vistaRapida}
             detalle={detalle}
@@ -751,7 +827,7 @@ export default function StudentsModule({ currentRol }: { currentRol: Rol | null 
         )}
 
         {/* MODAL NUEVO ALUMNO */}
-        {nuevoForm && (
+        {!soloConsulta && nuevoForm && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4 py-8" onClick={() => !creando && setNuevoForm(null)}>
             <div className="tema-oscuro rounded-2xl shadow-xl w-full max-w-lg max-h-full overflow-y-auto"
               style={{ background: "var(--ui-card)", border: "1px solid var(--ui-border)" }}
@@ -920,8 +996,10 @@ function TarjetaPerfil({ alumno, pct, metrica, oculta, onVer, onAbrir }: {
   pct: number | null;
   metrica: Metrica;
   oculta: boolean;
-  onVer: () => void;
-  onAbrir: () => void;
+  // Sin acción = tarjeta de solo consulta: es lo que ve una familia sobre un
+  // niño que no es suyo (la vista rápida lleva teléfonos y correos).
+  onVer?: () => void;
+  onAbrir?: () => void;
 }) {
   const grupo = calcularGrupo(alumno.birth_date, alumno.gender, alumno.grupo_activo);
   const edad = edadDe(alumno.birth_date);
@@ -929,19 +1007,21 @@ function TarjetaPerfil({ alumno, pct, metrica, oculta, onVer, onAbrir }: {
 
   return (
     <div
-      className={`${oculta ? "hidden 2xl:flex" : "flex"} flex-col items-center text-center rounded-xl p-4 relative cursor-pointer transition-transform hover:-translate-y-0.5`}
+      className={`${oculta ? "hidden 2xl:flex" : "flex"} flex-col items-center text-center rounded-xl p-4 relative transition-transform ${onAbrir ? "cursor-pointer hover:-translate-y-0.5" : ""}`}
       style={{ background: "var(--ui-card)", border: "1px solid var(--ui-border)" }}
       onClick={onAbrir}
     >
-      <button
-        onClick={(e) => { e.stopPropagation(); onVer(); }}
-        title="Vista rápida"
-        aria-label={`Vista rápida de ${alumno.full_name}`}
-        className="absolute top-2 right-2 p-1.5 rounded-lg hover:opacity-80"
-        style={{ color: "var(--ui-text-3)" }}
-      >
-        <Eye size={15} />
-      </button>
+      {onVer && (
+        <button
+          onClick={(e) => { e.stopPropagation(); onVer(); }}
+          title="Vista rápida"
+          aria-label={`Vista rápida de ${alumno.full_name}`}
+          className="absolute top-2 right-2 p-1.5 rounded-lg hover:opacity-80"
+          style={{ color: "var(--ui-text-3)" }}
+        >
+          <Eye size={15} />
+        </button>
+      )}
 
       <Avatar alumno={alumno} grupo={grupo} size={78} />
 

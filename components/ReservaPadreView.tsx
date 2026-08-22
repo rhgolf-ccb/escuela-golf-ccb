@@ -3,6 +3,10 @@
 import { useCallback, useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { tipoPlanDeAlumno } from "@/lib/grupos";
+import {
+  ventanaReserva, ventanaCancelacion, formatearMomento,
+  HORAS_CIERRE_SEMANA, HORAS_MINIMAS_CANCELACION,
+} from "@/lib/reservas-ventana";
 
 
 type DiaSemana = "martes" | "miercoles" | "jueves" | "viernes" | "sabado" | "domingo";
@@ -71,11 +75,19 @@ export default function ReservaPadreView({ estudiantes }: { estudiantes: Estudia
   const [loading, setLoading] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
+  // La ventana se abre y se cierra a una hora exacta: sin un reloj propio, una
+  // pestaña dejada abierta antes de las 11:00 del lunes seguiría mostrando
+  // "abre el lunes" cuando el cupo ya está disponible.
+  const [ahora, setAhora] = useState<Date>(() => new Date());
+  useEffect(() => {
+    const t = setInterval(() => setAhora(new Date()), 30_000);
+    return () => clearInterval(t);
+  }, []);
 
   const selected = estudiantes.find((e) => e.id === selectedId) ?? null;
   const tipoPlan = selected ? tipoPlanDeAlumno(selected) : null;
 
-  function showToast(msg: string) { setToast(msg); setTimeout(() => setToast(null), 3500); }
+  function showToast(msg: string) { setToast(msg); setTimeout(() => setToast(null), 4500); }
 
   const fetchSesiones = useCallback(async () => {
     if (!selected || !tipoPlan) { setSesiones([]); return; }
@@ -134,32 +146,51 @@ export default function ReservaPadreView({ estudiantes }: { estudiantes: Estudia
 
   async function handleInscribir(ses: SesionConInfo) {
     if (!selected) return;
-    setBusyId(ses.id);
-    const estado = ses.confirmados < ses.cupo_maximo ? "confirmado" : "en_espera";
-    const posicion = estado === "en_espera" ? ses.en_espera + 1 : null;
 
+    // Se reevalúa contra el reloj del clic, no contra el del último render: la
+    // ventana pudo cerrarse con la pestaña abierta.
+    const ventana = ventanaReserva(ses, new Date());
+    if (!ventana.puedeReservar) { showToast(ventana.mensaje); return; }
+    if (ses.confirmados >= ses.cupo_maximo) {
+      showToast(`Cupo lleno (${ses.cupo_maximo} niños). Escribe al coordinador.`);
+      return;
+    }
+
+    setBusyId(ses.id);
     const { error } = await supabase.from("reservas").insert({
       sesion_id: ses.id,
       estudiante_id: selected.id,
-      estado,
-      posicion_espera: posicion,
+      estado: "confirmado",
+      posicion_espera: null,
     });
 
     if (error) {
-      showToast(error.code === "23505" ? "Ya estás inscrito en esta sesión" : "Error al inscribir: " + error.message);
+      // El trigger de la base vuelve a validar ventana y cupo. Si rechaza, su
+      // mensaje manda: la pantalla pudo quedarse con datos viejos.
+      showToast(error.code === "23505" ? "Ya estás inscrito en esta sesión" : error.message);
     } else {
-      showToast(estado === "confirmado" ? "Inscripción confirmada ✓" : `En lista de espera (pos. ${posicion})`);
+      showToast("Inscripción confirmada ✓");
       await logAccessEvent("reserva_creada", `${selected.full_name} · ${ses.fecha} · ${ses.tipo_sesion}`);
-      await fetchSesiones();
     }
+    await fetchSesiones();
     setBusyId(null);
   }
 
   async function handleCancelar(ses: SesionConInfo) {
     if (!selected || !ses.miReserva) return;
+
+    const cancelacion = ventanaCancelacion(ses, new Date());
+    if (!cancelacion.puedeCancelar) { showToast(cancelacion.mensaje); return; }
+
     setBusyId(ses.id);
     const eraConfirmado = ses.miReserva.estado === "confirmado";
-    await supabase.from("reservas").delete().eq("id", ses.miReserva.id);
+    const { error } = await supabase.from("reservas").delete().eq("id", ses.miReserva.id);
+    if (error) {
+      showToast(error.message);
+      await fetchSesiones();
+      setBusyId(null);
+      return;
+    }
 
     if (eraConfirmado) {
       const { data: enEspera } = await supabase
@@ -194,13 +225,21 @@ export default function ReservaPadreView({ estudiantes }: { estudiantes: Estudia
   return (
     <div className="max-w-3xl mx-auto px-4 sm:px-6 py-8">
       {toast && (
-        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-2 bg-gray-900 text-white text-sm font-medium px-5 py-3 rounded-xl shadow-lg pointer-events-none">
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 max-w-[92vw] text-center bg-gray-900 text-white text-sm font-medium px-5 py-3 rounded-xl shadow-lg pointer-events-none">
           {toast}
         </div>
       )}
 
       <h1 className="text-2xl font-bold text-gray-900 mb-1">Reservas</h1>
-      <p className="text-sm text-gray-400 mb-5">Inscribe a tu alumno en las próximas sesiones</p>
+      <p className="text-sm text-gray-400 mb-4">Inscribe a tu alumno en las próximas sesiones</p>
+
+      <div className="rounded-xl border border-gray-100 bg-gray-50 px-4 py-3 mb-5 text-xs text-gray-500 leading-relaxed">
+        <p className="font-semibold text-gray-700 mb-1">Cómo funciona el cupo</p>
+        <p>· Se abre el <strong>lunes a las 11:00 a. m.</strong> para toda la semana.</p>
+        <p>· Martes, miércoles y jueves cierran <strong>{HORAS_CIERRE_SEMANA} horas antes</strong> de cada sesión.</p>
+        <p>· El sábado cierra el <strong>miércoles a las 5:00 p. m.</strong></p>
+        <p>· Puedes cancelar hasta <strong>{HORAS_MINIMAS_CANCELACION} horas antes</strong>; después la sesión se cobra.</p>
+      </div>
 
       {estudiantes.length > 1 && (
         <div className="flex gap-2 mb-5 flex-wrap">
@@ -245,6 +284,8 @@ export default function ReservaPadreView({ estudiantes }: { estudiantes: Estudia
             <div className="space-y-2">
               {sesiones.map((ses) => {
                 const lleno = ses.confirmados >= ses.cupo_maximo;
+                const ventana = ventanaReserva(ses, ahora);
+                const cancelacion = ventanaCancelacion(ses, ahora);
                 return (
                   <div key={ses.id} className="bg-white rounded-xl border border-gray-100 shadow-sm p-4">
                     <div className="flex items-start justify-between gap-3">
@@ -269,13 +310,27 @@ export default function ReservaPadreView({ estudiantes }: { estudiantes: Estudia
                           >
                             {ses.miReserva.estado === "confirmado" ? "Inscrito" : `En espera (#${ses.miReserva.posicion_espera})`}
                           </span>
-                          <button
-                            onClick={() => handleCancelar(ses)}
-                            disabled={busyId === ses.id}
-                            className="text-xs font-semibold text-red-600 hover:text-red-700 disabled:opacity-50"
-                          >
-                            {busyId === ses.id ? "..." : "Cancelar"}
-                          </button>
+                          {cancelacion.puedeCancelar ? (
+                            <button
+                              onClick={() => handleCancelar(ses)}
+                              disabled={busyId === ses.id}
+                              className="text-xs font-semibold text-red-600 hover:text-red-700 disabled:opacity-50"
+                            >
+                              {busyId === ses.id ? "..." : "Cancelar"}
+                            </button>
+                          ) : (
+                            <span className="text-[11px] text-gray-400 text-right max-w-[60%]">
+                              Ya no se puede cancelar — la sesión se cobra
+                            </span>
+                          )}
+                        </div>
+                      ) : !ventana.puedeReservar ? (
+                        <div className="w-full py-2 rounded-lg text-xs font-semibold text-center text-gray-500 bg-gray-100">
+                          {ventana.mensaje}
+                        </div>
+                      ) : lleno ? (
+                        <div className="w-full py-2 rounded-lg text-xs font-semibold text-center text-red-700 bg-red-50">
+                          Cupo lleno ({ses.cupo_maximo} niños)
                         </div>
                       ) : (
                         <button
@@ -284,10 +339,19 @@ export default function ReservaPadreView({ estudiantes }: { estudiantes: Estudia
                           className="w-full py-2 rounded-lg text-sm font-semibold text-white disabled:opacity-50 transition-colors"
                           style={{ background: "#1a3a2a" }}
                         >
-                          {busyId === ses.id ? "..." : lleno ? "Unirme a lista de espera" : "Inscribir"}
+                          {busyId === ses.id ? "..." : "Inscribir"}
                         </button>
                       )}
                     </div>
+
+                    {!ses.miReserva && ventana.estado === "abierta" && !lleno && (
+                      <p className="text-[11px] text-gray-400 mt-1.5 text-center">{ventana.mensaje}</p>
+                    )}
+                    {ses.miReserva && cancelacion.puedeCancelar && cancelacion.limite && (
+                      <p className="text-[11px] text-gray-400 mt-1.5">
+                        Cancelación sin costo hasta el {formatearMomento(cancelacion.limite)}
+                      </p>
+                    )}
                   </div>
                 );
               })}

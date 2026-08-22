@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
-import { ADMIN_ROLES, STAFF_ROLES, type Rol } from "@/lib/roles";
+import { ADMIN_ROLES, type Rol } from "@/lib/roles";
 
 export async function POST(request: NextRequest) {
   const supabase = await createSupabaseServerClient();
@@ -22,16 +22,15 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "email y password (mínimo 8 caracteres) son requeridos" }, { status: 400 });
   }
 
+  // Sirve para cualquier rol, staff o familia: el coordinador fija la clave y
+  // la entrega por donde ya habla con esa persona, sin pasar por el correo.
   const { data: target } = await supabase
     .from("app_users")
     .select("id, rol")
     .eq("email", email)
     .maybeSingle();
   if (!target) {
-    return NextResponse.json({ error: "no existe un usuario con ese email — primero debe iniciar sesión una vez por magic link" }, { status: 404 });
-  }
-  if (!STAFF_ROLES.includes(target.rol as Rol)) {
-    return NextResponse.json({ error: "solo se puede fijar contraseña para roles de staff" }, { status: 400 });
+    return NextResponse.json({ error: "no existe un usuario con ese email" }, { status: 404 });
   }
 
   const admin = createSupabaseAdminClient();

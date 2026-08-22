@@ -70,6 +70,10 @@ export default function AccesosModule({ currentUserId, initialSessionDays }: { c
   const [inviteNombre, setInviteNombre] = useState("");
   const [inviteRol, setInviteRol] = useState<Rol>("padre_otros");
   const [inviteEstudiantes, setInviteEstudiantes] = useState<StudentSearch[]>([]);
+  // Contraseña inicial opcional: con ella la cuenta queda lista y no sale
+  // ningún correo — el coordinador manda el link de la app y la clave por
+  // WhatsApp. Vacía, se mantiene la invitación por correo de siempre.
+  const [invitePassword, setInvitePassword] = useState("");
   const [inviteSearch, setInviteSearch] = useState("");
   const [inviteResults, setInviteResults] = useState<StudentSearch[]>([]);
   const [inviteSaving, setInviteSaving] = useState(false);
@@ -135,9 +139,14 @@ export default function AccesosModule({ currentUserId, initialSessionDays }: { c
   function resetInvite() {
     setInviteEmail(""); setInviteNombre(""); setInviteRol("padre_otros");
     setInviteEstudiantes([]); setInviteSearch(""); setInviteResults([]); setInviteError(null);
+    setInvitePassword("");
   }
 
   async function handleInvite() {
+    if (invitePassword && invitePassword.length < 8) {
+      setInviteError("La contraseña debe tener mínimo 8 caracteres.");
+      return;
+    }
     setInviteSaving(true); setInviteError(null);
     const res = await fetch("/api/invite-user", {
       method: "POST",
@@ -147,11 +156,16 @@ export default function AccesosModule({ currentUserId, initialSessionDays }: { c
         nombre: inviteNombre.trim() || null,
         rol: inviteRol,
         estudianteIds: inviteEstudiantes.map((s) => s.id),
+        password: invitePassword || undefined,
       }),
     });
     const body = await res.json();
     if (!res.ok) { setInviteError(body.error ?? "Error al invitar"); setInviteSaving(false); return; }
-    showToast(body.emailWarning ? `${inviteEmail} creado, pero el email falló: ${body.emailWarning}` : `${inviteEmail} invitado ✓`);
+    showToast(
+      body.conPassword ? `${inviteEmail} creado con contraseña ✓ — pásale el link de la app`
+      : body.emailWarning ? `${inviteEmail} creado, pero el email falló: ${body.emailWarning}`
+      : `${inviteEmail} invitado ✓`
+    );
     setInviteSaving(false); setShowInvite(false); resetInvite();
     await fetchUsers();
   }
@@ -187,7 +201,7 @@ export default function AccesosModule({ currentUserId, initialSessionDays }: { c
   async function handleSetPassword() {
     if (!pwdTarget) return;
     setPwdSaving(true); setPwdError(null);
-    const res = await fetch("/api/set-staff-password", {
+    const res = await fetch("/api/set-user-password", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ email: pwdTarget.email, password: pwdValue }),
@@ -230,14 +244,15 @@ export default function AccesosModule({ currentUserId, initialSessionDays }: { c
         </div>
         <div className="flex items-center gap-2 shrink-0 flex-wrap">
           <Badge label={u.activo ? "Activo" : "Suspendido"} tono={u.activo ? "ok" : "bad"} />
-          {STAFF_ROLES.includes(u.rol) && (
-            <button
-              onClick={() => { setPwdTarget(u); setPwdValue(""); setPwdError(null); }}
-              className="text-xs font-semibold rounded-lg px-2.5 py-1 transition-colors hover:bg-(--ui-card-alt)"
-              style={{ color: "var(--ui-text-2)", border: "1px solid var(--ui-border)" }}>
-              Fijar contraseña
-            </button>
-          )}
+          {/* Vale para staff y para familias: sirve tanto para dejar lista una
+              cuenta nueva como para reponer la clave de un papá que la olvidó
+              sin depender de que le llegue el correo. */}
+          <button
+            onClick={() => { setPwdTarget(u); setPwdValue(""); setPwdError(null); }}
+            className="text-xs font-semibold rounded-lg px-2.5 py-1 transition-colors hover:bg-(--ui-card-alt)"
+            style={{ color: "var(--ui-text-2)", border: "1px solid var(--ui-border)" }}>
+            Fijar contraseña
+          </button>
           {u.id !== currentUserId && (
             <button
               onClick={() => handleToggleActivo(u)}
@@ -440,11 +455,19 @@ export default function AccesosModule({ currentUserId, initialSessionDays }: { c
               </Campo>
             )}
 
+            <Campo
+              label="Contraseña inicial"
+              hint="Opcional. Si la pones, la cuenta queda lista y NO se envía correo: le pasas el link de la app y esta clave. Si la dejas vacía, se envía la invitación por correo y la persona crea la suya."
+            >
+              <input type="text" autoComplete="off" placeholder="Mínimo 8 caracteres" value={invitePassword}
+                onChange={(e) => setInvitePassword(e.target.value)} className={CLASE_CAMPO} style={CAMPO} />
+            </Campo>
+
             {inviteError && <p className="text-xs font-semibold" style={{ color: "var(--ui-bad)" }}>{inviteError}</p>}
 
             <div className="flex gap-2 pt-1">
               <BotonPrimario onClick={handleInvite} disabled={inviteSaving || !inviteEmail.trim()}>
-                {inviteSaving ? "Invitando…" : "Invitar"}
+                {inviteSaving ? "Creando…" : invitePassword ? "Crear cuenta" : "Invitar por correo"}
               </BotonPrimario>
               <BotonSecundario onClick={() => { setShowInvite(false); resetInvite(); }} disabled={inviteSaving}>
                 Cancelar
