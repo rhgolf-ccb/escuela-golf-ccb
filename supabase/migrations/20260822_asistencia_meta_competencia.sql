@@ -23,6 +23,11 @@
 -- Se devuelven los dos números crudos (presentes y meta), no el porcentaje: con
 -- meta = 0 no hay porcentaje que mostrar, y esa diferencia la decide la
 -- interfaz igual que con presentes/ausentes.
+--
+-- Esta vista fija la ventana al mes en curso y es la que alimentan Alumnos y
+-- Paco. La misma regla sobre un periodo elegido a mano vive en
+-- lib/asistencia-competencia.ts, que es la que usa Reportes. Si cambia una,
+-- cambia la otra.
 
 create or replace view student_metrics
 with (security_invoker = true) as
