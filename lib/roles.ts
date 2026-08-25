@@ -17,9 +17,14 @@ export const ROLE_ALLOW: Record<Rol, "all" | string[]> = {
   administrativo: "all",
   // /api/asesor-golf es el chat de Paco: proxy.ts filtra también las rutas de
   // API con esta misma lista, así que sin la entrada la petición sale 403.
-  padre_competencia: ["/mi-perfil", "/reservas", "/alumnos", "/staff", "/drills", "/fisico", "/calendario", "/api/asesor-golf"],
-  alumno_competencia: ["/mi-perfil", "/reservas", "/alumnos", "/staff", "/drills", "/fisico", "/calendario", "/api/asesor-golf"],
-  padre_otros: ["/mi-perfil", "/staff", "/drills", "/calendario"],
+  //
+  // /set-password y su /api/confirm-password-set van en los tres roles de
+  // familia. Sin ellos, una cuenta invitada por correo (password_set = false)
+  // rebotaba entre /set-password y /mi-perfil hasta agotar los redirects, y
+  // nadie de fuera del staff podía cambiar su propia contraseña.
+  padre_competencia: ["/mi-perfil", "/reservas", "/alumnos", "/staff", "/drills", "/fisico", "/calendario", "/set-password", "/api/asesor-golf", "/api/confirm-password-set"],
+  alumno_competencia: ["/mi-perfil", "/reservas", "/alumnos", "/staff", "/drills", "/fisico", "/calendario", "/set-password", "/api/asesor-golf", "/api/confirm-password-set"],
+  padre_otros: ["/mi-perfil", "/staff", "/drills", "/calendario", "/set-password", "/api/confirm-password-set"],
 };
 
 // Restricted even for roles with "all" access — coordinador/administrativo only.

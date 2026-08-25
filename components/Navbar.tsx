@@ -9,7 +9,7 @@ import { isRouteAllowed, isStaff, roleLabel, type Rol } from "@/lib/roles";
 import {
   Users, Calendar, ClipboardList, BookOpen, UserCheck,
   BarChart2, Shield, Dumbbell, Brain, CalendarDays,
-  LogOut, ChevronDown, Activity, User, Menu, X
+  LogOut, ChevronDown, Activity, User, Menu, X, KeyRound
 } from "lucide-react";
 
 function initiales(name: string): string {
@@ -137,6 +137,16 @@ export default function Navbar({
         </button>
         {userMenuOpen && (
           <div className="mt-1 mx-1 rounded-lg bg-sidebar-hover overflow-hidden">
+            {/* La contraseña inicial la entrega el coordinador por WhatsApp;
+                sin esta entrada nadie podía cambiar la suya después. */}
+            <Link
+              href="/set-password"
+              onClick={() => setUserMenuOpen(false)}
+              className="w-full flex items-center gap-2 px-3 py-2.5 text-sm text-sidebar-text hover:text-white hover:bg-white/5 transition-colors"
+            >
+              <KeyRound size={15} />
+              Cambiar contraseña
+            </Link>
             <button
               onClick={handleLogout}
               className="w-full flex items-center gap-2 px-3 py-2.5 text-sm text-red-400 hover:text-red-300 hover:bg-white/5 transition-colors"

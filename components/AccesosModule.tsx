@@ -48,11 +48,73 @@ function formatFecha(dateStr: string | null): string {
   return new Date(dateStr).toLocaleString("es-CO", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" });
 }
 
+// El buscador de alumnos lo usan el modal de invitar y el de editar. Vive
+// aparte para que no se desincronicen: vincular fichas es lo que decide qué ve
+// la cuenta, y dos copias del mismo buscador terminan divergiendo.
+function SelectorAlumnos({ seleccionados, onChange }: {
+  seleccionados: StudentSearch[];
+  onChange: (next: StudentSearch[]) => void;
+}) {
+  const [search, setSearch] = useState("");
+  const [results, setResults] = useState<StudentSearch[]>([]);
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    if (search.length < 2) { setResults([]); return; }
+    debounceRef.current = setTimeout(async () => {
+      const { data } = await supabase
+        .from("students")
+        .select("id, full_name, grupo_activo")
+        .ilike("full_name", `%${search}%`)
+        .eq("status", "activo")
+        .order("full_name")
+        .limit(10);
+      setResults((data as StudentSearch[]) ?? []);
+    }, 300);
+    return () => { if (debounceRef.current) clearTimeout(debounceRef.current); };
+  }, [search]);
+
+  return (
+    <>
+      <div className="space-y-1 mb-1">
+        {seleccionados.map((st) => (
+          <div key={st.id} className="flex items-center justify-between px-3 py-1.5 rounded-lg"
+            style={{ background: "var(--g-juvenil-bg)" }}>
+            <span className="text-xs font-semibold" style={{ color: "var(--g-juvenil-fg)" }}>{st.full_name}</span>
+            <button onClick={() => onChange(seleccionados.filter((x) => x.id !== st.id))}
+              title="Quitar" style={{ color: "var(--g-juvenil-fg)" }}>
+              <X size={13} />
+            </button>
+          </div>
+        ))}
+      </div>
+      <div className="relative">
+        <input type="text" placeholder="Buscar alumno por nombre…" value={search}
+          onChange={(e) => setSearch(e.target.value)} className={CLASE_CAMPO} style={CAMPO} />
+        {results.length > 0 && (
+          <div className="absolute left-0 right-0 top-full mt-1 z-10 rounded-xl shadow-lg overflow-hidden max-h-48 overflow-y-auto"
+            style={{ background: "var(--ui-card)", border: "1px solid var(--ui-border)" }}>
+            {results.filter((r) => !seleccionados.some((st) => st.id === r.id)).map((st) => (
+              <button key={st.id}
+                onClick={() => { onChange([...seleccionados, st]); setSearch(""); setResults([]); }}
+                className="w-full text-left px-3 py-2 text-sm transition-colors hover:bg-(--ui-card-alt)"
+                style={{ color: "var(--ui-text)", borderBottom: "1px solid var(--ui-border-soft)" }}>
+                {st.full_name} <span className="text-xs" style={{ color: "var(--ui-text-3)" }}>{st.grupo_activo}</span>
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+    </>
+  );
+}
+
 
 export default function AccesosModule({ currentUserId, initialSessionDays }: { currentUserId: string; initialSessionDays: number | null }) {
   const [tab, setTab] = useState<Tab>("usuarios");
   const [users, setUsers] = useState<AppUser[]>([]);
-  const [vinculos, setVinculos] = useState<Record<string, string[]>>({});
+  const [vinculos, setVinculos] = useState<Record<string, StudentSearch[]>>({});
   const [loadingUsers, setLoadingUsers] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
 
@@ -71,11 +133,15 @@ export default function AccesosModule({ currentUserId, initialSessionDays }: { c
   // ningún correo — el coordinador manda el link de la app y la clave por
   // WhatsApp. Vacía, se mantiene la invitación por correo de siempre.
   const [invitePassword, setInvitePassword] = useState("");
-  const [inviteSearch, setInviteSearch] = useState("");
-  const [inviteResults, setInviteResults] = useState<StudentSearch[]>([]);
   const [inviteSaving, setInviteSaving] = useState(false);
   const [inviteError, setInviteError] = useState<string | null>(null);
-  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const [editTarget, setEditTarget] = useState<AppUser | null>(null);
+  const [editNombre, setEditNombre] = useState("");
+  const [editRol, setEditRol] = useState<Rol>("padre_otros");
+  const [editEstudiantes, setEditEstudiantes] = useState<StudentSearch[]>([]);
+  const [editSaving, setEditSaving] = useState(false);
+  const [editError, setEditError] = useState<string | null>(null);
 
   const [pwdTarget, setPwdTarget] = useState<AppUser | null>(null);
   const [pwdValue, setPwdValue] = useState("");
@@ -92,12 +158,12 @@ export default function AccesosModule({ currentUserId, initialSessionDays }: { c
     setLoadingUsers(true);
     const { data } = await supabase.from("app_users").select("*").order("created_at", { ascending: false });
     setUsers((data as AppUser[]) ?? []);
-    const { data: links } = await supabase.from("user_estudiantes").select("user_id, students(full_name)");
-    const map: Record<string, string[]> = {};
+    const { data: links } = await supabase.from("user_estudiantes").select("user_id, students(id, full_name, grupo_activo)");
+    const map: Record<string, StudentSearch[]> = {};
     (links ?? []).forEach((l) => {
       const st = Array.isArray(l.students) ? l.students[0] : l.students;
       if (!st) return;
-      (map[l.user_id] ??= []).push(st.full_name);
+      (map[l.user_id] ??= []).push(st as StudentSearch);
     });
     setVinculos(map);
     setLoadingUsers(false);
@@ -117,25 +183,9 @@ export default function AccesosModule({ currentUserId, initialSessionDays }: { c
   useEffect(() => { fetchUsers(); }, [fetchUsers]);
   useEffect(() => { if (tab === "registro") fetchLogs(); }, [tab, fetchLogs]);
 
-  useEffect(() => {
-    if (debounceRef.current) clearTimeout(debounceRef.current);
-    if (inviteSearch.length < 2) { setInviteResults([]); return; }
-    debounceRef.current = setTimeout(async () => {
-      const { data } = await supabase
-        .from("students")
-        .select("id, full_name, grupo_activo")
-        .ilike("full_name", `%${inviteSearch}%`)
-        .eq("status", "activo")
-        .order("full_name")
-        .limit(10);
-      setInviteResults((data as StudentSearch[]) ?? []);
-    }, 300);
-    return () => { if (debounceRef.current) clearTimeout(debounceRef.current); };
-  }, [inviteSearch]);
-
   function resetInvite() {
     setInviteEmail(""); setInviteNombre(""); setInviteRol("padre_otros");
-    setInviteEstudiantes([]); setInviteSearch(""); setInviteResults([]); setInviteError(null);
+    setInviteEstudiantes([]); setInviteError(null);
     setInvitePassword("");
   }
 
@@ -171,6 +221,42 @@ export default function AccesosModule({ currentUserId, initialSessionDays }: { c
       : `${inviteEmail} invitado ✓`
     );
     setInviteSaving(false); setShowInvite(false); resetInvite();
+    await fetchUsers();
+  }
+
+  function openEdit(u: AppUser) {
+    setEditTarget(u);
+    setEditNombre(u.nombre ?? "");
+    setEditRol(u.rol);
+    setEditEstudiantes(vinculos[u.id] ?? []);
+    setEditError(null);
+  }
+
+  async function handleEditUser() {
+    if (!editTarget) return;
+    if (isPadreOrAlumno(editRol) && editEstudiantes.length === 0) {
+      setEditError("Vincula al menos un alumno: sin ficha la cuenta entra y no ve nada.");
+      return;
+    }
+    setEditSaving(true); setEditError(null);
+    const res = await fetch("/api/update-user", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        userId: editTarget.id,
+        nombre: editNombre.trim() || null,
+        rol: editRol,
+        estudianteIds: editEstudiantes.map((s) => s.id),
+      }),
+    });
+    const body = await res.json();
+    if (!res.ok) { setEditError(body.error ?? "Error al guardar"); setEditSaving(false); return; }
+    const detalle = [
+      body.agregados ? `${body.agregados} alumno(s) agregado(s)` : null,
+      body.quitados ? `${body.quitados} quitado(s)` : null,
+    ].filter(Boolean).join(", ");
+    showToast(detalle ? `Cambios guardados ✓ — ${detalle}` : "Cambios guardados ✓");
+    setEditSaving(false); setEditTarget(null);
     await fetchUsers();
   }
 
@@ -240,7 +326,9 @@ export default function AccesosModule({ currentUserId, initialSessionDays }: { c
           <p className="text-sm font-semibold" style={{ color: "var(--ui-text)" }}>{u.nombre || u.email}</p>
           <p className="text-xs" style={{ color: "var(--ui-text-3)" }}>{u.email} · {ROL_LABEL[u.rol]}</p>
           {vinculos[u.id]?.length > 0 && (
-            <p className="text-xs mt-0.5" style={{ color: "var(--ui-text-2)" }}>Alumnos: {vinculos[u.id].join(", ")}</p>
+            <p className="text-xs mt-0.5" style={{ color: "var(--ui-text-2)" }}>
+              Alumnos: {vinculos[u.id].map((s) => s.full_name).join(", ")}
+            </p>
           )}
           <p className="text-[11px] mt-0.5" style={{ color: "var(--ui-text-3)" }}>
             {u.last_sign_in ? `Último ingreso: ${formatFecha(u.last_sign_in)}` : "Nunca ha entrado"}
@@ -248,6 +336,15 @@ export default function AccesosModule({ currentUserId, initialSessionDays }: { c
         </div>
         <div className="flex items-center gap-2 shrink-0 flex-wrap">
           <Badge label={u.activo ? "Activo" : "Suspendido"} tono={u.activo ? "ok" : "bad"} />
+          {/* Un papá al que le entra otro hijo a la escuela se resuelve aquí:
+              antes había que borrar la cuenta y rehacerla, lo que le cambiaba
+              la contraseña que ya tenía. */}
+          <button
+            onClick={() => openEdit(u)}
+            className="text-xs font-semibold rounded-lg px-2.5 py-1 transition-colors hover:bg-(--ui-card-alt)"
+            style={{ color: "var(--ui-text-2)", border: "1px solid var(--ui-border)" }}>
+            Editar
+          </button>
           {/* Vale para staff y para familias: sirve tanto para dejar lista una
               cuenta nueva como para reponer la clave de un papá que la olvidó
               sin depender de que le llegue el correo. */}
@@ -428,35 +525,7 @@ export default function AccesosModule({ currentUserId, initialSessionDays }: { c
             {isPadreOrAlumno(inviteRol) && (
               <Campo label="Alumno(s) vinculado(s) *"
                 hint="Obligatorio. Solo verá a los alumnos que vincules aquí. Si la cuenta es del alumno, vincúlalo a él mismo.">
-                <div className="space-y-1 mb-1">
-                  {inviteEstudiantes.map((st) => (
-                    <div key={st.id} className="flex items-center justify-between px-3 py-1.5 rounded-lg"
-                      style={{ background: "var(--g-juvenil-bg)" }}>
-                      <span className="text-xs font-semibold" style={{ color: "var(--g-juvenil-fg)" }}>{st.full_name}</span>
-                      <button onClick={() => setInviteEstudiantes((prev) => prev.filter((x) => x.id !== st.id))}
-                        title="Quitar" style={{ color: "var(--g-juvenil-fg)" }}>
-                        <X size={13} />
-                      </button>
-                    </div>
-                  ))}
-                </div>
-                <div className="relative">
-                  <input type="text" placeholder="Buscar alumno por nombre…" value={inviteSearch}
-                    onChange={(e) => setInviteSearch(e.target.value)} className={CLASE_CAMPO} style={CAMPO} />
-                  {inviteResults.length > 0 && (
-                    <div className="absolute left-0 right-0 top-full mt-1 z-10 rounded-xl shadow-lg overflow-hidden max-h-48 overflow-y-auto"
-                      style={{ background: "var(--ui-card)", border: "1px solid var(--ui-border)" }}>
-                      {inviteResults.filter((r) => !inviteEstudiantes.some((st) => st.id === r.id)).map((st) => (
-                        <button key={st.id}
-                          onClick={() => { setInviteEstudiantes((prev) => [...prev, st]); setInviteSearch(""); setInviteResults([]); }}
-                          className="w-full text-left px-3 py-2 text-sm transition-colors hover:bg-(--ui-card-alt)"
-                          style={{ color: "var(--ui-text)", borderBottom: "1px solid var(--ui-border-soft)" }}>
-                          {st.full_name} <span className="text-xs" style={{ color: "var(--ui-text-3)" }}>{st.grupo_activo}</span>
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                </div>
+                <SelectorAlumnos seleccionados={inviteEstudiantes} onChange={setInviteEstudiantes} />
               </Campo>
             )}
 
@@ -478,6 +547,44 @@ export default function AccesosModule({ currentUserId, initialSessionDays }: { c
               <BotonSecundario onClick={() => { setShowInvite(false); resetInvite(); }} disabled={inviteSaving}>
                 Cancelar
               </BotonSecundario>
+            </div>
+          </div>
+        </Modal>
+      )}
+
+      {editTarget && (
+        <Modal onClose={() => { if (!editSaving) setEditTarget(null); }} ancho="sm">
+          <ModalHeader titulo="Editar usuario" sub={editTarget.email}
+            onClose={() => { if (!editSaving) setEditTarget(null); }} />
+          <div className="p-5 space-y-3">
+            {/* El correo no se toca: es la identidad de la cuenta en Supabase y
+                cambiarlo aquí la dejaría sin poder entrar. */}
+            <Campo label="Nombre" hint="Opcional">
+              <input type="text" placeholder="Nombre y apellido" value={editNombre}
+                onChange={(e) => setEditNombre(e.target.value)} className={CLASE_CAMPO} style={CAMPO} />
+            </Campo>
+            <Campo label="Rol">
+              <select value={editRol} onChange={(e) => setEditRol(e.target.value as Rol)}
+                className={CLASE_CAMPO} style={CAMPO}>
+                {ROLES.map((r) => <option key={r} value={r}>{ROL_LABEL[r]}</option>)}
+              </select>
+            </Campo>
+
+            {isPadreOrAlumno(editRol) && (
+              <Campo label="Alumno(s) vinculado(s) *"
+                hint="Agrega o quita fichas. La cuenta pasa a ver exactamente los alumnos que queden aquí.">
+                <SelectorAlumnos seleccionados={editEstudiantes} onChange={setEditEstudiantes} />
+              </Campo>
+            )}
+
+            {editError && <p className="text-xs font-semibold" style={{ color: "var(--ui-bad)" }}>{editError}</p>}
+
+            <div className="flex gap-2 pt-1">
+              <BotonPrimario onClick={handleEditUser}
+                disabled={editSaving || (isPadreOrAlumno(editRol) && editEstudiantes.length === 0)}>
+                {editSaving ? "Guardando…" : "Guardar cambios"}
+              </BotonPrimario>
+              <BotonSecundario onClick={() => setEditTarget(null)} disabled={editSaving}>Cancelar</BotonSecundario>
             </div>
           </div>
         </Modal>

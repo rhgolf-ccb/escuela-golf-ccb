@@ -7,6 +7,12 @@ const PUBLIC_PATHS = [
   "/auth/callback",
   "/auth/confirm",
   "/api/check-access",
+  // Se pide desde /login, es decir sin sesión: es el "olvidé mi contraseña" y
+  // el camino de quien nunca la creó. Sin esto respondía 401 y la familia que
+  // perdiera su clave quedaba sin ninguna salida. La ruta se protege sola —
+  // valida el correo contra app_users con la llave de servicio y responde
+  // ok:true incluso para correos desconocidos, para no delatar quién existe.
+  "/api/send-login-link",
   "/manifest.webmanifest",
   "/manifest.json",
   "/sw.js",

@@ -1,3 +1,5 @@
+import { PACO_LIMITE_SEMANAL_FAMILIA } from "@/lib/roles";
+
 export const TOOL_STATUS_LABELS: Record<string, string> = {
   web_search: "🔍 Buscando en internet...",
   buscar_alumno: "👤 Buscando alumno...",
@@ -28,7 +30,12 @@ export function lunesISODate(): string {
 }
 
 export const PACO_LIMIT_MESSAGE = "Has alcanzado tu límite diario de consultas. Vuelve mañana 🦅";
-export const PACO_LIMIT_MESSAGE_SEMANAL = "Ya usaste tus 10 consultas de esta semana. Vuelven el lunes 🦅";
+// El número sale de la constante, no escrito a mano: si mañana suben el cupo,
+// el mensaje tiene que subir con él.
+export const PACO_LIMIT_MESSAGE_SEMANAL =
+  `Ya usaste tus ${PACO_LIMITE_SEMANAL_FAMILIA} consultas de esta semana. Vuelven el lunes 🦅`;
+export const PACO_LIMIT_PLACEHOLDER = "Límite diario alcanzado";
+export const PACO_LIMIT_PLACEHOLDER_SEMANAL = "Vuelves el lunes 🦅";
 
 export type PlanKind = "torneo" | "festival" | null;
 

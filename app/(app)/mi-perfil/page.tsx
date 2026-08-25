@@ -19,7 +19,14 @@ export default async function MiPerfilPage() {
 
   const estudiantes = (vinculos ?? [])
     .map((v) => (Array.isArray(v.students) ? v.students[0] : v.students))
-    .filter((s): s is { id: string; full_name: string; grupo_activo: string | null; foto_url: string | null; birth_date: string | null } => !!s);
+    .filter((s): s is { id: string; full_name: string; grupo_activo: string | null; foto_url: string | null; birth_date: string | null } => !!s)
+    // La pantalla abre en el primero de la lista, y la consulta no trae orden:
+    // un papá con dos hijos podía caer en el que todavía no tiene grupo (sin
+    // tests, sin asistencia) y creer que la app está vacía. Primero los que sí
+    // están en un grupo.
+    .sort((a, b) =>
+      (a.grupo_activo ? 0 : 1) - (b.grupo_activo ? 0 : 1) ||
+      a.full_name.localeCompare(b.full_name, "es"));
 
   return <MiPerfilView rol={currentUser.rol} estudiantes={estudiantes} />;
 }

@@ -5,7 +5,7 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { supabase } from "@/lib/supabase";
 import { shouldOfferPdf } from "@/lib/pdf-generator";
-import { TOOL_STATUS_LABELS, formatTime, MARKDOWN_COMPONENTS, streamAsesorChat, todayISODate, lunesISODate, detectPlanKind, extractPlanTitle, PACO_LIMIT_MESSAGE, PACO_LIMIT_MESSAGE_SEMANAL, type PacoUsage } from "@/lib/paco-chat-shared";
+import { TOOL_STATUS_LABELS, formatTime, MARKDOWN_COMPONENTS, streamAsesorChat, todayISODate, lunesISODate, detectPlanKind, extractPlanTitle, PACO_LIMIT_MESSAGE, PACO_LIMIT_MESSAGE_SEMANAL, PACO_LIMIT_PLACEHOLDER, PACO_LIMIT_PLACEHOLDER_SEMANAL, type PacoUsage } from "@/lib/paco-chat-shared";
 import { formatWhatsAppMessage, openWhatsApp } from "@/lib/whatsapp-formatter";
 import { pacoLimitFor, pacoLimiteSemanalFor, isFamiliaCompetencia, type Rol } from "@/lib/roles";
 
@@ -201,11 +201,20 @@ export default function AsesorGolfChat({ rol }: { rol: Rol | null }) {
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img src="/Paco_transparente.png" alt="Paco" className="w-6 h-6 object-contain shrink-0" />
               <div className="min-w-0">
+                {/* La cabecera estaba escrita para un profesor: el modelo que
+                    corre por dentro y la lista de especialidades no le dicen
+                    nada a un niño de 12 años ni a su mamá. */}
                 <div className="flex items-center gap-1.5">
-                  <p className="text-sm font-semibold text-(--ui-bg) truncate">Paco — Asesor de Golf</p>
-                  <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded-full bg-(--ui-bg)/15 text-(--ui-bg) shrink-0">Sonnet 5</span>
+                  <p className="text-sm font-semibold text-(--ui-bg) truncate">
+                    {esFamilia ? "Paco" : "Paco — Asesor de Golf"}
+                  </p>
+                  {!esFamilia && (
+                    <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded-full bg-(--ui-bg)/15 text-(--ui-bg) shrink-0">Sonnet 5</span>
+                  )}
                 </div>
-                <p className="text-[11px] text-(--ui-bg)/70 truncate">Especialista en TPI · Swing · Pedagogía</p>
+                <p className="text-[11px] text-(--ui-bg)/70 truncate">
+                  {esFamilia ? "El águila de la Escuela de Golf" : "Especialista en TPI · Swing · Pedagogía"}
+                </p>
               </div>
               {usage && usage.limit !== null && (
                 <span className="text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-(--ui-bg)/10 text-(--ui-bg)/70 shrink-0">
@@ -307,7 +316,11 @@ export default function AsesorGolfChat({ rol }: { rol: Rol | null }) {
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={handleKeyDown}
               disabled={isLoading || limitReached}
-              placeholder={limitReached ? "Límite diario alcanzado" : "Pregunta sobre swing, TPI, benchmarks..."}
+              placeholder={
+                limitReached
+                  ? (esFamilia ? PACO_LIMIT_PLACEHOLDER_SEMANAL : PACO_LIMIT_PLACEHOLDER)
+                  : (esFamilia ? "Pregúntale a Paco sobre tu juego…" : "Pregunta sobre swing, TPI, benchmarks...")
+              }
               className="flex-1 min-w-0 text-sm px-3 py-2 rounded-full border border-(--ui-border) focus:outline-none focus:border-[var(--ui-gold)] disabled:opacity-60"
               style={{ backgroundColor: "var(--ui-card-alt)", color: "var(--ui-text)", border: "1px solid var(--ui-border)" }}
             />

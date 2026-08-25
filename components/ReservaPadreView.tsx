@@ -193,18 +193,10 @@ export default function ReservaPadreView({ estudiantes }: { estudiantes: Estudia
     }
 
     if (eraConfirmado) {
-      const { data: enEspera } = await supabase
-        .from("reservas")
-        .select("id, posicion_espera")
-        .eq("sesion_id", ses.id)
-        .eq("estado", "en_espera")
-        .order("posicion_espera", { ascending: true });
-      if (enEspera && enEspera.length > 0) {
-        await supabase.from("reservas").update({ estado: "confirmado", posicion_espera: null }).eq("id", enEspera[0].id);
-        for (let i = 1; i < enEspera.length; i++) {
-          await supabase.from("reservas").update({ posicion_espera: i }).eq("id", enEspera[i].id);
-        }
-      }
+      // El ascenso lo hace la base (promover_lista_espera): la reserva que se
+      // asciende es la de otro niño, y la familia ya no puede escribir filas
+      // que no sean de sus alumnos.
+      await supabase.rpc("promover_lista_espera", { p_sesion_id: ses.id });
     }
 
     showToast("Reserva cancelada");

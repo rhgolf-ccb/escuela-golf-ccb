@@ -44,8 +44,11 @@ export default function SetPasswordPage() {
       <div className="w-full max-w-sm bg-white rounded-xl border border-gray-100 p-6">
         <div className="flex flex-col items-center text-center mb-6">
           <Image src="/Paco_transparente.png" alt="CCB" width={64} height={64} className="object-contain mb-2" />
-          <h1 className="text-lg font-semibold text-gray-900">Crea tu contraseña</h1>
-          <p className="text-sm text-gray-500 mt-1">La usarás para ingresar la próxima vez.</p>
+          {/* La misma pantalla sirve para crearla la primera vez y para
+              cambiarla después desde el menú, así que el texto no da por
+              sentado ninguno de los dos casos. */}
+          <h1 className="text-lg font-semibold text-gray-900">Tu contraseña</h1>
+          <p className="text-sm text-gray-500 mt-1">Elige una nueva. La usarás para ingresar la próxima vez.</p>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-3">
