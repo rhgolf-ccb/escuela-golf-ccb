@@ -3,10 +3,12 @@
 import { useState } from "react";
 import { CalendarDays } from "lucide-react";
 import { TIPO_PLAN_LABEL, acentoGrupo, acentoGrupoSuave, tipoPlanDeAlumno, type TipoPlan } from "@/lib/grupos";
+import AvatarAlumno from "@/components/ui/AvatarAlumno";
 
 export type EstudianteVinculado = {
   id: string; full_name: string; grupo_activo: string | null;
   birth_date: string | null; gender: string | null;
+  foto_url: string | null;
 };
 export type DiaPrograma = {
   grupo: TipoPlan; dia_semana: string; fecha: string; tipo_sesion: string; lugar: string;
@@ -48,9 +50,6 @@ function formatFechaCorta(fecha: string): string {
   return new Date(`${fecha}T00:00:00`).toLocaleDateString("es-CO", { day: "numeric", month: "short" });
 }
 function formatHora(t: string | null): string { return t ? t.slice(0, 5) : ""; }
-function initiales(name: string): string {
-  return name.split(" ").slice(0, 2).map((n) => n[0]).join("").toUpperCase();
-}
 function fechaEnRango(fecha: string, inicio: string, fin: string | null): boolean {
   return fecha >= inicio && fecha <= (fin ?? inicio);
 }
@@ -137,7 +136,7 @@ export default function CalendarioPadresModule({
               className="flex items-center gap-2 px-3 py-2 rounded-xl border transition-colors"
               style={selectedId === e.id ? { background: "#1B4D2E", color: "#fff", borderColor: "#1B4D2E" } : { background: "#fff", color: "#374151", borderColor: "#e5e7eb" }}
             >
-              <span className="w-6 h-6 rounded-full bg-white/20 flex items-center justify-center text-[10px] font-bold">{initiales(e.full_name)}</span>
+              <AvatarAlumno name={e.full_name} fotoUrl={e.foto_url} size={24} fallbackClassName="bg-white/20 text-[10px] font-bold" />
               <span className="text-sm font-medium">{e.full_name}</span>
             </button>
           ))}

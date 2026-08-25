@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { tipoPlanDeAlumno } from "@/lib/grupos";
+import AvatarAlumno from "@/components/ui/AvatarAlumno";
 import {
   ventanaReserva, ventanaCancelacion, formatearMomento,
   HORAS_CIERRE_SEMANA, HORAS_MINIMAS_CANCELACION,
@@ -14,6 +15,7 @@ type DiaSemana = "martes" | "miercoles" | "jueves" | "viernes" | "sabado" | "dom
 type Estudiante = {
   id: string; full_name: string; grupo_activo: string | null;
   birth_date: string | null; gender: string | null;
+  foto_url: string | null;
 };
 
 type SesionConInfo = {
@@ -60,9 +62,6 @@ function formatWeekRange(monday: Date): string {
   return `${monday.toLocaleDateString("es-CO", { day: "numeric", month: "long" })} — ${dom.toLocaleDateString("es-CO", { day: "numeric", month: "long", year: "numeric" })}`;
 }
 function formatHora(t: string | null): string { return t ? t.slice(0, 5) : ""; }
-function initiales(name: string): string {
-  return name.split(" ").slice(0, 2).map((n) => n[0]).join("").toUpperCase();
-}
 function cupoBarColor(confirmados: number, cupoMax: number): string {
   const pct = cupoMax > 0 ? confirmados / cupoMax : 0;
   if (pct >= 1) return "#dc2626";
@@ -244,7 +243,7 @@ export default function ReservaPadreView({ estudiantes }: { estudiantes: Estudia
               className="flex items-center gap-2 px-3 py-2 rounded-xl border transition-colors"
               style={selectedId === e.id ? { background: "#1a3a2a", color: "#fff", borderColor: "#1a3a2a" } : { background: "#fff", color: "#374151", borderColor: "#e5e7eb" }}
             >
-              <span className="w-6 h-6 rounded-full bg-white/20 flex items-center justify-center text-[10px] font-bold">{initiales(e.full_name)}</span>
+              <AvatarAlumno name={e.full_name} fotoUrl={e.foto_url} size={24} fallbackClassName="bg-white/20 text-[10px] font-bold" />
               <span className="text-sm font-medium">{e.full_name}</span>
             </button>
           ))}

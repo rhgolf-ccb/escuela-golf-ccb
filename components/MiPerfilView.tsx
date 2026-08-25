@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { User } from "lucide-react";
 import { supabase } from "@/lib/supabase";
+import AvatarAlumno from "@/components/ui/AvatarAlumno";
 import type { Rol } from "@/lib/roles";
 import { scoreToHandicapTest, handicapBand, formatHandicapTest } from "@/lib/handicap-test";
 
@@ -23,10 +24,6 @@ const TABS: { id: Tab; label: string }[] = [
   { id: "progreso", label: "Progreso" },
   { id: "notas", label: "Notas" },
 ];
-
-function initiales(name: string): string {
-  return name.split(" ").slice(0, 2).map((n) => n[0]).join("").toUpperCase();
-}
 
 function scoreColor(score: number | null) {
   if (score === null) return { text: "#9CA3AF", bg: "#F9FAFB" };
@@ -174,7 +171,7 @@ export default function MiPerfilView({ rol, estudiantes }: { rol: Rol; estudiant
               className="flex items-center gap-2 px-3 py-2 rounded-xl border transition-colors"
               style={selectedId === e.id ? { background: "#1B4D2E", color: "#fff", borderColor: "#1B4D2E" } : { background: "#fff", color: "#374151", borderColor: "#e5e7eb" }}
             >
-              <span className="w-6 h-6 rounded-full bg-white/20 flex items-center justify-center text-[10px] font-bold">{initiales(e.full_name)}</span>
+              <AvatarAlumno name={e.full_name} fotoUrl={e.foto_url} size={24} fallbackClassName="bg-white/20 text-[10px] font-bold" />
               <span className="text-sm font-medium">{e.full_name}</span>
             </button>
           ))}
@@ -184,9 +181,12 @@ export default function MiPerfilView({ rol, estudiantes }: { rol: Rol; estudiant
       {selected && (
         <>
           <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-4 mb-5 flex items-center gap-3">
-            <div className="w-11 h-11 rounded-full bg-gray-100 flex items-center justify-center text-sm font-bold text-gray-500 shrink-0">
-              {initiales(selected.full_name)}
-            </div>
+            <AvatarAlumno
+              name={selected.full_name}
+              fotoUrl={selected.foto_url}
+              size={44}
+              fallbackClassName="bg-gray-100 text-sm font-bold text-gray-500"
+            />
             <div>
               <p className="font-semibold text-gray-900">{selected.full_name}</p>
               {selected.grupo_activo && <p className="text-xs text-gray-400">{selected.grupo_activo}</p>}

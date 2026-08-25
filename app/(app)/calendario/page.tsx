@@ -77,7 +77,7 @@ export default async function CalendarioPage() {
   // de en cadena (eventos/días sin escuela son institucionales, no dependen
   // del alumno vinculado).
   const [{ data: vinculos }, { data: eventosRaw }, { data: diasSinEscuelaRaw }] = await Promise.all([
-    supabase.from("user_estudiantes").select("students(id, full_name, grupo_activo, birth_date, gender)").eq("user_id", currentUser.id),
+    supabase.from("user_estudiantes").select("students(id, full_name, grupo_activo, birth_date, gender, foto_url)").eq("user_id", currentUser.id),
     admin.from("eventos_calendario").select("id, nombre, fecha_inicio, fecha_fin, descripcion, tipo"),
     admin.from("dias_sin_escuela").select("id, fecha_inicio, fecha_fin, motivo"),
   ]);

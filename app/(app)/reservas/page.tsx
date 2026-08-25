@@ -25,12 +25,12 @@ export default async function ReservasPage() {
   const supabase = await createSupabaseServerClient();
   const { data: vinculos } = await supabase
     .from("user_estudiantes")
-    .select("students(id, full_name, grupo_activo, birth_date, gender)")
+    .select("students(id, full_name, grupo_activo, birth_date, gender, foto_url)")
     .eq("user_id", currentUser.id);
 
   const estudiantes = (vinculos ?? [])
     .map((v) => (Array.isArray(v.students) ? v.students[0] : v.students))
-    .filter((s): s is { id: string; full_name: string; grupo_activo: string | null; birth_date: string | null; gender: string | null } => !!s)
+    .filter((s): s is { id: string; full_name: string; grupo_activo: string | null; birth_date: string | null; gender: string | null; foto_url: string | null } => !!s)
     // Mismo criterio que /mi-perfil: el alumno sin grupo no tiene plan que
     // reservar, así que no puede ser el que abre la pantalla.
     .sort((a, b) =>
