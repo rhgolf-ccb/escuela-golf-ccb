@@ -25,7 +25,7 @@ import EventosTab from "./EventosTab";
 import WeekWizardModal from "./week-wizard/WeekWizardModal";
 import { isStaff, type Rol } from "@/lib/roles";
 import { TIPO_PLAN_LABEL, TIPOS_PLAN, acentoGrupo, colorGrupo, TEXTO_SOBRE_ACENTO, type TipoPlan } from "@/lib/grupos";
-import { formatWhatsAppMessage, openWhatsApp } from "@/lib/whatsapp-formatter";
+import { formatWhatsAppMessage, mensajeSuspension, openWhatsApp } from "@/lib/whatsapp-formatter";
 import { CalendarDays } from "lucide-react";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -152,6 +152,8 @@ export interface SesionSemana {
   juego_competitivo: string | null; estaciones_damas: EstacionDamas[] | null;
   estaciones_competencia?: EstacionCompetencia[] | null;
   notas: string | null; asistencia_registrada: boolean;
+  // Clase cancelada a última hora. La sesión se conserva: se marca.
+  suspendida?: boolean; motivo_suspension?: string | null;
   sesion_juvenil?: SesionJuvenilData | null;
   calentamiento?: { ejercicios: { id: string; nombre: string; series_repeticiones: string | null }[]; duracion_min: number } | null;
 }
@@ -517,6 +519,12 @@ export default function ProgramacionModule({ currentRol }: { currentRol: Rol | n
   const [calLoading, setCalLoading]           = useState(false);
   const [mesCal, setMesCal]                   = useState<Date>(() => new Date());
   const [calEventDetail, setCalEventDetail]   = useState<CalSesion | null>(null);
+  // Suspender una clase a última hora: se marca la sesión y queda el aviso
+  // redactado para mandarlo al grupo. `aviso` distingue los dos momentos del
+  // modal — antes de suspender se pregunta el motivo, después se muestra el
+  // mensaje listo para enviar.
+  const [suspender, setSuspender] = useState<{ sesion: CalSesion; motivo: string; guardando: boolean; aviso: string | null } | null>(null);
+  const [avisoCopiado, setAvisoCopiado] = useState(false);
   const [selectedCalDate, setSelectedCalDate] = useState<string | null>(null);
   const [calEventReservas, setCalEventReservas] = useState<{
     loading: boolean; cupoMaximo: number;
@@ -740,6 +748,49 @@ export default function ProgramacionModule({ currentRol }: { currentRol: Rol | n
     if (viewMode === "semana") fetchCalSemana();
     else if (viewMode === "mes") fetchCalMes();
   }, [viewMode, fetchCalSemana, fetchCalMes]);
+
+  // ── Suspender / reactivar una clase ───────────────────────────────────────
+  function avisoDe(s: CalSesion, motivo: string | null): string {
+    return mensajeSuspension({
+      grupo: TIPO_PLAN_LABEL[s.tipo_plan],
+      dia: DIA_LABEL[s.dia_semana],
+      fecha: formatDiaFecha(s.fecha),
+      horaInicio: formatHora(s.hora_inicio) || null,
+      horaFin: formatHora(s.hora_fin) || null,
+      motivo: motivo?.trim() || null,
+    });
+  }
+
+  async function handleSuspender() {
+    if (!suspender) return;
+    setSuspender({ ...suspender, guardando: true });
+    const motivo = suspender.motivo.trim() || null;
+    const { error } = await supabase
+      .from("sesiones_semana")
+      .update({ suspendida: true, motivo_suspension: motivo, suspendida_at: new Date().toISOString() })
+      .eq("id", suspender.sesion.id);
+    if (error) {
+      showToast(`No se pudo suspender: ${error.message}`);
+      setSuspender({ ...suspender, guardando: false });
+      return;
+    }
+    // El aviso se arma con lo que quedó guardado, no con lo que había en el
+    // formulario: si el update falló a medias, el mensaje mentiría.
+    setSuspender({ ...suspender, guardando: false, aviso: avisoDe(suspender.sesion, motivo) });
+    setCalEventDetail(null);
+    if (viewMode === "semana") fetchCalSemana(); else if (viewMode === "mes") fetchCalMes();
+  }
+
+  async function handleReactivar(s: CalSesion) {
+    const { error } = await supabase
+      .from("sesiones_semana")
+      .update({ suspendida: false, motivo_suspension: null, suspendida_at: null })
+      .eq("id", s.id);
+    if (error) { showToast(`No se pudo reactivar: ${error.message}`); return; }
+    showToast("Clase reactivada — vuelve a aparecer para las familias");
+    setCalEventDetail(null);
+    if (viewMode === "semana") fetchCalSemana(); else if (viewMode === "mes") fetchCalMes();
+  }
 
   // ── Fetch reservas for calendar event detail ──────────────────────────────
   useEffect(() => {
@@ -2111,6 +2162,29 @@ export default function ProgramacionModule({ currentRol }: { currentRol: Rol | n
                 {calEventDetail.hora_inicio && <><span>·</span><span>{formatHora(calEventDetail.hora_inicio)}–{formatHora(calEventDetail.hora_fin)}</span></>}
               </div>
               {calEventDetail.objetivo && <p className="text-sm text-(--ui-text-2)">{calEventDetail.objetivo}</p>}
+              {calEventDetail.suspendida && (
+                <div className="rounded-lg px-3 py-2" style={{ background: "var(--ui-bad-bg)", border: "1px solid var(--ui-bad)" }}>
+                  <p className="text-xs font-bold" style={{ color: "var(--ui-bad)" }}>Clase cancelada</p>
+                  {calEventDetail.motivo_suspension && (
+                    <p className="text-xs mt-0.5" style={{ color: "var(--ui-text-2)" }}>{calEventDetail.motivo_suspension}</p>
+                  )}
+                  <div className="flex gap-2 mt-2">
+                    <button
+                      onClick={() => setSuspender({ sesion: calEventDetail, motivo: calEventDetail.motivo_suspension ?? "", guardando: false, aviso: avisoDe(calEventDetail, calEventDetail.motivo_suspension ?? null) })}
+                      className="text-xs font-semibold rounded-lg px-2.5 py-1 text-(--g-on-accent)"
+                      style={{ background: "#25D366" }}
+                    >
+                      Ver aviso para WhatsApp
+                    </button>
+                    <button
+                      onClick={() => handleReactivar(calEventDetail)}
+                      className="text-xs font-semibold rounded-lg px-2.5 py-1 border border-(--ui-border) text-(--ui-text-2) hover:bg-(--ui-card-alt)"
+                    >
+                      Reactivar clase
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* Reservas section */}
@@ -2217,7 +2291,123 @@ export default function ProgramacionModule({ currentRol }: { currentRol: Rol | n
                   Cambiar de fecha
                 </button>
               </div>
+              {/* Tormenta a las 3 de la tarde: se marca aquí y el aviso queda
+                  escrito para pegarlo en el grupo. */}
+              {!calEventDetail.suspendida && (
+                <button
+                  onClick={() => setSuspender({ sesion: calEventDetail, motivo: "", guardando: false, aviso: null })}
+                  className="w-full py-1.5 rounded-xl text-xs font-semibold"
+                  style={{ color: "var(--ui-bad)", border: "1px solid var(--ui-bad)" }}
+                >
+                  Suspender clase y avisar
+                </button>
+              )}
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* ══ MODAL: Suspender clase y avisar ═════════════════════════════════ */}
+      {suspender && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={() => { if (!suspender.guardando) { setSuspender(null); setAvisoCopiado(false); } }}>
+          <div className="bg-(--ui-card) rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden" onClick={(e) => e.stopPropagation()}>
+            <div className="px-5 py-4 border-b border-(--ui-border-soft)">
+              <p className="text-sm font-bold text-(--ui-text)">
+                {suspender.aviso ? "Aviso listo para enviar" : "Suspender clase"}
+              </p>
+              <p className="text-xs text-(--ui-text-3) mt-0.5">
+                {TIPO_PLAN_LABEL[suspender.sesion.tipo_plan]} · {DIA_LABEL[suspender.sesion.dia_semana]} {formatDiaFecha(suspender.sesion.fecha)}
+                {suspender.sesion.hora_inicio ? ` · ${formatHora(suspender.sesion.hora_inicio)}` : ""}
+              </p>
+            </div>
+
+            {suspender.aviso === null ? (
+              <div className="px-5 py-4 space-y-3">
+                <p className="text-xs text-(--ui-text-2)">
+                  La clase queda marcada como cancelada para las familias y nadie más se puede inscribir.
+                  Las inscripciones que ya estaban no se borran.
+                </p>
+                <div>
+                  <p className="text-[11px] font-semibold uppercase tracking-wide text-(--ui-text-3) mb-1.5">Motivo</p>
+                  <div className="flex flex-wrap gap-1.5 mb-2">
+                    {["Tormenta eléctrica", "Lluvia", "Campo cerrado", "Profesor no disponible"].map((m) => (
+                      <button
+                        key={m}
+                        onClick={() => setSuspender({ ...suspender, motivo: m })}
+                        className="text-[11px] font-semibold rounded-full px-2.5 py-1 border"
+                        style={suspender.motivo === m
+                          ? { background: "var(--ui-gold)", color: "var(--ui-bg)", borderColor: "var(--ui-gold)" }
+                          : { color: "var(--ui-text-2)", borderColor: "var(--ui-border)" }}
+                      >
+                        {m}
+                      </button>
+                    ))}
+                  </div>
+                  <input
+                    type="text"
+                    value={suspender.motivo}
+                    onChange={(e) => setSuspender({ ...suspender, motivo: e.target.value })}
+                    placeholder="O escríbelo tú (opcional)"
+                    className="w-full rounded-lg px-3 py-2 text-sm focus:outline-none"
+                    style={{ background: "var(--ui-card-alt)", color: "var(--ui-text)", border: "1px solid var(--ui-border)" }}
+                  />
+                </div>
+                <div className="flex gap-2 pt-1">
+                  <button
+                    onClick={handleSuspender}
+                    disabled={suspender.guardando}
+                    className="flex-1 py-2 rounded-xl text-sm font-bold disabled:opacity-50"
+                    style={{ background: "var(--ui-bad)", color: "var(--ui-bg)" }}
+                  >
+                    {suspender.guardando ? "Suspendiendo…" : "Suspender y preparar aviso"}
+                  </button>
+                  <button
+                    onClick={() => setSuspender(null)}
+                    disabled={suspender.guardando}
+                    className="px-4 py-2 rounded-xl text-sm font-medium border border-(--ui-border) text-(--ui-text-2)"
+                  >
+                    Cancelar
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="px-5 py-4 space-y-3">
+                <p className="text-xs text-(--ui-text-3)">
+                  La clase ya está cancelada en la app. Solo falta avisarle al grupo:
+                </p>
+                <pre
+                  className="text-xs whitespace-pre-wrap rounded-lg px-3 py-2.5 max-h-56 overflow-y-auto"
+                  style={{ background: "var(--ui-card-alt)", color: "var(--ui-text-2)", fontFamily: "inherit" }}
+                >
+                  {suspender.aviso}
+                </pre>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => openWhatsApp(suspender.aviso!)}
+                    className="flex-1 py-2 rounded-xl text-sm font-bold text-(--g-on-accent) flex items-center justify-center gap-1.5"
+                    style={{ background: "#25D366" }}
+                  >
+                    <i className="ti ti-brand-whatsapp" style={{ fontSize: 16 }} /> Enviar por WhatsApp
+                  </button>
+                  <button
+                    onClick={async () => {
+                      await navigator.clipboard.writeText(suspender.aviso!);
+                      setAvisoCopiado(true);
+                      setTimeout(() => setAvisoCopiado(false), 2500);
+                    }}
+                    className="px-4 py-2 rounded-xl text-sm font-medium border border-(--ui-border) text-(--ui-text-2)"
+                  >
+                    {avisoCopiado ? "Copiado ✓" : "Copiar"}
+                  </button>
+                </div>
+                <button
+                  onClick={() => { setSuspender(null); setAvisoCopiado(false); }}
+                  className="w-full py-1.5 text-xs font-medium text-(--ui-text-3)"
+                >
+                  Cerrar
+                </button>
+              </div>
+            )}
           </div>
         </div>
       )}

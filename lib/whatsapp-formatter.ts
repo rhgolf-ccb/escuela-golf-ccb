@@ -1,4 +1,4 @@
-export type WhatsAppDocType = "analisis_grupal" | "programacion_semanal" | "reporte_alumno" | "plan_drills" | "actividad_especial" | "plan_torneo" | "festival";
+export type WhatsAppDocType = "analisis_grupal" | "programacion_semanal" | "reporte_alumno" | "plan_drills" | "actividad_especial" | "plan_torneo" | "festival" | "suspension_clase";
 
 const TITLE_EMOJI: Record<WhatsAppDocType, string> = {
   analisis_grupal: "🏌️",
@@ -8,6 +8,7 @@ const TITLE_EMOJI: Record<WhatsAppDocType, string> = {
   actividad_especial: "🌟",
   plan_torneo: "🏆",
   festival: "🎪",
+  suspension_clase: "⛔",
 };
 
 const HEADING_EMOJI: Record<WhatsAppDocType, { pattern: RegExp; emoji: string }[]> = {
@@ -49,6 +50,10 @@ const HEADING_EMOJI: Record<WhatsAppDocType, { pattern: RegExp; emoji: string }[
     { pattern: /ubicaci|lugar|campo|cancha/i, emoji: "📍" },
     { pattern: /premio/i, emoji: "🏅" },
     { pattern: /puntuaci[oó]n|puntaje/i, emoji: "📊" },
+  ],
+  suspension_clase: [
+    { pattern: /horario|hora/i, emoji: "🕐" },
+    { pattern: /motivo|raz[oó]n/i, emoji: "⚠️" },
   ],
 };
 
@@ -97,6 +102,32 @@ export function formatWhatsAppMessage(content: string, docType: WhatsAppDocType,
   const truncatedBody = truncateSmart(body, Math.max(budget, 0));
 
   return `${tituloLine}\n\n${truncatedBody}\n\n${FOOTER}`;
+}
+
+/**
+ * Aviso de clase cancelada, listo para mandar al grupo. El texto se arma aquí
+ * y no en la pantalla para que salga siempre igual, lo mande quien lo mande y
+ * desde donde lo mande — a última hora nadie está para redactar.
+ */
+export function mensajeSuspension(datos: {
+  grupo: string;
+  dia: string;
+  fecha: string;
+  horaInicio: string | null;
+  horaFin: string | null;
+  motivo: string | null;
+}): string {
+  const hora = datos.horaInicio
+    ? ` de ${datos.horaInicio}${datos.horaFin ? ` a ${datos.horaFin}` : ""}`
+    : "";
+  const cuerpo = [
+    `Buenas tardes. La clase de ${datos.grupo} de ${datos.dia} ${datos.fecha}${hora} queda cancelada.`,
+    datos.motivo ? `Motivo: ${datos.motivo}.` : null,
+    "No tienen que hacer nada: la clase ya aparece cancelada en la app y no se cobra.",
+    "Cualquier duda nos escriben. Gracias.",
+  ].filter(Boolean).join("\n\n");
+
+  return formatWhatsAppMessage(cuerpo, "suspension_clase", `Clase cancelada · ${datos.dia} ${datos.fecha}`);
 }
 
 export function openWhatsApp(text: string, phone?: string | null) {

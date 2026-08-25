@@ -11,6 +11,7 @@ export type EstudianteVinculado = {
 export type DiaPrograma = {
   grupo: TipoPlan; dia_semana: string; fecha: string; tipo_sesion: string; lugar: string;
   hora_inicio: string | null; hora_fin: string | null; objetivo: string; estaciones: string[];
+  suspendida?: boolean; motivo_suspension?: string | null;
 };
 export type ActividadEspecialPadre = { id: string; nombre: string; grupos: TipoPlan[]; fecha: string; hora_inicio: string | null; hora_fin: string | null };
 export type EventoCalPadre = { id: string; nombre: string; fecha_inicio: string; fecha_fin: string | null; descripcion: string | null; tipo: "especial" | "institucional" };
@@ -208,8 +209,18 @@ export default function CalendarioPadresModule({
                     <div className="flex items-center gap-2 flex-wrap mb-1">
                       <span className="text-xs font-bold" style={{ color: acentoGrupo(d.grupo) }}>{TIPO_PLAN_LABEL[d.grupo]}</span>
                       <span className="text-xs font-semibold text-gray-500 capitalize">{DIA_LABEL[d.dia_semana] ?? d.dia_semana} · {formatFechaCorta(d.fecha)}</span>
+                      {d.suspendida && (
+                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-full" style={{ background: "#fef2f2", color: "#991b1b" }}>
+                          CANCELADA
+                        </span>
+                      )}
                     </div>
-                    <p className="text-sm font-bold text-gray-900">{TIPO_SESION_LABEL[d.tipo_sesion] ?? d.tipo_sesion}</p>
+                    <p className="text-sm font-bold text-gray-900" style={d.suspendida ? { textDecoration: "line-through", color: "#9ca3af" } : undefined}>
+                      {TIPO_SESION_LABEL[d.tipo_sesion] ?? d.tipo_sesion}
+                    </p>
+                    {d.suspendida && d.motivo_suspension && (
+                      <p className="text-xs font-semibold mt-0.5" style={{ color: "#991b1b" }}>{d.motivo_suspension}</p>
+                    )}
                     <p className="text-xs text-gray-400 mt-0.5">
                       {d.hora_inicio && `${formatHora(d.hora_inicio)}${d.hora_fin ? `–${formatHora(d.hora_fin)}` : ""} · `}{LUGAR_LABEL[d.lugar] ?? d.lugar}
                     </p>

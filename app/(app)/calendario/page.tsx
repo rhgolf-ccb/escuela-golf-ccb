@@ -116,7 +116,7 @@ export default async function CalendarioPage() {
       const planMap = Object.fromEntries(planes.map((p) => [p.id, p.tipo_plan as TipoPlan]));
       const { data: seses } = await admin
         .from("sesiones_semana")
-        .select("plan_id, dia_semana, fecha, tipo_sesion, lugar, hora_inicio, hora_fin, objetivo, drills, sesion_juvenil, estaciones_damas, estaciones_competencia")
+        .select("plan_id, dia_semana, fecha, tipo_sesion, lugar, hora_inicio, hora_fin, objetivo, drills, sesion_juvenil, estaciones_damas, estaciones_competencia, suspendida, motivo_suspension")
         .in("plan_id", planes.map((p) => p.id));
 
       dias = (seses ?? []).map((s) => ({
@@ -129,6 +129,8 @@ export default async function CalendarioPage() {
         hora_fin: s.hora_fin,
         objetivo: s.objetivo,
         estaciones: estacionesDeSesion(s),
+        suspendida: s.suspendida ?? false,
+        motivo_suspension: s.motivo_suspension ?? null,
       }));
     }
 

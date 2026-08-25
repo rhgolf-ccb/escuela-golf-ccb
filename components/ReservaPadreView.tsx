@@ -27,6 +27,8 @@ type SesionConInfo = {
   hora_fin: string | null;
   objetivo: string;
   cupo_maximo: number;
+  suspendida: boolean;
+  motivo_suspension: string | null;
   confirmados: number;
   en_espera: number;
   miReserva: { id: string; estado: "confirmado" | "en_espera"; posicion_espera: number | null } | null;
@@ -104,7 +106,7 @@ export default function ReservaPadreView({ estudiantes }: { estudiantes: Estudia
 
     const { data: sesData } = await supabase
       .from("sesiones_semana")
-      .select("id, plan_id, dia_semana, fecha, tipo_sesion, lugar, hora_inicio, hora_fin, objetivo, cupo_maximo")
+      .select("id, plan_id, dia_semana, fecha, tipo_sesion, lugar, hora_inicio, hora_fin, objetivo, cupo_maximo, suspendida, motivo_suspension")
       .in("plan_id", planes.map((p) => p.id))
       .order("hora_inicio");
 
@@ -294,7 +296,14 @@ export default function ReservaPadreView({ estudiantes }: { estudiantes: Estudia
                     </div>
 
                     <div className="mt-3">
-                      {ses.miReserva ? (
+                      {/* Una clase cancelada no admite nada: ni inscribirse ni
+                          cancelar. El aviso va antes que el estado de cupo. */}
+                      {ses.suspendida ? (
+                        <div className="w-full py-2 px-3 rounded-lg text-xs font-semibold text-center text-red-700 bg-red-50">
+                          Clase cancelada{ses.motivo_suspension ? ` — ${ses.motivo_suspension}` : ""}
+                          {ses.miReserva && <span className="block font-normal text-[11px] text-red-600 mt-0.5">Tu inscripción no se cobra.</span>}
+                        </div>
+                      ) : ses.miReserva ? (
                         <div className="flex items-center justify-between gap-2">
                           <span
                             className="text-xs font-semibold px-2 py-1 rounded-full"
