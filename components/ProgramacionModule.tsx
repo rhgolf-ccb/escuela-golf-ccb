@@ -570,9 +570,15 @@ export default function ProgramacionModule({ currentRol }: { currentRol: Rol | n
   const padresPdfRef = useRef<HTMLDivElement>(null);
   const profesoresPdfRef = useRef<HTMLDivElement>(null);
   const [generandoPdf, setGenerandoPdf] = useState<"padres" | "profesores" | null>(null);
+  // El PDF se arma junto con la vista previa, no al pulsar el botón: navigator
+  // .share() de iOS exige que la llamada salga del gesto del usuario, y si entre
+  // el clic y el share hay un await largo (importar jsPDF, dibujar) Safari lo
+  // rechaza por "no user activation".
   const [pdfPreview, setPdfPreview] = useState<{
     dataUrl: string; ratio: number; titulo: string; subtitulo: string; filename: string;
+    blob: Blob;
   } | null>(null);
+  const [compartiendoPdf, setCompartiendoPdf] = useState(false);
 
   // Los cuatro grupos abren el mismo wizard de semana: WeekWizardModal ya
   // resuelve horario, categorías y contenido por tipo de plan.
@@ -1010,9 +1016,12 @@ export default function ProgramacionModule({ currentRol }: { currentRol: Rol | n
     try {
       const { default: html2canvas } = await import("html2canvas");
       const canvas = await html2canvas(el, { scale: 2, backgroundColor: "#fff", useCORS: true, logging: false });
+      const dataUrl = canvas.toDataURL("image/jpeg", 0.95);
+      const ratio = canvas.width / canvas.height;
       setPdfPreview({
-        dataUrl: canvas.toDataURL("image/jpeg", 0.95),
-        ratio: canvas.width / canvas.height,
+        dataUrl,
+        ratio,
+        blob: await construirPdf(dataUrl, ratio),
         titulo: destino === "padres" ? "Vista previa — PDF padres" : "Vista previa — PDF profesores",
         subtitulo: destino === "padres"
           ? "Así se verá el PDF que descargas o envías"
@@ -1024,22 +1033,72 @@ export default function ProgramacionModule({ currentRol }: { currentRol: Rol | n
     }
   }
 
-  async function downloadPreviewPdf() {
-    if (!pdfPreview) return;
+  // Centra la imagen capturada en una A4 apaisada y devuelve el PDF ya armado.
+  async function construirPdf(dataUrl: string, ratio: number): Promise<Blob> {
     const { default: jsPDF } = await import("jspdf");
     const pdf = new jsPDF({ orientation: "landscape", unit: "mm", format: "a4" });
     const pdfW = pdf.internal.pageSize.getWidth();
     const pdfH = pdf.internal.pageSize.getHeight();
     let imgW = pdfW;
-    let imgH = pdfW / pdfPreview.ratio;
+    let imgH = pdfW / ratio;
     if (imgH > pdfH) {
       imgH = pdfH;
-      imgW = pdfH * pdfPreview.ratio;
+      imgW = pdfH * ratio;
     }
-    const offsetX = (pdfW - imgW) / 2;
-    const offsetY = (pdfH - imgH) / 2;
-    pdf.addImage(pdfPreview.dataUrl, "JPEG", offsetX, offsetY, imgW, imgH);
-    pdf.save(pdfPreview.filename);
+    pdf.addImage(dataUrl, "JPEG", (pdfW - imgW) / 2, (pdfH - imgH) / 2, imgW, imgH);
+    return pdf.output("blob");
+  }
+
+  function descargarBlob(blob: Blob, filename: string) {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  function downloadPreviewPdf() {
+    if (!pdfPreview) return;
+    descargarBlob(pdfPreview.blob, pdfPreview.filename);
+    setPdfPreview(null);
+  }
+
+  // Mandar el PDF por WhatsApp de verdad, como archivo adjunto.
+  //
+  // Un link wa.me solo sabe llevar texto: por eso el botón de WhatsApp de la
+  // barra manda el resumen escrito y nunca el PDF. Lo único que puede entregar
+  // el archivo es navigator.share() con `files`, que abre la hoja de compartir
+  // del sistema y ahí sí se elige WhatsApp con el PDF adjunto. Existe en el
+  // celular (Android/Chrome y iOS/Safari); en escritorio casi nunca, así que
+  // ahí se cae a descargar el PDF y abrir WhatsApp con el texto para adjuntarlo
+  // a mano — que es exactamente lo que se hacía antes, pero sin buscar dónde
+  // quedó el archivo.
+  async function sharePreviewPdf() {
+    if (!pdfPreview) return;
+    const file = new File([pdfPreview.blob], pdfPreview.filename, { type: "application/pdf" });
+    const titulo = `Programación ${TIPO_PLAN_LABEL[activeTab]} — ${formatWeekRange(semana)}`;
+
+    if (typeof navigator !== "undefined" && navigator.canShare?.({ files: [file] })) {
+      setCompartiendoPdf(true);
+      try {
+        await navigator.share({ files: [file], title: titulo });
+        setPdfPreview(null);
+      } catch (err) {
+        // AbortError = el usuario cerró la hoja de compartir. No es un fallo.
+        if ((err as Error)?.name !== "AbortError") {
+          descargarBlob(pdfPreview.blob, pdfPreview.filename);
+          showToast("No se pudo compartir directo — el PDF quedó descargado para adjuntarlo");
+        }
+      } finally {
+        setCompartiendoPdf(false);
+      }
+      return;
+    }
+
+    descargarBlob(pdfPreview.blob, pdfPreview.filename);
+    openWhatsApp(titulo);
+    showToast("PDF descargado — adjúntalo en el chat que se acaba de abrir");
     setPdfPreview(null);
   }
 
@@ -1054,14 +1113,14 @@ export default function ProgramacionModule({ currentRol }: { currentRol: Rol | n
   const iconoPdf = <svg width="13" height="13" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>;
 
   const compartirItems: DropdownMenuItem[] = [
-    { label: "PDF padres", icon: iconoPdf, onSelect: () => openPdfPreview("padres") },
+    { label: "PDF padres (ver y enviar)", icon: iconoPdf, onSelect: () => openPdfPreview("padres") },
     {
-      label: "PDF profesores",
+      label: "PDF profesores (ver y enviar)",
       icon: <svg width="13" height="13" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2M9 11a4 4 0 100-8 4 4 0 000 8zM23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 010 7.75"/></svg>,
       onSelect: () => openPdfPreview("profesores"),
     },
     {
-      label: "Enviar por WhatsApp",
+      label: "Resumen de texto por WhatsApp",
       icon: <svg width="13" height="13" viewBox="0 0 24 24" fill="#25D366"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>,
       onSelect: handleWhatsApp,
     },
@@ -2511,6 +2570,15 @@ export default function ProgramacionModule({ currentRol }: { currentRol: Rol | n
             </div>
             <div className="flex items-center justify-end gap-2 px-5 py-3 border-t border-(--ui-border-soft)">
               <button onClick={() => setPdfPreview(null)} className="px-4 py-2 rounded-lg text-sm font-medium text-(--ui-text-2) hover:bg-(--ui-card-alt)">Cerrar</button>
+              <button
+                onClick={sharePreviewPdf}
+                disabled={compartiendoPdf}
+                className="px-4 py-2 rounded-lg text-sm font-semibold text-(--g-on-accent) flex items-center gap-1.5 disabled:opacity-60"
+                style={{ background: "#25D366" }}
+              >
+                <i className="ti ti-brand-whatsapp" style={{ fontSize: 15 }} />
+                {compartiendoPdf ? "Abriendo…" : "Enviar PDF por WhatsApp"}
+              </button>
               <button onClick={downloadPreviewPdf} className="px-4 py-2 rounded-lg text-sm font-semibold text-(--ui-bg) flex items-center gap-1.5" style={{ background: "var(--ui-gold)" }}>
                 <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
                 Descargar PDF
