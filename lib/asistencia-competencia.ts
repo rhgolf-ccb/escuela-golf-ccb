@@ -29,6 +29,18 @@
 
 export const META_SEMANAL_COMPETENCIA = 3;
 
+/**
+ * Porcentaje de asistencia contra la meta, con tope en 100.
+ *
+ * La semana tiene 4 sesiones y la meta son 3: el que va a las cuatro cumplió,
+ * no cumplió un 133 %. Sin el tope, venir de más se veía como un dato raro en
+ * la tabla y descuadraba el promedio del grupo contra el de cada alumno.
+ */
+export function pctContraMeta(presentes: number, meta: number): number {
+  if (meta <= 0) return 0;
+  return Math.min(100, Math.round((presentes / meta) * 100));
+}
+
 /** Una sesión ya cargada, reducida a lo único que la meta necesita. */
 export type SesionParaMeta = {
   /** Fecha de la sesión, ISO (YYYY-MM-DD). */
