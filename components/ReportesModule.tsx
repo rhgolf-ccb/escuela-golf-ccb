@@ -4,7 +4,7 @@ import { useState, useEffect, useMemo, useRef, useCallback, type ReactNode, Frag
 import * as XLSX from "xlsx";
 import {
   BarChart3, CalendarCheck, ClipboardCheck, TrendingUp, PieChart, CakeSlice, Radio,
-  FileText, Table2, Send, type LucideIcon,
+  FileText, Table2, Send, MessageCircle, type LucideIcon,
 } from "lucide-react";
 // El cliente compartido y no uno propio con createClient(): aquel guarda la
 // sesión en localStorage, donde no está —vive en la cookie que lee
@@ -13,6 +13,7 @@ import {
 // tabla, la asistencia quedó con sus tarjetas y sus columnas pero sin una sola
 // fila de alumnos.
 import { supabase } from "@/lib/supabase";
+import { DIRECTOR_COORD_ROLES, roleLabel, type Rol } from "@/lib/roles";
 import {
   acentoGrupo, acentoGrupoSuave, calcularGrupo, edadDe,
   tipoPlanDeAlumno, tipoPlanDeGrupo, TIPOS_PLAN, TIPO_PLAN_LABEL, type TipoPlan,
@@ -29,27 +30,31 @@ import {
 
 // ── Constants ────────────────────────────────────────────────────────────────
 
-type Tab = "asistencia" | "tests" | "progreso" | "estadisticas" | "edades" | "live";
+type Tab = "asistencia" | "tests" | "progreso" | "estadisticas" | "edades" | "live" | "paco";
 
 // Las seis pestañas responden a tres preguntas distintas y la barra plana las
 // mostraba como si fueran seis variantes de lo mismo. Se agrupan por familia:
 // el seguimiento del alumno, la foto del padrón y lo que está pasando ahora.
 // El orden es el que ya tenían, así que agrupar no mueve nada de sitio.
-type Familia = "seguimiento" | "padron" | "vivo";
+type Familia = "seguimiento" | "padron" | "vivo" | "uso";
 
 const FAMILIA_LABEL: Record<Familia, string> = {
   seguimiento: "Seguimiento",
   padron: "Padrón",
   vivo: "Ahora",
+  uso: "Uso",
 };
 
-const TABS: { id: Tab; label: string; icon: LucideIcon; familia: Familia; hint: string }[] = [
+const TABS: { id: Tab; label: string; icon: LucideIcon; familia: Familia; hint: string; soloDirectorCoord?: boolean }[] = [
   { id: "asistencia",   label: "Asistencia",   icon: CalendarCheck,  familia: "seguimiento", hint: "Quién vino a cada sesión" },
   { id: "tests",        label: "Tests",        icon: ClipboardCheck, familia: "seguimiento", hint: "Cobertura de evaluaciones" },
   { id: "progreso",     label: "Progreso",     icon: TrendingUp,     familia: "seguimiento", hint: "Tendencia semana a semana" },
   { id: "estadisticas", label: "Estadísticas", icon: PieChart,       familia: "padron",      hint: "Resumen por grupo" },
   { id: "edades",       label: "Edades",       icon: CakeSlice,      familia: "padron",      hint: "Listado para armar grupos" },
   { id: "live",         label: "Reserva live", icon: Radio,          familia: "vivo",        hint: "Inscritos de la semana en curso" },
+  // Solo director y coordinador: ver cuánto usan a Paco los demás no es asunto
+  // de un profesor. La ruta que sirve los datos lo comprueba por su cuenta.
+  { id: "paco",         label: "Paco",         icon: MessageCircle,  familia: "uso",         hint: "Quién está usando el asesor", soloDirectorCoord: true },
 ];
 
 const MESES_ES = ["enero","febrero","marzo","abril","mayo","junio","julio","agosto","septiembre","octubre","noviembre","diciembre"];
@@ -2041,18 +2046,163 @@ function ExportBar({ pdf, excel, whatsapp }: { pdf?: () => void; excel?: () => v
   );
 }
 
+// ── Tab 8: USO DE PACO ───────────────────────────────────────────────────────
+
+// Cuánto se usa el asesor y, sobre todo, quién no lo ha abierto nunca: esa
+// segunda lista es la que dice si la herramienta llegó a la gente. El dato sale
+// de `paco_usage`, que existe para el cupo diario y de paso guarda el rastro.
+//
+// Va por /api/paco-uso porque la policy de esa tabla deja ver solo las filas
+// propias; la ruta comprueba que quien pregunta sea director o coordinador.
+
+type UsoPaco = {
+  id: string;
+  nombre: string | null;
+  email: string;
+  rol: string;
+  activo: boolean;
+  last_sign_in: string | null;
+  mensajes: number;
+  mensajes30: number;
+  dias: number;
+  primera: string | null;
+  ultima: string | null;
+};
+
+function TabPaco() {
+  const [usuarios, setUsuarios] = useState<UsoPaco[] | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let vivo = true;
+    (async () => {
+      try {
+        const res = await fetch("/api/paco-uso");
+        const data = await res.json();
+        if (!vivo) return;
+        if (!res.ok) { setLoadError(data.error === "forbidden" ? "Esta pestaña es del director y el coordinador." : (data.error ?? "No se pudo cargar")); return; }
+        setUsuarios(data.usuarios as UsoPaco[]);
+      } catch (e) {
+        if (vivo) setLoadError(e instanceof Error ? e.message : "No se pudo cargar");
+      }
+    })();
+    return () => { vivo = false; };
+  }, []);
+
+  const { conUso, sinUso, totalMensajes, mensajes30 } = useMemo(() => {
+    const lista = usuarios ?? [];
+    const con = lista.filter((u) => u.mensajes > 0).sort((a, b) => b.mensajes - a.mensajes);
+    const sin = lista.filter((u) => u.mensajes === 0 && u.activo);
+    return {
+      conUso: con,
+      sinUso: sin,
+      totalMensajes: lista.reduce((a, u) => a + u.mensajes, 0),
+      mensajes30: lista.reduce((a, u) => a + u.mensajes30, 0),
+    };
+  }, [usuarios]);
+
+  function doExportExcel() {
+    const rows = (usuarios ?? []).map((u) => [
+      u.nombre ?? u.email, roleLabel(u.rol as Rol), u.mensajes, u.mensajes30, u.dias,
+      u.primera ?? "—", u.ultima ?? "—",
+    ]);
+    exportExcel("Uso de Paco", ["Nombre", "Rol", "Mensajes", "Últimos 30 días", "Días", "Primera vez", "Última vez"], rows);
+  }
+
+  if (loadError) return <ErrorState msg={loadError} />;
+  if (!usuarios) return <Loading />;
+
+  return (
+    <div>
+      <Toolbar right={<ExportBar excel={doExportExcel} />}>
+        <span className="text-xs" style={{ color: "var(--ui-text-3)" }}>Todo el histórico</span>
+      </Toolbar>
+
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
+        <MetricCard label="Lo han usado" value={conUso.length} sub={`de ${usuarios.length} cuentas`} />
+        <MetricCard label="Mensajes" value={totalMensajes} tono="ok" sub="desde el primer día" />
+        <MetricCard label="Últimos 30 días" value={mensajes30} tono={mensajes30 > 0 ? "ok" : "neutro"} />
+        <MetricCard label="Nunca lo han abierto" value={sinUso.length} tono={sinUso.length > 0 ? "bad" : "neutro"} sub="cuentas activas" />
+      </div>
+
+      <Panel title="Quién lo usa" sub={conUso.length > 0 ? `${conUso.length} cuentas` : undefined}>
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr>
+                <th className={`${TH} text-left px-3 py-2`} style={thStyle}>Nombre</th>
+                <th className={`${TH} text-left px-3 py-2 w-32`} style={thStyle}>Rol</th>
+                <th className={`${TH} text-center px-2 py-2 w-24`} style={thStyle}>Mensajes</th>
+                <th className={`${TH} text-center px-2 py-2 w-24`} style={thStyle} title="Mensajes en los últimos 30 días">30 días</th>
+                <th className={`${TH} text-center px-2 py-2 w-20`} style={thStyle} title="Días distintos en que lo abrió">Días</th>
+                <th className={`${TH} text-left px-3 py-2 w-28`} style={thStyle}>Última vez</th>
+              </tr>
+            </thead>
+            <tbody>
+              {conUso.length === 0 ? (
+                <tr><td colSpan={6}><EmptyState msg="Todavía nadie ha usado a Paco" /></td></tr>
+              ) : conUso.map((u, i) => (
+                <tr key={u.id} className="h-9" style={{ background: fondoFila(i) }}>
+                  <td className="px-3 py-1.5 text-[12px] font-semibold" style={{ color: "var(--ui-text)" }}>
+                    {u.nombre ?? u.email}
+                  </td>
+                  <td className="px-3 py-1.5 text-[11px]" style={{ color: "var(--ui-text-2)" }}>{roleLabel(u.rol as Rol)}</td>
+                  <td className="text-center px-2 py-1.5 text-[12px] font-bold tabular-nums" style={{ color: "var(--ui-text)" }}>{u.mensajes}</td>
+                  <td className="text-center px-2 py-1.5 text-[12px] tabular-nums" style={{ color: u.mensajes30 > 0 ? "var(--ui-ok)" : "var(--ui-text-3)" }}>{u.mensajes30}</td>
+                  <td className="text-center px-2 py-1.5 text-[12px] tabular-nums" style={{ color: "var(--ui-text-2)" }}>{u.dias}</td>
+                  <td className="px-3 py-1.5 text-[11px] tabular-nums" style={{ color: "var(--ui-text-2)" }}>{fmtFecha(u.ultima)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </Panel>
+
+      {sinUso.length > 0 && (
+        <div className="mt-4">
+          <Panel title="Nunca lo han abierto" sub={`${sinUso.length} cuentas activas`}>
+            <div className="flex flex-wrap gap-1.5 p-4">
+              {sinUso.map((u) => (
+                <span key={u.id} className="px-2 py-1 rounded-md text-[11px]"
+                  style={{ background: "var(--ui-card-alt)", color: "var(--ui-text-2)", border: "1px solid var(--ui-border)" }}
+                  title={`${roleLabel(u.rol as Rol)} · ${u.email}`}>
+                  {u.nombre ?? u.email}
+                </span>
+              ))}
+            </div>
+          </Panel>
+        </div>
+      )}
+
+      <p className="text-[11px] mt-4 leading-relaxed" style={{ color: "var(--ui-text-3)" }}>
+        Se cuenta un mensaje por cada pregunta que alguien le hace a Paco. El contador nació para
+        el cupo diario —40 al día el coordinador, 20 los profesores, 10 por semana las familias—
+        y de paso deja este rastro. No se guarda de qué se habló.
+      </p>
+    </div>
+  );
+}
+
 // ── Main component ───────────────────────────────────────────────────────────
 
-export default function ReportesModule() {
+export default function ReportesModule({ currentRol }: { currentRol?: Rol | null }) {
   const [activeTab, setActiveTab] = useState<Tab>("asistencia");
-  const tabActual = TABS.find((t) => t.id === activeTab)!;
+
+  // Un profesor no ve la pestaña de uso de Paco. La ruta que sirve esos datos lo
+  // vuelve a comprobar: esconderla aquí es para no ofrecer algo que al abrirse
+  // diría "no tienes permiso".
+  const tabsVisibles = useMemo(
+    () => TABS.filter((t) => !t.soloDirectorCoord || (currentRol != null && DIRECTOR_COORD_ROLES.includes(currentRol))),
+    [currentRol]
+  );
+  const tabActual = tabsVisibles.find((t) => t.id === activeTab) ?? tabsVisibles[0];
 
   // Las familias en el orden en que aparecen en TABS, sin repetirlas.
   const familias = useMemo(() => {
     const vistas: Familia[] = [];
-    for (const t of TABS) if (!vistas.includes(t.familia)) vistas.push(t.familia);
-    return vistas.map((f) => ({ familia: f, tabs: TABS.filter((t) => t.familia === f) }));
-  }, []);
+    for (const t of tabsVisibles) if (!vistas.includes(t.familia)) vistas.push(t.familia);
+    return vistas.map((f) => ({ familia: f, tabs: tabsVisibles.filter((t) => t.familia === f) }));
+  }, [tabsVisibles]);
 
   return (
     <Pagina>
@@ -2102,6 +2252,7 @@ export default function ReportesModule() {
           {activeTab === "estadisticas" && <TabEstadisticas />}
           {activeTab === "edades" && <TabEdades />}
           {activeTab === "live" && <TabReservaLive />}
+          {activeTab === "paco" && tabActual.id === "paco" && <TabPaco />}
         </div>
     </Pagina>
   );

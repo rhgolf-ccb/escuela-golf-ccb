@@ -981,18 +981,21 @@ export async function POST(request: NextRequest) {
           break;
         }
 
+        // El contador sube siempre, también para quien no tiene cupo. Antes solo
+        // se incrementaba cuando había cupo que descontar, así que el uso del
+        // director no quedaba registrado en ninguna parte y en Reportes → Paco
+        // aparecía como si nunca lo hubiera abierto. La pantalla del chat solo
+        // enseña el contador cuando hay límite, así que para él no cambia nada.
+        const { data: nuevoConteo } = await admin.rpc("increment_paco_usage", { p_user_id: userId, p_fecha: hoy });
         let usage: { count: number; limit: number | null; periodo?: "dia" | "semana" } | undefined;
         if (limite === null) {
-          usage = { count: 0, limit: null, periodo };
+          usage = { count: typeof nuevoConteo === "number" ? nuevoConteo : 0, limit: null, periodo };
+        } else if (esFamilia) {
+          // El contador de la base es por día; el cupo de la familia es de la
+          // semana completa, así que hay que volver a sumarla.
+          usage = { count: await consumoSemanal(admin, userId), limit: limite, periodo };
         } else {
-          const { data: nuevoConteo } = await admin.rpc("increment_paco_usage", { p_user_id: userId, p_fecha: hoy });
-          if (esFamilia) {
-            // El contador de la base es por día; el cupo de la familia es de la
-            // semana completa, así que hay que volver a sumarla.
-            usage = { count: await consumoSemanal(admin, userId), limit: limite, periodo };
-          } else {
-            usage = { count: typeof nuevoConteo === "number" ? nuevoConteo : limite, limit: limite, periodo };
-          }
+          usage = { count: typeof nuevoConteo === "number" ? nuevoConteo : limite, limit: limite, periodo };
         }
 
         send({ type: "done", text: text.trim(), usedWebSearch, usage });
