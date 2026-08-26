@@ -1,6 +1,7 @@
 ﻿"use client";
 
 import { useState, useEffect, useMemo, useRef, useCallback, type ReactNode, Fragment } from "react";
+import * as XLSX from "xlsx";
 import {
   BarChart3, CalendarCheck, ClipboardCheck, TrendingUp, PieChart, CakeSlice, Radio,
   FileText, Table2, Send, type LucideIcon,
@@ -132,55 +133,30 @@ function weeksInRange(from: Date, to: Date): { inicio: Date; fin: Date }[] {
 // completo tiene que paginarse con .range().
 const PAGE_SIZE = 1000;
 
-type PagedResponse<T> = { data: T[] | null; error: { message: string } | null; count?: number | null };
+type PagedResponse<T> = { data: T[] | null; error: { message: string } | null };
 
 /**
- * Trae todas las páginas de una consulta con .range().
- *
- * La primera página viaja con `count: "exact"`, así que la respuesta ya dice
- * cuántas filas hay en total y el resto de páginas salen a la vez en vez de una
- * detrás de otra. Con la base en São Paulo cada viaje cuesta ~300 ms, y el
- * padrón —1019 alumnos, dos páginas— los pagaba dos veces seguidas.
+ * Trae todas las páginas de una consulta acumulando con .range() hasta que una
+ * página devuelve menos de PAGE_SIZE filas.
  *
  * `buildQuery` recibe el rango porque los query builders de PostgREST son de un
- * solo uso: hay que construir uno nuevo en cada llamada.
+ * solo uso: hay que construir uno nuevo en cada iteración.
  *
- * Si una página falla se devuelve el error junto con lo acumulado hasta ahí;
- * quien llama debe mostrarlo en vez de pintar la lista parcial como si
- * estuviera completa.
+ * Si una página falla se corta el bucle y se devuelve el mensaje de error junto
+ * con lo acumulado hasta ahí; quien llama debe mostrar el error en vez de
+ * pintar la lista parcial como si estuviera completa.
  */
 async function fetchAllPages<T>(
-  buildQuery: (desde: number, hasta: number, conCuenta: boolean) => PromiseLike<PagedResponse<T>>
+  buildQuery: (desde: number, hasta: number) => PromiseLike<PagedResponse<T>>
 ): Promise<{ rows: T[]; error: string | null }> {
-  const { data, error, count } = await buildQuery(0, PAGE_SIZE - 1, true);
-  if (error) return { rows: [], error: error.message };
-  const primera = data ?? [];
-  if (primera.length < PAGE_SIZE) return { rows: primera, error: null };
-
-  // Sin cuenta exacta —la consulta no la pidió— no se sabe cuántas páginas
-  // faltan, así que se siguen pidiendo una a una como antes.
-  if (count == null) {
-    const rows = [...primera];
-    for (let desde = PAGE_SIZE; ; desde += PAGE_SIZE) {
-      const { data: d, error: e } = await buildQuery(desde, desde + PAGE_SIZE - 1, false);
-      if (e) return { rows, error: e.message };
-      const page = d ?? [];
-      rows.push(...page);
-      if (page.length < PAGE_SIZE) return { rows, error: null };
-    }
+  const rows: T[] = [];
+  for (let desde = 0; ; desde += PAGE_SIZE) {
+    const { data, error } = await buildQuery(desde, desde + PAGE_SIZE - 1);
+    if (error) return { rows, error: error.message };
+    const page = data ?? [];
+    rows.push(...page);
+    if (page.length < PAGE_SIZE) return { rows, error: null };
   }
-  if (count <= PAGE_SIZE) return { rows: primera, error: null };
-
-  const total = count;
-  const restantes = await Promise.all(
-    Array.from({ length: Math.ceil(total / PAGE_SIZE) - 1 }, (_, i) => {
-      const desde = (i + 1) * PAGE_SIZE;
-      return buildQuery(desde, desde + PAGE_SIZE - 1, false);
-    })
-  );
-  const fallo = restantes.find((p) => p.error);
-  if (fallo) return { rows: primera, error: fallo.error!.message };
-  return { rows: [...primera, ...restantes.flatMap((p) => p.data ?? [])], error: null };
 }
 
 /**
@@ -191,34 +167,12 @@ async function fetchAllPages<T>(
  * estable, dos alumnos con el mismo nombre pueden caer en distinta página entre
  * una petición y otra, y la paginación duplicaría una fila y se saltaría otra.
  */
-// Cada pestaña monta su propio componente y pedía el padrón otra vez al
-// entrar: ~190 KB y casi un segundo por cambio de pestaña, para una lista que
-// no cambia mientras se mira un reporte. Se guarda en memoria un rato corto y
-// se comparte entre pestañas. Reportes no escribe en `students` —lo único que
-// graba es `reservas.asistio`—, así que no hay nada que invalidar; al recargar
-// la pantalla el padrón vuelve a pedirse.
-const PADRON_TTL_MS = 120_000;
-const padronCache = new Map<string, { en: number; promesa: Promise<{ rows: unknown[]; error: string | null }> }>();
-
 function fetchStudents<T = Student>(columnas: string, soloActivos: boolean) {
-  const clave = `${columnas}|${soloActivos}`;
-  const guardado = padronCache.get(clave);
-  if (guardado && Date.now() - guardado.en < PADRON_TTL_MS) {
-    return guardado.promesa as Promise<{ rows: T[]; error: string | null }>;
-  }
-
-  const promesa = fetchAllPages<T>((desde, hasta, conCuenta) => {
-    const q = supabase.from("students").select(columnas, conCuenta ? { count: "exact" } : undefined);
+  return fetchAllPages<T>((desde, hasta) => {
+    const q = supabase.from("students").select(columnas);
     return (soloActivos ? q.eq("status", "activo") : q)
       .order("full_name").order("id").range(desde, hasta) as unknown as PromiseLike<PagedResponse<T>>;
-  }).then((res) => {
-    // Un fallo no se cachea: la siguiente pestaña debe poder reintentar.
-    if (res.error) padronCache.delete(clave);
-    return res;
   });
-
-  padronCache.set(clave, { en: Date.now(), promesa: promesa as Promise<{ rows: unknown[]; error: string | null }> });
-  return promesa;
 }
 
 // enrollment_date entra porque la meta de Competencia no cobra las semanas
@@ -360,10 +314,7 @@ type Sesion = {
 type Reserva = {
   id: string; sesion_id: string; estudiante_id: string; estado: string;
   posicion_espera: number | null; created_at: string; asistio: boolean | null;
-  // Opcional: solo "Reserva live" necesita el nombre incrustado en la reserva.
-  // La pestaña de Asistencia saca los suyos del padrón y no lo pide, que es la
-  // mitad del peso de esa respuesta.
-  students?: { id: string; full_name: string; grupo_activo: string | null; tiene_talega: string | null } | null;
+  students: { id: string; full_name: string; grupo_activo: string | null; tiene_talega: string | null } | null;
 };
 
 type Student = {
@@ -390,12 +341,7 @@ async function exportPDF(title: string, headers: string[], rows: string[][], sub
 
 // Excel compacto: fila mínima (14px) y anchos de columna ajustados al contenido,
 // para maximizar registros visibles por hoja (estándar de descargables de Reportes).
-//
-// La librería se carga al pulsar el botón y no con el módulo: son 137 KB
-// comprimidos —una cuarta parte de todo el JavaScript de la pantalla— que la
-// inmensa mayoría de las visitas nunca usa. El PDF ya se cargaba así.
-async function exportExcel(title: string, headers: string[], rows: (string | number)[][], subtitle?: string) {
-  const XLSX = await import("xlsx");
+function exportExcel(title: string, headers: string[], rows: (string | number)[][], subtitle?: string) {
   const aoa: (string | number)[][] = subtitle ? [[title], [subtitle], [], headers, ...rows] : [headers, ...rows];
   const ws = XLSX.utils.aoa_to_sheet(aoa);
   ws["!rows"] = aoa.map(() => ({ hpx: 14 }));
@@ -444,65 +390,44 @@ function TabAsistencia() {
   const groupByWeek = periodMode === "periodo" && rangeDays > 14;
   const periodoLabel = periodoSubtitle(effFrom, effTo);
 
-  // Las cuatro consultas salen a la vez. Antes las reservas esperaban a que
-  // llegaran las sesiones para armar el .in(sesion_id, …), y el padrón entero
-  // —956 fichas, 190 KB— viajaba para pintar las ocho filas de una semana. Las
-  // reservas se filtran por la fecha de su sesión con un join, así que ya no
-  // dependen del primer viaje, y del padrón solo se piden los alumnos que la
-  // tabla puede llegar a mostrar:
-  //   · los que tienen reserva en el periodo (cualquier grupo), y
-  //   · el grupo de Competencia completo, que aparece aunque no haya reservado
-  //     nada porque se mide contra la meta del club.
   useEffect(() => {
     async function load() {
       setLoading(true);
       setLoadError(null);
-      const [
-        { data: ses, error: sesErr },
-        { rows: rv, error: rvErr },
-        { data: stsRv, error: stsRvErr },
-        { data: stsComp, error: stsCompErr },
-      ] = await Promise.all([
+      const [{ data: ses, error: sesErr }, { rows: sts, error: stsErr }] = await Promise.all([
         supabase.from("sesiones_semana")
           .select("id,dia_semana,fecha,hora_inicio,hora_fin,tipo_sesion,lugar,objetivo,cupo_maximo,planes_semanales(tipo_plan,semana_inicio)")
           .gte("fecha", effFromISO).lte("fecha", effToISO).order("fecha").order("hora_inicio"),
-        fetchAllPages<Reserva>((desde, hasta) =>
-          supabase.from("reservas")
-            .select("id,sesion_id,estudiante_id,estado,posicion_espera,created_at,asistio,sesiones_semana!inner(fecha)")
-            .gte("sesiones_semana.fecha", effFromISO)
-            .lte("sesiones_semana.fecha", effToISO)
-            .eq("estado", "confirmado")
-            .order("id")
-            .range(desde, hasta) as unknown as PromiseLike<PagedResponse<Reserva>>
-        ),
-        supabase.from("students")
-          .select(`${STUDENT_COLS},reservas!inner(sesiones_semana!inner(fecha))`)
-          .eq("status", "activo")
-          .eq("reservas.estado", "confirmado")
-          .gte("reservas.sesiones_semana.fecha", effFromISO)
-          .lte("reservas.sesiones_semana.fecha", effToISO)
-          .order("full_name"),
-        supabase.from("students")
-          .select(STUDENT_COLS)
-          .eq("status", "activo")
-          .eq("grupo_activo", "Competencia")
-          .order("full_name"),
+        fetchStudents(STUDENT_COLS, true),
       ]);
-      const err = sesErr?.message ?? rvErr ?? stsRvErr?.message ?? stsCompErr?.message;
-      if (err) {
-        setLoadError(err);
+      if (sesErr || stsErr) {
+        setLoadError(sesErr?.message ?? stsErr!);
         setSesiones([]); setStudents([]); setReservas([]);
         setLoading(false);
         return;
       }
-      // Un alumno de Competencia con reserva llega por las dos consultas.
-      const porId = new Map<string, Student>();
-      for (const st of [...((stsRv ?? []) as unknown as Student[]), ...((stsComp ?? []) as unknown as Student[])]) {
-        porId.set(st.id, st);
-      }
       setSesiones((ses ?? []) as unknown as Sesion[]);
-      setStudents([...porId.values()].sort((a, b) => a.full_name.localeCompare(b.full_name)));
-      setReservas(rv);
+      setStudents(sts);
+      if (ses && ses.length > 0) {
+        const ids = (ses as unknown as Sesion[]).map((s) => s.id);
+        const { rows: rv, error: rvErr } = await fetchAllPages<Reserva>((desde, hasta) =>
+          supabase.from("reservas")
+            .select("id,sesion_id,estudiante_id,estado,posicion_espera,created_at,asistio,students!reservas_estudiante_id_fkey(id,full_name,grupo_activo,tiene_talega)")
+            .in("sesion_id", ids)
+            .eq("estado", "confirmado")
+            .order("id")
+            .range(desde, hasta) as unknown as PromiseLike<PagedResponse<Reserva>>
+        );
+        if (rvErr) {
+          setLoadError(rvErr);
+          setSesiones([]); setStudents([]); setReservas([]);
+          setLoading(false);
+          return;
+        }
+        setReservas(rv.map((r) => ({ ...r, students: Array.isArray(r.students) ? r.students[0] : r.students })));
+      } else {
+        setReservas([]);
+      }
       setLoading(false);
     }
     load();

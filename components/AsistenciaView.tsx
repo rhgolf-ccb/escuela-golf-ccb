@@ -102,41 +102,12 @@ export default function AsistenciaView({ sesionId }: { sesionId: string }) {
   const load = useCallback(async () => {
     setLoading(true);
 
-    // Las cuatro consultas salen a la vez y el plan viaja incrustado en la
-    // sesión. Antes eran cinco viajes en fila —sesión, plan, reservas, padrón,
-    // checks—, uno detrás de otro, y con la base en São Paulo son ~300 ms cada
-    // uno: kilómetro y medio de espera para una pantalla que el profesor abre
-    // desde el teléfono, en el campo, con la clase ya empezada. Ninguna
-    // dependía de la anterior salvo el plan, que ahora llega con la sesión.
-    type AlumnoRow = { id: string; full_name: string; grupo_activo: string | null; birth_date: string | null; gender: string | null };
-    type ReservaRow = {
-      id: string;
-      asistio: boolean | null;
-      students: AlumnoRow | AlumnoRow[] | null;
-    };
-
-    const [
-      { data: sesData },
-      { data: rvData },
-      { data: rosterData },
-      { data: checkData },
-    ] = await Promise.all([
-      supabase.from("sesiones_semana")
-        .select("*, planes_semanales(tipo_plan, tema_semanal)")
-        .eq("id", sesionId)
-        .single(),
-      supabase.from("reservas")
-        .select("id, asistio, students!reservas_estudiante_id_fkey(id, full_name, grupo_activo, birth_date, gender)")
-        .eq("sesion_id", sesionId)
-        .eq("estado", "confirmado"),
-      supabase.from("students")
-        .select("id, full_name, grupo_activo, birth_date, gender")
-        .eq("status", "activo")
-        .order("full_name", { ascending: true }),
-      supabase.from("progreso_checks")
-        .select("student_id, resultado")
-        .eq("sesion_id", sesionId),
-    ]);
+    // 1. Load session
+    const { data: sesData } = await supabase
+      .from("sesiones_semana")
+      .select("*")
+      .eq("id", sesionId)
+      .single();
 
     if (!sesData) { setLoading(false); return; }
     const s = sesData as SesionInfo;
@@ -153,13 +124,30 @@ export default function AsistenciaView({ sesionId }: { sesionId: string }) {
     (raw.sesion_juvenil?.estaciones ?? []).forEach((e) => { if (e?.foco) fset.add(e.foco); });
     setFocosDia([...fset]);
 
-    // 2. Plan de la semana — viene incrustado en la sesión.
-    const planData = (sesData as unknown as { planes_semanales: PlanInfo | PlanInfo[] | null }).planes_semanales;
-    const p = (Array.isArray(planData) ? planData[0] : planData) as PlanInfo | null;
-    if (!p) { setLoading(false); return; }
+    // 2. Load plan
+    const { data: planData } = await supabase
+      .from("planes_semanales")
+      .select("tipo_plan, tema_semanal")
+      .eq("id", s.plan_id)
+      .single();
+
+    if (!planData) { setLoading(false); return; }
+    const p = planData as PlanInfo;
     setPlan(p);
 
-    // 3. Alumnos con reserva confirmada en esta sesión (y su asistio)
+    // 3. Load students with a confirmed reservation for this session (+ their asistio)
+    type AlumnoRow = { id: string; full_name: string; grupo_activo: string | null; birth_date: string | null; gender: string | null };
+    type ReservaRow = {
+      id: string;
+      asistio: boolean | null;
+      students: AlumnoRow | AlumnoRow[] | null;
+    };
+    const { data: rvData } = await supabase
+      .from("reservas")
+      .select("id, asistio, students!reservas_estudiante_id_fkey(id, full_name, grupo_activo, birth_date, gender)")
+      .eq("sesion_id", sesionId)
+      .eq("estado", "confirmado");
+
     const rows = ((rvData as unknown as ReservaRow[]) ?? [])
       .map((r) => {
         const st = Array.isArray(r.students) ? r.students[0] : r.students;
@@ -181,6 +169,12 @@ export default function AsistenciaView({ sesionId }: { sesionId: string }) {
     // algunas queda disponible el botón "Agregar alumnos del grupo".
     // El grupo se calcula por edad, así que el filtro no puede ir en la consulta:
     // se traen los activos y se resuelve aquí con el mismo criterio que Alumnos.
+    const { data: rosterData } = await supabase
+      .from("students")
+      .select("id, full_name, grupo_activo, birth_date, gender")
+      .eq("status", "activo")
+      .order("full_name", { ascending: true });
+
     const roster: StudentRow[] = ((rosterData as AlumnoRow[]) ?? [])
       .filter((st) => tipoPlanDeAlumno(st) === p.tipo_plan)
       .map((st) => ({
@@ -200,7 +194,11 @@ export default function AsistenciaView({ sesionId }: { sesionId: string }) {
     if (autoCarga) roster.forEach((r) => { map[r.id] = null; });
     setAsistencias(map);
 
-    // 5. Checks rápidos ya guardados para esta sesión
+    // 5. Cargar checks rápidos ya guardados para esta sesión (si la tabla existe)
+    const { data: checkData } = await supabase
+      .from("progreso_checks")
+      .select("student_id, resultado")
+      .eq("sesion_id", sesionId);
     const cmap: Record<string, CheckResult> = {};
     (checkData ?? []).forEach((c) => {
       const row = c as { student_id: string; resultado: CheckResult };

@@ -208,48 +208,34 @@ export default function StudentsModule({
       // el padrón ya pasa de esa cifra, así que hay que pedir página por página.
       // El desempate por id mantiene el orden estable entre páginas cuando dos
       // alumnos comparten nombre.
-      //
-      // Los activos y los inactivos se piden por separado y a la vez. Con una
-      // sola consulta eran 1019 filas, o sea dos páginas, y la segunda no podía
-      // salir hasta que volviera la primera: medio segundo de ida y vuelta a São
-      // Paulo por nada. Cada estado cabe holgado en una página, y si algún día
-      // uno pasa de mil, su propio bucle lo pagina igual que antes.
       const PAGE_SIZE = 1000;
+      const acc: AlumnoFila[] = [];
+      let failed = false;
 
-      async function traerEstado(status: "activo" | "inactivo") {
-        const filas: AlumnoFila[] = [];
-        for (let desde = 0; ; desde += PAGE_SIZE) {
-          let query = supabase
-            .from("students")
-            .select(COLUMNAS_PADRON)
-            .eq("status", status)
-            .order("full_name", { ascending: true })
-            .order("id", { ascending: true })
-            .range(desde, desde + PAGE_SIZE - 1);
-          // Una familia no se trae el padrón entero al navegador: solo su grupo.
-          if (soloConsulta) query = query.eq("grupo_activo", "Competencia");
-          const { data, error } = await query;
-          if (error) return { filas, error: error.message };
-          const page = (data ?? []) as unknown as AlumnoFila[];
-          filas.push(...page);
-          if (page.length < PAGE_SIZE) return { filas, error: null };
+      for (let desde = 0; ; desde += PAGE_SIZE) {
+        let query = supabase
+          .from("students")
+          .select(COLUMNAS_PADRON)
+          .order("full_name", { ascending: true })
+          .order("id", { ascending: true })
+          .range(desde, desde + PAGE_SIZE - 1);
+        // Una familia no se trae el padrón entero al navegador: solo su grupo.
+        if (soloConsulta) query = query.eq("grupo_activo", "Competencia");
+        const { data, error } = await query;
+
+        if (error) {
+          setError(error.message);
+          failed = true;
+          break;
         }
+        const page = (data ?? []) as unknown as AlumnoFila[];
+        acc.push(...page);
+        if (page.length < PAGE_SIZE) break;
       }
-
-      const [activos, inactivos] = await Promise.all([traerEstado("activo"), traerEstado("inactivo")]);
-      const fallo = activos.error ?? inactivos.error;
 
       // Con una carga fallida se deja la lista vacía: media lista se ve igual
       // que la lista completa y aquí no habría forma de notarlo.
-      if (fallo) {
-        setError(fallo);
-        setStudents([]);
-      } else {
-        setStudents(
-          [...activos.filas, ...inactivos.filas]
-            .sort((a, b) => a.full_name.localeCompare(b.full_name) || String(a.id).localeCompare(String(b.id)))
-        );
-      }
+      setStudents(failed ? [] : acc);
       setLoading(false);
     }
     fetchAll();
