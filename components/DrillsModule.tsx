@@ -1,7 +1,6 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import * as XLSX from "xlsx";
 import { supabase } from "@/lib/supabase";
 import {
   BookOpen, ChevronDown, ChevronUp, Download, Flag, MapPin, Package, Pencil, Plus,
@@ -408,7 +407,11 @@ export default function DrillsModule({ soloLectura = false }: { soloLectura?: bo
   const IMPORT_HEADERS = ["titulo", "descripcion", "categoria", "foco", "posicion_swing", "nivel_recomendado", "material", "lugar", "duracion_minutos", "repeticiones"];
   const CATEGORIAS_VALIDAS: Categoria[] = ["tecnico", "juego_corto", "putting", "campo"];
 
-  function descargarPlantilla() {
+  // La librería de Excel se carga al usarla —plantilla o importación— y no con
+  // el módulo: son 137 KB comprimidos que solo hacen falta el día que alguien
+  // carga drills en lote.
+  async function descargarPlantilla() {
+    const XLSX = await import("xlsx");
     const ejemplo = [
       "Drill de rotación de hombros", "Con un palo cruzado en la espalda, girar hasta P3 sin que caiga.",
       "tecnico", "rotacion_giro", "P3", "aguilas,albatros", "banda", "campo_practica", "15", "3 series de 10",
@@ -428,6 +431,7 @@ export default function DrillsModule({ soloLectura = false }: { soloLectura?: bo
     setImporting(true);
     setImportResult(null);
     try {
+      const XLSX = await import("xlsx");
       const buffer = await file.arrayBuffer();
       const wb = XLSX.read(buffer, { type: "array" });
       const sheet = wb.Sheets[wb.SheetNames[0]];
