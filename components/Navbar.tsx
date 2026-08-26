@@ -8,7 +8,7 @@ import { supabase } from "@/lib/supabase";
 import { isRouteAllowed, isStaff, roleLabel, type Rol } from "@/lib/roles";
 import {
   Users, Calendar, ClipboardList, BookOpen, UserCheck,
-  BarChart2, Shield, Dumbbell, Brain, CalendarDays,
+  BarChart2, Shield, Dumbbell, Brain, CalendarDays, Trophy,
   LogOut, ChevronDown, Activity, User, Menu, X, KeyRound
 } from "lucide-react";
 
@@ -22,6 +22,7 @@ const navItems = [
   { label: "Programación",        href: "/programacion",       icon: Calendar },
   { label: "Reservas",            href: "/reservas",           icon: CalendarDays },
   { label: "Reportes",            href: "/reportes",           icon: BarChart2 },
+  { label: "Torneos",             href: "/torneos",            icon: Trophy },
   { label: "Protocolos",          href: "/protocolos",         icon: ClipboardList },
   { label: "Staff",               href: "/staff",              icon: UserCheck },
   { label: "Accesos",             href: "/accesos",            icon: Shield },

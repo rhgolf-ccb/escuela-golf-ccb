@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import { GRUPOS_POR_TIPO_PLAN, calcularGrupo, tipoPlanDeAlumno, type GrupoAlumno, type TipoPlan } from "@/lib/grupos";
+import { CATEGORIAS_CLASE, LABEL_CATEGORIA } from "@/lib/puntos";
 
 interface SesionInfo {
   id: string;
@@ -34,16 +35,11 @@ interface StudentRow {
   reserva_id: string | null;
 }
 
-// Puntos de esfuerzo y disciplina. El baremo vive aquí y no en la base para
-// poder ajustarlo sin migración; la tabla solo valida que la categoría exista.
-// Se registran desde esta pantalla porque es el único momento en que el
-// profesor tiene la app abierta y al niño enfrente: si el registro vive en otra
-// pantalla, no se usa.
-const CATEGORIAS_PUNTO = [
-  { id: "sesion_extra", label: "Sesión extra", puntos: 3, ayuda: "Vino a una clase que no le tocaba" },
-  { id: "reto_casa",    label: "Reto de casa", puntos: 2, ayuda: "Cumplió la práctica que le dejaron" },
-  { id: "disciplina",   label: "Disciplina",   puntos: 1, ayuda: "Puntualidad, uniforme, cuidado del material, trato" },
-] as const;
+// Puntos de esfuerzo y disciplina. El baremo completo —incluidos los de torneo,
+// que se dan desde /torneos— vive en lib/puntos.ts. Estas tres se registran
+// desde esta pantalla porque es el único momento en que el profesor tiene la
+// app abierta y al niño enfrente: si el registro vive en otra pantalla, no se usa.
+const CATEGORIAS_PUNTO = CATEGORIAS_CLASE;
 
 
 type PuntoOtorgado = {
@@ -52,11 +48,6 @@ type PuntoOtorgado = {
   categoria: string;
   puntos: number;
   motivo: string | null;
-};
-
-const LABEL_CATEGORIA: Record<string, string> = {
-  ...Object.fromEntries(CATEGORIAS_PUNTO.map((c) => [c.id, c.label])),
-  torneo: "Torneo", podio: "Podio", otro: "Otro",
 };
 
 type Asistencia = boolean | null; // true=presente, false=ausente, null=sin marcar
