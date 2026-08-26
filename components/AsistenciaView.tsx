@@ -34,6 +34,31 @@ interface StudentRow {
   reserva_id: string | null;
 }
 
+// Puntos de esfuerzo y disciplina. El baremo vive aquí y no en la base para
+// poder ajustarlo sin migración; la tabla solo valida que la categoría exista.
+// Se registran desde esta pantalla porque es el único momento en que el
+// profesor tiene la app abierta y al niño enfrente: si el registro vive en otra
+// pantalla, no se usa.
+const CATEGORIAS_PUNTO = [
+  { id: "sesion_extra", label: "Sesión extra", puntos: 3, ayuda: "Vino a una clase que no le tocaba" },
+  { id: "reto_casa",    label: "Reto de casa", puntos: 2, ayuda: "Cumplió la práctica que le dejaron" },
+  { id: "disciplina",   label: "Disciplina",   puntos: 1, ayuda: "Puntualidad, uniforme, cuidado del material, trato" },
+] as const;
+
+
+type PuntoOtorgado = {
+  id: string;
+  estudiante_id: string;
+  categoria: string;
+  puntos: number;
+  motivo: string | null;
+};
+
+const LABEL_CATEGORIA: Record<string, string> = {
+  ...Object.fromEntries(CATEGORIAS_PUNTO.map((c) => [c.id, c.label])),
+  torneo: "Torneo", podio: "Podio", otro: "Otro",
+};
+
 type Asistencia = boolean | null; // true=presente, false=ausente, null=sin marcar
 type CheckResult = "cumple" | "progreso" | "bajo" | null; // check rápido sobre el foco del día
 
@@ -98,6 +123,16 @@ export default function AsistenciaView({ sesionId }: { sesionId: string }) {
   const [filtroGrupo, setFiltroGrupo] = useState<string>("todos");
   // Guardar sin ninguna marca borra la asistencia que hubiera: se pide confirmar.
   const [confirmarVacio, setConfirmarVacio] = useState(false);
+
+  // Puntos ya otorgados en ESTA sesión, por alumno. Se graban en el momento y
+  // no al pulsar Guardar: son independientes de la asistencia, y un profesor
+  // que cierra la pantalla sin guardar no debería perder un reconocimiento que
+  // ya le dijo al niño en voz alta.
+  const [puntos, setPuntos] = useState<Record<string, PuntoOtorgado[]>>({});
+  const [panelPuntos, setPanelPuntos] = useState<string | null>(null);
+  const [guardandoPunto, setGuardandoPunto] = useState(false);
+  const [motivoPunto, setMotivoPunto] = useState("");
+  const [errorPunto, setErrorPunto] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -194,17 +229,24 @@ export default function AsistenciaView({ sesionId }: { sesionId: string }) {
     if (autoCarga) roster.forEach((r) => { map[r.id] = null; });
     setAsistencias(map);
 
-    // 5. Cargar checks rápidos ya guardados para esta sesión (si la tabla existe)
-    const { data: checkData } = await supabase
-      .from("progreso_checks")
-      .select("student_id, resultado")
-      .eq("sesion_id", sesionId);
+    // 5. Checks rápidos y puntos ya otorgados en esta sesión. Van juntos porque
+    // ninguno depende del otro y así es un viaje y no dos.
+    const [{ data: checkData }, { data: puntosData }] = await Promise.all([
+      supabase.from("progreso_checks").select("student_id, resultado").eq("sesion_id", sesionId),
+      supabase.from("puntos_alumno").select("id, estudiante_id, categoria, puntos, motivo").eq("sesion_id", sesionId),
+    ]);
     const cmap: Record<string, CheckResult> = {};
     (checkData ?? []).forEach((c) => {
       const row = c as { student_id: string; resultado: CheckResult };
       cmap[row.student_id] = row.resultado;
     });
     setChecks(cmap);
+
+    const pmap: Record<string, PuntoOtorgado[]> = {};
+    ((puntosData ?? []) as PuntoOtorgado[]).forEach((pt) => {
+      (pmap[pt.estudiante_id] ??= []).push(pt);
+    });
+    setPuntos(pmap);
 
     setLoading(false);
   }, [sesionId]);
@@ -233,6 +275,47 @@ export default function AsistenciaView({ sesionId }: { sesionId: string }) {
     setAsistencias((prev) => (prev[studentId] === value ? prev : { ...prev, [studentId]: value }));
     setSaved(false);
     setConfirmarVacio(false);
+  }
+
+  // Los puntos se graban al pulsar, no al guardar la asistencia: son otra cosa,
+  // y el profesor ya se lo dijo al niño en voz alta. Si falla, se avisa y no se
+  // pinta nada — nunca al revés.
+  async function otorgarPunto(studentId: string, cat: typeof CATEGORIAS_PUNTO[number]) {
+    if (guardandoPunto) return;
+    setGuardandoPunto(true);
+    setErrorPunto(null);
+    const motivo = motivoPunto.trim();
+    const { data, error } = await supabase
+      .from("puntos_alumno")
+      .insert({
+        estudiante_id: studentId,
+        categoria: cat.id,
+        puntos: cat.puntos,
+        motivo: motivo || null,
+        sesion_id: sesionId,
+      })
+      .select("id, estudiante_id, categoria, puntos, motivo")
+      .single();
+    setGuardandoPunto(false);
+    if (error) {
+      setErrorPunto(error.message.includes("puntos_alumno")
+        ? "No se pudo guardar el punto. ¿Ya se creó la tabla de puntos?"
+        : error.message);
+      return;
+    }
+    setPuntos((prev) => ({ ...prev, [studentId]: [...(prev[studentId] ?? []), data as PuntoOtorgado] }));
+    setPanelPuntos(null);
+    setMotivoPunto("");
+  }
+
+  async function quitarPunto(studentId: string, puntoId: string) {
+    const { error } = await supabase.from("puntos_alumno").delete().eq("id", puntoId);
+    if (error) { setErrorPunto(error.message); return; }
+    setPuntos((prev) => ({ ...prev, [studentId]: (prev[studentId] ?? []).filter((pt) => pt.id !== puntoId) }));
+  }
+
+  function totalPuntos(studentId: string): number {
+    return (puntos[studentId] ?? []).reduce((a, pt) => a + pt.puntos, 0);
   }
 
   function setCheckFor(studentId: string, value: CheckResult) {
@@ -565,8 +648,12 @@ export default function AsistenciaView({ sesionId }: { sesionId: string }) {
               const estado = asistencias[student.id];
               const gc = GRUPO_COLOR[student.grupo ?? ""] ?? { bg: "var(--ui-card-alt)", text: "var(--ui-text-3)" };
 
+              const misPuntos = puntos[student.id] ?? [];
+              const abierto = panelPuntos === student.id;
+
               return (
-                <div key={student.id} className="flex items-center justify-between px-4 py-3 hover:bg-(--ui-card-alt) transition-colors">
+                <div key={student.id}>
+                <div className="flex items-center justify-between px-4 py-3 hover:bg-(--ui-card-alt) transition-colors">
                   <div className="flex items-center gap-3">
                     {/* Avatar */}
                     <div
@@ -581,11 +668,24 @@ export default function AsistenciaView({ sesionId }: { sesionId: string }) {
                     </div>
                     <div>
                       <p className="text-sm font-medium text-(--ui-text)">{student.full_name}</p>
-                      {student.grupo && (
-                        <span className="text-[11px] font-semibold px-1.5 py-0.5 rounded" style={{ background: gc.bg, color: gc.text }}>
-                          {student.grupo}
-                        </span>
-                      )}
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        {student.grupo && (
+                          <span className="text-[11px] font-semibold px-1.5 py-0.5 rounded" style={{ background: gc.bg, color: gc.text }}>
+                            {student.grupo}
+                          </span>
+                        )}
+                        {misPuntos.map((pt) => (
+                          <button
+                            key={pt.id}
+                            onClick={() => quitarPunto(student.id, pt.id)}
+                            className="text-[11px] font-semibold px-1.5 py-0.5 rounded transition-opacity hover:opacity-60"
+                            style={{ background: "var(--g-competencia-bg)", color: "var(--g-competencia-fg)" }}
+                            title={`${LABEL_CATEGORIA[pt.categoria] ?? pt.categoria}${pt.motivo ? ` — ${pt.motivo}` : ""} · clic para quitarlo`}
+                          >
+                            +{pt.puntos} {LABEL_CATEGORIA[pt.categoria] ?? pt.categoria}
+                          </button>
+                        ))}
+                      </div>
                     </div>
                   </div>
 
@@ -613,6 +713,16 @@ export default function AsistenciaView({ sesionId }: { sesionId: string }) {
                         })}
                       </div>
                     )}
+                    <button
+                      onClick={() => { setPanelPuntos(abierto ? null : student.id); setMotivoPunto(""); setErrorPunto(null); }}
+                      className="w-7 h-7 rounded-md text-sm font-bold transition-all shrink-0"
+                      style={abierto || misPuntos.length > 0
+                        ? { background: "var(--g-competencia-bg)", color: "var(--g-competencia-fg)" }
+                        : { background: "var(--ui-card-alt)", color: "var(--ui-text-3)" }}
+                      title="Dar un punto de esfuerzo o disciplina"
+                    >
+                      {totalPuntos(student.id) > 0 ? totalPuntos(student.id) : "+"}
+                    </button>
                     <div className="flex gap-1.5 border-l border-(--ui-border-soft) pl-2">
                       <button
                         onClick={() => marcar(student.id, true)}
@@ -630,6 +740,47 @@ export default function AsistenciaView({ sesionId }: { sesionId: string }) {
                       </button>
                     </div>
                   </div>
+                </div>
+
+                {abierto && (
+                  <div className="px-4 pb-3 -mt-1" style={{ background: "var(--ui-card-alt)" }}>
+                    <p className="text-[11px] mb-2 pt-2" style={{ color: "var(--ui-text-3)" }}>
+                      Un punto para <span className="font-semibold" style={{ color: "var(--ui-text-2)" }}>{student.full_name}</span>
+                    </p>
+                    <input
+                      value={motivoPunto}
+                      onChange={(e) => setMotivoPunto(e.target.value)}
+                      placeholder="Motivo (opcional) — se lo verá el coordinador"
+                      maxLength={120}
+                      className="w-full mb-2 px-2.5 py-1.5 rounded-md text-[13px]"
+                      style={{ background: "var(--ui-card)", border: "1px solid var(--ui-border)", color: "var(--ui-text)" }}
+                    />
+                    <div className="flex flex-wrap gap-1.5">
+                      {CATEGORIAS_PUNTO.map((cat) => (
+                        <button
+                          key={cat.id}
+                          onClick={() => otorgarPunto(student.id, cat)}
+                          disabled={guardandoPunto}
+                          title={cat.ayuda}
+                          className="px-2.5 py-1.5 rounded-md text-[12px] font-semibold transition-colors disabled:opacity-50"
+                          style={{ background: "var(--g-competencia-bg)", color: "var(--g-competencia-fg)" }}
+                        >
+                          {cat.label} +{cat.puntos}
+                        </button>
+                      ))}
+                      <button
+                        onClick={() => { setPanelPuntos(null); setMotivoPunto(""); }}
+                        className="px-2.5 py-1.5 rounded-md text-[12px] font-semibold"
+                        style={{ color: "var(--ui-text-3)" }}
+                      >
+                        Cancelar
+                      </button>
+                    </div>
+                    {errorPunto && (
+                      <p className="text-[11px] mt-2" style={{ color: "var(--ui-bad)" }}>{errorPunto}</p>
+                    )}
+                  </div>
+                )}
                 </div>
               );
             })}
