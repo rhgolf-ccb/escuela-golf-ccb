@@ -1,12 +1,18 @@
 ﻿"use client";
 
 import { useState, useEffect, useMemo, useRef, useCallback, type ReactNode, Fragment } from "react";
-import { createClient } from "@supabase/supabase-js";
 import * as XLSX from "xlsx";
 import {
   BarChart3, CalendarCheck, ClipboardCheck, TrendingUp, PieChart, CakeSlice, Radio,
   FileText, Table2, Send, type LucideIcon,
 } from "lucide-react";
+// El cliente compartido y no uno propio con createClient(): aquel guarda la
+// sesión en localStorage, donde no está —vive en la cookie que lee
+// createBrowserClient—, así que Reportes consultaba como anónimo. No se notó
+// mientras `students` tuvo la lectura abierta; el día que RLS entró en esa
+// tabla, la asistencia quedó con sus tarjetas y sus columnas pero sin una sola
+// fila de alumnos.
+import { supabase } from "@/lib/supabase";
 import {
   acentoGrupo, acentoGrupoSuave, calcularGrupo, edadDe,
   tipoPlanDeAlumno, tipoPlanDeGrupo, TIPOS_PLAN, TIPO_PLAN_LABEL, type TipoPlan,
@@ -19,11 +25,6 @@ import {
   fondoFila, GrupoBadge, Leyenda, Loading, MetricCard, Pagina, Panel, PctBadge,
   Segmented, TH, thStyle, TONO, tonoDePct, Toolbar, WeekNav, type Tono,
 } from "@/components/ui/tema";
-
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-);
 
 // ── Constants ────────────────────────────────────────────────────────────────
 
@@ -69,8 +70,15 @@ function addDays(d: Date, n: number): Date {
   return r;
 }
 
+// La fecha del calendario local, no la de UTC. Con toISOString() cualquier hora
+// después de las 7:00 p. m. en Bogotá ya cae en el día siguiente, y `toISO(new
+// Date())` devolvía mañana: la meta de Competencia empezaba a cobrar sesiones
+// que aún no se dictan justo a la hora en que el profesor revisa después de
+// clase.
 function toISO(d: Date): string {
-  return d.toISOString().split("T")[0];
+  const mes = String(d.getMonth() + 1).padStart(2, "0");
+  const dia = String(d.getDate()).padStart(2, "0");
+  return `${d.getFullYear()}-${mes}-${dia}`;
 }
 
 function fmtFecha(iso: string | null | undefined): string {
