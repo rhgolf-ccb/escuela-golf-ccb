@@ -65,7 +65,11 @@ export function buildJuvenilRow(base: RowBase, dia: DiaWizardState, config: Grou
   }));
   return {
     ...base,
-    tipo_sesion: "juvenil_estaciones", lugar: "campo_practica",
+    // El lugar de la fila alimenta los chips del calendario y el encabezado del
+    // PDF de familias. Escribirlo fijo en "campo_practica" hacía que un día
+    // programado en el campo infantil se anunciara en el campo de práctica; se
+    // guarda el de la primera estación, igual que Competencia.
+    tipo_sesion: "juvenil_estaciones", lugar: estaciones[0]?.lugar ?? "campo_practica",
     objetivo: `Sesión ${estaciones.length} estaciones: ${estaciones.map((e) => e.categoria).join(" · ")}`,
     drills: [], juego_competitivo: null, estaciones_damas: null, notas: null,
     sesion_juvenil: { tipo: "estaciones", estaciones },

@@ -340,7 +340,10 @@ export default function JuvenileClassModal({
         });
         payload = {
           tipo_sesion: "juvenil_estaciones",
-          lugar: "campo_practica",
+          // Ver save-builders.ts: la fila guarda el lugar de la primera
+          // estación, no un placeholder, para que el calendario y el PDF de
+          // familias anuncien el sitio que el profesor eligió.
+          lugar: estaciones[0]?.lugar ?? "campo_practica",
           objetivo: `Sesión ${estaciones.length} estaciones: ${estaciones.map((e) => CATEGORIA_ESTACION_LABEL_JUVENIL[e.categoria]).join(" · ")}`,
           drills: [], juego_competitivo: null, estaciones_damas: null, notas: null,
           sesion_juvenil: { tipo: "estaciones", estaciones },

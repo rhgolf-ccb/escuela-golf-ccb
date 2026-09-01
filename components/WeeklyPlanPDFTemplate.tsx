@@ -131,7 +131,6 @@ const TIPO_SESION_LABEL_PDF: Record<string, string> = {
 // ── Columna de un día ─────────────────────────────────────────────────────────
 function DayColumn({ sesion }: { sesion: SesionSemana }) {
   const drillsToShow = (sesion.drills ?? []).slice(0, 3);
-  const lugarLabel = LUGAR_LABEL[sesion.lugar] ?? sesion.lugar ?? "—";
 
   const jd = sesion.sesion_juvenil as (SesionJuvenilEstaciones | SesionJuvenilEspecial | null | undefined);
   const jdTipo = jd && "tipo" in jd ? (jd as { tipo: string }).tipo : null;
@@ -139,6 +138,22 @@ function DayColumn({ sesion }: { sesion: SesionSemana }) {
   const isJuvEspecial = jdTipo === "especial";
   const estacionesJuv = isJuvEstaciones ? (jd as SesionJuvenilEstaciones).estaciones : [];
   const especialTipo = isJuvEspecial ? (jd as SesionJuvenilEspecial).tipo_especial : null;
+
+  // El `lugar` de la fila es un placeholder fijo ("campo_practica") en los días
+  // de estaciones de Birdies y Juvenil: el sitio real lo eligió el profesor
+  // estación por estación y vive dentro de sesion_juvenil. Leer la fila hacía
+  // que un día programado en el campo infantil le llegara al papá como campo
+  // de práctica. Se cae a la fila solo cuando no hay estaciones que preguntar
+  // (día especial, Damas, dato viejo sin `lugar` por estación).
+  const lugaresEstaciones = [...new Set(
+    estacionesJuv.map((e) => e.lugar).filter((l): l is string => !!l),
+  )];
+  const lugarLabel = lugaresEstaciones.length
+    ? lugaresEstaciones.map((l) => LUGAR_LABEL[l] ?? l).join(" · ")
+    : LUGAR_LABEL[sesion.lugar] ?? sesion.lugar ?? "—";
+  // Con dos sitios en el mismo día, el encabezado ya no alcanza para saber cuál
+  // es cuál: cada estación repite el suyo.
+  const lugarPorEstacion = lugaresEstaciones.length > 1;
 
   // Friendly objetivo text for estaciones
   const objetivoText = isJuvEstaciones
@@ -231,6 +246,11 @@ function DayColumn({ sesion }: { sesion: SesionSemana }) {
                   </div>
                   <p style={{ margin: 0, fontWeight: 700, fontSize: 10, color: "#1a3a2a", lineHeight: 1.3 }}>
                     {CAT_LABEL[est.categoria] ?? est.categoria}
+                    {lugarPorEstacion && est.lugar && (
+                      <span style={{ fontWeight: 400, color: "#555555" }}>
+                        {" "}· 📍 {LUGAR_LABEL[est.lugar] ?? est.lugar}
+                      </span>
+                    )}
                   </p>
                 </div>
                 {(est.drills ?? []).slice(0, 3).map((drill, dIdx) => (

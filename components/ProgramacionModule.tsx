@@ -438,7 +438,10 @@ export function sesionesToEstaciones(diaySesiones: SesionSemana[], tipoPlan: Tip
         est.estaciones.forEach((e, idx) => {
           views.push({
             nombre: CATEGORIA_LABEL_MAP[e.categoria] ?? e.categoria,
-            lugar, horario,
+            // El lugar de la fila es un placeholder en los días de estaciones;
+            // el real lo eligió el profesor por estación, igual que Competencia.
+            lugar: (e.lugar && LUGAR_LABEL[e.lugar as Lugar]) ?? e.lugar ?? lugar,
+            horario,
             numero: idx + 1,
             reto: e.desafio ?? null,
             responsable: e.responsable ?? null,
