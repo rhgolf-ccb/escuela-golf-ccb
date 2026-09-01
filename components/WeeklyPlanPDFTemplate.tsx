@@ -62,7 +62,27 @@ function formatFechaCorta(fecha: string): string {
   const d = new Date(fecha + "T00:00:00");
   return d.toLocaleDateString("es-CO", { day: "numeric", month: "long", year: "numeric" });
 }
-function formatHora(t: string | null): string { return t ? t.slice(0, 5) : ""; }
+// La hora se guarda en 24 h ("09:15"). Este PDF traía " p.m." escrito a mano:
+// nació cuando todas las clases eran de entre semana por la tarde, y desde que
+// Birdies y Juvenil tienen sábado y domingo por la mañana el papá leía
+// "09:15 – 10:00 p.m." para una clase de las nueve y cuarto de la mañana.
+function partesHora(t: string): { texto: string; sufijo: string } {
+  const [h, m] = t.slice(0, 5).split(":").map(Number);
+  return {
+    texto: `${h % 12 === 0 ? 12 : h % 12}:${String(m).padStart(2, "0")}`,
+    sufijo: h < 12 ? "a. m." : "p. m.",
+  };
+}
+
+/** "8:30 – 9:30 a. m."; si la clase cruza el mediodía, "11:00 a. m. – 1:00 p. m.". */
+function rangoHorario(inicio: string, fin: string | null): string {
+  const i = partesHora(inicio);
+  if (!fin) return `${i.texto} ${i.sufijo}`;
+  const f = partesHora(fin);
+  return i.sufijo === f.sufijo
+    ? `${i.texto} – ${f.texto} ${f.sufijo}`
+    : `${i.texto} ${i.sufijo} – ${f.texto} ${f.sufijo}`;
+}
 function formatWeekRange(monday: Date): string {
   const dom = addDays(monday, 6);
   const start = monday.toLocaleDateString("es-CO", { day: "numeric", month: "long" });
@@ -187,7 +207,7 @@ function DayColumn({ sesion }: { sesion: SesionSemana }) {
         {sesion.hora_inicio && (
           <p style={{ margin: "0 0 7px", fontSize: 11, color: "#222", display: "flex", alignItems: "center" }}>
             <IconClock />
-            <span>{formatHora(sesion.hora_inicio)} – {formatHora(sesion.hora_fin)} p.m.</span>
+            <span>{rangoHorario(sesion.hora_inicio, sesion.hora_fin)}</span>
           </p>
         )}
 
