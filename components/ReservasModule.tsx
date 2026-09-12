@@ -155,6 +155,8 @@ export default function ReservasModule() {
   const [alumnoSel, setAlumnoSel] = useState<StudentSearch | null>(null);
 
   const [inscribiendo, setInscribiendo] = useState(false);
+  const [decisionCupo, setDecisionCupo] = useState<StudentSearch | null>(null);
+  const [promoviendo, setPromoviendo] = useState<string | null>(null);
   const [confirmEliminar, setConfirmEliminar] = useState<ReservaConEstudiante | null>(null);
   const [eliminando, setEliminando] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
@@ -284,18 +286,28 @@ export default function ReservasModule() {
   }, [searchQuery, sesionSel]);
 
   // ── Inscribir ─────────────────────────────────────────────────────────────
+  // Con el cupo lleno ya no decide sola la pantalla: mandaba al alumno a la
+  // lista de espera y ahí se quedaba. Ahora el staff elige — sobrecupo o
+  // espera —, que es la decisión que de todos modos toma coordinación. La
+  // base no lo impide: el trigger de ventana solo aplica a las familias.
   async function handleInscribir() {
     if (!alumnoSel || !sesionSel) return;
+    const confCount = reservas.filter((r) => r.estado === "confirmado").length;
+    if (confCount >= sesionSel.cupo_maximo) { setDecisionCupo(alumnoSel); return; }
+    await inscribir(alumnoSel, "confirmado");
+  }
+
+  async function inscribir(alumno: StudentSearch, estado: "confirmado" | "en_espera") {
+    if (!sesionSel) return;
     setInscribiendo(true);
 
     const confCount = reservas.filter((r) => r.estado === "confirmado").length;
     const espCount  = reservas.filter((r) => r.estado === "en_espera").length;
-    const estado    = confCount < sesionSel.cupo_maximo ? "confirmado" : "en_espera";
     const posicion  = estado === "en_espera" ? espCount + 1 : null;
 
     const { error } = await supabase.from("reservas").insert({
       sesion_id: sesionSel.id,
-      estudiante_id: alumnoSel.id,
+      estudiante_id: alumno.id,
       estado,
       posicion_espera: posicion,
     }).select("id");
@@ -305,15 +317,56 @@ export default function ReservasModule() {
         ? "El alumno ya está inscrito en esta sesión"
         : "Error al inscribir: " + error.message);
     } else {
-      showToast(estado === "confirmado"
-        ? `${alumnoSel.full_name} inscrito ✓`
-        : `${alumnoSel.full_name} en lista de espera (pos. ${posicion})`);
+      showToast(estado === "en_espera"
+        ? `${alumno.full_name} en lista de espera (pos. ${posicion})`
+        : confCount >= sesionSel.cupo_maximo
+          ? `${alumno.full_name} inscrito en sobrecupo ✓`
+          : `${alumno.full_name} inscrito ✓`);
       setAlumnoSel(null);
       setSearchQuery("");
+      setDecisionCupo(null);
       await fetchReservas(sesionSel.id);
       await fetchSesiones();
     }
     setInscribiendo(false);
+  }
+
+  // ── Pasar de la lista de espera a confirmado ──────────────────────
+  // También con el cupo lleno: al que ya quedó esperando hay que poder subirlo
+  // a mano, sin borrarlo y volverlo a inscribir.
+  async function handleConfirmarEspera(reserva: ReservaConEstudiante) {
+    if (!sesionSel) return;
+    setPromoviendo(reserva.id);
+
+    const { error } = await supabase.from("reservas")
+      .update({ estado: "confirmado", posicion_espera: null })
+      .eq("id", reserva.id);
+
+    if (error) {
+      showToast("Error al confirmar: " + error.message);
+      setPromoviendo(null);
+      return;
+    }
+
+    await renumerarEspera(reservas.filter((r) => r.id !== reserva.id));
+
+    showToast(`${reserva.students.full_name} confirmado ✓`);
+    setPromoviendo(null);
+    await fetchReservas(sesionSel.id);
+    await fetchSesiones();
+  }
+
+  // La espera queda 1, 2, 3… sin huecos. Solo escribe las filas que cambian.
+  async function renumerarEspera(restantes: ReservaConEstudiante[]) {
+    const enEsperaRestantes = restantes
+      .filter((r) => r.estado === "en_espera")
+      .sort((a, b) => (a.posicion_espera ?? 99) - (b.posicion_espera ?? 99));
+    for (let i = 0; i < enEsperaRestantes.length; i++) {
+      if (enEsperaRestantes[i].posicion_espera === i + 1) continue;
+      await supabase.from("reservas")
+        .update({ posicion_espera: i + 1 })
+        .eq("id", enEsperaRestantes[i].id);
+    }
   }
 
   // ── Eliminar reserva ──────────────────────────────────────────────────────
@@ -324,27 +377,22 @@ export default function ReservasModule() {
     await supabase.from("reservas").delete().eq("id", reserva.id);
 
     const restantes = reservas.filter((r) => r.id !== reserva.id);
+    const confirmadosRestantes = restantes.filter((r) => r.estado === "confirmado").length;
     const enEsperaRestantes = restantes
       .filter((r) => r.estado === "en_espera")
       .sort((a, b) => (a.posicion_espera ?? 99) - (b.posicion_espera ?? 99));
 
-    if (eraConfirmado && enEsperaRestantes.length > 0) {
+    // El ascenso automático pide que de verdad haya quedado un puesto libre: en
+    // una sesión en sobrecupo, sacar a uno todavía la deja por encima del tope.
+    const quedoPuesto = confirmadosRestantes < (sesionSel?.cupo_maximo ?? 0);
+    if (eraConfirmado && quedoPuesto && enEsperaRestantes.length > 0) {
       const primero = enEsperaRestantes[0];
       await supabase.from("reservas")
         .update({ estado: "confirmado", posicion_espera: null })
         .eq("id", primero.id);
-
-      for (let i = 1; i < enEsperaRestantes.length; i++) {
-        await supabase.from("reservas")
-          .update({ posicion_espera: i })
-          .eq("id", enEsperaRestantes[i].id);
-      }
-    } else if (!eraConfirmado) {
-      for (let i = 0; i < enEsperaRestantes.length; i++) {
-        await supabase.from("reservas")
-          .update({ posicion_espera: i + 1 })
-          .eq("id", enEsperaRestantes[i].id);
-      }
+      await renumerarEspera(restantes.filter((r) => r.id !== primero.id));
+    } else {
+      await renumerarEspera(restantes);
     }
 
     showToast("Reserva eliminada");
@@ -362,6 +410,7 @@ export default function ReservasModule() {
   const enEspera    = reservas
     .filter((r) => r.estado === "en_espera")
     .sort((a, b) => (a.posicion_espera ?? 99) - (b.posicion_espera ?? 99));
+  const sobrecupo   = sesionSel ? Math.max(confirmados.length - sesionSel.cupo_maximo, 0) : 0;
 
   // ── Render ────────────────────────────────────────────────────────────────
   return (
@@ -593,9 +642,9 @@ export default function ReservasModule() {
                       className="text-2xl font-bold"
                       style={{ color: confirmados.length >= sesionSel.cupo_maximo ? "var(--ui-bad)" : "var(--ui-ok)" }}
                     >
-                      {Math.max(sesionSel.cupo_maximo - confirmados.length, 0)}
+                      {sobrecupo > 0 ? `+${sobrecupo}` : sesionSel.cupo_maximo - confirmados.length}
                     </p>
-                    <p className="text-xs text-(--ui-text-3)">disponibles</p>
+                    <p className="text-xs text-(--ui-text-3)">{sobrecupo > 0 ? "en sobrecupo" : "disponibles"}</p>
                   </div>
                   <div>
                     <p className="text-2xl font-bold text-(--ui-text-3)">{sesionSel.cupo_maximo}</p>
@@ -780,9 +829,15 @@ export default function ReservasModule() {
                                 style={r.students.tiene_talega === "Sí" ? { color: "var(--ui-ok)", background: "var(--ui-ok-bg)" } : { color: "var(--ui-text-3)", background: "var(--ui-border-soft)" }}>
                                 {talegaLabel(r.students.tiene_talega)}
                               </span>
-                              <span className="text-[10px] font-semibold text-(--ui-warn) bg-(--ui-warn-bg) border border-(--ui-warn) px-1.5 py-0.5 rounded-full flex-shrink-0">
-                                Espera #{r.posicion_espera}
-                              </span>
+                              <button
+                                onClick={() => handleConfirmarEspera(r)}
+                                disabled={promoviendo === r.id}
+                                className="text-[10px] font-semibold px-2 py-1 rounded-full flex-shrink-0 border transition-colors disabled:opacity-40"
+                                style={{ color: "var(--ui-ok)", borderColor: "var(--ui-ok)", background: "var(--ui-ok-bg)" }}
+                                title="Pasar a confirmado"
+                              >
+                                {promoviendo === r.id ? "..." : "Confirmar"}
+                              </button>
                               <button
                                 onClick={() => setConfirmEliminar(r)}
                                 className="opacity-0 group-hover:opacity-100 p-1 rounded text-(--ui-text-3) hover:text-(--ui-bad) hover:bg-(--ui-bad-bg) transition-all"
@@ -802,6 +857,56 @@ export default function ReservasModule() {
           )}
         </div>
       </div>
+
+      {/* Cupo lleno: sobrecupo o lista de espera */}
+      {decisionCupo && sesionSel && (
+        <div
+          className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4"
+          onClick={() => { if (!inscribiendo) setDecisionCupo(null); }}
+        >
+          <div className="bg-(--ui-card) rounded-2xl shadow-2xl w-full max-w-sm p-6" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-10 h-10 rounded-full bg-(--ui-warn-bg) flex items-center justify-center shrink-0">
+                <svg width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="var(--ui-warn)" strokeWidth={2}>
+                  <path d="M12 9v4M12 17h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/>
+                </svg>
+              </div>
+              <div>
+                <h3 className="font-bold text-(--ui-text)">Cupo lleno ({confirmados.length}/{sesionSel.cupo_maximo})</h3>
+                <p className="text-xs text-(--ui-text-3) mt-0.5">{decisionCupo.full_name}</p>
+              </div>
+            </div>
+            <p className="text-sm text-(--ui-text-2) mb-5">
+              La sesión ya llegó a su tope. Puedes inscribirlo igual — la sesión
+              queda en sobrecupo — o dejarlo en la lista de espera.
+            </p>
+            <div className="flex flex-col gap-2">
+              <button
+                onClick={() => inscribir(decisionCupo, "confirmado")}
+                disabled={inscribiendo}
+                className="w-full py-2.5 rounded-xl text-sm font-semibold text-(--g-on-accent) disabled:opacity-50 transition-colors"
+                style={{ background: acentoGrupo(sesionSel.tipo_plan) }}
+              >
+                {inscribiendo ? "Inscribiendo..." : "Inscribir igual (sobrecupo)"}
+              </button>
+              <button
+                onClick={() => inscribir(decisionCupo, "en_espera")}
+                disabled={inscribiendo}
+                className="w-full py-2.5 rounded-xl text-sm font-medium border border-(--ui-border) text-(--ui-text-2) hover:bg-(--ui-card-alt) transition-colors disabled:opacity-50"
+              >
+                Dejar en lista de espera
+              </button>
+              <button
+                onClick={() => setDecisionCupo(null)}
+                disabled={inscribiendo}
+                className="w-full py-2 text-sm font-medium text-(--ui-text-3) hover:text-(--ui-text-2) transition-colors disabled:opacity-50"
+              >
+                Cancelar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Confirm delete modal */}
       {confirmEliminar && (
