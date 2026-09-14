@@ -685,6 +685,12 @@ export default function ProgramacionModule({ currentRol }: { currentRol: Rol | n
       fechaEnRango(fecha, d.fecha_inicio, d.fecha_fin) && (!tipoPlan || aplicaAlGrupo(d, tipoPlan)));
   }
 
+  // Eventos de una fecha que le aplican a un grupo — el torneo que se anuncia
+  // en el lugar de la clase.
+  function eventosDeDia(fecha: string, tipoPlan: TipoPlan): EventoCalendario[] {
+    return calEventos.filter((e) => fechaEnRango(fecha, e.fecha_inicio, e.fecha_fin) && aplicaAlGrupo(e, tipoPlan));
+  }
+
   // Los días sin clase que le aplican a un grupo — lo que reciben el wizard y
   // los modales de mover, que trabajan siempre dentro de un solo grupo.
   function diasSinEscuelaDeGrupo(tipoPlan: TipoPlan): DiaSinEscuela[] {
@@ -721,9 +727,16 @@ export default function ProgramacionModule({ currentRol }: { currentRol: Rol | n
   // La tabla es chica y no depende de la semana. Antes solo se traía dentro de
   // fetchCalSemana/fetchCalMes, así que en Vista Plan —de donde sale el wizard—
   // la lista estaba vacía y se podía programar encima de un festivo.
+  // Los eventos van en la misma carga: en Vista Plan hay que poder anunciar el
+  // torneo del sábado en el lugar de la clase, y antes solo se traían dentro de
+  // las vistas de semana y mes.
   const fetchDiasSinEscuela = useCallback(async () => {
-    const { data } = await supabase.from("dias_sin_escuela").select("*");
-    setCalDiasSinEscuela((data as DiaSinEscuela[]) ?? []);
+    const [{ data: sinEscuela }, { data: eventos }] = await Promise.all([
+      supabase.from("dias_sin_escuela").select("*"),
+      supabase.from("eventos_calendario").select("*"),
+    ]);
+    setCalDiasSinEscuela((sinEscuela as DiaSinEscuela[]) ?? []);
+    setCalEventos((eventos as EventoCalendario[]) ?? []);
   }, []);
   useEffect(() => { fetchDiasSinEscuela(); }, [fetchDiasSinEscuela]);
 
@@ -1919,6 +1932,7 @@ export default function ProgramacionModule({ currentRol }: { currentRol: Rol | n
                   // "Sin programación" sobre un día que no tiene clase se lee
                   // como algo que falta por hacer. Si está marcado, se dice.
                   const sinClase = diaSinEscuelaDe(dia, activeTab);
+                  const actividadesDia = eventosDeDia(fecha, activeTab);
                   return (
                     <button
                       key={dia}
@@ -1936,10 +1950,19 @@ export default function ProgramacionModule({ currentRol }: { currentRol: Rol | n
                             </span>
                           ))}
                         </div>
-                      ) : sinClase ? (
-                        <span className="text-xs font-semibold" style={{ color: "var(--ui-text-2)" }}>
-                          🚫 {etiquetaDiaSinEscuela(sinClase.motivo)}
-                        </span>
+                      ) : sinClase || actividadesDia.length > 0 ? (
+                        <div className="flex flex-col gap-0.5">
+                          {sinClase && (
+                            <span className="text-xs font-semibold" style={{ color: "var(--ui-text-2)" }}>
+                              🚫 {etiquetaDiaSinEscuela(sinClase.motivo)}
+                            </span>
+                          )}
+                          {actividadesDia.map((e) => (
+                            <span key={e.id} className="text-xs font-semibold" style={{ color: e.tipo === "especial" ? "var(--ui-warn)" : "var(--g-birdies-fg)" }}>
+                              {e.tipo === "especial" ? "🌟" : "📌"} {e.nombre}
+                            </span>
+                          ))}
+                        </div>
                       ) : (
                         <span className="text-xs text-(--ui-text-3)">Sin programación</span>
                       )}
@@ -2007,6 +2030,11 @@ export default function ProgramacionModule({ currentRol }: { currentRol: Rol | n
                           <p className="text-sm font-semibold text-(--ui-text-2) mb-1">
                             🚫 No hay clase de {TIPO_PLAN_LABEL[activeTab]} este día
                           </p>
+                          {eventosDeDia(fecha, activeTab).map((e) => (
+                            <p key={e.id} className="text-sm font-bold mb-1" style={{ color: e.tipo === "especial" ? "var(--ui-warn)" : "var(--g-birdies-fg)" }}>
+                              {e.tipo === "especial" ? "🌟" : "📌"} {e.nombre}
+                            </p>
+                          ))}
                           <p className="text-xs text-(--ui-text-3) mb-4">
                             {descripcionSinClase(diaSinEscuelaDe(dia, activeTab)!)} — las familias lo ven así en su calendario y en el PDF de la semana.
                           </p>

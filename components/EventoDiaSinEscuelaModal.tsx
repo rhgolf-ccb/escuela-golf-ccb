@@ -74,6 +74,10 @@ export default function EventoDiaSinEscuelaModal({
   // marcando un martes, no unas vacaciones.
   const [fechaFin, setFechaFin] = useState(editEvento?.fecha_fin ?? editSinEscuela?.fecha_fin ?? (fijarUnDia ? fechaSugerida : ""));
   const [motivo, setMotivo] = useState(editSinEscuela?.motivo ?? "");
+  // Un día sin clase muchas veces no está vacío: ese sábado hay torneo. Si se
+  // le pone nombre, además del día sin clase se crea el evento, y es el evento
+  // el que la familia ve en el lugar de la clase.
+  const [actividad, setActividad] = useState("");
   const [grupos, setGrupos] = useState<TipoPlan[]>(editing?.grupos ?? gruposSugeridos ?? []);
   // Un torneo o una salida es un evento Y un día sin clase. Solo se ofrece al
   // crear: al editar un evento viejo, el día sin clase ya es su propia ficha y
@@ -96,11 +100,21 @@ export default function EventoDiaSinEscuelaModal({
 
     setSaving(true);
     try {
+      // Con actividad, un día sin clase se guarda como evento con
+      // `sin_clase`: el servidor escribe las dos filas juntas, igual que
+      // cuando se entra por el lado del evento.
+      const conActividad = kind === "sin_escuela" && !editId && !!actividad.trim();
       const base = kind === "evento"
         ? {
             kind, nombre: nombre.trim(), fecha_inicio: fechaInicio, fecha_fin: fechaFin || null,
             descripcion: descripcion.trim() || null, tipo, grupos,
             sin_clase: sinClase, sesiones_existentes: sesionesExistentes,
+          }
+        : conActividad
+        ? {
+            kind: "evento", nombre: actividad.trim(), fecha_inicio: fechaInicio, fecha_fin: fechaFin || null,
+            descripcion: motivo.trim() || null, tipo: "institucional", grupos,
+            sin_clase: true, sesiones_existentes: sesionesExistentes,
           }
         : { kind, fecha_inicio: fechaInicio, fecha_fin: fechaFin, motivo: motivo.trim() || null, grupos, sesiones_existentes: sesionesExistentes };
       const body = editId ? { ...base, id: editId } : base;
@@ -207,6 +221,16 @@ export default function EventoDiaSinEscuelaModal({
             <input value={motivo} onChange={(e) => setMotivo(e.target.value)} placeholder="Motivo / mensaje a los padres (ej: Festivo — Batalla de Boyacá)" className="w-full text-sm px-3 py-2 rounded-lg border border-(--ui-border)" />
             <p className="text-[11px] text-(--ui-text-3)">Este texto es lo que ven los padres en su calendario.</p>
             <GruposPicker grupos={grupos} onChange={setGrupos} />
+            {!editId && (
+              <div className="pt-1">
+                <input value={actividad} onChange={(e) => setActividad(e.target.value)} placeholder="¿Hay actividad ese día? (ej: Torneo infantil)" className="w-full text-sm px-3 py-2 rounded-lg border border-(--ui-border)" />
+                <p className="text-[11px] text-(--ui-text-3) mt-1">
+                  {actividad.trim()
+                    ? `Ese día no hay clase y en su lugar se anuncia “${actividad.trim()}”.`
+                    : "Déjalo vacío si ese día no pasa nada — el día queda simplemente sin clase."}
+                </p>
+              </div>
+            )}
           </>
         )}
 
