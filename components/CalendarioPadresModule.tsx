@@ -16,20 +16,27 @@ export type DiaPrograma = {
   suspendida?: boolean; motivo_suspension?: string | null;
 };
 export type ActividadEspecialPadre = { id: string; nombre: string; grupos: TipoPlan[]; fecha: string; hora_inicio: string | null; hora_fin: string | null };
-export type EventoCalPadre = { id: string; nombre: string; fecha_inicio: string; fecha_fin: string | null; descripcion: string | null; tipo: "especial" | "institucional" };
-export type DiaSinEscuelaPadre = { id: string; fecha_inicio: string; fecha_fin: string; motivo: string | null };
+// `grupos` null o vacío = toda la escuela; con grupos, solo esos.
+export type EventoCalPadre = { id: string; nombre: string; fecha_inicio: string; fecha_fin: string | null; descripcion: string | null; tipo: "especial" | "institucional"; grupos: TipoPlan[] | null };
+export type DiaSinEscuelaPadre = { id: string; fecha_inicio: string; fecha_fin: string; motivo: string | null; grupos: TipoPlan[] | null };
+
+function aplicaAlGrupo(ficha: { grupos: TipoPlan[] | null }, tipoPlan: TipoPlan | null): boolean {
+  if (!ficha.grupos?.length) return true;
+  return !!tipoPlan && ficha.grupos.includes(tipoPlan);
+}
 
 const DIA_LABEL: Record<string, string> = {
   martes: "Martes", miercoles: "Miércoles", jueves: "Jueves",
   viernes: "Viernes", sabado: "Sábado", domingo: "Domingo",
 };
 const TIPO_SESION_LABEL: Record<string, string> = {
-  tiro_largo: "Tiro Largo", juego_corto: "Juego Corto", putt: "Putt",
+  tiro_largo: "Tiro Largo", juego_corto: "Juego Corto", putt: "Putt", dia_putt: "Día de Putt",
   campo: "Campo", test_tecnico: "Test Técnico", test_fisico: "Test Físico",
   competencia: "Competencia", damas_estaciones: "Estaciones", juvenil_estaciones: "3 Estaciones",
 };
 const LUGAR_LABEL: Record<string, string> = {
   campo_practica: "Campo de práctica", putting_green: "Putting Green",
+  putting_green_fundadores: "Putting Green Fundadores", putting_green_pacos_fabios: "Putting Green Pacos y Fabios",
   campo_infantil: "Campo Infantil", campo_pacos_fabios: "Pacos/Fabios", campo_completo: "Campo Completo",
 };
 
@@ -101,8 +108,14 @@ export default function CalendarioPadresModule({
   const actividadesSemana = tipoPlan
     ? actividades.filter((a) => a.grupos.includes(tipoPlan) && a.fecha >= inicio && a.fecha <= fin)
     : [];
-  const eventosSemana = eventos.filter((e) => fechaEnRango(inicio, e.fecha_inicio, e.fecha_fin) || fechaEnRango(fin, e.fecha_inicio, e.fecha_fin) || (e.fecha_inicio >= inicio && e.fecha_inicio <= fin));
-  const diasSinEscuelaSemana = diasSinEscuela.filter((d) => d.fecha_inicio <= fin && d.fecha_fin >= inicio);
+  // Un día sin clase de Competencia no le sirve de nada a la familia de un
+  // Birdie: solo confundiría. Se muestran los de toda la escuela más los del
+  // grupo del alumno que está seleccionado arriba.
+  const eventosSemana = eventos.filter((e) =>
+    aplicaAlGrupo(e, tipoPlan)
+    && (fechaEnRango(inicio, e.fecha_inicio, e.fecha_fin) || fechaEnRango(fin, e.fecha_inicio, e.fecha_fin) || (e.fecha_inicio >= inicio && e.fecha_inicio <= fin)));
+  const diasSinEscuelaSemana = diasSinEscuela.filter((d) =>
+    aplicaAlGrupo(d, tipoPlan) && d.fecha_inicio <= fin && d.fecha_fin >= inicio);
 
   // Sesiones y días sin escuela se muestran juntos, en orden de fecha, para que
   // un festivo aparezca en el lugar del día (ej: "Viernes 7 · Festivo") y no como
@@ -198,6 +211,11 @@ export default function CalendarioPadresModule({
                         </span>
                       </div>
                       <p className="text-sm font-bold text-gray-700">🚫 {etiquetaTipoSinEscuela(s.motivo)}</p>
+                      <p className="text-xs text-gray-500 mt-0.5">
+                        {s.grupos?.length
+                          ? `No hay clase de ${s.grupos.map((g) => TIPO_PLAN_LABEL[g]).join(", ")} este día.`
+                          : "No hay clase en la escuela este día."}
+                      </p>
                       {detalle && <p className="text-xs text-gray-500 mt-1">{detalle}</p>}
                     </div>
                   );

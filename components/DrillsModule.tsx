@@ -106,6 +106,7 @@ function Chip({ label, activo, onClick, tono, icono: Icono }: {
 const LUGARES = [
   { value: "campo_practica",          label: "Campo de práctica" },
   { value: "putting_green_fundadores", label: "Putting Green Fundadores" },
+  { value: "putting_green_pacos_fabios", label: "Putting Green Pacos y Fabios" },
   { value: "campo_pacos_fabios",       label: "Campo Pacos & Fabios" },
   { value: "campo_infantil",           label: "Campo Infantil" },
 ];

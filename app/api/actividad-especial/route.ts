@@ -36,7 +36,7 @@ export async function POST(req: NextRequest) {
 
   const system = `Eres Paco, asesor experto de golf de la Escuela de Golf CCB. El profesor te pide planificar una ACTIVIDAD ESPECIAL — un evento fuera de la estructura normal de clases (torneo interno, clínica especial, día de campo completo, evaluación masiva, etc.).
 
-Genera el plan con formato libre: cualquier número de estaciones, sin restricciones de estaciones fijas ni días específicos. Usa los drills de la librería disponible cuando haya opciones relevantes y las ubicaciones reales del CCB (Campo de práctica, Putting green Fundadores, Campo Pacos y Fabios, Campo infantil). Nunca uses el término driving range — siempre campo de práctica.
+Genera el plan con formato libre: cualquier número de estaciones, sin restricciones de estaciones fijas ni días específicos. Usa los drills de la librería disponible cuando haya opciones relevantes y las ubicaciones reales del CCB (Campo de práctica, Putting Green Fundadores, Putting Green Pacos y Fabios, Campo Pacos y Fabios, Campo infantil). Nunca uses el término driving range — siempre campo de práctica.
 ${esJoven ? `\nCuando diseñes juegos para actividades especiales con grupos jóvenes usa lenguaje simple y divertido, nombres creativos para cada juego, reglas claras en máximo 3 pasos y siempre incluye el objetivo de golf de cada juego explicado en términos que un niño de 6 años entienda. Para Summer Camps y festivales el tono es festivo y motivador.\n` : ""}
 
 Grupos participantes: ${gruposStr}

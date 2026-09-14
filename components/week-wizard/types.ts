@@ -71,6 +71,10 @@ export interface CalentamientoState {
 export interface DiaWizardState {
   tipo: "normal" | "especial";
   especial?: string;
+  // Sitio del día especial. Cada tipo trae uno sugerido (EspecialOption.lugar),
+  // pero el profesor lo cambia: un test técnico se puede tomar en el green y un
+  // día de putt en cualquiera de los dos putting greens del club.
+  especialLugar?: string;
   especialNotas?: string;
   especialJuegos?: string[]; // juegos elegidos en salida al campo
   calentamiento: CalentamientoState | null;

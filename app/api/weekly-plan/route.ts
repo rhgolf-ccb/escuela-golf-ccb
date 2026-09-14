@@ -195,8 +195,8 @@ ${PACO_PLANNING_KNOWLEDGE}`;
       "hora_inicio": "${h.hi}",
       "hora_fin": "${h.hf}",
       "tipo_sesion": "<putt|campo>",
-      "lugar": "<putting_green|campo_pacos_fabios>",
-      "foco_principal": "Putting green Fundadores O Campo Pacos y Fabios — elige según alternancia semanal${hayTorneo ? " (priorizar campo real por torneo próximo)" : ""}",
+      "lugar": "<putting_green_fundadores|putting_green_pacos_fabios|campo_pacos_fabios>",
+      "foco_principal": "Putting Green Fundadores, Putting Green Pacos y Fabios O Campo Pacos y Fabios — elige según alternancia semanal${hayTorneo ? " (priorizar campo real por torneo próximo)" : ""}",
       "opciones_actividad": null,
       "drills": [${drillComp},${drillComp}],
       "juego_competitivo": "string o null",
@@ -226,7 +226,7 @@ ${PACO_PLANNING_KNOWLEDGE}`;
       "hora_inicio": "${h.hi}",
       "hora_fin": "${h.hf}",
       "tipo_sesion": "${modo === "preparacion" ? "putt" : "<tiro_largo|juego_corto>"}",
-      "lugar": "${modo === "preparacion" ? "putting_green" : "campo_practica"}",
+      "lugar": "${modo === "preparacion" ? "putting_green_fundadores" : "campo_practica"}",
       "foco_principal": "${modo === "preparacion" ? "Putting — distancias 1-5 metros bajo presión" : "Continúa tiro largo O introduce juego corto"}",
       "opciones_actividad": null,
       "drills": [${drillComp},${drillComp}],
@@ -236,13 +236,13 @@ ${PACO_PLANNING_KNOWLEDGE}`;
     });
 
     const system = `Asistente pedagógico Escuela Golf CCB — grupo Competencia (13-17 años, construcción de swing).
-Instalaciones: campo_practica (tiro largo/corto), putting_green (Fundadores, solo putt), campo_pacos_fabios (campo real). SÁBADOS solo campo_practica. Nunca "Driving Range".
+Instalaciones: campo_practica (tiro largo/corto), putting_green_fundadores y putting_green_pacos_fabios (los dos greens del club, solo putt), campo_pacos_fabios (campo real). SÁBADOS solo campo_practica. Nunca "Driving Range".
 
 MODO: ${modo === "construccion" ? "Construcción de swing" : "Preparación para competencia"}
 TORNEO: ${torneoStr} | POSICIONES: ${posicionesStr} | PRIMER DÍA: ${primerDia}${focoMesLine}${evCtx}
 
-${modo === "construccion" ? `CONSTRUCCIÓN: Día1=campo_practica tiro largo, 3 opciones (id1 Trackman/filmación, id2 drills ${posicionesStr}, id3 potencia/velocidad). Día2=putting_green o campo_pacos_fabios${hayTorneo ? " (prioriza campo)" : ""}. Día3=campo_practica tiro largo o juego corto. Sáb=campo_practica.
-Drills DEBEN incluir: posicion_objetivo, descripcion, error_comun, sensacion, repeticiones, metrica_exito.` : `PREPARACIÓN: Día1=campo_practica juego corto 4 opciones. Día2=campo_pacos_fabios juego real. Día3=putting_green presión. Sáb=campo_practica repaso.`}
+${modo === "construccion" ? `CONSTRUCCIÓN: Día1=campo_practica tiro largo, 3 opciones (id1 Trackman/filmación, id2 drills ${posicionesStr}, id3 potencia/velocidad). Día2=putting_green_fundadores, putting_green_pacos_fabios o campo_pacos_fabios${hayTorneo ? " (prioriza campo)" : ""}. Día3=campo_practica tiro largo o juego corto. Sáb=campo_practica.
+Drills DEBEN incluir: posicion_objetivo, descripcion, error_comun, sensacion, repeticiones, metrica_exito.` : `PREPARACIÓN: Día1=campo_practica juego corto 4 opciones. Día2=campo_pacos_fabios juego real. Día3=putting_green_fundadores o putting_green_pacos_fabios presión. Sáb=campo_practica repaso.`}
 
 Devuelve SOLO JSON válido comenzando con { sin backticks ni texto adicional.
 

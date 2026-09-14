@@ -32,8 +32,12 @@ import { CalendarDays } from "lucide-react";
 export type { TipoPlan };
 export { TIPO_PLAN_LABEL };
 export type DiaSemana  = "martes" | "miercoles" | "jueves" | "viernes" | "sabado" | "domingo";
-export type TipoSesion = "tiro_largo" | "juego_corto" | "putt" | "campo" | "test_tecnico" | "test_fisico" | "trabajo_fisico" | "competencia" | "damas_estaciones" | "juvenil_estaciones";
-export type Lugar      = "campo_practica" | "putting_green" | "campo_infantil" | "campo_pacos_fabios" | "campo_completo";
+// "dia_putt" es un día especial completo en el green — distinto de "putt",
+// que es una sola estación de putt dentro de un día normal.
+export type TipoSesion = "tiro_largo" | "juego_corto" | "putt" | "dia_putt" | "campo" | "test_tecnico" | "test_fisico" | "trabajo_fisico" | "competencia" | "damas_estaciones" | "juvenil_estaciones";
+export type Lugar      = "campo_practica" | "putting_green_fundadores" | "putting_green_pacos_fabios" | "campo_infantil" | "campo_pacos_fabios" | "campo_completo"
+  // Sitio de antes de que los dos putting greens se separaran — solo lectura.
+  | "putting_green";
 type ViewMode   = "plan" | "semana" | "mes";
 
 export interface Drill {
@@ -117,11 +121,25 @@ export function esEstacionEstructurada(e: EstacionLibre | EstacionEstructurada):
   return "juego" in e;
 }
 
+// `grupos` null (o vacío) = toda la escuela. Un martes puede quedar sin clase
+// solo para Competencia mientras Juvenil y Damas entrenan normal.
 export interface EventoCalendario {
   id: string; nombre: string; fecha_inicio: string; fecha_fin: string | null;
-  descripcion: string | null; tipo: "especial" | "institucional";
+  descripcion: string | null; tipo: "especial" | "institucional"; grupos: TipoPlan[] | null;
 }
-export interface DiaSinEscuela { id: string; fecha_inicio: string; fecha_fin: string; motivo: string | null; }
+export interface DiaSinEscuela { id: string; fecha_inicio: string; fecha_fin: string; motivo: string | null; grupos: TipoPlan[] | null; }
+
+// Una ficha de calendario le aplica a un grupo cuando no tiene grupos (es de
+// toda la escuela) o cuando ese grupo está en la lista.
+export function aplicaAlGrupo(ficha: { grupos?: TipoPlan[] | null }, tipoPlan: TipoPlan): boolean {
+  return !ficha.grupos?.length || ficha.grupos.includes(tipoPlan);
+}
+
+// Texto del alcance para la grilla y los avisos: "" cuando es de toda la
+// escuela, y los nombres de los grupos cuando no.
+export function alcanceGrupos(ficha: { grupos?: TipoPlan[] | null }): string {
+  return ficha.grupos?.length ? ficha.grupos.map((g) => TIPO_PLAN_LABEL[g]).join(" · ") : "";
+}
 
 export function fechaEnRango(fecha: string, inicio: string, fin: string | null): boolean {
   return fecha >= inicio && fecha <= (fin ?? inicio);
@@ -209,6 +227,7 @@ const DIA_OFFSET: Record<DiaSemana, number> = {
 
 export const TIPO_SESION_LABEL: Record<TipoSesion, string> = {
   tiro_largo: "Tiro Largo", juego_corto: "Juego Corto", putt: "Putt",
+  dia_putt: "Día de Putt",
   campo: "Campo", test_tecnico: "Test Técnico", test_fisico: "Test Físico", trabajo_fisico: "Trabajo Físico",
   competencia: "Competencia", damas_estaciones: "Estaciones", juvenil_estaciones: "3 Estaciones",
 };
@@ -217,6 +236,7 @@ const TIPO_SESION_COLOR: Record<TipoSesion, { bg: string; text: string }> = {
   tiro_largo:      { bg: "var(--g-birdies-bg)", text: "var(--g-birdies-fg)" },
   juego_corto:     { bg: "var(--ui-ok-bg)", text: "var(--ui-ok)" },
   putt:            { bg: "var(--ui-warn-bg)", text: "var(--ui-warn)" },
+  dia_putt:        { bg: "var(--ui-warn-bg)", text: "var(--ui-warn)" },
   campo:           { bg: "var(--ui-ok-bg)", text: "var(--ui-ok)" },
   test_tecnico:    { bg: "var(--g-damas-bg)", text: "var(--g-damas-fg)" },
   test_fisico:     { bg: "var(--g-mas14-bg)", text: "var(--g-mas14-fg)" },
@@ -227,10 +247,20 @@ const TIPO_SESION_COLOR: Record<TipoSesion, { bg: string; text: string }> = {
 };
 
 export const LUGAR_LABEL: Record<Lugar, string> = {
-  campo_practica: "Campo de práctica", putting_green: "Putting Green",
+  campo_practica: "Campo de práctica",
+  putting_green_fundadores: "Putting Green Fundadores",
+  putting_green_pacos_fabios: "Putting Green Pacos y Fabios",
   campo_infantil: "Campo Infantil", campo_pacos_fabios: "Pacos/Fabios",
   campo_completo: "Campo Completo",
+  putting_green: "Putting Green",
 };
+
+// Los que se pueden elegir hoy — LUGAR_LABEL incluye además el valor legacy,
+// que se traduce para mostrar pero no vuelve a ofrecerse en un selector.
+export const LUGARES_ELEGIBLES: Lugar[] = [
+  "campo_practica", "putting_green_fundadores", "putting_green_pacos_fabios",
+  "campo_infantil", "campo_pacos_fabios", "campo_completo",
+];
 
 // ── Opciones de combobox para "Editar tema semanal" — constantes editables
 // para ampliar la lista de sugerencias sin tocar el resto del componente. El
@@ -368,6 +398,14 @@ export function descripcionDiaSinEscuela(motivo: string | null | undefined): str
   const etiqueta = etiquetaDiaSinEscuela(motivo);
   if (!motivo?.trim()) return etiqueta;
   return etiqueta === "Sin escuela" ? `Sin escuela — ${motivo.trim()}` : motivo.trim();
+}
+
+// Igual que la anterior, pero diciendo a quién le aplica. Sin el grupo, un
+// aviso de "no hay clase" sobre un día que sí tiene clase para otros grupos se
+// lee como si la escuela entera estuviera cerrada.
+export function descripcionSinClase(sin: DiaSinEscuela): string {
+  const alcance = alcanceGrupos(sin);
+  return alcance ? `${descripcionDiaSinEscuela(sin.motivo)} (solo ${alcance})` : descripcionDiaSinEscuela(sin.motivo);
 }
 
 // Nombre legible del foco para mostrar en la grilla (el valor se guarda con
@@ -635,9 +673,18 @@ export default function ProgramacionModule({ currentRol }: { currentRol: Rol | n
   // Día sin escuela que aplica a un día de la semana en curso, si lo hay. El
   // compensatorio del lunes festivo ya viene como su propia fila, así que no se
   // deduce nada: manda lo que esté cargado en dias_sin_escuela.
-  function diaSinEscuelaDe(dia: DiaSemana): DiaSinEscuela | undefined {
+  // Con `tipoPlan` solo cuentan los días que le aplican a ese grupo; sin él,
+  // cualquiera que caiga en la fecha (la vista de calendario es de todos).
+  function diaSinEscuelaDe(dia: DiaSemana, tipoPlan?: TipoPlan): DiaSinEscuela | undefined {
     const fecha = getFechaForDia(semana, dia);
-    return calDiasSinEscuela.find((d) => fechaEnRango(fecha, d.fecha_inicio, d.fecha_fin));
+    return calDiasSinEscuela.find((d) =>
+      fechaEnRango(fecha, d.fecha_inicio, d.fecha_fin) && (!tipoPlan || aplicaAlGrupo(d, tipoPlan)));
+  }
+
+  // Los días sin clase que le aplican a un grupo — lo que reciben el wizard y
+  // los modales de mover, que trabajan siempre dentro de un solo grupo.
+  function diasSinEscuelaDeGrupo(tipoPlan: TipoPlan): DiaSinEscuela[] {
+    return calDiasSinEscuela.filter((d) => aplicaAlGrupo(d, tipoPlan));
   }
 
   // Abre el wizard solo si queda al menos un día programable. Si la semana (o el
@@ -646,7 +693,7 @@ export default function ProgramacionModule({ currentRol }: { currentRol: Rol | n
   function abrirWizard(tipoPlan: TipoPlan, singleDay?: DiaSemana) {
     const objetivo = singleDay ? [singleDay] : DIAS_POR_TIPO[tipoPlan];
     const bloqueados = objetivo
-      .map((d) => ({ dia: d, sin: diaSinEscuelaDe(d) }))
+      .map((d) => ({ dia: d, sin: diaSinEscuelaDe(d, tipoPlan) }))
       .filter((x): x is { dia: DiaSemana; sin: DiaSinEscuela } => !!x.sin);
     if (bloqueados.length === objetivo.length && objetivo.length > 0) {
       const { dia, sin } = bloqueados[0];
@@ -1257,12 +1304,16 @@ export default function ProgramacionModule({ currentRol }: { currentRol: Rol | n
                   const fecha = getFechaForDia(semana, dia);
                   const sinEscuela = calDiasSinEscuela.find((d) => fechaEnRango(fecha, d.fecha_inicio, d.fecha_fin));
                   const eventosDia = calEventos.filter((e) => fechaEnRango(fecha, e.fecha_inicio, e.fecha_fin));
+                  // El gris de "cerrado" es solo para los días de toda la
+                  // escuela: si Competencia no tiene clase pero Damas sí, pintar
+                  // la columna entera diría que ese día no viene nadie.
+                  const alcanceSin = sinEscuela ? alcanceGrupos(sinEscuela) : "";
                   return (
-                    <div key={dia} style={{ borderRight: "1px solid var(--ui-border-soft)", padding: "2px 4px", minHeight: sinEscuela || eventosDia.length ? 24 : 0, background: sinEscuela ? "var(--ui-border)" : "transparent" }}>
-                      {sinEscuela && <p onClick={() => setEditDiaSinEscuela(sinEscuela)} style={{ margin: 0, fontSize: 10, fontWeight: 700, color: "var(--ui-text-2)", cursor: "pointer" }} title={`${sinEscuela.motivo ?? ""} · clic para editar`}>{etiquetaDiaSinEscuela(sinEscuela.motivo)}</p>}
+                    <div key={dia} style={{ borderRight: "1px solid var(--ui-border-soft)", padding: "2px 4px", minHeight: sinEscuela || eventosDia.length ? 24 : 0, background: sinEscuela && !alcanceSin ? "var(--ui-border)" : "transparent" }}>
+                      {sinEscuela && <p onClick={() => setEditDiaSinEscuela(sinEscuela)} style={{ margin: 0, fontSize: 10, fontWeight: 700, color: "var(--ui-text-2)", cursor: "pointer" }} title={`${descripcionSinClase(sinEscuela)} · clic para editar`}>{etiquetaDiaSinEscuela(sinEscuela.motivo)}{alcanceSin && ` · ${alcanceSin}`}</p>}
                       {eventosDia.map((e) => (
                         <p key={e.id} onClick={() => setEditEventoCal(e)} style={{ margin: 0, fontSize: 10, fontWeight: 600, color: e.tipo === "especial" ? "var(--ui-warn)" : "var(--g-birdies-fg)", cursor: "pointer" }} title={`${e.descripcion ?? e.nombre} · clic para editar`}>
-                          {e.tipo === "especial" ? "🌟" : "📌"} {e.nombre}
+                          {e.tipo === "especial" ? "🌟" : "📌"} {e.nombre}{alcanceGrupos(e) && ` · ${alcanceGrupos(e)}`}
                         </p>
                       ))}
                     </div>
@@ -1490,10 +1541,10 @@ export default function ProgramacionModule({ currentRol }: { currentRol: Rol | n
                   <div
                     key={i}
                     onClick={() => setSelectedCalDate(isSelected ? null : dateStr)}
-                    title={sinEscuela?.motivo ?? undefined}
+                    title={sinEscuela ? descripcionSinClase(sinEscuela) : undefined}
                     style={{
                       minHeight: 100,
-                      background: sinEscuela ? "var(--ui-border)" : isSelected ? "var(--ui-ok-bg)" : "var(--ui-card)",
+                      background: sinEscuela && !alcanceGrupos(sinEscuela) ? "var(--ui-border)" : isSelected ? "var(--ui-ok-bg)" : "var(--ui-card)",
                       borderBottom: "1px solid var(--ui-border-soft)",
                       borderRight: "1px solid var(--ui-border-soft)",
                       padding: "6px",
@@ -1515,7 +1566,7 @@ export default function ProgramacionModule({ currentRol }: { currentRol: Rol | n
                       {date.getDate()}
                     </div>
                     <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
-                      {sinEscuela && <p onClick={(ev) => { ev.stopPropagation(); setEditDiaSinEscuela(sinEscuela); }} style={{ margin: 0, fontSize: 10, fontWeight: 700, color: "var(--ui-text-2)", cursor: "pointer" }} title={`${sinEscuela.motivo ?? ""} · clic para editar`}>{etiquetaDiaSinEscuela(sinEscuela.motivo)}</p>}
+                      {sinEscuela && <p onClick={(ev) => { ev.stopPropagation(); setEditDiaSinEscuela(sinEscuela); }} style={{ margin: 0, fontSize: 10, fontWeight: 700, color: "var(--ui-text-2)", cursor: "pointer" }} title={`${descripcionSinClase(sinEscuela)} · clic para editar`}>{etiquetaDiaSinEscuela(sinEscuela.motivo)}{alcanceGrupos(sinEscuela) && ` · ${alcanceGrupos(sinEscuela)}`}</p>}
                       {dayEventos.map((e) => (
                         <div key={e.id} onClick={(ev) => { ev.stopPropagation(); setEditEventoCal(e); }} style={{
                           background: e.tipo === "especial" ? "var(--ui-warn)" : "var(--g-birdies-fg)", color: "#fff",
@@ -1851,6 +1902,9 @@ export default function ProgramacionModule({ currentRol }: { currentRol: Rol | n
                   const diaySesiones = sesiones.filter((s) => s.dia_semana === dia);
                   const fecha = getFechaForDia(semana, dia);
                   const isSelected = selectedDia === dia;
+                  // "Sin programación" sobre un día que no tiene clase se lee
+                  // como algo que falta por hacer. Si está marcado, se dice.
+                  const sinClase = diaSinEscuelaDe(dia, activeTab);
                   return (
                     <button
                       key={dia}
@@ -1868,6 +1922,10 @@ export default function ProgramacionModule({ currentRol }: { currentRol: Rol | n
                             </span>
                           ))}
                         </div>
+                      ) : sinClase ? (
+                        <span className="text-xs font-semibold" style={{ color: "var(--ui-text-2)" }}>
+                          🚫 {etiquetaDiaSinEscuela(sinClase.motivo)}
+                        </span>
                       ) : (
                         <span className="text-xs text-(--ui-text-3)">Sin programación</span>
                       )}
@@ -1930,7 +1988,22 @@ export default function ProgramacionModule({ currentRol }: { currentRol: Rol | n
                     </div>
 
                     <div className="flex-1 overflow-y-auto px-5 py-4">
-                      {diaySesiones.length === 0 ? (
+                      {diaySesiones.length === 0 && diaSinEscuelaDe(dia, activeTab) ? (
+                        <div className="flex flex-col items-center justify-center py-16 text-center">
+                          <p className="text-sm font-semibold text-(--ui-text-2) mb-1">
+                            🚫 No hay clase de {TIPO_PLAN_LABEL[activeTab]} este día
+                          </p>
+                          <p className="text-xs text-(--ui-text-3) mb-4">
+                            {descripcionSinClase(diaSinEscuelaDe(dia, activeTab)!)} — las familias lo ven así en su calendario y en el PDF de la semana.
+                          </p>
+                          <button
+                            onClick={() => setEditDiaSinEscuela(diaSinEscuelaDe(dia, activeTab)!)}
+                            className="px-4 py-2 rounded-lg text-sm font-medium border border-(--ui-border) text-(--ui-text-2) hover:bg-(--ui-card-alt)"
+                          >
+                            Editar o quitar la marca
+                          </button>
+                        </div>
+                      ) : diaySesiones.length === 0 ? (
                         <div className="flex flex-col items-center justify-center py-16 text-center">
                           <p className="text-sm font-semibold text-(--ui-text-2) mb-1">No hay programación para este día</p>
                           <p className="text-xs text-(--ui-text-3) mb-4">Ármala en el wizard: sugiere drills de la biblioteca y tú decides cuáles usar.</p>
@@ -2108,7 +2181,7 @@ export default function ProgramacionModule({ currentRol }: { currentRol: Rol | n
                 </div>
                 <div><label className="block text-xs font-semibold text-(--ui-text-2) mb-1.5">Lugar</label>
                   <select value={sesionForm.lugar} onChange={(e) => setSesionForm((f) => f ? { ...f, lugar: e.target.value as Lugar } : f)} className="w-full border border-(--ui-border) rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-600 bg-(--ui-card)">
-                    {(Object.keys(LUGAR_LABEL) as Lugar[]).map((l) => <option key={l} value={l}>{LUGAR_LABEL[l]}</option>)}
+                    {LUGARES_ELEGIBLES.map((l) => <option key={l} value={l}>{LUGAR_LABEL[l]}</option>)}
                   </select>
                 </div>
               </div>
@@ -2548,7 +2621,7 @@ export default function ProgramacionModule({ currentRol }: { currentRol: Rol | n
 
       {/* Snapshots ocultos de los dos PDF — html2canvas los captura fuera de pantalla */}
       <div ref={padresPdfRef} style={{ position: "absolute", left: "-9999px", top: 0 }}>
-        {plan && <WeeklyPlanPDFTemplate plan={plan} sesiones={sesiones} tipoPlan={activeTab} semana={semana} />}
+        {plan && <WeeklyPlanPDFTemplate plan={plan} sesiones={sesiones} tipoPlan={activeTab} semana={semana} diasSinClase={diasSinEscuelaDeGrupo(activeTab)} />}
       </div>
       <div ref={profesoresPdfRef} style={{ position: "absolute", left: "-9999px", top: 0 }}>
         {plan && <TeacherPlanPDFTemplate plan={plan} sesiones={sesiones} tipoPlan={activeTab} semana={semana} />}
@@ -2599,7 +2672,7 @@ export default function ProgramacionModule({ currentRol }: { currentRol: Rol | n
           planId={plan.id}
           horariosDefecto={horariosDefecto}
           sesionesExistentes={sesiones}
-          diasSinEscuela={calDiasSinEscuela}
+          diasSinEscuela={diasSinEscuelaDeGrupo(weekWizardCtx.tipoPlan)}
           singleDay={weekWizardCtx.singleDay}
           onClose={() => {
             // Los días recorridos ya se guardaron incrementalmente al avanzar
@@ -2649,7 +2722,7 @@ export default function ProgramacionModule({ currentRol }: { currentRol: Rol | n
         <MoverSemanaModal
           plan={plan}
           sesiones={sesiones}
-          diasSinEscuela={calDiasSinEscuela}
+          diasSinEscuela={diasSinEscuelaDeGrupo(plan.tipo_plan)}
           onClose={() => setMoviendoSemana(false)}
           onMoved={(nuevaSemana) => {
             setMoviendoSemana(false);
@@ -2666,7 +2739,7 @@ export default function ProgramacionModule({ currentRol }: { currentRol: Rol | n
       {moviendoSesion && (
         <MoverSesionModal
           sesion={moviendoSesion}
-          diasSinEscuela={calDiasSinEscuela}
+          diasSinEscuela={diasSinEscuelaDeGrupo(moviendoSesion.tipo_plan)}
           onClose={() => setMoviendoSesion(null)}
           onMoved={(nuevaFecha) => {
             setMoviendoSesion(null);

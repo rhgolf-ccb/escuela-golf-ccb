@@ -10,10 +10,12 @@ function usaSesionJuvenil(tipoPlan: string): boolean {
 }
 const DIA_VALUES = ["martes", "miercoles", "jueves", "viernes", "sabado", "domingo"] as const;
 const TIPO_SESION_VALUES = [
-  "tiro_largo", "juego_corto", "putt", "campo", "test_tecnico", "test_fisico", "trabajo_fisico",
+  "tiro_largo", "juego_corto", "putt", "dia_putt", "campo", "test_tecnico", "test_fisico", "trabajo_fisico",
   "competencia", "damas_estaciones", "juvenil_estaciones", "especial", "campo_pacos", "campo_infantil",
 ] as const;
-const LUGAR_VALUES = ["campo_practica", "putting_green", "campo_infantil", "campo_pacos_fabios", "campo_completo"] as const;
+// "putting_green" a secas sigue aceptado para no rechazar un plan viejo que
+// se reenvíe; los dos greens con apellido son los que ofrece la interfaz.
+const LUGAR_VALUES = ["campo_practica", "putting_green_fundadores", "putting_green_pacos_fabios", "campo_infantil", "campo_pacos_fabios", "campo_completo", "putting_green"] as const;
 
 // hora_inicio/hora_fin del cliente solo se respetan cuando vienen completos y
 // válidos (ej. el día de campo de Damas, que sí puede tener una hora distinta

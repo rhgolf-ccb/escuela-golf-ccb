@@ -53,7 +53,7 @@ export function defaultCategoriasForDia(tipoPlan: TipoPlan, dia: DiaSemana): Est
 // putting green, campo → Pacos y Fabios, todo lo demás → campo de práctica,
 // incluida trabajo_fisico que no tiene lugar propio).
 export function suggestLugar(categoria: EstacionCategoria): string {
-  if (categoria === "putt") return "putting_green";
+  if (categoria === "putt") return "putting_green_fundadores";
   if (categoria === "campo_infantil") return "campo_infantil";
   if (categoria === "campo") return "campo_pacos_fabios";
   return "campo_practica";

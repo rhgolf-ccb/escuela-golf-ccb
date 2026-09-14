@@ -46,6 +46,12 @@ function especialDe(config: GroupConfig, dia: DiaWizardState) {
   return config.especiales.find((e) => e.value === dia.especial) ?? config.especiales[0];
 }
 
+// El sitio del día especial: el que eligió el profesor, y si no tocó el
+// selector, el sugerido por el tipo de día.
+function lugarEspecial(config: GroupConfig, dia: DiaWizardState): string {
+  return dia.especialLugar ?? especialDe(config, dia).lugar;
+}
+
 // Mismo shape que ya escribía JuvenileClassModal.tsx — sesion_juvenil como
 // única fuente de verdad, tipo_sesion/lugar de fila son valores fijos/placeholder.
 export function buildJuvenilRow(base: RowBase, dia: DiaWizardState, config: GroupConfig): Record<string, unknown> {
@@ -54,7 +60,7 @@ export function buildJuvenilRow(base: RowBase, dia: DiaWizardState, config: Grou
     const esp = especialDe(config, dia);
     return {
       ...base,
-      tipo_sesion: esp.tipoSesion, lugar: esp.lugar, objetivo: esp.objetivo,
+      tipo_sesion: esp.tipoSesion, lugar: lugarEspecial(config, dia), objetivo: esp.objetivo,
       drills: [], juego_competitivo: null, estaciones_damas: null, notas: dia.especialNotas || null,
       sesion_juvenil: { tipo: "especial", tipo_especial: esp.value },
       calentamiento,
@@ -87,7 +93,7 @@ export function buildCompetenciaRow(base: RowBase, dia: DiaWizardState, config: 
     const juegoDrills = juegos.map((j) => ({ titulo: j, descripcion: "", series_repeticiones: null }));
     return {
       ...base,
-      tipo_sesion: esp.tipoSesion, lugar: esp.lugar,
+      tipo_sesion: esp.tipoSesion, lugar: lugarEspecial(config, dia),
       objetivo: juegos.length ? `${esp.objetivo} — Juegos: ${juegos.join(", ")}` : esp.objetivo,
       drills: juegoDrills, juego_competitivo: null, estaciones_damas: null, sesion_juvenil: null,
       estaciones_competencia: null, notas: dia.especialNotas || null,
@@ -139,7 +145,7 @@ export function buildDamasRow(base: RowBase, dia: DiaWizardState, config: GroupC
     const esp = especialDe(config, dia);
     return {
       ...base,
-      tipo_sesion: esp.tipoSesion, lugar: esp.lugar, objetivo: esp.objetivo,
+      tipo_sesion: esp.tipoSesion, lugar: lugarEspecial(config, dia), objetivo: esp.objetivo,
       drills: [], juego_competitivo: null, estaciones_damas: null, sesion_juvenil: null,
       notas: dia.especialNotas || null,
       calentamiento,

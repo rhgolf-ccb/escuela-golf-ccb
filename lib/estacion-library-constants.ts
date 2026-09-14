@@ -70,21 +70,38 @@ export const SUBGRUPO_LABEL: Record<SubgrupoJuvenil, string> = {
 
 // Lugares de práctica — mismo vocabulario duplicado antes en cada modal.
 // Nunca "driving range" (terminología CCB).
+//
+// Los dos putting greens son sitios distintos y separados por diez minutos de
+// camino: nombrarlos "Putting Green" a secas dejaba a la familia sin saber a
+// cuál llegar. El valor viejo sin apellido ya no se ofrece (ver
+// LUGAR_LABEL_LEGACY).
 export const LUGARES_ESTACION: { value: string; label: string }[] = [
   { value: "campo_practica", label: "Campo de práctica" },
-  { value: "putting_green", label: "Putting Green" },
+  { value: "putting_green_fundadores", label: "Putting Green Fundadores" },
+  { value: "putting_green_pacos_fabios", label: "Putting Green Pacos y Fabios" },
   { value: "campo_infantil", label: "Campo Infantil" },
   { value: "campo_pacos_fabios", label: "Campo Pacos y Fabios" },
   { value: "campo_completo", label: "Campo Completo" },
 ];
 
-export const LUGAR_LABEL: Record<string, string> = Object.fromEntries(
-  LUGARES_ESTACION.map((l) => [l.value, l.label])
-);
+// Valores que ya no se pueden elegir pero pueden seguir guardados en filas o
+// JSONB viejos — se traducen para mostrar, nunca se ofrecen en un selector.
+const LUGAR_LABEL_LEGACY: Record<string, string> = {
+  putting_green: "Putting Green",
+};
+
+export const LUGAR_LABEL: Record<string, string> = {
+  ...LUGAR_LABEL_LEGACY,
+  ...Object.fromEntries(LUGARES_ESTACION.map((l) => [l.value, l.label])),
+};
 
 // Reverso de LUGAR_LABEL — Damas guarda el label legible (no el value crudo)
 // dentro de estaciones_damas, así que al reabrir para editar hay que
 // reconstruir el value a partir del texto guardado.
-export const LUGAR_VALUE_FROM_LABEL: Record<string, string> = Object.fromEntries(
-  LUGARES_ESTACION.map((l) => [l.label, l.value])
-);
+export const LUGAR_VALUE_FROM_LABEL: Record<string, string> = {
+  // Un día de Damas guardado antes de que existieran los dos greens dice
+  // "Putting Green" a secas: al reabrirlo cae en Fundadores, igual que hizo la
+  // migración con el resto de los datos.
+  "Putting Green": "putting_green_fundadores",
+  ...Object.fromEntries(LUGARES_ESTACION.map((l) => [l.label, l.value])),
+};

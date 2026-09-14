@@ -44,6 +44,9 @@ export function parseExistingToDiaState(tipoPlan: TipoPlan, config: GroupConfig,
         const valorValido = config.especiales.some((e) => e.value === sj.tipo_especial);
         return {
           tipo: "especial", especial: valorValido ? sj.tipo_especial : undefined,
+          // El sitio guardado manda al reabrir: si el profesor movió el test al
+          // green, no puede volver a proponerle el campo de práctica.
+          especialLugar: sesion.lugar,
           especialNotas: sesion.notas ?? "", calentamiento: null, estaciones: [],
           horaInicio: hhmm(sesion.hora_inicio), horaFin: hhmm(sesion.hora_fin),
         };
@@ -75,7 +78,7 @@ export function parseExistingToDiaState(tipoPlan: TipoPlan, config: GroupConfig,
     if (esEspecial) {
       const opt = config.especiales.find((e) => e.tipoSesion === sesion.tipo_sesion)!;
       return {
-        tipo: "especial", especial: opt.value, especialNotas: sesion.notas ?? "",
+        tipo: "especial", especial: opt.value, especialLugar: sesion.lugar, especialNotas: sesion.notas ?? "",
         especialJuegos: (sesion.drills ?? []).map((d) => d.titulo),
         calentamiento: null, estaciones: [], horaInicio: hhmm(sesion.hora_inicio), horaFin: hhmm(sesion.hora_fin),
       };
@@ -108,7 +111,7 @@ export function parseExistingToDiaState(tipoPlan: TipoPlan, config: GroupConfig,
   if (esEspecial) {
     const opt = config.especiales.find((e) => e.tipoSesion === sesion.tipo_sesion)!;
     return {
-      tipo: "especial", especial: opt.value, especialNotas: sesion.notas ?? "",
+      tipo: "especial", especial: opt.value, especialLugar: sesion.lugar, especialNotas: sesion.notas ?? "",
       calentamiento: null, estaciones: [], horaInicio: hhmm(sesion.hora_inicio), horaFin: hhmm(sesion.hora_fin),
     };
   }

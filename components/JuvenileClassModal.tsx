@@ -87,7 +87,8 @@ const CATEGORIAS_CON_IA = new Set<CategoriaEstacion>(["juego_largo", "juego_cort
 
 const LUGARES_ESTACION: { value: string; label: string }[] = [
   { value: "campo_practica",    label: "Campo de práctica" },
-  { value: "putting_green",     label: "Putting Green" },
+  { value: "putting_green_fundadores",   label: "Putting Green Fundadores" },
+  { value: "putting_green_pacos_fabios", label: "Putting Green Pacos y Fabios" },
   { value: "campo_infantil",    label: "Campo Infantil" },
   { value: "campo_pacos_fabios", label: "Campo Pacos y Fabios" },
   { value: "campo_completo",    label: "Campo Completo" },
@@ -97,7 +98,7 @@ const LUGARES_ESTACION: { value: string; label: string }[] = [
 // profesor la ve como punto de partida al llegar al último paso, pero sigue
 // siendo un dropdown editable, nunca se guarda a ciegas.
 function sugerirLugar(categoria: CategoriaEstacion): string {
-  if (categoria === "putt") return "putting_green";
+  if (categoria === "putt") return "putting_green_fundadores";
   if (categoria === "campo_infantil") return "campo_infantil";
   return "campo_practica";
 }

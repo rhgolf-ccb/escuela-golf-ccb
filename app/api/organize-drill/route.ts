@@ -4,9 +4,13 @@ import { ANTHROPIC_MODEL } from "@/lib/anthropic-model";
 
 function normalizeLugar(raw: string): string {
   const r = (raw ?? "").toLowerCase().trim();
+  // El green de Pacos y Fabios se decide antes que el campo: los dos textos
+  // dicen "pacos y fabios" y solo los separa la palabra putting/green.
+  const esGreen = r.includes("putting") || r.includes("green");
+  if (esGreen && (r.includes("pacos") || r.includes("fabios"))) return "putting_green_pacos_fabios";
   if (r.includes("pacos") || r.includes("fabios")) return "campo_pacos_fabios";
   if (r.includes("infantil")) return "campo_infantil";
-  if (r.includes("putting") || r.includes("fundadores")) return "putting_green_fundadores";
+  if (esGreen || r.includes("fundadores")) return "putting_green_fundadores";
   return "campo_practica";
 }
 
@@ -34,6 +38,7 @@ Categorías válidas:
 Lugares — devuelve el valor exacto:
 - "campo_practica" → Campo de práctica principal (tiro largo, posiciones de swing)
 - "putting_green_fundadores" → Putting Green de los Fundadores
+- "putting_green_pacos_fabios" → Putting Green de Pacos y Fabios
 - "campo_pacos_fabios" → Campo Pacos & Fabios (campo corto par 3)
 - "campo_infantil" → Campo Infantil (niños más pequeños)
 
@@ -55,7 +60,7 @@ Devuelve exactamente este JSON:
   "subcategoria": "la subcategoría más específica (ej: P3, chipping, distancia, matchplay)",
   "posicion_swing": ["P3","P4"] o null si no es drill técnico de swing,
   "nivel_recomendado": ["competencia","+14"] — lista de niveles apropiados,
-  "lugar": "campo_practica|putting_green_fundadores|campo_pacos_fabios|campo_infantil",
+  "lugar": "campo_practica|putting_green_fundadores|putting_green_pacos_fabios|campo_pacos_fabios|campo_infantil",
   "duracion_minutos": número entero o null,
   "repeticiones": "ej: 3 series de 10" o null,
   "error_que_corrige": "el error técnico específico que corrige" o null,

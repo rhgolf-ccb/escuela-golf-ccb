@@ -40,7 +40,7 @@ export async function POST(req: NextRequest) {
     : `[{"titulo":"nombre del drill","descripcion":"descripción general","dificultad_birdies":"cómo lo hacen los Birdies (4-5 años)","dificultad_aguilas":"cómo lo hacen las Águilas (6-8 años)","dificultad_albatros":"cómo lo hacen Albatros (9-12 años)","dificultad_mas14":"cómo lo hacen los +14"}]`;
 
   const estacionSchema = esDamas
-    ? `[{"nombre":"nombre estación","lugar":"Campo de práctica / Putting Green / Campo Infantil","duracion_min":20,"descripcion":"qué practican en esta estación"}]`
+    ? `[{"nombre":"nombre estación","lugar":"Campo de práctica / Putting Green Fundadores / Putting Green Pacos y Fabios / Campo Infantil","duracion_min":20,"descripcion":"qué practican en esta estación"}]`
     : "null";
 
   const systemPrompt = `Eres un entrenador senior de la Escuela de Golf del Country Club de Bogotá (Colombia). Diseñas planes de entrenamiento semanales pedagógicos, progresivos y motivadores. Usas terminología de golf en español colombiano.
@@ -85,7 +85,7 @@ Devuelve exactamente este JSON:
   ]
 }
 
-Elige tipo_sesion y lugar coherentes con el dia y el tema. Opciones tipo_sesion: tiro_largo, juego_corto, putt, campo, test_tecnico, test_fisico, competencia${esDamas ? ", damas_estaciones" : ""}. Opciones lugar: campo_practica, putting_green, campo_infantil, campo_pacos_fabios, campo_completo.`;
+Elige tipo_sesion y lugar coherentes con el dia y el tema. Opciones tipo_sesion: tiro_largo, juego_corto, putt, campo, test_tecnico, test_fisico, competencia${esDamas ? ", damas_estaciones" : ""}. Opciones lugar: campo_practica, putting_green_fundadores, putting_green_pacos_fabios, campo_infantil, campo_pacos_fabios, campo_completo.`;
 
   const anthropicRes = await fetch("https://api.anthropic.com/v1/messages", {
     method: "POST",

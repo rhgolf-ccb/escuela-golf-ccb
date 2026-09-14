@@ -60,7 +60,7 @@ Duración de la estación: ${duracion_min} minutos
 
 ${tonoInstruccion}
 
-Nunca uses el término driving range — siempre campo de práctica. Usa las ubicaciones reales del CCB (Campo de práctica, Putting green Fundadores, Campo Pacos y Fabios, Campo infantil) en "materiales" o instrucciones si aplica.${evitarStr}
+Nunca uses el término driving range — siempre campo de práctica. Usa las ubicaciones reales del CCB (Campo de práctica, Putting Green Fundadores, Putting Green Pacos y Fabios, Campo Pacos y Fabios, Campo infantil) en "materiales" o instrucciones si aplica.${evitarStr}
 
 Devuelve SOLO este JSON sin texto extra ni backticks:
 {

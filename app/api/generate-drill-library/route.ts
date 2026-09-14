@@ -4,9 +4,13 @@ import { ANTHROPIC_MODEL } from "@/lib/anthropic-model";
 
 function normalizeLugar(raw: string): string {
   const r = (raw ?? "").toLowerCase().trim();
+  // El green de Pacos y Fabios se decide antes que el campo: los dos textos
+  // dicen "pacos y fabios" y solo los separa la palabra putting/green.
+  const esGreen = r.includes("putting") || r.includes("green");
+  if (esGreen && (r.includes("pacos") || r.includes("fabios"))) return "putting_green_pacos_fabios";
   if (r.includes("pacos") || r.includes("fabios")) return "campo_pacos_fabios";
   if (r.includes("infantil")) return "campo_infantil";
-  if (r.includes("putting") || r.includes("fundadores")) return "putting_green_fundadores";
+  if (esGreen || r.includes("fundadores")) return "putting_green_fundadores";
   return "campo_practica";
 }
 
@@ -66,7 +70,7 @@ const DRILL_SCHEMA = `{
   "subcategoria": "string",
   "posicion_swing": ["P1"] o null,
   "nivel_recomendado": ["aguilas","albatros"],
-  "lugar": "campo_practica|putting_green_fundadores|campo_pacos_fabios|campo_infantil",
+  "lugar": "campo_practica|putting_green_fundadores|putting_green_pacos_fabios|campo_pacos_fabios|campo_infantil",
   "duracion_minutos": número entero,
   "repeticiones": "3 series de 10",
   "error_que_corrige": "string",

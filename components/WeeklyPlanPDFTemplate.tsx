@@ -38,6 +38,8 @@ const DIA_LABEL: Record<string, string> = {
 const LUGAR_LABEL: Record<string, string> = {
   campo_practica: "Campo de práctica",
   putting_green: "Putting Green",
+  putting_green_fundadores: "Putting Green Fundadores",
+  putting_green_pacos_fabios: "Putting Green Pacos y Fabios",
   campo_infantil: "Campo Infantil",
   campo_pacos_fabios: "Campo Pacos & Fabios",
   campo_completo: "Campo Completo",
@@ -53,6 +55,7 @@ function prettyFocoPDF(foco: string | null | undefined): string | null {
   if (!foco) return null;
   return FOCO_LABEL_PDF[foco] ?? foco.replace(/_/g, " ").replace(/^\w/, (c) => c.toUpperCase());
 }
+const DIA_ISO_KEYS = ["domingo", "lunes", "martes", "miercoles", "jueves", "viernes", "sabado"];
 const DIA_OFFSET: Record<string, number> = {
   martes: 1, miercoles: 2, jueves: 3, viernes: 4, sabado: 5, domingo: 6,
 };
@@ -118,11 +121,15 @@ const IconCalendar = () => (
 );
 
 // ── Props ─────────────────────────────────────────────────────────────────────
+interface DiaSinClasePDF { id: string; fecha_inicio: string; fecha_fin: string; motivo: string | null }
+
 interface Props {
   plan: PlanSemanal;
   sesiones: SesionSemana[];
   tipoPlan: string;
   semana: Date;
+  // Ya filtrados al grupo de este plan por quien arma el PDF.
+  diasSinClase?: DiaSinClasePDF[];
 }
 
 const CAT_LABEL: Record<string, string> = {
@@ -147,6 +154,39 @@ const TIPO_SESION_LABEL_PDF: Record<string, string> = {
   tiro_largo: "Tiro Largo", juego_corto: "Juego Corto", putt: "Putt", campo: "Campo",
   test_tecnico: "Test Técnico", test_fisico: "Test Físico", trabajo_fisico: "Trabajo Físico",
 };
+
+// El PDF es lo que la familia recibe por WhatsApp. Un día sin clase que
+// simplemente no aparece se lee como un descuido de programación, y de ahí
+// salían las llamadas preguntando si el niño se perdió una clase: sale como
+// columna propia, en su lugar de la semana.
+function SinClaseColumn({ fecha, dia, motivo }: { fecha: string; dia: string; motivo: string | null }) {
+  const texto = (motivo ?? "").trim();
+  const etiqueta = /^festivo/i.test(texto) ? "Festivo" : /^compensatorio/i.test(texto) ? "Compensatorio" : "No hay clase";
+  const detalle = texto.replace(/^(festivo|compensatorio|sin escuela)\s*[—:-]?\s*/i, "").trim();
+  return (
+    <div style={{
+      flex: 1, minWidth: 0,
+      border: "1px solid #d0d0d0",
+      borderRadius: 10,
+      overflow: "hidden",
+      display: "flex", flexDirection: "column",
+      background: "#f2f2f2",
+    }}>
+      <div style={{ background: "#6b7280", padding: "10px 14px" }}>
+        <p style={{ margin: 0, color: "#ffffff", fontWeight: 800, fontSize: 15, textTransform: "uppercase", letterSpacing: "0.05em" }}>
+          {DIA_LABEL[dia] ?? dia}
+        </p>
+        <p style={{ margin: "3px 0 0", color: "rgba(255,255,255,0.65)", fontSize: 10 }}>
+          {formatFechaCorta(fecha)}
+        </p>
+      </div>
+      <div style={{ padding: "16px 14px", flex: 1, display: "flex", flexDirection: "column", justifyContent: "center", textAlign: "center" }}>
+        <p style={{ margin: 0, fontWeight: 800, fontSize: 13, color: "#4b5563" }}>{etiqueta}</p>
+        {detalle && <p style={{ margin: "6px 0 0", fontSize: 10.5, color: "#6b7280", lineHeight: 1.4 }}>{detalle}</p>}
+      </div>
+    </div>
+  );
+}
 
 // ── Columna de un día ─────────────────────────────────────────────────────────
 function DayColumn({ sesion }: { sesion: SesionSemana }) {
@@ -430,7 +470,7 @@ function DayColumn({ sesion }: { sesion: SesionSemana }) {
 }
 
 // ── Componente principal ──────────────────────────────────────────────────────
-export default function WeeklyPlanPDFTemplate({ plan, sesiones, tipoPlan, semana }: Props) {
+export default function WeeklyPlanPDFTemplate({ plan, sesiones, tipoPlan, semana, diasSinClase = [] }: Props) {
   const TIPO_LABEL: Record<string, string> = { birdies: "Birdies", juvenil: "Juvenil", competencia: "Competencia", damas: "Damas" };
 
   // Ordenar sesiones por día
@@ -445,8 +485,31 @@ export default function WeeklyPlanPDFTemplate({ plan, sesiones, tipoPlan, semana
   // mismo día (Competencia, Damas) son contenido distinto y ambas salen.
   const sesionesPorDia = sesionesOrdenadas;
 
+  // Días sin clase que caen dentro de esta semana. Un rango largo (vacaciones)
+  // aporta una columna por día hábil; el lunes nunca hay clase, así que no
+  // cuenta como día perdido.
+  const columnasSinClase = (() => {
+    const cols: { key: string; dia: string; fecha: string; motivo: string | null }[] = [];
+    for (let i = 0; i < 7; i++) {
+      const d = new Date(semana);
+      d.setDate(d.getDate() + i);
+      const iso = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+      const dia = DIA_ISO_KEYS[d.getDay()];
+      if (!dia || dia === "lunes") continue;
+      if (sesionesPorDia.some((x) => x.fecha === iso)) continue;
+      const sin = diasSinClase.find((x) => iso >= x.fecha_inicio && iso <= (x.fecha_fin || x.fecha_inicio));
+      if (sin) cols.push({ key: `${sin.id}-${iso}`, dia, fecha: iso, motivo: sin.motivo });
+    }
+    return cols;
+  })();
+
+  const columnas = [
+    ...sesionesPorDia.map((sesion) => ({ orden: DIA_OFFSET[sesion.dia_semana] ?? 9, key: sesion.id, node: <DayColumn key={sesion.id} sesion={sesion} /> })),
+    ...columnasSinClase.map((c) => ({ orden: DIA_OFFSET[c.dia] ?? 9, key: c.key, node: <SinClaseColumn key={c.key} fecha={c.fecha} dia={c.dia} motivo={c.motivo} /> })),
+  ].sort((a, b) => a.orden - b.orden);
+
   const weekRange = formatWeekRange(semana);
-  const numCols = sesionesPorDia.length || 1;
+  const numCols = columnas.length || 1;
 
   return (
     <div style={{
@@ -552,10 +615,8 @@ export default function WeeklyPlanPDFTemplate({ plan, sesiones, tipoPlan, semana
         flex: 1,
         alignItems: "stretch",
       }}>
-        {sesionesPorDia.map((sesion) => (
-          <DayColumn key={sesion.id} sesion={sesion} />
-        ))}
-        {sesionesPorDia.length === 0 && (
+        {columnas.map((c) => c.node)}
+        {columnas.length === 0 && (
           <p style={{ color: "#888", fontSize: 12 }}>Sin sesiones registradas</p>
         )}
       </div>

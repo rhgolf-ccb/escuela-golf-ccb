@@ -2,6 +2,41 @@ import type { NextRequest } from "next/server";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
 import { STAFF_ROLES, type Rol } from "@/lib/roles";
+import { TIPOS_PLAN, type TipoPlan } from "@/lib/grupos";
+
+// Un evento o un día sin clase puede ser de toda la escuela o de unos grupos.
+// null es "toda la escuela" — se distingue del arreglo vacío que llega cuando
+// el profesor no marcó ninguno, y que significa lo mismo.
+function normalizarGrupos(raw: unknown): TipoPlan[] | null {
+  if (!Array.isArray(raw)) return null;
+  const validos = raw.filter((g): g is TipoPlan => TIPOS_PLAN.includes(g as TipoPlan));
+  return validos.length ? validos : null;
+}
+
+// Sesiones ya programadas dentro del rango que se va a marcar sin clase. Con
+// grupos, solo cuentan las de esos grupos: apagar el martes de Competencia no
+// puede reportar como conflicto la clase de Damas de ese mismo día.
+async function sesionesEnRango(
+  admin: ReturnType<typeof createSupabaseAdminClient>,
+  fechaInicio: string, fechaFin: string, grupos: TipoPlan[] | null,
+): Promise<{ data?: { id: string; fecha: string }[]; error?: string }> {
+  const { data, error } = await admin
+    .from("sesiones_semana")
+    .select("id, fecha, planes_semanales!inner(tipo_plan)")
+    .gte("fecha", fechaInicio)
+    .lte("fecha", fechaFin);
+  if (error) return { error: error.message };
+  const filas = (data ?? []) as unknown as {
+    id: string; fecha: string; planes_semanales: { tipo_plan: string } | { tipo_plan: string }[];
+  }[];
+  const tipoDe = (f: (typeof filas)[number]) =>
+    Array.isArray(f.planes_semanales) ? f.planes_semanales[0]?.tipo_plan : f.planes_semanales?.tipo_plan;
+  return {
+    data: filas
+      .filter((f) => !grupos || grupos.includes(tipoDe(f) as TipoPlan))
+      .map((f) => ({ id: f.id, fecha: f.fecha })),
+  };
+}
 
 export async function POST(req: NextRequest) {
   const supabase = await createSupabaseServerClient();
@@ -24,18 +59,56 @@ export async function POST(req: NextRequest) {
   const admin = createSupabaseAdminClient();
 
   if (body.kind === "evento") {
-    const { nombre, fecha_inicio, fecha_fin, descripcion, tipo } = body as {
+    const { nombre, fecha_inicio, fecha_fin, descripcion, tipo, sin_clase, sesiones_existentes } = body as {
       nombre?: string; fecha_inicio?: string; fecha_fin?: string | null; descripcion?: string | null; tipo?: string;
+      sin_clase?: boolean; sesiones_existentes?: "borrar" | "conservar";
     };
+    const grupos = normalizarGrupos(body.grupos);
     if (!nombre?.trim() || !fecha_inicio) {
       return Response.json({ error: "Nombre y fecha son requeridos" }, { status: 400 });
     }
+
+    // El torneo del sábado es un evento Y un día sin clase. Se escriben las dos
+    // filas de un solo golpe: pedirle al profesor que cargue lo mismo dos veces
+    // era justo por donde se colaba el día que la familia veía a medias.
+    const rangoFin = fecha_fin || fecha_inicio;
+    if (sin_clase) {
+      const { data: sesiones, error: sesErr } = await sesionesEnRango(admin, fecha_inicio, rangoFin, grupos);
+      if (sesErr) return Response.json({ error: sesErr }, { status: 500 });
+      if ((sesiones?.length ?? 0) > 0 && !sesiones_existentes) {
+        return Response.json({
+          needs_confirm: true,
+          sesiones: sesiones!.length,
+          fechas: [...new Set(sesiones!.map((s) => s.fecha))].sort(),
+        }, { status: 409 });
+      }
+      if (sesiones_existentes === "borrar" && sesiones?.length) {
+        const { error: delErr } = await admin.from("sesiones_semana").delete().in("id", sesiones.map((s) => s.id));
+        if (delErr) return Response.json({ error: delErr.message }, { status: 500 });
+      }
+    }
+
     const { data, error } = await admin.from("eventos_calendario").insert({
       nombre: nombre.trim(), fecha_inicio, fecha_fin: fecha_fin || null,
       descripcion: descripcion?.trim() || null, tipo: tipo === "especial" ? "especial" : "institucional",
+      grupos,
     }).select().single();
     if (error) return Response.json({ error: error.message }, { status: 500 });
-    return Response.json({ evento: data });
+
+    let dia_sin_escuela = null;
+    if (sin_clase) {
+      const { data: sinFila, error: sinErr } = await admin.from("dias_sin_escuela").insert({
+        fecha_inicio, fecha_fin: rangoFin, motivo: nombre.trim(), grupos,
+      }).select().single();
+      if (sinErr) {
+        return Response.json({
+          evento: data,
+          error: `El evento quedó guardado, pero no se pudo marcar el día sin clase: ${sinErr.message}`,
+        }, { status: 500 });
+      }
+      dia_sin_escuela = sinFila;
+    }
+    return Response.json({ evento: data, dia_sin_escuela });
   }
 
   if (body.kind === "sin_escuela") {
@@ -43,6 +116,7 @@ export async function POST(req: NextRequest) {
       fecha_inicio?: string; fecha_fin?: string; motivo?: string | null;
       sesiones_existentes?: "borrar" | "conservar";
     };
+    const grupos = normalizarGrupos(body.grupos);
     if (!fecha_inicio || !fecha_fin) {
       return Response.json({ error: "El rango de fechas es requerido" }, { status: 400 });
     }
@@ -50,19 +124,18 @@ export async function POST(req: NextRequest) {
     // Marcar un día sin escuela sobre fechas ya programadas dejaba las sesiones
     // huérfanas: seguían saliendo en el PDF de padres. No se borran en silencio
     // — se devuelve el conflicto y el cliente decide.
-    const { data: sesiones, error: sesErr } = await admin
-      .from("sesiones_semana").select("id, fecha").gte("fecha", fecha_inicio).lte("fecha", fecha_fin);
-    if (sesErr) return Response.json({ error: sesErr.message }, { status: 500 });
+    const { data: sesiones, error: sesErr } = await sesionesEnRango(admin, fecha_inicio, fecha_fin, grupos);
+    if (sesErr) return Response.json({ error: sesErr }, { status: 500 });
     if ((sesiones?.length ?? 0) > 0 && !sesiones_existentes) {
       return Response.json({
         needs_confirm: true,
         sesiones: sesiones!.length,
-        fechas: [...new Set(sesiones!.map((s) => s.fecha as string))].sort(),
+        fechas: [...new Set(sesiones!.map((s) => s.fecha))].sort(),
       }, { status: 409 });
     }
 
     const { data, error } = await admin.from("dias_sin_escuela").insert({
-      fecha_inicio, fecha_fin, motivo: motivo?.trim() || null,
+      fecha_inicio, fecha_fin, motivo: motivo?.trim() || null, grupos,
     }).select().single();
     if (error) return Response.json({ error: error.message }, { status: 500 });
 
@@ -110,6 +183,7 @@ export async function PATCH(req: NextRequest) {
     const { data, error } = await admin.from("eventos_calendario").update({
       nombre: nombre.trim(), fecha_inicio, fecha_fin: fecha_fin || null,
       descripcion: descripcion?.trim() || null, tipo: tipo === "especial" ? "especial" : "institucional",
+      grupos: normalizarGrupos(body.grupos),
     }).eq("id", id).select().single();
     if (error) return Response.json({ error: error.message }, { status: 500 });
     return Response.json({ evento: data });
@@ -120,7 +194,7 @@ export async function PATCH(req: NextRequest) {
     if (!id) return Response.json({ error: "id requerido" }, { status: 400 });
     if (!fecha_inicio || !fecha_fin) return Response.json({ error: "El rango de fechas es requerido" }, { status: 400 });
     const { data, error } = await admin.from("dias_sin_escuela").update({
-      fecha_inicio, fecha_fin, motivo: motivo?.trim() || null,
+      fecha_inicio, fecha_fin, motivo: motivo?.trim() || null, grupos: normalizarGrupos(body.grupos),
     }).eq("id", id).select().single();
     if (error) return Response.json({ error: error.message }, { status: 500 });
     return Response.json({ dia_sin_escuela: data });

@@ -535,11 +535,16 @@ export default function WeekWizardModal({ tipoPlan, semana, planId, horariosDefe
                 <EspecialDiaPicker
                   opciones={config.especiales}
                   valor={diaActual.especial}
+                  lugar={diaActual.especialLugar}
                   notas={diaActual.especialNotas}
                   color={config.color}
                   juegosCampo={tipoPlan === "competencia" ? CAMPO_GAMES : undefined}
                   juegosSeleccionados={diaActual.especialJuegos ?? []}
-                  onChangeValor={(v) => updateDia({ ...diaActual, especial: v })}
+                  // Cambiar de tipo de día trae el sitio sugerido de ese tipo:
+                  // el que quedó de la elección anterior casi nunca aplica
+                  // (un test técnico no se toma donde la salida al campo).
+                  onChangeValor={(v) => updateDia({ ...diaActual, especial: v, especialLugar: config.especiales.find((e) => e.value === v)?.lugar })}
+                  onChangeLugar={(l) => updateDia({ ...diaActual, especialLugar: l })}
                   onChangeNotas={(n) => updateDia({ ...diaActual, especialNotas: n })}
                   onChangeJuegos={(g) => updateDia({ ...diaActual, especialJuegos: g })}
                 />

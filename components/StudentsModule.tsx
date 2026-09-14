@@ -79,7 +79,7 @@ const GROUPS: { label: string; value: GroupFilter; isSpecial?: boolean }[] = [
 // los demás niños: es el indicador que mueve a Competencia. Lo que no sale de
 // ahí son los datos personales (teléfonos, correos, observaciones) ni el estado
 // de matrícula, que se maneja desde la ficha y es cosa del staff.
-const COLUMNAS_STAFF = ["Alumno", "Edad", "Asistencia", "Tests", "Estado"];
+const COLUMNAS_STAFF = ["Alumno", "Edad", "Asistencia", "Tests", "Activo"];
 const COLUMNAS_FAMILIA = ["Alumno", "Edad", "Asistencia", "Tests"];
 
 type Tono = { color: string; background: string };
@@ -179,6 +179,14 @@ export default function StudentsModule({
   const columnasTabla = soloConsulta ? COLUMNAS_FAMILIA : COLUMNAS_STAFF;
 
   const [students, setStudents] = useState<AlumnoFila[]>([]);
+  // El padrón activo es lo único que se trae al abrir el módulo. Los archivados
+  // se piden solo si el director entra a buscarlos: eran la mitad de las filas
+  // que el navegador cargaba en cada visita para no mostrarlas nunca.
+  const [archivadosCargados, setArchivadosCargados] = useState(false);
+  const [cargandoArchivados, setCargandoArchivados] = useState(false);
+  // Cuántos hay sin traerlos — un count(*) en el servidor, para que el chip
+  // "Archivados (N)" diga la verdad antes de cargar ninguna fila.
+  const [archivadosCount, setArchivadosCount] = useState(0);
   const [metricas, setMetricas] = useState<Map<string, Metrica>>(new Map());
   const [metricasError, setMetricasError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -216,6 +224,7 @@ export default function StudentsModule({
         let query = supabase
           .from("students")
           .select(COLUMNAS_PADRON)
+          .eq("status", "activo")
           .order("full_name", { ascending: true })
           .order("id", { ascending: true })
           .range(desde, desde + PAGE_SIZE - 1);
@@ -240,6 +249,47 @@ export default function StudentsModule({
     }
     fetchAll();
   }, [soloConsulta]);
+
+  // Cuántos archivados hay, sin traerlos. `head: true` no descarga filas.
+  useEffect(() => {
+    if (soloConsulta) return;
+    supabase
+      .from("students")
+      .select("id", { count: "exact", head: true })
+      .eq("status", "inactivo")
+      .then(({ count }) => { if (typeof count === "number") setArchivadosCount(count); });
+  }, [soloConsulta]);
+
+  // Los archivados llegan la primera vez que se piden — al entrar al chip
+  // "Archivados" o "Todos" —, y de ahí en adelante se quedan en memoria.
+  const cargarArchivados = useCallback(async () => {
+    if (archivadosCargados || cargandoArchivados) return;
+    setCargandoArchivados(true);
+    const PAGE_SIZE = 1000;
+    const acc: AlumnoFila[] = [];
+    for (let desde = 0; ; desde += PAGE_SIZE) {
+      const { data, error } = await supabase
+        .from("students")
+        .select(COLUMNAS_PADRON)
+        .eq("status", "inactivo")
+        .order("full_name", { ascending: true })
+        .order("id", { ascending: true })
+        .range(desde, desde + PAGE_SIZE - 1);
+      if (error) { setError(error.message); setCargandoArchivados(false); return; }
+      const page = (data ?? []) as unknown as AlumnoFila[];
+      acc.push(...page);
+      if (page.length < PAGE_SIZE) break;
+    }
+    // Alguien archivado en esta misma sesión ya está en la lista: se descarta
+    // por id para no verlo dos veces.
+    setStudents((prev) => {
+      const ids = new Set(prev.map((x) => String(x.id)));
+      const nuevos = acc.filter((x) => !ids.has(String(x.id)));
+      return [...prev, ...nuevos].sort((a, b) => a.full_name.localeCompare(b.full_name));
+    });
+    setArchivadosCargados(true);
+    setCargandoArchivados(false);
+  }, [archivadosCargados, cargandoArchivados]);
 
   // Asistencia y tests salen agregados de la vista student_metrics — una fila
   // por alumno, no una consulta por alumno. Se piden solo las filas con algo
@@ -335,16 +385,26 @@ export default function StudentsModule({
       return n;
     });
   }
+  // El contador de archivados sale de un count del servidor mientras no estén
+  // cargados, así que archivar o reactivar tiene que moverlo a mano; una vez
+  // cargados, se cuenta sobre las filas y este delta deja de usarse.
+  function ajustarArchivados(delta: number) {
+    if (!archivadosCargados) setArchivadosCount((c) => Math.max(0, c + delta));
+  }
+
   async function toggleStatus(student: AlumnoFila) {
     const nuevo = student.status === "activo" ? "inactivo" : "activo";
     setStudents((prev) => prev.map((s) => (s.id === student.id ? { ...s, status: nuevo } : s)));
+    ajustarArchivados(nuevo === "inactivo" ? 1 : -1);
     const { error: e } = await supabase.from("students").update({ status: nuevo }).eq("id", student.id);
     if (e) {
       setError(e.message);
       setStudents((prev) => prev.map((s) => (s.id === student.id ? { ...s, status: student.status } : s)));
+      ajustarArchivados(nuevo === "inactivo" ? -1 : 1);
     }
   }
   async function bulkUpdateStatus(nuevo: "activo" | "inactivo") {
+    const cambiados = students.filter((s) => selected.has(String(s.id)) && s.status !== nuevo);
     const ids = students.filter((s) => selected.has(String(s.id))).map((s) => s.id);
     if (!ids.length) return;
     setBulkSaving(true);
@@ -352,6 +412,7 @@ export default function StudentsModule({
     setBulkSaving(false);
     if (e) { setError(e.message); return; }
     setStudents((prev) => prev.map((s) => (selected.has(String(s.id)) ? { ...s, status: nuevo } : s)));
+    ajustarArchivados(nuevo === "inactivo" ? cambiados.length : -cambiados.length);
     setSelected(new Set());
   }
 
@@ -444,12 +505,18 @@ export default function StudentsModule({
     return counts;
   }, [students]);
 
-  const counts = useMemo(() => ({
-    todos: students.length,
-    activo: students.filter((s) => s.status === "activo").length,
-    inactivo: students.filter((s) => s.status === "inactivo").length,
-    talegaPropia: students.filter((s) => s.tiene_talega === "Sí").length,
-  }), [students]);
+  const counts = useMemo(() => {
+    const activo = students.filter((s) => s.status === "activo").length;
+    // Mientras los archivados no estén cargados, su número viene del count del
+    // servidor — no de contar filas que el navegador todavía no tiene.
+    const inactivo = archivadosCargados ? students.filter((s) => s.status === "inactivo").length : archivadosCount;
+    return {
+      todos: activo + inactivo,
+      activo,
+      inactivo,
+      talegaPropia: students.filter((s) => s.tiene_talega === "Sí").length,
+    };
+  }, [students, archivadosCargados, archivadosCount]);
 
   const inputClass = "w-full px-3 py-2 rounded-lg text-sm focus:outline-none focus:ring-2";
   // colorScheme: sin esto el calendario del input date, el caret y las opciones
@@ -489,7 +556,7 @@ export default function StudentsModule({
               <span style={{ color: "var(--ui-border)" }}>·</span>
               <span className="flex items-center gap-1.5" style={{ color: "var(--ui-text-3)" }}>
                 <span className="inline-block w-2 h-2 rounded-full" style={{ background: "var(--ui-text-3)" }} />
-                {counts.inactivo} inactivos
+                {counts.inactivo} archivados
               </span>
             </div>
             {currentRol && isStaff(currentRol) && (
@@ -531,12 +598,12 @@ export default function StudentsModule({
               {(["todos", "activo", "inactivo"] as StatusFilter[]).map((s) => {
                 const active = statusFilter === s;
                 return (
-                  <button key={s} onClick={() => setStatusFilter(s)}
+                  <button key={s} onClick={() => { setStatusFilter(s); if (s !== "activo") cargarArchivados(); }}
                     className="px-3 py-1.5 rounded-md text-xs font-medium capitalize transition-colors"
                     style={active
                       ? { background: "var(--g-juvenil-bg)", color: "var(--g-juvenil-fg)" }
                       : { color: "var(--ui-text-3)" }}>
-                    {s === "todos" ? `Todos (${counts.todos})` : s === "activo" ? `Activos (${counts.activo})` : `Inactivos (${counts.inactivo})`}
+                    {s === "todos" ? `Todos (${counts.todos})` : s === "activo" ? `Activos (${counts.activo})` : `Archivados (${counts.inactivo})`}
                   </button>
                 );
               })}
@@ -648,12 +715,12 @@ export default function StudentsModule({
               <button onClick={() => bulkUpdateStatus("inactivo")} disabled={bulkSaving}
                 className="px-3 py-1.5 rounded-lg text-xs font-semibold disabled:opacity-50"
                 style={{ background: "var(--ui-card)", color: "var(--ui-text)" }}>
-                {bulkSaving ? "Guardando…" : "Marcar inactivos"}
+                {bulkSaving ? "Guardando…" : "Archivar"}
               </button>
               <button onClick={() => bulkUpdateStatus("activo")} disabled={bulkSaving}
                 className="px-3 py-1.5 rounded-lg text-xs font-semibold disabled:opacity-50"
                 style={{ background: "var(--ui-card)", color: "var(--ui-text)" }}>
-                Marcar activos
+                Devolver a activos
               </button>
               <button onClick={() => setSelected(new Set())} className="px-3 py-1.5 rounded-lg text-xs font-medium"
                 style={{ color: "var(--ui-text-2)" }}>Limpiar</button>
@@ -705,7 +772,7 @@ export default function StudentsModule({
                     {filtered.length === 0 ? (
                       <tr>
                         <td colSpan={columnasTabla.length + (soloConsulta ? 0 : 2)} className="text-center py-16" style={{ color: "var(--ui-text-3)" }}>
-                          {search ? `No se encontraron alumnos con "${search}"` : "No hay alumnos en esta categoría"}
+                          {cargandoArchivados ? "Cargando archivados…" : search ? `No se encontraron alumnos con "${search}"` : "No hay alumnos en esta categoría"}
                         </td>
                       </tr>
                     ) : (
@@ -754,9 +821,11 @@ export default function StudentsModule({
                             {!soloConsulta && (
                               <>
                             <td className="px-5 py-3" onClick={(e) => e.stopPropagation()}>
-                              <button onClick={() => toggleStatus(student)} title="Cambiar activo / inactivo" className="cursor-pointer focus:outline-none">
-                                <StatusBadge status={student.status} />
-                              </button>
+                              <ToggleActivo
+                                activo={student.status === "activo"}
+                                nombre={student.full_name}
+                                onToggle={() => toggleStatus(student)}
+                              />
                             </td>
                             <td className="px-5 py-3" onClick={(e) => e.stopPropagation()}>
                               <div className="flex items-center justify-end gap-1">
@@ -781,7 +850,7 @@ export default function StudentsModule({
                                     { label: "Abrir perfil completo", icon: <ExternalLink size={14} />, onSelect: () => router.push(`/alumnos/${student.id}`) },
                                     { label: "Editar datos", icon: <Pencil size={14} />, onSelect: () => router.push(`/alumnos/${student.id}?editar=1`) },
                                     {
-                                      label: student.status === "activo" ? "Marcar inactivo" : "Marcar activo",
+                                      label: student.status === "activo" ? "Archivar alumno" : "Devolver a activos",
                                       separatorBefore: true,
                                       onSelect: () => toggleStatus(student),
                                     },
@@ -1195,12 +1264,33 @@ function Campo({ label, children }: { label: string; children: React.ReactNode }
   );
 }
 
-function StatusBadge({ status }: { status: Student["status"] }) {
-  const tono = status === "activo" ? TONO_OK : TONO_NEUTRO;
+// Interruptor de activo/archivado directo en la fila: archivar a alguien era
+// entrar a su perfil, y por eso el padrón acumulaba alumnos que ya no vienen.
+function ToggleActivo({ activo, nombre, onToggle }: { activo: boolean; nombre: string; onToggle: () => void }) {
   return (
-    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold" style={tono}>
-      <span className="w-1.5 h-1.5 rounded-full inline-block" style={{ background: tono.color }} />
-      {status === "activo" ? "Activo" : "Inactivo"}
-    </span>
+    <div className="flex items-center gap-2">
+      <button
+        type="button"
+        role="switch"
+        aria-checked={activo}
+        aria-label={activo ? `Archivar a ${nombre}` : `Devolver a ${nombre} a la lista de activos`}
+        title={activo ? "Archivar alumno" : "Devolver a activos"}
+        onClick={onToggle}
+        className="relative rounded-full shrink-0 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2"
+        style={{ width: 36, height: 20, background: activo ? "var(--ui-ok)" : "var(--ui-border)" }}
+      >
+        <span
+          className="absolute rounded-full transition-transform"
+          style={{
+            width: 14, height: 14, top: 3, left: 3, background: "var(--ui-card)",
+            transform: activo ? "translateX(16px)" : "translateX(0)",
+          }}
+        />
+      </button>
+      <span className="text-xs font-medium" style={{ color: activo ? "var(--ui-ok)" : "var(--ui-text-3)" }}>
+        {activo ? "Activo" : "Archivado"}
+      </span>
+    </div>
   );
 }
+

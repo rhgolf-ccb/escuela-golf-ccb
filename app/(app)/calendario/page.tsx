@@ -78,8 +78,8 @@ export default async function CalendarioPage() {
   // del alumno vinculado).
   const [{ data: vinculos }, { data: eventosRaw }, { data: diasSinEscuelaRaw }] = await Promise.all([
     supabase.from("user_estudiantes").select("students(id, full_name, grupo_activo, birth_date, gender, foto_url)").eq("user_id", currentUser.id),
-    admin.from("eventos_calendario").select("id, nombre, fecha_inicio, fecha_fin, descripcion, tipo"),
-    admin.from("dias_sin_escuela").select("id, fecha_inicio, fecha_fin, motivo"),
+    admin.from("eventos_calendario").select("id, nombre, fecha_inicio, fecha_fin, descripcion, tipo, grupos"),
+    admin.from("dias_sin_escuela").select("id, fecha_inicio, fecha_fin, motivo, grupos"),
   ]);
 
   const estudiantes: EstudianteVinculado[] = (vinculos ?? [])

@@ -15,7 +15,7 @@ const CATEGORIA_LABEL: Record<string, string> = {
 const LUGAR_DEFAULT: Record<string, string> = {
   tiro_largo:     "campo_practica",
   juego_corto:    "campo_practica",
-  putt:           "putting_green",
+  putt:           "putting_green_fundadores",
   campo:          "campo_pacos_fabios",
   test_tecnico:   "campo_practica",
   test_fisico:    "campo_practica",

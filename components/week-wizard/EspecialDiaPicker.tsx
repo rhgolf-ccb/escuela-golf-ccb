@@ -1,20 +1,23 @@
 "use client";
 
+import { LUGARES_ESTACION } from "@/lib/estacion-library-constants";
 import type { EspecialOption } from "./types";
 
 interface Props {
   opciones: EspecialOption[];
   valor?: string;
+  lugar?: string;
   notas?: string;
   color: string;
   juegosCampo?: string[]; // catálogo de juegos de campo (solo si aplica)
   juegosSeleccionados?: string[];
   onChangeValor: (value: string) => void;
+  onChangeLugar: (lugar: string) => void;
   onChangeNotas: (notas: string) => void;
   onChangeJuegos?: (juegos: string[]) => void;
 }
 
-export default function EspecialDiaPicker({ opciones, valor, notas, color, juegosCampo, juegosSeleccionados, onChangeValor, onChangeNotas, onChangeJuegos }: Props) {
+export default function EspecialDiaPicker({ opciones, valor, lugar, notas, color, juegosCampo, juegosSeleccionados, onChangeValor, onChangeLugar, onChangeNotas, onChangeJuegos }: Props) {
   const opcionSel = opciones.find((o) => o.value === valor);
   const esSalidaCampo = opcionSel?.tipoSesion === "campo";
   const seleccion = juegosSeleccionados ?? [];
@@ -61,6 +64,20 @@ export default function EspecialDiaPicker({ opciones, valor, notas, color, juego
           </div>
         </div>
       )}
+      {opcionSel && (
+        <div className="pt-1">
+          <p className="text-[11px] font-bold text-(--ui-text-3) uppercase tracking-wide mb-1.5">Sitio</p>
+          <select
+            value={lugar ?? opcionSel.lugar}
+            onChange={(e) => onChangeLugar(e.target.value)}
+            className="w-full text-xs border border-(--ui-border) rounded-lg px-2.5 py-2 bg-(--ui-card-alt) text-(--ui-text)"
+            style={{ colorScheme: "dark" }}
+          >
+            {LUGARES_ESTACION.map((l) => <option key={l.value} value={l.value}>{l.label}</option>)}
+          </select>
+        </div>
+      )}
+
       <textarea
         value={notas ?? ""}
         onChange={(e) => onChangeNotas(e.target.value)}

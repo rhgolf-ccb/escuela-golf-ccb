@@ -10,12 +10,13 @@ import { TIPO_PLAN_LABEL, acentoGrupo, type TipoPlan } from "@/lib/grupos";
 
 
 const TIPO_SESION_LABEL: Record<string, string> = {
-  tiro_largo: "Tiro Largo", juego_corto: "Juego Corto", putt: "Putt",
+  tiro_largo: "Tiro Largo", juego_corto: "Juego Corto", putt: "Putt", dia_putt: "Día de Putt",
   campo: "Campo", test_tecnico: "Test Técnico", test_fisico: "Test Físico", trabajo_fisico: "Trabajo Físico",
   competencia: "Competencia", damas_estaciones: "Estaciones", juvenil_estaciones: "3 Estaciones",
 };
 const LUGAR_LABEL: Record<string, string> = {
   campo_practica: "Campo de práctica", putting_green: "Putting Green",
+  putting_green_fundadores: "Putting Green Fundadores", putting_green_pacos_fabios: "Putting Green Pacos y Fabios",
   campo_infantil: "Campo Infantil", campo_pacos_fabios: "Pacos/Fabios",
   campo_completo: "Campo Completo",
 };

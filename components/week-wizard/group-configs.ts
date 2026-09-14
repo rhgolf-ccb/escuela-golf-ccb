@@ -148,6 +148,7 @@ export const GROUP_CONFIGS: Record<TipoPlan, GroupConfig> = {
       { value: "coordinacion", emoji: "🤸", label: "Coordinación y equilibrio", drillsCategoria: null, canonical: "trabajo_fisico", focos: FOCOS_BIRD_COORD },
     ],
     especiales: [
+      { value: "dia_putt", tipoSesion: "dia_putt", emoji: "🎯", label: "Día de putt", desc: "Sesión completa en el green", lugar: "putting_green_fundadores", objetivo: "Día completo de putt" },
       { value: "test_tecnico", tipoSesion: "test_tecnico", emoji: "📋", label: "Test técnico", desc: "Protocolo Birdies", lugar: "campo_practica", objetivo: "Test técnico del protocolo Birdies" },
       { value: "test_fisico", tipoSesion: "test_fisico", emoji: "💪", label: "Test físico", desc: "Protocolo Birdies", lugar: "campo_practica", objetivo: "Test físico del protocolo Birdies" },
       { value: "campo_infantil", tipoSesion: "campo", emoji: "👶", label: "Campo Infantil", desc: "Día lúdico", lugar: "campo_infantil", objetivo: "Día lúdico en Campo Infantil" },
@@ -164,6 +165,7 @@ export const GROUP_CONFIGS: Record<TipoPlan, GroupConfig> = {
       { value: "fisico", emoji: "💪", label: "Físico", drillsCategoria: null, canonical: "trabajo_fisico", focos: FOCOS_JUV_FISICO },
     ],
     especiales: [
+      { value: "dia_putt", tipoSesion: "dia_putt", emoji: "🎯", label: "Día de putt", desc: "Sesión completa en el green", lugar: "putting_green_fundadores", objetivo: "Día completo de putt" },
       { value: "test_tecnico", tipoSesion: "test_tecnico", emoji: "📋", label: "Test técnico", desc: "Evaluación P1-P10", lugar: "campo_practica", objetivo: "Evaluación técnica P1-P10" },
       { value: "test_fisico", tipoSesion: "test_fisico", emoji: "💪", label: "Test físico", desc: "Evaluación TPI", lugar: "campo_practica", objetivo: "Evaluación física TPI" },
       { value: "campo_pacos", tipoSesion: "campo", emoji: "🌿", label: "Salida al campo", desc: "Juego en campo real", lugar: "campo_pacos_fabios", objetivo: "Juego en Campo Pacos y Fabios" },
@@ -180,6 +182,7 @@ export const GROUP_CONFIGS: Record<TipoPlan, GroupConfig> = {
       { value: "trabajo_fisico", emoji: "💪", label: "Trabajo Físico", drillsCategoria: null, canonical: "trabajo_fisico", focos: FOCOS_FISICO_COMP },
     ],
     especiales: [
+      { value: "dia_putt", tipoSesion: "dia_putt", emoji: "🎯", label: "Día de putt", desc: "Sesión completa en el green", lugar: "putting_green_fundadores", objetivo: "Día completo de putt" },
       { value: "test_tecnico", tipoSesion: "test_tecnico", emoji: "📋", label: "Test técnico", desc: "Evaluación P1-P10", lugar: "campo_practica", objetivo: "Evaluación técnica P1-P10" },
       { value: "test_fisico", tipoSesion: "test_fisico", emoji: "💪", label: "Test físico", desc: "Evaluación TPI", lugar: "campo_practica", objetivo: "Evaluación física TPI" },
       { value: "campo", tipoSesion: "campo", emoji: "🌿", label: "Salida al campo", desc: "Juego en campo real", lugar: "campo_pacos_fabios", objetivo: "Juego en Campo Pacos y Fabios" },
@@ -195,6 +198,7 @@ export const GROUP_CONFIGS: Record<TipoPlan, GroupConfig> = {
       { value: "fisico", emoji: "💪", label: "Físico", drillsCategoria: null, canonical: "trabajo_fisico" },
     ],
     especiales: [
+      { value: "dia_putt", tipoSesion: "dia_putt", emoji: "🎯", label: "Día de putt", desc: "Sesión completa en el green", lugar: "putting_green_fundadores", objetivo: "Día completo de putt" },
       { value: "test_tecnico", tipoSesion: "test_tecnico", emoji: "📋", label: "Test técnico", desc: "Evaluación P1-P10", lugar: "campo_practica", objetivo: "Evaluación técnica P1-P10" },
       { value: "test_fisico", tipoSesion: "test_fisico", emoji: "💪", label: "Test físico", desc: "Evaluación TPI", lugar: "campo_practica", objetivo: "Evaluación física TPI" },
       { value: "campo", tipoSesion: "campo", emoji: "🌿", label: "Salida al campo", desc: "Juego en campo real", lugar: "campo_pacos_fabios", objetivo: "Juego en Campo Pacos y Fabios" },

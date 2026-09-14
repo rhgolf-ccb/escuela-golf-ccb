@@ -286,7 +286,7 @@ function Pill({ active, onClick, children }: { active: boolean; onClick: () => v
 }
 
 const MAX_HISTORY = 10;
-const LUGARES: Lugar[] = ["campo_practica", "putting_green", "campo_infantil", "campo_pacos_fabios", "campo_completo"];
+const LUGARES: Lugar[] = ["campo_practica", "putting_green_fundadores", "putting_green_pacos_fabios", "campo_infantil", "campo_pacos_fabios", "campo_completo"];
 
 const SCHEDULE_DESC: Record<TipoPlan, string> = {
   birdies:
