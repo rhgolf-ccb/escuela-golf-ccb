@@ -534,6 +534,10 @@ export default function ProgramacionModule({ currentRol }: { currentRol: Rol | n
   const [showEventoWizard, setShowEventoWizard] = useState(false);
   const [editEventoCal, setEditEventoCal] = useState<EventoCalendario | null>(null);
   const [editDiaSinEscuela, setEditDiaSinEscuela] = useState<DiaSinEscuela | null>(null);
+  // Marcar "no hay clase" desde Vista Plan: ya se sabe el día y el grupo, así
+  // que el modal abre con los dos puestos. Antes solo se llegaba por
+  // "Planificar con Paco", que es justo donde nadie lo busca al programar.
+  const [marcarSinClase, setMarcarSinClase] = useState<string | null>(null);
   const [showWizard, setShowWizard] = useState(false);
   const [pendingDiaWizard, setPendingDiaWizard] = useState<{ grupo: TipoPlan; dia: DiaSemana; fecha: string } | null>(null);
   const [wizardActividadInit, setWizardActividadInit] = useState<{ grupos: TipoPlan[]; fecha: string } | null>(null);
@@ -1193,6 +1197,16 @@ export default function ProgramacionModule({ currentRol }: { currentRol: Rol | n
             id: primera.id, fecha: primera.fecha ?? fecha, dia_semana: primera.dia_semana ?? dia,
             tipo_plan: activeTab, asistencia_registrada: primera.asistencia_registrada,
           });
+        },
+      },
+      {
+        label: diaSinEscuelaDe(dia, activeTab) ? "Quitar la marca de \u201cno hay clase\u201d" : "Marcar: no hay clase este día",
+        separatorBefore: true,
+        icon: <span style={{ fontSize: 12, lineHeight: 1 }}>🚫</span>,
+        onSelect: () => {
+          const yaMarcado = diaSinEscuelaDe(dia, activeTab);
+          if (yaMarcado) setEditDiaSinEscuela(yaMarcado);
+          else setMarcarSinClase(fecha);
         },
       },
       {
@@ -2008,6 +2022,9 @@ export default function ProgramacionModule({ currentRol }: { currentRol: Rol | n
                           <p className="text-sm font-semibold text-(--ui-text-2) mb-1">No hay programación para este día</p>
                           <p className="text-xs text-(--ui-text-3) mb-4">Ármala en el wizard: sugiere drills de la biblioteca y tú decides cuáles usar.</p>
                           <div className="flex items-center gap-3">
+                            <button onClick={() => setMarcarSinClase(fecha)} className="px-4 py-2 rounded-lg text-sm font-medium border border-(--ui-border) text-(--ui-text-2) hover:bg-(--ui-card-alt)">
+                              🚫 No hay clase este día
+                            </button>
                             <button onClick={openEditDia} className="px-4 py-2 rounded-lg text-sm font-medium text-(--ui-bg)" style={{ backgroundColor: "var(--ui-gold)" }}>
                               Armar este día
                             </button>
@@ -2753,12 +2770,15 @@ export default function ProgramacionModule({ currentRol }: { currentRol: Rol | n
       )}
 
       {/* ══ MODAL: Evento / día sin escuela ════════════════════════════════════ */}
-      {(showEventoWizard || editEventoCal || editDiaSinEscuela) && (
+      {(showEventoWizard || editEventoCal || editDiaSinEscuela || marcarSinClase) && (
         <EventoDiaSinEscuelaModal
-          fechaSugerida={toISODate(semana)}
+          fechaSugerida={marcarSinClase ?? toISODate(semana)}
           editEvento={editEventoCal}
           editSinEscuela={editDiaSinEscuela}
-          onClose={() => { setShowEventoWizard(false); setEditEventoCal(null); setEditDiaSinEscuela(null); }}
+          kindInicial={marcarSinClase ? "sin_escuela" : undefined}
+          gruposSugeridos={marcarSinClase ? [activeTab] : undefined}
+          fijarUnDia={!!marcarSinClase}
+          onClose={() => { setShowEventoWizard(false); setEditEventoCal(null); setEditDiaSinEscuela(null); setMarcarSinClase(null); }}
           onCreated={() => {
             showToast("Guardado en el calendario ✓");
             fetchDiasSinEscuela();

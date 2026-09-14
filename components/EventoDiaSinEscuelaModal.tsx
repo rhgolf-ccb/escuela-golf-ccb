@@ -48,26 +48,33 @@ function GruposPicker({ grupos, onChange }: { grupos: TipoPlan[]; onChange: (g: 
 }
 
 export default function EventoDiaSinEscuelaModal({
-  fechaSugerida, editEvento, editSinEscuela, onClose, onCreated,
+  fechaSugerida, editEvento, editSinEscuela, kindInicial, gruposSugeridos, fijarUnDia, onClose, onCreated,
 }: {
   fechaSugerida: string;
   editEvento?: EventoEdit | null;
   editSinEscuela?: SinEscuelaEdit | null;
+  // Abrir directo en "sin clase", con el grupo ya marcado y sobre un solo día
+  // — es como entra desde Vista Plan, donde ya se sabe qué día y qué grupo.
+  kindInicial?: Kind;
+  gruposSugeridos?: TipoPlan[];
+  fijarUnDia?: boolean;
   onClose: () => void;
   onCreated: () => void;
 }) {
   const editing = editEvento ?? editSinEscuela ?? null;
   const editId = editing?.id ?? null;
 
-  const [kind, setKind] = useState<Kind>(editSinEscuela ? "sin_escuela" : "evento");
+  const [kind, setKind] = useState<Kind>(editSinEscuela ? "sin_escuela" : kindInicial ?? "evento");
 
   const [nombre, setNombre] = useState(editEvento?.nombre ?? "");
   const [tipo, setTipo] = useState<"especial" | "institucional">(editEvento?.tipo ?? "institucional");
   const [descripcion, setDescripcion] = useState(editEvento?.descripcion ?? "");
   const [fechaInicio, setFechaInicio] = useState(editEvento?.fecha_inicio ?? editSinEscuela?.fecha_inicio ?? fechaSugerida);
-  const [fechaFin, setFechaFin] = useState(editEvento?.fecha_fin ?? editSinEscuela?.fecha_fin ?? "");
+  // Con fijarUnDia el rango es ese día y ya: quien llega desde Vista Plan está
+  // marcando un martes, no unas vacaciones.
+  const [fechaFin, setFechaFin] = useState(editEvento?.fecha_fin ?? editSinEscuela?.fecha_fin ?? (fijarUnDia ? fechaSugerida : ""));
   const [motivo, setMotivo] = useState(editSinEscuela?.motivo ?? "");
-  const [grupos, setGrupos] = useState<TipoPlan[]>(editing?.grupos ?? []);
+  const [grupos, setGrupos] = useState<TipoPlan[]>(editing?.grupos ?? gruposSugeridos ?? []);
   // Un torneo o una salida es un evento Y un día sin clase. Solo se ofrece al
   // crear: al editar un evento viejo, el día sin clase ya es su propia ficha y
   // tocarla desde acá duplicaría filas.
@@ -137,14 +144,17 @@ export default function EventoDiaSinEscuelaModal({
     setDeleting(false);
   }
 
-  const titulo = editId ? (editEvento ? "Editar evento" : "Editar día sin clase") : "Marcar evento o día sin clase";
+  const titulo = editId
+    ? (editEvento ? "Editar evento" : "Editar día sin clase")
+    : kindInicial === "sin_escuela" ? "Marcar día sin clase"
+    : "Marcar evento o día sin clase";
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ backgroundColor: "rgba(0,0,0,0.45)" }} onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
       <div className="bg-(--ui-card) rounded-2xl shadow-2xl w-full max-w-md p-6 space-y-3 max-h-[90vh] overflow-y-auto">
         <h3 className="font-bold text-(--ui-text)">{titulo}</h3>
 
-        {!editId && (
+        {!editId && !kindInicial && (
           <div className="flex gap-2">
             <button onClick={() => setKind("evento")} className="flex-1 py-2 rounded-lg text-sm font-semibold"
               style={kind === "evento" ? { backgroundColor: "var(--g-birdies-fg)", color: "#fff" } : { backgroundColor: "var(--ui-card-alt)", color: "var(--ui-text-3)" }}>
