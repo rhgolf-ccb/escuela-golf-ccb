@@ -2,18 +2,34 @@
 
 import Link from "next/link";
 import Image from "next/image";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
-import { isRouteAllowed, isStaff, roleLabel, type Rol } from "@/lib/roles";
+import { ADMIN_ROLES, isRouteAllowed, isStaff, roleLabel, type Rol } from "@/lib/roles";
 import {
   Users, Calendar, ClipboardList, BookOpen, UserCheck,
   BarChart2, Shield, Dumbbell, Brain, CalendarDays, Trophy,
-  LogOut, ChevronDown, Activity, User, Menu, X, KeyRound
+  LogOut, ChevronDown, Activity, User, Menu, X, KeyRound, ImageIcon
 } from "lucide-react";
 
 function initiales(name: string): string {
   return name.split(" ").slice(0, 2).map((n) => n[0]).join("").toUpperCase();
+}
+
+// Una foto de celular pesa 5-10 MB y Vercel corta el cuerpo de la petición en
+// 4,5 MB. Se reduce en el navegador a 2560 px de ancho (sobra para el fondo
+// de Inicio a pantalla completa) y se manda como JPEG.
+async function reducirFoto(file: File): Promise<Blob> {
+  const bitmap = await createImageBitmap(file);
+  const escala = Math.min(1, 2560 / bitmap.width);
+  const canvas = document.createElement("canvas");
+  canvas.width = Math.round(bitmap.width * escala);
+  canvas.height = Math.round(bitmap.height * escala);
+  canvas.getContext("2d")!.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+  bitmap.close();
+  return new Promise((resolve, reject) =>
+    canvas.toBlob((b) => (b ? resolve(b) : reject(new Error("No se pudo leer la foto"))), "image/jpeg", 0.85)
+  );
 }
 
 const navItems = [
@@ -49,6 +65,9 @@ export default function Navbar({
   const displayName = nombre?.trim() || email || "";
   const [mobileOpen, setMobileOpen] = useState(false);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
+  const [subiendoPortada, setSubiendoPortada] = useState(false);
+  const portadaInputRef = useRef<HTMLInputElement>(null);
+  const puedeCambiarPortada = role ? ADMIN_ROLES.includes(role) : false;
 
   const visibleItems = role
     ? navItems.filter((item) => {
@@ -65,6 +84,31 @@ export default function Navbar({
     }
     await supabase.auth.signOut();
     router.push("/login");
+  }
+
+  async function handlePortada(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+    setSubiendoPortada(true);
+    try {
+      const fd = new FormData();
+      fd.append("foto", await reducirFoto(file), "inicio.jpg");
+      const res = await fetch("/api/portada", { method: "POST", body: fd });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || "No se pudo cambiar la foto");
+      }
+      setUserMenuOpen(false);
+      setMobileOpen(false);
+      if (pathname === "/dashboard") router.refresh();
+      else router.push("/dashboard");
+    } catch (err) {
+      console.error("Cambiar foto de Inicio:", err);
+      window.alert(err instanceof Error ? err.message : "No se pudo cambiar la foto");
+    } finally {
+      setSubiendoPortada(false);
+    }
   }
 
   const SidebarContent = () => (
@@ -148,6 +192,16 @@ export default function Navbar({
               <KeyRound size={15} />
               Cambiar contraseña
             </Link>
+            {puedeCambiarPortada && (
+              <button
+                onClick={() => portadaInputRef.current?.click()}
+                disabled={subiendoPortada}
+                className="w-full flex items-center gap-2 px-3 py-2.5 text-sm text-sidebar-text hover:text-white hover:bg-white/5 transition-colors disabled:opacity-60"
+              >
+                <ImageIcon size={15} />
+                {subiendoPortada ? "Subiendo foto…" : "Cambiar foto de Inicio"}
+              </button>
+            )}
             <button
               onClick={handleLogout}
               className="w-full flex items-center gap-2 px-3 py-2.5 text-sm text-red-400 hover:text-red-300 hover:bg-white/5 transition-colors"
@@ -180,6 +234,12 @@ export default function Navbar({
 
   return (
     <>
+      {/* Fuera de SidebarContent: ese bloque se monta dos veces (escritorio y
+          móvil) y el ref quedaría apuntando a uno solo. */}
+      {puedeCambiarPortada && (
+        <input ref={portadaInputRef} type="file" accept="image/*" className="hidden" onChange={handlePortada} />
+      )}
+
       {/* SIDEBAR DESKTOP */}
       <aside className="hidden lg:flex flex-col w-60 shrink-0 bg-sidebar-bg h-screen sticky top-0">
         <SidebarContent />

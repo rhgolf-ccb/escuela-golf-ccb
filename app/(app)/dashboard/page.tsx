@@ -1,6 +1,7 @@
 import Image from "next/image";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
 import { getCurrentAppUser } from "@/lib/current-user";
+import { getPortadaUrl } from "@/lib/portada";
 import { Users, Calendar, UserCheck, CalendarCheck, Trophy, CalendarOff, Star, Pin, ChartBar, ChevronDown, type LucideIcon } from "lucide-react";
 import WeatherChip from "@/components/WeatherChip";
 import DashboardAgendaCard, { type AgendaSesion } from "@/components/DashboardAgendaCard";
@@ -97,11 +98,12 @@ export default async function DashboardPage() {
   const diaMesLabel = new Intl.DateTimeFormat("es-CO", { timeZone: "America/Bogota", day: "numeric", month: "long" }).format(new Date());
   const fechaLabel = `${diaSemanaLabel} ${diaMesLabel}`;
 
-  const [{ count: totalAlumnos }, { count: clasesHoy }, { count: totalStaff }, { count: totalReservas }] = await Promise.all([
+  const [{ count: totalAlumnos }, { count: clasesHoy }, { count: totalStaff }, { count: totalReservas }, portadaUrl] = await Promise.all([
     supabase.from("students").select("*", { count: "exact", head: true }).eq("status", "activo"),
     supabase.from("sesiones_semana").select("*", { count: "exact", head: true }).eq("fecha", hoy),
     supabase.from("staff_directorio").select("*", { count: "exact", head: true }),
     supabase.from("reservas").select("*", { count: "exact", head: true }),
+    getPortadaUrl(),
   ]);
 
   const semanaInicio = getMondayISO(hoy);
@@ -189,7 +191,7 @@ export default async function DashboardPage() {
           ignora y perderíamos la optimización de next/image. */}
       <div className="fixed inset-y-0 left-0 right-0 lg:left-60 z-0 bg-sidebar-bg pointer-events-none">
         <Image
-          src="/hero-ccb.jpg"
+          src={portadaUrl}
           alt="Country Club de Bogotá"
           fill
           preload
