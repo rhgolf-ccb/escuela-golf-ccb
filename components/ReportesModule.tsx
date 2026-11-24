@@ -18,10 +18,7 @@ import {
   acentoGrupo, acentoGrupoSuave, calcularGrupo, edadDe,
   tipoPlanDeAlumno, tipoPlanDeGrupo, TIPOS_PLAN, TIPO_PLAN_LABEL, type TipoPlan,
 } from "@/lib/grupos";
-import {
-  lunesDe, META_SEMANAL_COMPETENCIA, metaDeAlumno, metaDeAlumnoEnSemana, metasPorSemana,
-  pctContraMeta,
-} from "@/lib/asistencia-competencia";
+import { crearMedidorMeta, metaSemanalDe, pctContraMeta, TEXTO_METAS } from "@/lib/asistencia-meta";
 import {
   Badge, BarraPct, CAMPO, CampoLabel, ChipGrupo, EmptyState, Encabezado, ErrorState,
   fondoFila, GrupoBadge, Leyenda, Loading, MetricCard, Pagina, Panel, PctBadge,
@@ -312,8 +309,9 @@ type Sesion = {
   id: string; dia_semana: string; fecha: string; hora_inicio: string | null;
   hora_fin: string | null; tipo_sesion: string | null; lugar: string | null;
   objetivo: string | null; cupo_maximo: number | null;
+  suspendida?: boolean | null;
   // semana_inicio es el lunes del plan y es opcional porque no todas las
-  // pestañas lo piden: la meta de Competencia reparte por él, "Reserva live" no.
+  // pestañas lo piden: la meta semanal reparte por él, "Reserva live" no.
   planes_semanales: { tipo_plan: string; semana_inicio?: string | null } | null;
 };
 
@@ -402,7 +400,7 @@ function TabAsistencia() {
       setLoadError(null);
       const [{ data: ses, error: sesErr }, { rows: sts, error: stsErr }] = await Promise.all([
         supabase.from("sesiones_semana")
-          .select("id,dia_semana,fecha,hora_inicio,hora_fin,tipo_sesion,lugar,objetivo,cupo_maximo,planes_semanales(tipo_plan,semana_inicio)")
+          .select("id,dia_semana,fecha,hora_inicio,hora_fin,tipo_sesion,lugar,objetivo,cupo_maximo,suspendida,planes_semanales(tipo_plan,semana_inicio)")
           .gte("fecha", effFromISO).lte("fecha", effToISO).order("fecha").order("hora_inicio"),
         fetchStudents(STUDENT_COLS, true),
       ]);
@@ -481,73 +479,46 @@ function TabAsistencia() {
     return m;
   }, [reservas]);
 
-  // A un alumno de Competencia se le mide contra la meta del club —3 sesiones
-  // por semana— y no contra lo que reservó, y eso vale en cualquier pestaña
-  // donde aparezca. Antes la regla dependía de la pestaña elegida: el mismo
-  // niño que en "Competencia" salía en 67 % aparecía en "Todos" —que es la
-  // pestaña que se abre por defecto— con 100 %, porque ahí se le medía contra
-  // sus propias reservas y nadie marca ausencias. De ahí que Alumnos y
-  // Reportes dieran números distintos del mismo alumno.
-  const esTabCompetencia = grupo === "competencia";
-  const mideContraMeta = useCallback((st: Student) => tipoPlanDeAlumno(st) === "competencia", []);
-
-  // Las sesiones de Competencia del periodo se miran siempre, no solo cuando la
-  // pestaña es Competencia: son las que fijan la meta y las únicas que cuentan
-  // para ella.
-  const sesionesComp = useMemo(
-    () => sesiones.filter((s) => (s.planes_semanales as { tipo_plan: string } | null)?.tipo_plan === "competencia"),
-    [sesiones]
-  );
-  const sesionesCompIds = useMemo(() => new Set(sesionesComp.map((s) => s.id)), [sesionesComp]);
-
-  const metasSemana = useMemo(
-    () => metasPorSemana(
-      sesionesComp.map((s) => ({
-        fecha: s.fecha,
-        semanaInicio: s.planes_semanales?.semana_inicio ?? "",
+  // A un alumno de un grupo con meta (Birdies, Águilas, Albatros, Competencia)
+  // se le mide contra la meta semanal del club y no contra lo que reservó, y
+  // eso vale en cualquier pestaña donde aparezca. Antes la regla dependía de la
+  // pestaña elegida y Alumnos y Reportes daban números distintos del mismo
+  // alumno. Las sesiones de todos los planes se miran siempre: son las que
+  // fijan la meta de cada grupo.
+  const medidor = useMemo(
+    () => crearMedidorMeta(
+      sesiones.map((s) => ({
+        id: s.id, fecha: s.fecha, suspendida: s.suspendida,
+        tipoPlan: s.planes_semanales?.tipo_plan, semanaInicio: s.planes_semanales?.semana_inicio,
       })),
       toISO(new Date()),
     ),
-    [sesionesComp]
+    [sesiones]
   );
+  const mideContraMeta = medidor.mideContraMeta;
+  const metaDe = medidor.metaDe;
 
-  const metaDe = useCallback(
-    (st: Student) => mideContraMeta(st) ? metaDeAlumno(metasSemana, st.enrollment_date) : 0,
-    [mideContraMeta, metasSemana]
-  );
-
-  const semanaPorSesion = useMemo(() => {
-    const m = new Map<string, string>();
-    for (const s of sesionesComp) m.set(s.id, s.planes_semanales?.semana_inicio || lunesDe(s.fecha));
-    return m;
-  }, [sesionesComp]);
-
-  // Asistencias que cuentan para el alumno. Contra la meta solo suman las
-  // sesiones de Competencia, y solo las de semanas que también le suman meta:
-  // una clase anterior a su matrícula no entra ni arriba ni abajo, igual que en
-  // la vista student_metrics.
   const presentesDe = useCallback((st: Student) => {
     const suyas = (reservasPorAlumno.get(st.id) ?? []).filter((r) => r.asistio === true);
     if (!mideContraMeta(st)) return suyas.length;
-    const desde = st.enrollment_date;
-    return suyas.filter((r) =>
-      sesionesCompIds.has(r.sesion_id) &&
-      (!desde || (semanaPorSesion.get(r.sesion_id) ?? "") >= desde)
-    ).length;
-  }, [reservasPorAlumno, mideContraMeta, sesionesCompIds, semanaPorSesion]);
+    return suyas.filter((r) => medidor.cuentaParaMeta(st, r.sesion_id)).length;
+  }, [reservasPorAlumno, mideContraMeta, medidor]);
 
-  // En Competencia el que no reservó nada es justo el que hay que ver, así que
-  // la fila existe si tiene meta aunque no tenga ni una reserva. En el resto de
-  // grupos la tabla sigue siendo la de siempre: solo quien se inscribió.
+  // Pestaña de un plan concreto: los alumnos con meta salen aunque no hayan
+  // reservado nada — el que no vino nunca es justo el que hay que ver.
+  const esTabConMeta = grupo !== "todos";
+
+  // Con meta, la fila existe aunque el alumno no tenga ni una reserva. Sin meta
+  // (+14, Damas) la tabla sigue siendo la de siempre: solo quien se inscribió.
   const filasAlumnos = useMemo(() => {
     const conReserva = new Set(reservas.map((r) => r.estudiante_id));
     return students.filter((s) => {
       if (grupo === "todos") return conReserva.has(s.id);
       if (tipoPlanDeAlumno(s) !== grupo) return false;
       if (conReserva.has(s.id)) return true;
-      return esTabCompetencia && metaDe(s) > 0;
+      return esTabConMeta && metaDe(s) > 0;
     });
-  }, [students, reservas, grupo, esTabCompetencia, metaDe]);
+  }, [students, reservas, grupo, esTabConMeta, metaDe]);
 
   const { totalInscritos, totalAsistieron, totalAusentes, totalMarcadas } = useMemo(() => ({
     totalInscritos: new Set(reservasEnRango.map((r) => r.estudiante_id)).size,
@@ -558,10 +529,10 @@ function TabAsistencia() {
 
   // El total mezcla las dos bases a propósito, igual que la pestaña de
   // Estadísticas: el denominador es "cuántas asistencias se esperaban", que en
-  // Competencia es la meta y en el resto es lo que el profesor marcó. Las de
-  // Competencia se suman por alumno de la tabla y no sobre reservasEnRango,
-  // porque esta última incluye a quien vino a una sesión de Competencia sin
-  // pertenecer al grupo: sumaría al numerador sin sumar meta.
+  // los grupos con meta es la meta y en el resto es lo que el profesor marcó.
+  // Los de meta se suman por alumno de la tabla y no sobre reservasEnRango,
+  // porque esta última incluye a quien vino a una sesión de otro plan: sumaría
+  // al numerador sin sumar meta.
   const { presentesFilas, metaTotal, presentesOtros, marcadasOtros, hayMeta } = useMemo(() => {
     let presentes = 0, meta = 0;
     const conMeta = new Set<string>();
@@ -630,7 +601,7 @@ function TabAsistencia() {
 
   const headers = ["Nombre", "Grupo", ...columnas.map((c) => c.labelLargo), hayMeta ? "Asist./Meta" : "Total", "% Asist."];
 
-  // Lo que va en la penúltima columna y en el %: en Competencia, asistencias
+  // Lo que va en la penúltima columna y en el %: con meta, asistencias
   // sobre la meta del periodo; en el resto, asistencias sobre lo reservado.
   function totalYPct(st: Student, asistio: number, reservadas: number): { total: string; p: number; base: number } {
     if (mideContraMeta(st)) {
@@ -688,14 +659,14 @@ function TabAsistencia() {
 
   function doExportWhatsApp() {
     const resumen = hayMeta
-      ? `Asistencias: ${presentesFilas} de una meta de ${metaTotal} (${META_SEMANAL_COMPETENCIA} por semana) — ${pctGlobal}%`
+      ? `Asistencias: ${presentesFilas} de una meta de ${metaTotal} (${TEXTO_METAS}) — ${pctGlobal}%`
       : `Inscritos: ${totalInscritos} | Asistieron: ${totalAsistieron} | Ausentes: ${totalAusentes}`;
     const lines = [periodoLabel, resumen,
       "", ...filasAlumnos.slice(0, 30).map((st) => {
         const rv = reservasDe(st.id);
         const a = presentesDe(st);
-        const { base } = totalYPct(st, a, rv.length);
-        return `• ${st.full_name}: ${a}/${base} (${pct(a, base)}%)`;
+        const { base, p } = totalYPct(st, a, rv.length);
+        return `• ${st.full_name}: ${a}/${base} (${p}%)`;
       })];
     exportWhatsApp(`Asistencia – ${fmtRango(effFrom, effTo)}`, lines);
   }
@@ -721,8 +692,8 @@ function TabAsistencia() {
 
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
         <MetricCard
-          label={esTabCompetencia ? "Alumnos" : "Inscritos"}
-          value={esTabCompetencia ? filasAlumnos.length : totalInscritos}
+          label={esTabConMeta ? "Alumnos" : "Inscritos"}
+          value={esTabConMeta ? filasAlumnos.length : totalInscritos}
           sub={fmtRango(effFrom, effTo)} />
         <MetricCard label="Asistieron" value={totalAsistieron} tono="ok"
           sub={hayMeta
@@ -741,9 +712,10 @@ function TabAsistencia() {
 
       {hayMeta && (
         <p className="text-[11px] mb-4 leading-relaxed" style={{ color: "var(--ui-text-3)" }}>
-          En Competencia el % va contra la meta del club — {META_SEMANAL_COMPETENCIA} sesiones por semana — y no contra lo que
-          el alumno reservó. Una semana con menos programación baja su meta a las sesiones que se dictaron,
-          las que todavía no han pasado no cuentan, y el alumno aparece aunque no haya reservado nada.
+          El % va contra la meta semanal del club — {TEXTO_METAS} — y no contra lo que
+          el alumno reservó (+14 y Damas siguen contra lo reservado). Una semana con menos programación baja
+          su meta a las sesiones que se dictaron; las suspendidas y las que todavía no han pasado no cuentan, y en
+          la pestaña de cada grupo el alumno aparece aunque no haya reservado nada.
         </p>
       )}
 
@@ -769,7 +741,7 @@ function TabAsistencia() {
                   );
                 })}
                 <th className={`${TH} text-center px-1.5 py-2 w-12`} style={thStyle}
-                  title={hayMeta ? `Asistencias sobre la meta del periodo (${META_SEMANAL_COMPETENCIA} por semana)` : "Sesiones reservadas"}>
+                  title={hayMeta ? `Asistencias sobre la meta del periodo (${TEXTO_METAS})` : "Sesiones reservadas"}>
                   {hayMeta ? "Meta" : "Total"}
                 </th>
                 <th className={`${TH} text-center px-1.5 py-2 w-14`} style={thStyle}>%</th>
@@ -777,7 +749,7 @@ function TabAsistencia() {
             </thead>
             <tbody>
               {filasAlumnos.length === 0 ? (
-                <tr><td colSpan={columnas.length + 4}><EmptyState msg={esTabCompetencia ? "Sin alumnos de Competencia en el periodo" : "Sin inscritos en el periodo"} /></td></tr>
+                <tr><td colSpan={columnas.length + 4}><EmptyState msg={esTabConMeta ? "Sin alumnos del grupo en el periodo" : "Sin inscritos en el periodo"} /></td></tr>
               ) : filasAlumnos.map((st, i) => {
                 const reservasAlumno = reservasDe(st.id);
                 const asistio = presentesDe(st);
@@ -851,7 +823,7 @@ function TabAsistencia() {
             { color: "var(--ui-ok)", label: "Asistió" },
             { color: "var(--ui-bad)", label: "Ausente" },
             { color: "transparent", borde: "var(--ui-text-3)", label: "Sin marcar — clic para cambiar" },
-            { color: "var(--ui-border)", label: esTabCompetencia ? "No reservó esta sesión" : "No inscrito" },
+            { color: "var(--ui-border)", label: esTabConMeta ? "No reservó esta sesión" : "No inscrito" },
           ]} />
         </Panel>
       )}
@@ -1097,7 +1069,7 @@ type SemanaProgreso = {
   pct: Record<string, number>;
   /** Asistencias del alumno esa semana. */
   presentes: Record<string, number>;
-  /** Contra qué se mide: la meta en Competencia, lo reservado en el resto. */
+  /** Contra qué se mide: la meta en los grupos que la tienen, lo reservado en el resto. */
   base: Record<string, number>;
 };
 
@@ -1108,7 +1080,7 @@ function TabProgreso() {
   const [rangeFrom, setRangeFrom] = useState<string>(() => toISO(addDays(getMondayOf(new Date()), -21)));
   const [rangeTo, setRangeTo] = useState<string>(() => toISO(addDays(getMondayOf(new Date()), 6)));
   const [students, setStudents] = useState<Student[]>([]);
-  // Además del %, cada semana guarda los números crudos: en Competencia la
+  // Además del %, cada semana guarda los números crudos: con meta la
   // acumulada es la suma de asistencias sobre la suma de metas, no el promedio
   // de porcentajes semanales — que daría el mismo peso a una semana de una sola
   // sesión que a una completa.
@@ -1135,7 +1107,7 @@ function TabProgreso() {
         supabase.from("swing_evaluations").select("student_id,score_promedio").order("created_at", { ascending: false }),
         supabase.from("physical_tests").select("student_id,tpi_summary").order("created_at", { ascending: false }),
         supabase.from("notas_profesor").select("alumno_id,contenido,fecha,created_at").order("created_at", { ascending: false }),
-        supabase.from("sesiones_semana").select("id,fecha,planes_semanales(tipo_plan,semana_inicio)")
+        supabase.from("sesiones_semana").select("id,fecha,suspendida,planes_semanales(tipo_plan,semana_inicio)")
           .gte("fecha", toISO(primeraSemana)).lte("fecha", toISO(ultimaSemanaFin)),
       ]);
 
@@ -1158,7 +1130,7 @@ function TabProgreso() {
       (nt ?? []).forEach((n: { alumno_id: string; contenido: string; fecha: string }) => { if (!ntMap[n.alumno_id]) ntMap[n.alumno_id] = { contenido: n.contenido, fecha: n.fecha }; });
       setNotasMap(ntMap);
 
-      const sesArr = (ses ?? []) as unknown as { id: string; fecha: string; planes_semanales: { tipo_plan: string; semana_inicio?: string | null } | null }[];
+      const sesArr = (ses ?? []) as unknown as { id: string; fecha: string; suspendida?: boolean | null; planes_semanales: { tipo_plan: string; semana_inicio?: string | null } | null }[];
       const sesIds = sesArr.map((s) => s.id);
       if (sesIds.length > 0) {
         // Hasta 12 semanas de reservas de todo el padrón: pasa de 1000 filas sin
@@ -1175,12 +1147,13 @@ function TabProgreso() {
           setLoading(false);
           return;
         }
-        // La meta solo mira las sesiones de Competencia; los demás grupos se
-        // siguen midiendo contra lo que cada alumno reservó esa semana.
-        const metasComp = metasPorSemana(
-          sesArr
-            .filter((s) => s.planes_semanales?.tipo_plan === "competencia")
-            .map((s) => ({ fecha: s.fecha, semanaInicio: s.planes_semanales?.semana_inicio ?? "" })),
+        // Los grupos con meta se miden contra ella; +14 y Damas siguen contra
+        // lo que cada alumno reservó esa semana.
+        const medidor = crearMedidorMeta(
+          sesArr.map((s) => ({
+            id: s.id, fecha: s.fecha, suspendida: s.suspendida,
+            tipoPlan: s.planes_semanales?.tipo_plan, semanaInicio: s.planes_semanales?.semana_inicio,
+          })),
           toISO(new Date()),
         );
         const semanasData = semanasList.map((inicio) => {
@@ -1199,16 +1172,14 @@ function TabProgreso() {
           const baseMap: Record<string, number> = {};
           for (const st of sts) {
             const rvAlumno = rvPorAlumno.get(st.id) ?? [];
-            const asist = rvAlumno.filter((r) => r.asistio === true).length;
-            const esComp = tipoPlanDeAlumno(st) === "competencia";
-            const base = esComp
-              ? metaDeAlumnoEnSemana(metasComp, inicio, st.enrollment_date)
-              : rvAlumno.length;
-            // Semana anterior a la matrícula: no cuenta ni meta ni asistencias,
-            // o la acumulada sumaría arriba sin sumar abajo.
-            presentesMap[st.id] = esComp && base === 0 ? 0 : asist;
+            const conMeta = medidor.mideContraMeta(st);
+            // Con meta solo cuentan las sesiones de su plan en semanas que le
+            // suman meta, o la acumulada sumaría arriba sin sumar abajo.
+            const asist = rvAlumno.filter((r) => r.asistio === true && (!conMeta || medidor.cuentaParaMeta(st, r.sesion_id))).length;
+            const base = conMeta ? medidor.metaEnSemana(st, inicio) : rvAlumno.length;
+            presentesMap[st.id] = conMeta && base === 0 ? 0 : asist;
             baseMap[st.id] = base;
-            pctMap[st.id] = base > 0 ? (esComp ? pctContraMeta(asist, base) : pct(asist, base)) : 0;
+            pctMap[st.id] = base > 0 ? (conMeta ? pctContraMeta(asist, base) : pct(asist, base)) : 0;
           }
           return { inicio, pct: pctMap, presentes: presentesMap, base: baseMap };
         });
@@ -1239,11 +1210,11 @@ function TabProgreso() {
     return `${done}/${total}`;
   }
 
-  // Acumulada: en Competencia son las asistencias sobre las metas sumadas, así
+  // Acumulada: con meta son las asistencias sobre las metas sumadas, así
   // una semana sin programación no entra como un 0 que arrastra el promedio. En
   // el resto sigue siendo el promedio de los porcentajes semanales.
   function acumDe(st: Student): number {
-    if (tipoPlanDeAlumno(st) === "competencia") {
+    if (metaSemanalDe(st) !== null) {
       let presentes = 0, base = 0;
       for (const s of semanas) { presentes += s.presentes[st.id] ?? 0; base += s.base[st.id] ?? 0; }
       return base > 0 ? pctContraMeta(presentes, base) : 0;
@@ -1294,8 +1265,8 @@ function TabProgreso() {
 
       {loading ? <Loading /> : loadError ? <ErrorState msg={loadError} /> : studentsFiltrados.length === 0 ? <Panel><EmptyState msg="No hay alumnos activos." /></Panel> : (
         <Panel title="Progreso por alumno"
-          sub={grupo === "competencia"
-            ? `${periodoLabel} · % contra la meta de ${META_SEMANAL_COMPETENCIA} sesiones por semana`
+          sub={grupo !== "todos" && grupo !== "damas"
+            ? `${periodoLabel} · % contra la meta semanal (${TEXTO_METAS})`
             : periodoLabel}>
           <div className="overflow-x-auto">
           <table className="w-full text-sm">
@@ -1376,7 +1347,7 @@ function TabEstadisticas() {
       type RvStats = { sesion_id: string; estudiante_id: string; asistio: boolean | null };
       const [{ rows: activos, error: stsErr }, { data: ses }, { data: sw }] = await Promise.all([
         fetchStudents<ActivoRow>("id,grupo_activo,birth_date,gender,status,tiene_talega,enrollment_date", true),
-        supabase.from("sesiones_semana").select("id,fecha,planes_semanales(tipo_plan,semana_inicio)").gte("fecha", lunes4).lte("fecha", domingo),
+        supabase.from("sesiones_semana").select("id,fecha,suspendida,planes_semanales(tipo_plan,semana_inicio)").gte("fecha", lunes4).lte("fecha", domingo),
         supabase.from("swing_evaluations").select("student_id,score_promedio"),
       ]);
       if (stsErr) {
@@ -1385,7 +1356,7 @@ function TabEstadisticas() {
         setLoading(false);
         return;
       }
-      const sesArr = (ses ?? []) as unknown as { id: string; fecha: string; planes_semanales: { tipo_plan: string; semana_inicio?: string | null } | null }[];
+      const sesArr = (ses ?? []) as unknown as { id: string; fecha: string; suspendida?: boolean | null; planes_semanales: { tipo_plan: string; semana_inicio?: string | null } | null }[];
       const sesIds = sesArr.map((s) => s.id);
       let rv: RvStats[] = [];
       if (sesIds.length > 0) {
@@ -1407,50 +1378,49 @@ function TabEstadisticas() {
       const totalActivos = activos.length;
       const competencia = activos.filter((s) => s.grupo_activo === "Competencia").length;
       const damas = activos.filter((s) => s.grupo_activo === "Damas").length;
-      // Competencia se mide contra la meta del club en las mismas 4 semanas de
-      // la ventana; el resto de grupos, contra lo que marcó el profesor.
-      const sesionesComp = sesArr.filter((s) => s.planes_semanales?.tipo_plan === "competencia");
-      const sesionesCompIds = new Set(sesionesComp.map((s) => s.id));
-      const metasComp = metasPorSemana(
-        sesionesComp.map((s) => ({ fecha: s.fecha, semanaInicio: s.planes_semanales?.semana_inicio ?? "" })),
+      // Los grupos con meta se miden contra ella en las mismas 4 semanas de la
+      // ventana; +14 y Damas, contra lo que marcó el profesor.
+      const medidor = crearMedidorMeta(
+        sesArr.map((s) => ({
+          id: s.id, fecha: s.fecha, suspendida: s.suspendida,
+          tipoPlan: s.planes_semanales?.tipo_plan, semanaInicio: s.planes_semanales?.semana_inicio,
+        })),
         toISO(hoy),
       );
-      const idsComp = new Set(activos.filter((s) => s.grupo_activo === "Competencia").map((s) => s.id));
-      const metaComp = activos
-        .filter((s) => idsComp.has(s.id))
-        .reduce((suma, s) => suma + metaDeAlumno(metasComp, s.enrollment_date), 0);
-      // Solo sesiones de Competencia — una clase suelta de otro plan no cuenta
-      // contra una meta que tampoco la incluyó — y solo de semanas que ya le
-      // suman meta al alumno: si no, el numerador crece sin que crezca el
-      // denominador.
-      const semanaDeSesionComp = new Map(sesionesComp.map((s) => [s.id, s.planes_semanales?.semana_inicio || lunesDe(s.fecha)] as const));
-      const matriculaComp = new Map(activos.filter((s) => idsComp.has(s.id)).map((s) => [s.id, s.enrollment_date] as const));
-      const presentesComp = rv.filter((r) => {
-        if (r.asistio !== true || !sesionesCompIds.has(r.sesion_id) || !idsComp.has(r.estudiante_id)) return false;
-        const desde = matriculaComp.get(r.estudiante_id);
-        return !desde || (semanaDeSesionComp.get(r.sesion_id) ?? "") >= desde;
-      }).length;
+      const alumnoPorId = new Map(activos.map((s) => [s.id, s] as const));
+      const conMeta = new Set(activos.filter((s) => medidor.mideContraMeta(s)).map((s) => s.id));
 
-      // El global mezcla las dos bases a propósito: el denominador es "cuántas
-      // asistencias se esperaban", que en Competencia es la meta y en el resto
-      // es lo que se marcó.
-      const rvOtros = rv.filter((r) => !idsComp.has(r.estudiante_id));
-      const marcadasOtros = rvOtros.filter((r) => r.asistio !== null).length;
-      const asistidasOtros = rvOtros.filter((r) => r.asistio === true).length;
-      const baseGlobal = marcadasOtros + metaComp;
-      const pctAsistencia = baseGlobal > 0 ? pctContraMeta(asistidasOtros + presentesComp, baseGlobal) : 0;
+      // Con meta: presentes que cuentan sobre la meta. Sin meta: presentes
+      // sobre marcadas. El global mezcla las dos bases a propósito: el
+      // denominador es "cuántas asistencias se esperaban".
+      function resumen(ids: Set<string>) {
+        let presentes = 0, base = 0;
+        for (const id of ids) {
+          if (conMeta.has(id)) base += medidor.metaDe(alumnoPorId.get(id)!);
+        }
+        for (const r of rv) {
+          if (!ids.has(r.estudiante_id)) continue;
+          if (conMeta.has(r.estudiante_id)) {
+            if (r.asistio === true && medidor.cuentaParaMeta(alumnoPorId.get(r.estudiante_id)!, r.sesion_id)) presentes++;
+          } else if (r.asistio !== null) {
+            base++;
+            if (r.asistio) presentes++;
+          }
+        }
+        return { presentes, base };
+      }
+      const global = resumen(new Set(activos.map((s) => s.id)));
+      const pctAsistencia = global.base > 0 ? pctContraMeta(global.presentes, global.base) : 0;
 
       const grupos = ["Birdies","Águilas","Albatros","+14","Competencia","Damas"];
       const porGrupo = grupos.map((g) => {
         const alumnos = activos.filter((s) => calcularGrupo(s.birth_date, s.gender, s.grupo_activo) === g);
         const ids = new Set(alumnos.map((a) => a.id));
-        const rvG = rv.filter((r) => ids.has(r.estudiante_id));
-        const asistG = rvG.filter((r) => r.asistio === true).length;
-        const marcG = rvG.filter((r) => r.asistio !== null).length;
         const tipo = grupoTipo(g);
         const sesG = sesArr.filter((s) => s.planes_semanales?.tipo_plan === tipo).length;
         const testsG = [...ids].filter((id) => swSet.has(id)).length;
-        const asistProm = g === "Competencia" ? pctContraMeta(presentesComp, metaComp) : pct(asistG, marcG);
+        const rg = resumen(ids);
+        const asistProm = rg.base > 0 ? pctContraMeta(rg.presentes, rg.base) : 0;
         return { grupo: g, alumnos: alumnos.length, sesiones: sesG, asistProm, testsCompletos: testsG };
       }).filter((g) => g.alumnos > 0);
       setStats({ totalActivos, pctAsistencia, competencia, damas, porGrupo });
@@ -1472,7 +1442,7 @@ function TabEstadisticas() {
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         <MetricCard label="Alumnos activos" value={stats.totalActivos} />
         <MetricCard label="Asistencia prom. 4 sem." value={`${stats.pctAsistencia}%`} tono={tonoDePct(stats.pctAsistencia)}
-          sub={`Competencia va contra su meta de ${META_SEMANAL_COMPETENCIA}/semana`} />
+          sub={`Contra la meta semanal: ${TEXTO_METAS}`} />
         <MetricCard label="Alumnos Competencia" value={stats.competencia} />
         <MetricCard label="Alumnos Damas" value={stats.damas} />
       </div>

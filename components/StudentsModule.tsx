@@ -4,10 +4,11 @@ import { useEffect, useState, useMemo, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { supabase, type Student } from "@/lib/supabase";
 import { isStaff, type Rol } from "@/lib/roles";
-import { calcularGrupo, colorGrupo, edadDe } from "@/lib/grupos";
+import { calcularGrupo, colorGrupo, edadDe, type GrupoAlumno } from "@/lib/grupos";
 import GroupAnalysisModal from "./GroupAnalysisModal";
 import DropdownMenu from "./ui/DropdownMenu";
 import { Search, X, Trophy, Users, UserPlus, Eye, MoreHorizontal, Pencil, ExternalLink } from "lucide-react";
+import { META_SEMANAL_POR_GRUPO, pctContraMeta } from "@/lib/asistencia-meta";
 
 // Grupos asignables a mano. Birdies/Águilas/Albatros/+14 se calculan por edad, pero
 // se dejan elegibles para poder fijar el grupo de un alumno sin fecha de nacimiento.
@@ -31,13 +32,13 @@ type AlumnoFila = Student & { foto_url: string | null };
 // sin las reservas que nadie marcó: ver la migración de la vista.
 type Metrica = {
   presentes: number; ausentes: number; tests: number;
-  // Solo Competencia: asistencias del mes y meta del mes (3 por semana,
-  // ajustada por festivos y por la fecha de matrícula). Ver la migración
-  // 20260822_asistencia_meta_competencia.sql.
-  metaCompetencia: number; presentesCompetencia: number;
+  // Grupos con meta semanal (Birdies y Águilas 2, Albatros y Competencia 3):
+  // asistencias del mes y meta del mes, ajustada por festivos, suspensiones y
+  // fecha de matrícula. Ver 20261124_asistencia_meta_por_grupo.sql.
+  metaAsistencia: number; presentesMeta: number;
 };
 const SIN_METRICA: Metrica = {
-  presentes: 0, ausentes: 0, tests: 0, metaCompetencia: 0, presentesCompetencia: 0,
+  presentes: 0, ausentes: 0, tests: 0, metaAsistencia: 0, presentesMeta: 0,
 };
 
 const COLUMNAS_PADRON = "id, full_name, birth_date, status, grupo_activo, gender, tiene_talega, foto_url";
@@ -92,12 +93,12 @@ const TONO_BAD: Tono    = { color: "var(--ui-bad)",    background: "var(--ui-bad
 // null = todavía nadie le marcó asistencia. No es 0 %, que se leería como que
 // faltó a todas las clases — la escuela apenas arranca y casi nadie tiene datos.
 //
-// Competencia se mide distinto: contra la meta del club (3 sesiones por semana
-// de las 4 programadas), no contra lo que el alumno alcanzó a reservar. Ir a
-// las 4 es el tope, así que el porcentaje se corta en 100 en vez de pasarse.
+// Birdies, Águilas, Albatros y Competencia se miden contra la meta semanal del
+// club (lib/asistencia-meta.ts), no contra lo que el alumno alcanzó a reservar.
+// Venir más que la meta es el tope, así que el porcentaje se corta en 100.
 function porcentajeAsistencia(m: Metrica): number | null {
-  if (m.metaCompetencia > 0) {
-    return Math.min(100, Math.round((m.presentesCompetencia / m.metaCompetencia) * 100));
+  if (m.metaAsistencia > 0) {
+    return pctContraMeta(m.presentesMeta, m.metaAsistencia);
   }
   const total = m.presentes + m.ausentes;
   if (total === 0) return null;
@@ -303,10 +304,10 @@ export default function StudentsModule({
       for (let desde = 0; ; desde += PAGE_SIZE) {
         const { data, error } = await supabase
           .from("student_metrics")
-          .select("student_id, presentes, ausentes, tests, meta_competencia, presentes_competencia")
-          // meta_competencia > 0 entra aunque no haya asistencias: un alumno de
-          // Competencia que no ha venido este mes va en 0 %, no en "sin datos".
-          .or("presentes.gt.0,ausentes.gt.0,tests.gt.0,meta_competencia.gt.0")
+          .select("student_id, presentes, ausentes, tests, meta_asistencia, presentes_meta")
+          // meta_asistencia > 0 entra aunque no haya asistencias: un alumno con
+          // meta que no ha venido este mes va en 0 %, no en "sin datos".
+          .or("presentes.gt.0,ausentes.gt.0,tests.gt.0,meta_asistencia.gt.0")
           .order("student_id", { ascending: true })
           .range(desde, desde + PAGE_SIZE - 1);
 
@@ -318,13 +319,13 @@ export default function StudentsModule({
         }
         const page = (data ?? []) as {
           student_id: string; presentes: number; ausentes: number; tests: number;
-          meta_competencia: number | null; presentes_competencia: number | null;
+          meta_asistencia: number | null; presentes_meta: number | null;
         }[];
         for (const r of page) {
           mapa.set(String(r.student_id), {
             presentes: r.presentes, ausentes: r.ausentes, tests: r.tests,
-            metaCompetencia: r.meta_competencia ?? 0,
-            presentesCompetencia: r.presentes_competencia ?? 0,
+            metaAsistencia: r.meta_asistencia ?? 0,
+            presentesMeta: r.presentes_meta ?? 0,
           });
         }
         if (page.length < PAGE_SIZE) break;
@@ -679,8 +680,8 @@ export default function StudentsModule({
             <p className="text-[11px] font-bold uppercase tracking-wide mb-2" style={{ color: "var(--ui-text-3)" }}>
               {groupFilter === "todos" ? "Perfiles destacados" : `Destacados de ${groupFilter}`}
               <span className="font-medium normal-case tracking-normal ml-1.5">
-                {groupFilter === "Competencia"
-                  ? "— por asistencia del mes (meta: 3 sesiones por semana)"
+                {META_SEMANAL_POR_GRUPO[groupFilter as GrupoAlumno]
+                  ? `— por asistencia del mes (meta: ${META_SEMANAL_POR_GRUPO[groupFilter as GrupoAlumno]} clases por semana)`
                   : "— por asistencia"}
               </span>
             </p>

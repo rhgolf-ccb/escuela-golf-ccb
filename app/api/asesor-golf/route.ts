@@ -97,7 +97,7 @@ async function contextoDeMisAlumnos(admin: SupabaseClient, userId: string): Prom
 
   const [{ data: alumnos }, { data: metricas }] = await Promise.all([
     admin.from("students").select("id, full_name, birth_date, grupo_activo").in("id", ids),
-    admin.from("student_metrics").select("student_id, presentes, ausentes, tests, meta_competencia, presentes_competencia").in("student_id", ids),
+    admin.from("student_metrics").select("student_id, presentes, ausentes, tests, meta_semanal, meta_asistencia, presentes_meta").in("student_id", ids),
   ]);
 
   const porId = new Map((metricas ?? []).map((m) => [String(m.student_id), m]));
@@ -106,8 +106,8 @@ async function contextoDeMisAlumnos(admin: SupabaseClient, userId: string): Prom
     const edad = a.birth_date
       ? Math.floor((Date.now() - new Date(a.birth_date).getTime()) / 31_557_600_000)
       : null;
-    const asistencia = m && m.meta_competencia > 0
-      ? `${m.presentes_competencia} de ${m.meta_competencia} sesiones del mes (la meta del club son 3 por semana)`
+    const asistencia = m && m.meta_asistencia > 0
+      ? `${m.presentes_meta} de ${m.meta_asistencia} sesiones del mes (la meta del club para su grupo son ${m.meta_semanal} por semana)`
       : m && (m.presentes + m.ausentes) > 0
         ? `${m.presentes} asistencias y ${m.ausentes} ausencias registradas`
         : "todavía sin asistencia registrada";
