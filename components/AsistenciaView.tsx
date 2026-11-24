@@ -90,6 +90,10 @@ function formatHora(t: string | null): string {
   return t ? t.slice(0, 5) : "";
 }
 
+function sinTildes(t: string): string {
+  return t.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
+}
+
 function initiales(name: string): string {
   return name.split(" ").map((n) => n[0]).slice(0, 2).join("").toUpperCase();
 }
@@ -102,6 +106,9 @@ export default function AsistenciaView({ sesionId }: { sesionId: string }) {
   const [plan, setPlan] = useState<PlanInfo | null>(null);
   const [students, setStudents] = useState<StudentRow[]>([]);
   const [grupoRoster, setGrupoRoster] = useState<StudentRow[]>([]);
+  // Todos los alumnos activos, para inscribir a uno de otro grupo que llega a
+  // última hora (p. ej. recupera una clase o viene con un hermano).
+  const [todosActivos, setTodosActivos] = useState<StudentRow[]>([]);
   const [autoCargadoDelGrupo, setAutoCargadoDelGrupo] = useState(false);
   const [showAgregar, setShowAgregar] = useState(false);
   const [buscarAlumno, setBuscarAlumno] = useState("");
@@ -193,7 +200,7 @@ export default function AsistenciaView({ sesionId }: { sesionId: string }) {
     // 3b. Padrón activo del grupo que corresponde al plan. La asistencia no debe
     // depender de que alguien haya inscrito antes a cada alumno en Reservas: si la
     // sesión no tiene ninguna reserva se arranca con el grupo completo, y si tiene
-    // algunas queda disponible el botón "Agregar alumnos del grupo".
+    // algunas queda disponible el botón "Agregar alumno".
     // El grupo se calcula por edad, así que el filtro no puede ir en la consulta:
     // se traen los activos y se resuelve aquí con el mismo criterio que Alumnos.
     const { data: rosterData } = await supabase
@@ -202,14 +209,15 @@ export default function AsistenciaView({ sesionId }: { sesionId: string }) {
       .eq("status", "activo")
       .order("full_name", { ascending: true });
 
-    const roster: StudentRow[] = ((rosterData as AlumnoRow[]) ?? [])
-      .filter((st) => tipoPlanDeAlumno(st) === p.tipo_plan)
-      .map((st) => ({
-        id: st.id, full_name: st.full_name,
-        grupo: calcularGrupo(st.birth_date, st.gender, st.grupo_activo),
-        reserva_id: null,
-      }));
+    const activos = (rosterData as AlumnoRow[]) ?? [];
+    const aFila = (st: AlumnoRow): StudentRow => ({
+      id: st.id, full_name: st.full_name,
+      grupo: calcularGrupo(st.birth_date, st.gender, st.grupo_activo),
+      reserva_id: null,
+    });
+    const roster: StudentRow[] = activos.filter((st) => tipoPlanDeAlumno(st) === p.tipo_plan).map(aFila);
     setGrupoRoster(roster);
+    setTodosActivos(activos.filter((st) => tipoPlanDeAlumno(st) !== p.tipo_plan).map(aFila));
 
     const autoCarga = alumnos.length === 0 && roster.length > 0;
     setAutoCargadoDelGrupo(autoCarga);
@@ -252,10 +260,16 @@ export default function AsistenciaView({ sesionId }: { sesionId: string }) {
   const sinMarcar = students.filter((s) => asistencias[s.id] !== true && asistencias[s.id] !== false).length;
 
   // Alumnos activos del grupo que todavía no están en la lista de asistencia.
-  const faltantes = grupoRoster.filter((r) => !students.some((s) => s.id === r.id));
-  const faltantesFiltrados = buscarAlumno.trim()
-    ? faltantes.filter((r) => r.full_name.toLowerCase().includes(buscarAlumno.trim().toLowerCase()))
-    : faltantes;
+  const enLista = new Set(students.map((s) => s.id));
+  const faltantes = grupoRoster.filter((r) => !enLista.has(r.id));
+  const termino = sinTildes(buscarAlumno.trim());
+  const coincide = (r: StudentRow) => sinTildes(r.full_name).includes(termino);
+  const faltantesFiltrados = termino ? faltantes.filter(coincide) : faltantes;
+  // Los de otros grupos solo aparecen al buscar: listarlos todos de entrada
+  // taparía a los del grupo, que son el caso normal.
+  const otrosFiltrados = termino.length >= 2
+    ? todosActivos.filter((r) => !enLista.has(r.id) && coincide(r)).slice(0, 20)
+    : [];
 
   // ── Filter ────────────────────────────────────────────────────────────────
   const studentsFiltered = filtroGrupo === "todos"
@@ -548,14 +562,12 @@ export default function AsistenciaView({ sesionId }: { sesionId: string }) {
           )}
         </div>
         <div className="flex items-center gap-2">
-          {faltantes.length > 0 && (
-            <button
-              onClick={() => setShowAgregar((v) => !v)}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-(--ui-card-alt) text-(--ui-text-2) border border-(--ui-border) hover:bg-(--ui-card-alt) transition-colors"
-            >
-              + Agregar alumnos del grupo ({faltantes.length})
-            </button>
-          )}
+          <button
+            onClick={() => setShowAgregar((v) => !v)}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-(--ui-card-alt) text-(--ui-text-2) border border-(--ui-border) hover:bg-(--ui-card-alt) transition-colors"
+          >
+            + Agregar alumno{faltantes.length > 0 ? ` (${faltantes.length} del grupo)` : ""}
+          </button>
           <button
             onClick={todosPresentes}
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-(--ui-ok-bg) text-(--ui-ok) border border-(--ui-ok) hover:bg-(--ui-ok-bg) transition-colors"
@@ -584,7 +596,8 @@ export default function AsistenciaView({ sesionId }: { sesionId: string }) {
               type="text"
               value={buscarAlumno}
               onChange={(e) => setBuscarAlumno(e.target.value)}
-              placeholder="Buscar alumno del grupo..."
+              placeholder="Buscar alumno (del grupo o de otro)..."
+              autoFocus
               className="flex-1 px-3 py-1.5 rounded-lg border border-(--ui-border) text-sm focus:outline-none focus:ring-2 focus:ring-green-600"
             />
             <button
@@ -593,22 +606,47 @@ export default function AsistenciaView({ sesionId }: { sesionId: string }) {
               className="px-3 py-1.5 rounded-lg text-xs font-semibold text-(--g-on-accent) disabled:opacity-40 shrink-0"
               style={{ background: "var(--ui-gold)" }}
             >
-              Agregar {faltantesFiltrados.length}
+              Agregar {faltantesFiltrados.length} del grupo
             </button>
           </div>
-          <div className="max-h-56 overflow-y-auto divide-y divide-(--ui-border-soft)">
-            {faltantesFiltrados.length === 0 ? (
-              <p className="py-6 text-center text-xs text-(--ui-text-3)">Sin alumnos por agregar.</p>
-            ) : faltantesFiltrados.map((r) => (
-              <button
-                key={r.id}
-                onClick={() => agregarAlumnos([r])}
-                className="w-full flex items-center justify-between px-4 py-2.5 hover:bg-(--ui-card-alt) transition-colors text-left"
-              >
-                <span className="text-sm text-(--ui-text)">{r.full_name}</span>
-                <span className="text-[11px] text-(--ui-text-3)">{r.grupo ?? "Sin grupo"} · agregar +</span>
-              </button>
-            ))}
+          <div className="max-h-72 overflow-y-auto divide-y divide-(--ui-border-soft)">
+            {faltantesFiltrados.length === 0 && otrosFiltrados.length === 0 ? (
+              <p className="py-6 text-center text-xs text-(--ui-text-3)">
+                {termino.length >= 2
+                  ? "Ningún alumno activo con ese nombre. Si es nuevo, primero hay que crearlo en Alumnos."
+                  : faltantes.length === 0
+                    ? "Todo el grupo ya está en la lista. Escribe un nombre para buscar alumnos de otros grupos."
+                    : "Sin alumnos por agregar."}
+              </p>
+            ) : (
+              <>
+                {faltantesFiltrados.map((r) => (
+                  <button
+                    key={r.id}
+                    onClick={() => agregarAlumnos([r])}
+                    className="w-full flex items-center justify-between px-4 py-2.5 hover:bg-(--ui-card-alt) transition-colors text-left"
+                  >
+                    <span className="text-sm text-(--ui-text)">{r.full_name}</span>
+                    <span className="text-[11px] text-(--ui-text-3)">{r.grupo ?? "Sin grupo"} · agregar +</span>
+                  </button>
+                ))}
+                {otrosFiltrados.length > 0 && (
+                  <p className="px-4 py-2 text-[11px] font-semibold uppercase tracking-wide text-(--ui-text-3) bg-(--ui-card-alt)">
+                    De otros grupos
+                  </p>
+                )}
+                {otrosFiltrados.map((r) => (
+                  <button
+                    key={r.id}
+                    onClick={() => { agregarAlumnos([r]); setBuscarAlumno(""); }}
+                    className="w-full flex items-center justify-between px-4 py-2.5 hover:bg-(--ui-card-alt) transition-colors text-left"
+                  >
+                    <span className="text-sm text-(--ui-text)">{r.full_name}</span>
+                    <span className="text-[11px] text-(--ui-text-3)">{r.grupo ?? "Sin grupo"} · agregar +</span>
+                  </button>
+                ))}
+              </>
+            )}
           </div>
         </div>
       )}
@@ -631,7 +669,7 @@ export default function AsistenciaView({ sesionId }: { sesionId: string }) {
             {students.length === 0
               ? grupoRoster.length === 0
                 ? "No hay alumnos activos en este grupo — revisa el padrón en Alumnos."
-                : "Sin alumnos en la lista — usa \"Agregar alumnos del grupo\"."
+                : "Sin alumnos en la lista — usa \"Agregar alumno\"."
               : "No hay alumnos en este grupo."}
           </div>
         ) : (
