@@ -5,11 +5,12 @@ import Image from "next/image";
 import { useRef, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
+import { RastreadorNavegacion, useAtras } from "@/components/BotonAtras";
 import { ADMIN_ROLES, isRouteAllowed, isStaff, roleLabel, type Rol } from "@/lib/roles";
 import {
   Users, Calendar, ClipboardList, BookOpen, UserCheck,
   BarChart2, Shield, Dumbbell, Brain, CalendarDays, Trophy,
-  LogOut, ChevronDown, Activity, User, Menu, X, KeyRound, ImageIcon
+  LogOut, ChevronDown, Activity, User, Menu, X, KeyRound, ImageIcon, ArrowLeft
 } from "lucide-react";
 
 function initiales(name: string): string {
@@ -68,6 +69,7 @@ export default function Navbar({
   const [subiendoPortada, setSubiendoPortada] = useState(false);
   const portadaInputRef = useRef<HTMLInputElement>(null);
   const puedeCambiarPortada = role ? ADMIN_ROLES.includes(role) : false;
+  const atras = useAtras();
 
   const visibleItems = role
     ? navItems.filter((item) => {
@@ -133,6 +135,17 @@ export default function Navbar({
           </div>
         </div>
       </div>
+
+      {/* Atrás: solo escritorio; en el celular la flecha va en la barra superior */}
+      {atras.visible && (
+        <button
+          onClick={atras.irAtras}
+          className="hidden lg:flex items-center gap-2 mx-3 mt-3 px-3 py-2 rounded-lg text-sm font-medium text-sidebar-text hover:bg-sidebar-hover hover:text-white transition-colors"
+        >
+          <ArrowLeft size={16} className="shrink-0" />
+          Atrás
+        </button>
+      )}
 
       {/* Nav items */}
       <nav className="flex-1 px-3 py-4 overflow-y-auto space-y-0.5">
@@ -236,6 +249,7 @@ export default function Navbar({
     <>
       {/* Fuera de SidebarContent: ese bloque se monta dos veces (escritorio y
           móvil) y el ref quedaría apuntando a uno solo. */}
+      <RastreadorNavegacion />
       {puedeCambiarPortada && (
         <input ref={portadaInputRef} type="file" accept="image/*" className="hidden" onChange={handlePortada} />
       )}
@@ -248,6 +262,11 @@ export default function Navbar({
       {/* TOPBAR MOBILE */}
       <header className="lg:hidden fixed inset-x-0 top-0 flex items-center justify-between px-4 h-14 bg-sidebar-bg z-40">
         <div className="flex items-center gap-2">
+          {atras.visible && (
+            <button onClick={atras.irAtras} className="text-white p-1 -ml-1" aria-label="Atrás">
+              <ArrowLeft size={22} />
+            </button>
+          )}
           <Image src="/Paco_transparente.png" alt="Paco" height={30} width={30} className="object-contain" />
           <span className="text-ccb-gold font-bold text-sm tracking-wide">CCB Escuela de Golf</span>
         </div>
