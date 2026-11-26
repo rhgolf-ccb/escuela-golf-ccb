@@ -26,7 +26,7 @@ type DetalleAlumno = {
   observations: string | null;
 };
 
-type AlumnoFila = Student & { foto_url: string | null };
+type AlumnoFila = Student & { foto_url: string | null; enrollment_date: string | null };
 
 // Una fila por alumno de la vista student_metrics. presentes/ausentes ya vienen
 // sin las reservas que nadie marcó: ver la migración de la vista.
@@ -41,7 +41,7 @@ const SIN_METRICA: Metrica = {
   presentes: 0, ausentes: 0, tests: 0, metaAsistencia: 0, presentesMeta: 0,
 };
 
-const COLUMNAS_PADRON = "id, full_name, birth_date, status, grupo_activo, gender, tiene_talega, foto_url";
+const COLUMNAS_PADRON = "id, full_name, birth_date, status, grupo_activo, gender, tiene_talega, foto_url, enrollment_date";
 
 type NuevoAlumnoForm = {
   full_name: string;
@@ -1014,7 +1014,10 @@ export default function StudentsModule({
         {showGroupAnalysis && groupFilter !== "todos" && (
           <GroupAnalysisModal
             grupo={groupFilter}
-            students={groupActiveStudents.map((s) => ({ id: String(s.id), full_name: s.full_name }))}
+            students={groupActiveStudents.map((s) => ({
+              id: String(s.id), full_name: s.full_name, birth_date: s.birth_date,
+              gender: s.gender, grupo_activo: s.grupo_activo, enrollment_date: s.enrollment_date,
+            }))}
             onClose={() => setShowGroupAnalysis(false)}
           />
         )}

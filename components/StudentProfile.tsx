@@ -11,7 +11,7 @@ import PlanParaCasaModal from "./PlanParaCasaModal";
 import { isStaff, DIRECTOR_COORD_ROLES, type Rol } from "@/lib/roles";
 import { scoreToHandicapTest, handicapBand, formatHandicapTest } from "@/lib/handicap-test";
 import { acentoGrupo, acentoGrupoSuave, colorGrupo } from "@/lib/grupos";
-import { crearMedidorMeta, pctContraMeta, metaSemanalDe } from "@/lib/asistencia-meta";
+import { asistenciaPeriodo, isoLocal, textoAsistencia, ultimoMes, type AsistenciaResumen } from "@/lib/asistencia-periodo";
 
 type Tab = "datos" | "tecnicos" | "fisicos" | "hitos" | "notas";
 type CritValue = "cumple" | "progreso" | "no" | null;
@@ -426,59 +426,17 @@ function calcularEdadNum(birthDate: string|null): number|null {
 
 type StudentContextInfo = Pick<Student, "full_name" | "grupo_activo" | "birth_date" | "enrollment_date" | "gender">;
 /**
- * `total` es la meta del periodo (Birdies/Águilas 2 por semana, Albatros y
- * Competencia 3) o, en +14 y Damas, las clases que reservó. `porMeta` dice cuál.
+ * Asistencia de un alumno entre `desde` (incluido) y `hasta` (excluido). Si la
+ * consulta falla se omite, como antes: el contexto y el informe salen sin ella
+ * en vez de quedarse cargando.
  */
-type AsistenciaResumen = { asistidas: number; total: number; pct: number; porMeta: boolean };
-
-function isoLocal(d: Date): string {
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-}
-
-/**
- * Asistencia de un alumno entre `desde` (incluido) y `hasta` (excluido), con la
- * misma regla que Reportes y `student_metrics` (lib/asistencia-meta.ts): los
- * grupos con meta semanal se miden contra ella, no contra lo que reservaron.
- * null si no hay nada que medir en el periodo.
- */
-async function asistenciaPeriodo(
-  studentId: string,
-  student: StudentContextInfo,
-  desde: string,
-  hasta: string
-): Promise<AsistenciaResumen | null> {
-  const alumno = { birth_date: student.birth_date, gender: student.gender, grupo_activo: student.grupo_activo, enrollment_date: student.enrollment_date };
-  const conMeta = metaSemanalDe(alumno) !== null;
-  const [sesRes, rvRes] = await Promise.all([
-    conMeta
-      ? supabase.from("sesiones_semana").select("id,fecha,suspendida,planes_semanales(tipo_plan,semana_inicio)").gte("fecha", desde).lt("fecha", hasta)
-      : Promise.resolve({ data: [] }),
-    supabase.from("reservas").select("sesion_id, asistio, sesiones_semana!inner(fecha)").eq("estudiante_id", studentId)
-      .gte("sesiones_semana.fecha", desde).lt("sesiones_semana.fecha", hasta),
-  ]);
-  const reservas = (rvRes.data ?? []) as { sesion_id: string; asistio: boolean | null }[];
-
-  if (!conMeta) {
-    if (!reservas.length) return null;
-    const asistidas = reservas.filter((r) => r.asistio).length;
-    return { asistidas, total: reservas.length, pct: Math.round((asistidas / reservas.length) * 100), porMeta: false };
+async function asistenciaAlumno(studentId: string, student: StudentContextInfo, desde: string, hasta: string): Promise<AsistenciaResumen | null> {
+  try {
+    const mapa = await asistenciaPeriodo([{ id: studentId, ...student }], desde, hasta);
+    return mapa.get(studentId) ?? null;
+  } catch {
+    return null;
   }
-
-  const sesiones = (sesRes.data ?? []) as unknown as { id: string; fecha: string; suspendida: boolean | null; planes_semanales: { tipo_plan: string; semana_inicio: string | null } | null }[];
-  const medidor = crearMedidorMeta(
-    sesiones.map((x) => ({ id: x.id, fecha: x.fecha, suspendida: x.suspendida, tipoPlan: x.planes_semanales?.tipo_plan, semanaInicio: x.planes_semanales?.semana_inicio })),
-    isoLocal(new Date())
-  );
-  const total = medidor.metaDe(alumno);
-  if (total === 0) return null;
-  const asistidas = reservas.filter((r) => r.asistio === true && medidor.cuentaParaMeta(alumno, r.sesion_id)).length;
-  return { asistidas, total, pct: pctContraMeta(asistidas, total), porMeta: true };
-}
-
-function textoAsistencia(a: AsistenciaResumen): string {
-  return a.porMeta
-    ? `${a.pct}% (${a.asistidas} de ${a.total} clases de la meta semanal del grupo)`
-    : `${a.pct}% (${a.asistidas}/${a.total} sesiones reservadas)`;
 }
 
 function buildStudentContext(
@@ -548,12 +506,8 @@ async function fetchFullStudentContext(studentId: string): Promise<string | null
   const student = studentRes.data as StudentContextInfo | null;
   if (!student) return null;
 
-  const asistencia = await asistenciaPeriodo(
-    studentId,
-    student,
-    isoLocal(new Date(Date.now() - 30 * 86400000)),
-    isoLocal(new Date(Date.now() + 86400000))
-  );
+  const mes = ultimoMes();
+  const asistencia = await asistenciaAlumno(studentId, student, mes.desde, mes.hasta);
 
   return buildStudentContext(
     student,
@@ -573,17 +527,16 @@ function tendenciaTexto(actual: number | null, anterior: number | null): string 
 
 async function buildParentReportMarkdown(studentId: string, student: StudentContextInfo): Promise<string> {
   const hoy = new Date();
-  const hace30 = isoLocal(new Date(Date.now() - 30 * 86400000));
+  const { desde: hace30, hasta: manana } = ultimoMes();
   const hace60 = isoLocal(new Date(Date.now() - 60 * 86400000));
-  const manana = isoLocal(new Date(Date.now() + 86400000));
   const grupo = normalizeGrupoKey(student.grupo_activo ?? calcularGrupoFisico({ birth_date: student.birth_date, grupo_activo: student.grupo_activo, gender: null }));
 
   const [swingRes, physicalRes, notasRes, asistRecienteRes, asistAnteriorRes, protocolosFisicoRes] = await Promise.all([
     supabase.from("swing_evaluations").select("*").eq("student_id", studentId).order("evaluation_date", { ascending: false }).limit(1),
     supabase.from("physical_evaluations").select("*").eq("student_id", studentId).order("evaluation_date", { ascending: false }).limit(1),
     supabase.from("notas_profesor").select("*").eq("alumno_id", studentId).order("fecha", { ascending: false }).limit(20),
-    asistenciaPeriodo(studentId, student, hace30, manana),
-    asistenciaPeriodo(studentId, student, hace60, hace30),
+    asistenciaAlumno(studentId, student, hace30, manana),
+    asistenciaAlumno(studentId, student, hace60, hace30),
     supabase.from("protocolo_tests").select("codigo, nombre").eq("grupo", grupo).eq("tipo", "fisico"),
   ]);
 

@@ -8,6 +8,7 @@ import { TOOL_STATUS_LABELS, formatTime, MARKDOWN_COMPONENTS, streamAsesorChat, 
 import { formatWhatsAppMessage, openWhatsApp } from "@/lib/whatsapp-formatter";
 import { POSICIONES_NOMBRES, physResultToScore, type PhysicalResult } from "./StudentProfile";
 import { scoreToHandicapTest } from "@/lib/handicap-test";
+import { asistenciaPeriodo, textoAsistencia, ultimoMes, type AlumnoAsistencia, type AsistenciaResumen } from "@/lib/asistencia-periodo";
 
 type Message = {
   role: "user" | "assistant";
@@ -39,7 +40,9 @@ type PhysicalRow = {
   tests_data: Record<string, { result: PhysicalResult; obs: string | null; na: boolean }> | null;
 };
 
-async function buildGroupContext(grupo: string, students: { id: string; full_name: string }[]): Promise<string> {
+export type AlumnoGrupo = AlumnoAsistencia & { full_name: string };
+
+async function buildGroupContext(grupo: string, students: AlumnoGrupo[]): Promise<string> {
   const ids = students.map((s) => s.id);
   const unMesAtras = new Date(Date.now() - 30 * 86400000).toISOString().split("T")[0];
 
@@ -51,7 +54,9 @@ async function buildGroupContext(grupo: string, students: { id: string; full_nam
       .order("evaluation_date", { ascending: false }),
     supabase.from("physical_evaluations").select("student_id,evaluation_date,score_promedio,tests_data").in("student_id", ids).order("evaluation_date", { ascending: false }),
     supabase.from("notas_profesor").select("alumno_id").in("alumno_id", ids).eq("origen", "paco").gte("fecha", unMesAtras),
-    supabase.from("reservas").select("estudiante_id, asistio, sesiones_semana!inner(fecha)").in("estudiante_id", ids).gte("sesiones_semana.fecha", unMesAtras),
+    // Misma regla que Reportes y la ficha: contra la meta semanal del grupo.
+    // Si falla, el análisis sale sin asistencia en vez de no salir.
+    asistenciaPeriodo(students, ultimoMes().desde, ultimoMes().hasta).catch(() => new Map<string, AsistenciaResumen>()),
     supabase.from("protocolo_tests").select("codigo, nombre").eq("grupo", grupo).eq("tipo", "fisico"),
   ]);
 
@@ -71,13 +76,7 @@ async function buildGroupContext(grupo: string, students: { id: string; full_nam
 
   const planActivoSet = new Set(((notasRes.data ?? []) as { alumno_id: string }[]).map((n) => n.alumno_id));
 
-  const asistenciaByStudent = new Map<string, { asistidas: number; total: number }>();
-  ((asistRes.data ?? []) as { estudiante_id: string; asistio: boolean | null }[]).forEach((r) => {
-    const cur = asistenciaByStudent.get(r.estudiante_id) ?? { asistidas: 0, total: 0 };
-    cur.total++;
-    if (r.asistio) cur.asistidas++;
-    asistenciaByStudent.set(r.estudiante_id, cur);
-  });
+  const asistenciaByStudent = asistRes;
 
   const physicalNombres: Record<string, string> = {};
   ((protocolosRes.data ?? []) as { codigo: string; nombre: string }[]).forEach((t) => {
@@ -93,7 +92,6 @@ async function buildGroupContext(grupo: string, students: { id: string; full_nam
     const swingEvals = swingByStudent.get(s.id) ?? [];
     const physicalEvals = physicalByStudent.get(s.id) ?? [];
     const asistencia = asistenciaByStudent.get(s.id);
-    const pct = asistencia && asistencia.total > 0 ? Math.round((asistencia.asistidas / asistencia.total) * 100) : null;
     const planActivo = planActivoSet.has(s.id) ? "Sí" : "No";
 
     const faltantes: string[] = [];
@@ -129,7 +127,7 @@ async function buildGroupContext(grupo: string, students: { id: string; full_nam
     }
 
     porAlumnoLines.push(
-      `- ${s.full_name}: ${tecnicoTxt} | ${fisicoTxt} | asistencia último mes: ${pct !== null ? `${pct}%` : "sin datos"} | plan de trabajo activo: ${planActivo}`
+      `- ${s.full_name}: ${tecnicoTxt} | ${fisicoTxt} | asistencia último mes: ${asistencia ? textoAsistencia(asistencia) : "sin datos"} | plan de trabajo activo: ${planActivo}`
     );
     if (faltantes.length) sinTests.push(`- ${s.full_name} (falta: ${faltantes.join(" y ")})`);
   });
@@ -162,7 +160,7 @@ export default function GroupAnalysisModal({
   onClose,
 }: {
   grupo: string;
-  students: { id: string; full_name: string }[];
+  students: AlumnoGrupo[];
   onClose: () => void;
 }) {
   const [messages, setMessages] = useState<Message[]>([]);
