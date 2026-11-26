@@ -65,9 +65,8 @@ function ModuleCards({ cards, className }: { cards: ModuleCard[]; className: str
 }
 
 // La asistencia real vive en reservas.asistio (boolean nullable), que sólo
-// distingue presente / ausente / sin marcar. La tabla `attendance` con sus
-// cuatro estados está muerta (RLS sin políticas, filas huérfanas, nadie
-// escribe en ella), así que aquí no se usa.
+// distingue presente / ausente / sin marcar. La vieja tabla `attendance`, con
+// cuatro estados, se borró en nov-2026 (20261126_drop_attendance.sql).
 type EstadoAsistencia = "presente" | "ausente" | "sin_marcar";
 
 const ATTENDANCE_LABEL: Record<EstadoAsistencia, string> = {
